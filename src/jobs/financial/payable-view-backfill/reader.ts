@@ -56,6 +56,7 @@ async function readAll(
       supplierRef: finDocuments.supplierRef,
       contractRef: finDocuments.contractRef,
       categoryRef: finDocuments.categoryRef,
+      budgetPlanRef: finDocuments.budgetPlanRef,
       costCenterRef: finDocuments.costCenterRef,
       programRef: finDocuments.programRef,
     })
@@ -77,6 +78,8 @@ async function readAll(
       supplierRef: row.supplierRef,
       contractRef: row.contractRef,
       categoryRef: row.categoryRef,
+      // #446 (REP-3 / Slice B): repõe budgetPlanRef da fonte de verdade (fin_documents).
+      budgetPlanRef: row.budgetPlanRef,
       costCenterRef: row.costCenterRef,
       programRef: row.programRef,
       valueCents: row.valueCents,

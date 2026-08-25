@@ -9,8 +9,9 @@ import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';
 import { readWorkerConfig } from '#src/modules/contracts/worker/config.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const CONN = 'mysql://core_app:pw@127.0.0.1:3306/core';
+const CONN = mysqlTestConnectionString({ user: 'core_app', password: 'pw' });
 
 describe('readWorkerConfig', () => {
   it('connection string ausente → erro', () => {

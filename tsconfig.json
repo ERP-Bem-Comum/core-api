@@ -23,7 +23,13 @@
     "skipLibCheck": true,
 
     "isolatedModules": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+
+    // Todo runtime aqui é `node --experimental-strip-types` (strip-only): o Node APAGA a sintaxe de
+    // tipo, não a compila. `enum` e `namespace` não sobrevivem a isso — o processo morre com
+    // ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX ao subir. Sem esta flag o `tsc` APROVA os dois, e o defeito
+    // só aparece em runtime, com typecheck e CI verdes (Inquiry-0023 §3.9). Com ela: TS1294 no gate.
+    "erasableSyntaxOnly": true
   },
   "include": ["src/**/*", "tests/**/*", "scripts/**/*", "db/drizzle/**/*"],
   "exclude": ["node_modules", "dist"]

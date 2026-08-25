@@ -59,7 +59,7 @@ Agente especialista em **MySQL 8.4 LTS** para o repositório `core-api`. Atua co
 1. ADRs aceitos (handbook/architecture/adr/)            ← imutáveis
 2. handbook/ (decisões de domínio + arquitetura)
 3. CLAUDE.md raiz                                       ← regras transversais
-4. handbook/reference/mysql/mysql-refman-8.4--oracle/ ← manual oficial (63 chunks por capítulo; ver `INDEX.md`; `.tex` original em `tex-source/`)
+4. handbook/reference/mysql/mysql-refman-8.4--oracle/ ← manual oficial (63 chunks por capítulo; ver `INDEX.md`)
 5. handbook/reference/mysql/best-practices/jusdb/       ← best practices offline (12 artigos)
 6. handbook/reference/mysql2/                           ← driver Node.js
 7. handbook/reference/drizzle/                          ← ORM
@@ -82,7 +82,7 @@ Resumo das amarras do `core-api` (re-leia [ADR-0020](../../handbook/architecture
 - **Isolamento por database:** prefixos `ctr_*`, `fin_*`, `outbox` (ADR-0014). Tabelas de um módulo NUNCA são lidas/escritas por outro. Cross-módulo só por evento via outbox (ADR-0015).
 - **Lista normativa ADR-0020** — features permitidas: `SELECT/INSERT/UPDATE/DELETE`, JOIN, FK, transações, índices, `CHECK`, agregações simples, `ON DUPLICATE KEY UPDATE`, **window functions**, **CTEs recursivas**, **FULLTEXT**.
 - **Proibidas por razão própria:** colunas JSON nativas, `JSON_EXTRACT`, JSON arrays, stored procedures, triggers, `ENUM` nativo, tipos espaciais, `AUTO_INCREMENT` em PK de domínio, isolation level explícito. Toda PR que adicionar qualquer item proibido **exige novo ADR**.
-- **IDs:** UUID v4 em `VARCHAR(36)` (legibilidade > 16 bytes — ADR-0018 §"Mapeamentos canônicos").
+- **IDs:** UUID v4 em `VARCHAR(36)` (legibilidade > 16 bytes — ADR-0020 §"Mapeamentos canônicos").
 - **Money:** `BIGINT` de cents + `CHAR(3)` de currency (nunca `DECIMAL`, nunca `JSON`).
 - **Period:** decomposto em colunas escalares (`start_date`, `end_date`); inclusividade em colunas booleanas se necessário.
 - **Domain validation acontece em TS** — sem `CHECK` substituindo regra de negócio; sem stored procedures.
@@ -178,7 +178,6 @@ Plano de migration: forward + rollback.
 5. **Esquecer `Result<T,E>`** ao tocar mapper/repository — borda do adapter converte exceção em Result.
 6. **Sugerir `throw` em domain/application** — proibido por CLAUDE.md.
 7. **Recomendar feature legada quando há equivalente moderno** (ex.: `SHOW SLAVE STATUS` em vez de `SHOW REPLICA STATUS`; `expire_logs_days` em vez de `binlog_expire_logs_seconds`).
-8. **Tocar código sem ticket** quando a mudança for não-trivial — abrir `.claude/.pipeline/<TICKET>/000-request.md` antes.
 
 ---
 
@@ -186,7 +185,6 @@ Plano de migration: forward + rollback.
 
 ### Manual oficial
 - [`handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../handbook/reference/mysql/mysql-refman-8.4--oracle/) — 63 chunks por capítulo. Entrada: [`INDEX.md`](../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md) (mapa: capítulo → arquivo → faixa de linhas no `.tex`).
-- [`handbook/reference/mysql/tex-source/`](../../handbook/reference/mysql/tex-source/) — `.tex` original Oracle (13MB, 221k linhas), intocado, para casos onde o split atrapalha.
 - **Como buscar:** `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ | head -n 5` — devolve o arquivo do chunk; depois `Read` direto. Maior chunk: 6.593 linhas.
 
 ### Best practices offline (12 artigos JusDB)
@@ -217,7 +215,7 @@ Plano de migration: forward + rollback.
 - [ADR-0013](../../handbook/architecture/adr/0013-mysql-database-engine.md) — MySQL + InnoDB.
 - [ADR-0014](../../handbook/architecture/adr/0014-mysql-database-isolation.md) — isolamento por database.
 - [ADR-0015](../../handbook/architecture/adr/0015-mysql-outbox-pattern.md) — outbox.
-- [ADR-0018](../../handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md) — mapeamentos canônicos (superseded em parte).
+- [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — mapeamentos canônicos (superseded em parte).
 - [ADR-0019](../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) — storage de documento.
 - [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — MySQL como dialeto único + lista normativa.
 
@@ -226,7 +224,6 @@ Plano de migration: forward + rollback.
 ## Saída esperada ao terminar uma sessão
 
 1. Resumo de 2–3 frases ao usuário com o que mudou e o que vem a seguir.
-2. Se houve ticket, `STATE.md` atualizado em `.claude/.pipeline/<TICKET>/`.
 3. Se houve decisão arquitetural, novo ADR ou nota em `handbook/CHANGELOG.md`.
 
 ---
@@ -234,3 +231,20 @@ Plano de migration: forward + rollback.
 ## Changelog deste agente
 
 - **2026-05-16** — Criação. Combina as 3 skills `database-*`, manual oficial 8.4, referências `mysql2` e `drizzle`, e a biblioteca offline de 12 artigos da JusDB em `handbook/reference/mysql/best-practices/jusdb/`.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

@@ -1,0 +1,78 @@
+id: ADR-0018
+title: Persistência Dual-Dialect — Drizzle com MySQL (produção) e SQLite (dev/CI)
+source: handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md
+decided_on: 2026-05-14
+
+declared:
+  status: Superseded by ADR-0020
+  status_normalized: superseded
+  supersedes: []
+  superseded_by: [ADR-0020]
+  related: [ADR-0006, ADR-0013, ADR-0019]
+
+assessment:
+  verdict: obsolete
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Morto como norma, com vida útil de UM DIA no calendário de decisões: aceito em 2026-05-14,
+    superseded em 2026-05-15, quando o ADR-0019 tornou o Docker Compose infraestrutura local oficial
+    e derrubou a premissa central.
+    A supersessão foi a mais cuidadosa do acervo. O ADR-0020 preservou explicitamente os mapeamentos
+    canônicos de tipo ("Mapeamentos canônicos preservados (de ADR-0018)"), substituiu a lista
+    normativa de features declarando o que deixou de valer e por quê, e tem consequências,
+    alternativas e gatilhos próprios. Nada se perdeu por descuido.
+    Sobra uma coisa só, e não é pouca: a rejeição de TypeORM e Prisma. O ADR-0020 não repete essa
+    alternativa, então o argumento contra ORM que esconde dialeto vive apenas aqui.
+
+extraction:
+  state: complete
+  covers: |
+    Zero alegações. A norma vigente está no ADR-0020, extraída lá em 9 alegações — incluindo os
+    mapeamentos canônicos e a lista de features, que o 0020 herdou nominalmente deste ADR.
+    O valor deste registro são os `findings`.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: Inelegível na triagem por status — não gera regra
+    applied_to: []
+    gap: |
+      Correto. A 039 registrou separadamente, no veredito do ADR-0020, que os mapeamentos canônicos de
+      tipo "não estão" nas rules — o que é a herança deste ADR e segue sendo lacuna. Ver
+      `ADR-0020.yaml#extraction.covers`.
+
+claims: []
+
+findings:
+  - |
+    A rejeição de TypeORM e Prisma vive SÓ aqui (alternativa D). O argumento é específico e ainda
+    válido: ORM de alto nível esconde o dialeto sob abstração e falha em casos sutis (tipos, índices
+    parciais, ordenação de joins), e Drizzle expõe SQL explicitamente, o que "encoraja a usar a lista
+    normativa em vez de esconder violações". O ADR-0020 não tem essa alternativa. Se alguém propuser
+    Prisma amanhã, o contra-argumento está num documento marcado como morto.
+  - |
+    Inversão registrada: este ADR REJEITOU "Docker MySQL local" (alternativa B) por acrescentar
+    dependência operacional e fricção, e o ADR-0020 foi construído exatamente sobre essa alternativa,
+    um dia depois. O que mudou não foi a análise — foi o ADR-0019 tornar o compose oficial. É o
+    exemplo mais limpo do acervo de decisão correta que envelhece em 24 horas por mudança de premissa,
+    não por erro de julgamento.
+  - |
+    O gatilho de reavaliação #1 deste ADR disparou com precisão literal: "MySQL gerenciado for
+    provisionado e estabilizado ... e o esforço de manter SQLite ultrapassar o ganho em velocidade de
+    testes". Segundo gatilho do inventário a disparar e gerar o sucessor — o outro foi o `:117` do
+    ADR-0024, que gerou o ADR-0055. Onde o gatilho existe, ele funciona.
+  - |
+    Refinamento do achado do lote 1: a supersessão NÃO perde o raciocínio por regra. Das quatro
+    cadeias extraídas, duas perderam (`0003`→`0014` perdeu gatilhos e alternativas; `0004`→`0015`
+    perdeu as consequências negativas) e duas preservaram (`0007`→`0021` e `0018`→`0020` têm
+    consequências, alternativas e gatilhos próprios). As duas que perderam são as mais ANTIGAS, ambas
+    de 2026-04-28. A prática melhorou; o passivo é das duas primeiras.
+
+provenance:
+  tickets:
+    - CTR-CLEANUP-SQLITE
+  issues: []
+  note: |
+    Os 7 tickets de implementação estão listados no `ADR-0020.yaml#provenance` — foram gerados pelo
+    sucessor, não por este ADR. CTR-CLEANUP-SQLITE é o que apagou o que este ADR criou, e é hoje o
+    teste que garante que não volte (`tests/cleanup/sqlite-removal.test.ts`, 18 critérios).

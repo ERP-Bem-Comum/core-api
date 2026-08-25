@@ -13,7 +13,7 @@ description: >
   índice composto, FK, CHECK constraint; revisar SQL emitido por `drizzle-kit
   generate`; escrever ou auditar repo Drizzle; mapear row↔domínio com `Result<T,E>`;
   planejar transação multi-tabela com `db.transaction`; usar prepared statement;
-  evitar UPSERT nativo (proibido por ADR-0020) com SELECT-then-UPDATE-or-INSERT;
+  escrever upsert com `.onDuplicateKeyUpdate()` (liberado pelo ADR-0020);
   hardening de migration (CHARSET/COLLATE manual, FK ON DELETE/UPDATE);
   configurar `relations-v2`. Ancorado em `handbook/reference/drizzle/` (≈85 .mdx)
   + `handbook/reference/mysql2/` + ADR-0020 (lista normativa de features SQL).
@@ -58,7 +58,7 @@ Upgrade Drizzle/Kit não-trivial = ADR novo + ticket dedicado. Quando notar `0.4
 - **Repos Drizzle.** Escrever ou revisar `*-repository.drizzle.ts`. Query builder, `where`, `with`, `orderBy`, `limit`, `offset`, `transaction`, `db.execute(sql\`...\`)`.
 - **Mappers.** Mapear row Drizzle → tipos de domínio retornando `Result<T, MapperError>` (sem `throw` cruzando a borda).
 - **Transações.** Multi-step write + outbox, isolation default (REPEATABLE READ), retry de deadlock.
-- **Upsert.** **Sempre** `SELECT-then-UPDATE-or-INSERT` dentro de `db.transaction` — `INSERT ... ON DUPLICATE KEY UPDATE` requer ADR (ver [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) §"Padrão de upsert").
+- **Upsert.** `.onDuplicateKeyUpdate()` é o caminho normal — o [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) §"🆕 Agora permitidas" **liberou** `ON DUPLICATE KEY UPDATE`: a proibição era paridade com SQLite (ADR-0018) e morreu com ele. A preferência que sobrevive é usar o **builder do Drizzle** em vez de SQL bruto — *"SQL bruto não é mais bloqueio"*, mas o builder é mais legível e tipado. `SELECT-then-UPDATE-or-INSERT` em `db.transaction` continua válido quando a escrita precisa **decidir** algo entre ler e gravar (guarda por status, invariante de agregado), não como substituto obrigatório do upsert.
 - **Relations-v2.** Quando precisar `with: { amendments: true }`. Avaliar v1 vs v2 caso a caso ([`relations-v2.mdx`](../../handbook/reference/drizzle/relations-v2.mdx) + [`relations-v1-v2.mdx`](../../handbook/reference/drizzle/relations-v1-v2.mdx)).
 - **Prepared statements.** Quando a mesma query roda em loop apertado (perf — [`perf-queries.mdx`](../../handbook/reference/drizzle/perf-queries.mdx)).
 - **Pool / driver.** Tunar `mysql2` pool junto do adapter (`drivers/mysql-driver.ts`). Em geral roteia para `mysql-database-expert` para timeouts/`wait_timeout`.
@@ -102,8 +102,8 @@ Re-leia [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-du
 - **Money:** `bigint('..._cents', { mode: 'number' })`. **Nunca** `decimal`, **nunca** JSON. Currency separada em `char(3)` quando aplicável.
 - **Period:** colunas escalares (`*_start`, `*_end`, `*_kind`). Sem JSON.
 - **Timestamps:** `datetime('...', { mode: 'date', fsp: 3 })`. **Não usar** `timestamp` do MySQL (timezone implícito).
-- **Status / enums de domínio:** `varchar(16)` + `check('..._chk', sql\`... IN ('A','B','C')\`)`. **Sem `mysqlEnum`** ([ADR-0018](../../handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md) §"Features proibidas" + [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) §"Lista normativa").
-- **Upsert:** `SELECT-then-UPDATE-or-INSERT` dentro de `db.transaction`. **Não** usar `.onDuplicateKeyUpdate()` sem ADR.
+- **Status / enums de domínio:** `varchar(16)` + `check('..._chk', sql\`... IN ('A','B','C')\`)`. **Sem `mysqlEnum`** ([ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) §"Lista normativa atualizada", que substitui a lista do ADR-0018).
+- **Upsert:** `.onDuplicateKeyUpdate()` (permitido — ADR-0020 §"🆕 Agora permitidas"). Use `SELECT-then-UPDATE-or-INSERT` em `db.transaction` quando houver **decisão** entre a leitura e a escrita, não por proibição.
 - **Mappers retornam `Result<T, MapperError>`.** Row corrompida = erro tipado, não exception.
 - **Adapter converte `try/catch` em `Result`** antes de cruzar a borda para application.
 - **Domain validation acontece em TS.** `CHECK` só para invariantes já garantidos pelo domínio (defesa em profundidade). Nunca como única validação.
@@ -255,8 +255,10 @@ export const DrizzleContractRepository = (db: Db): ContractRepository => ({
     }
   },
 
-  // Upsert canônico: SELECT-then-UPDATE-or-INSERT dentro de transaction.
-  // ADR-0020 §"Padrão de upsert" — não usar onDuplicateKeyUpdate sem novo ADR.
+  // `save` do agregado: SELECT-then-UPDATE-or-INSERT em transaction porque a escrita
+  // decide entre criar e atualizar por invariante de domínio — não porque upsert seja
+  // proibido. `.onDuplicateKeyUpdate()` está liberado (ADR-0020 §"🆕 Agora permitidas")
+  // e é o caminho normal em read-model/projeção (ver ADR-0045).
   save: async (contract: Contract) => {
     try {
       await db.transaction(async (tx) => {
@@ -342,7 +344,7 @@ await db.transaction(async (tx) => {
 
 - **`pnpm db:generate` emitiu SQL** ⇒ ler `migrations/mysql/NNNN_*.sql` inteiro antes de commitar. Inserir `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` em todo `CREATE TABLE`; `COLLATE utf8mb4_bin` em colunas UUID. Limitação documentada em `schemas/mysql.ts` §"CHARSET/COLLATE".
 - **Falta `id` em retorno de `insert`** ⇒ MySQL não suporta `RETURNING`. Use `.$returningId()` (ID auto) ou gere o UUID antes do insert (padrão do projeto).
-- **`.onDuplicateKeyUpdate()` aparecendo num PR** ⇒ rejeitar; rotear `SELECT-then-UPDATE-or-INSERT` em transaction. Exceção exige ADR.
+- **`.onDuplicateKeyUpdate()` aparecendo num PR** ⇒ **aceitar** — é permitido desde o ADR-0020 e já vive em 6 módulos (`supplier-view-store`, `payable-view-store`, `contract-count-store`, `budget-result-repository`, entre outros). Perguntar apenas se o upsert é o certo ali: quando a escrita precisa **decidir** por invariante de agregado, `SELECT-then-UPDATE-or-INSERT` em transaction expressa melhor.
 - **`json('...')` aparecendo num PR** ⇒ rejeitar; violação ADR-0020.
 - **`mysqlEnum(...)` aparecendo num PR** ⇒ rejeitar; usar `varchar(N)` + `check(..., sql\`col IN ('A','B')\`)`.
 - **`db.execute(sql\`...\`)` sem comentário** ⇒ exigir comentário linkando a limitação do builder ou ADR.
@@ -362,7 +364,7 @@ Skill canônica: [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL
 Leitura: [`select.mdx`](../../handbook/reference/drizzle/select.mdx) + [`operators.mdx`](../../handbook/reference/drizzle/operators.mdx) + [`joins.mdx`](../../handbook/reference/drizzle/joins.mdx). Se a dúvida é "tem índice cobrindo?", **roteie para** [`mysql-database-expert`](./mysql-database-expert.md).
 
 ### 🔁 "Como faço upsert nesse aggregate?"
-Padrão único: `SELECT-then-UPDATE-or-INSERT` dentro de `db.transaction`. Ver `repos/contract-repository.drizzle.ts`. Citar ADR-0020 §"Padrão de upsert".
+Depende do que a escrita faz. **Projeção / read-model** (o caso comum): `.onDuplicateKeyUpdate()` — liberado pelo ADR-0020 §"🆕 Agora permitidas" e é o padrão do [ADR-0045](../../handbook/architecture/adr/0045-financial-supplier-read-model.md), que o especifica com guard de recência. **Agregado cuja escrita decide por invariante**: `SELECT-then-UPDATE-or-INSERT` em `db.transaction`. Ver `repos/contract-repository.drizzle.ts`, que usa **os dois** — transação no `save` do agregado e `.onDuplicateKeyUpdate()` na tabela de numeração.
 
 ### 🧱 "Tem que rodar 3 inserts numa única unidade"
 [`transactions.mdx`](../../handbook/reference/drizzle/transactions.mdx) + [ADR-0015](../../handbook/architecture/adr/0015-mysql-outbox-pattern.md). Outbox vai NA MESMA transaction.
@@ -408,14 +410,13 @@ Leitura: [`drizzle-kit-generate.mdx`](../../handbook/reference/drizzle/drizzle-k
 ## Não fazer (anti-padrões do agente)
 
 1. **Propor API Drizzle sem abrir o `.mdx` correspondente.** Citar de memória é proibido.
-2. **Aceitar `.onDuplicateKeyUpdate()` / `json()` / `mysqlEnum()`** sem novo ADR.
+2. **Aceitar `json()` / `mysqlEnum()`** sem novo ADR — seguem proibidos (ADR-0020 §"❌ Continuam proibidas") e o semgrep barra. `.onDuplicateKeyUpdate()` **não** está nesta lista: foi liberado pelo ADR-0020.
 3. **Editar `meta/_journal.json` ou `meta/*.snapshot.json` manualmente.** Regenerar via `pnpm db:generate`.
 4. **Pular leitura do SQL emitido** por `pnpm db:generate`. O ORM é um builder; você é responsável por confirmar a saída.
 5. **Misturar módulos** num único schema (`schemas/mysql.ts` é por módulo, prefixo `ctr_*`/`fin_*` é normativo — ADR-0014).
 6. **Sugerir `throw` em adapter** sem `try/catch` → `Result` no perímetro.
 7. **Importar `pg-core`/`sqlite-core`** — dialeto único MySQL.
 8. **Sugerir `drizzle-kit push` para produção/CI.** Pipeline canônica: `generate` → revisar SQL → `migrate` programático em boot.
-9. **Tocar código sem ticket** quando a mudança for não-trivial — abrir `.claude/.pipeline/<TICKET>/000-request.md` antes (CLAUDE.md §"Pipeline").
 10. **Esquecer extensão `.ts`** em imports relativos / não usar `import type` para imports puramente de tipo (CLAUDE.md §"Sintaxe").
 
 ---
@@ -445,7 +446,6 @@ contratos-orchestrator (roteador único)
 ## Saída esperada ao terminar uma sessão
 
 1. **Resumo de 2-3 frases** ao usuário com o que mudou e o que vem a seguir.
-2. **Se houve ticket**, `STATE.md` atualizado em `.claude/.pipeline/<TICKET>/`.
 3. **Se houve schema change**, `pnpm db:generate` rodado + SQL gerado auditado + CHARSET/COLLATE manual inserido + nota em `STATE.md` ou commit message.
 4. **Se houve decisão arquitetural** (ex.: introduzir `relations-v2` no projeto, adotar `prepared statement` como padrão), abrir ADR ou nota em `handbook/CHANGELOG.md`.
 
@@ -454,3 +454,20 @@ contratos-orchestrator (roteador único)
 ## Changelog desta agent
 
 - **2026-05-19** — Criação. Combina handbook/reference/drizzle/ (≈85 `.mdx`), ADR-0020 (lista normativa MySQL), `schemas/mysql.ts` atual (CHARSET/COLLATE manual documentado) e a skill companion `drizzle-schema-author`. Pareada com [`mysql-database-expert`](./mysql-database-expert.md) — este agent cobre o ORM, aquele cobre o SQL/MySQL puro.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

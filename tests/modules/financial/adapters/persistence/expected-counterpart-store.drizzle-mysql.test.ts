@@ -29,10 +29,12 @@ import * as ReconciliationId from '#src/modules/financial/domain/reconciliation/
 import { confirmManualEntry } from '#src/modules/financial/domain/reconciliation/manual-entry.ts';
 import { undo } from '#src/modules/financial/domain/reconciliation/reconciliation.ts';
 import * as ExpectedCounterpartId from '#src/modules/financial/domain/expected-counterpart/expected-counterpart-id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 import {
   create,
   match,
   discard,
+  reopen,
 } from '#src/modules/financial/domain/expected-counterpart/expected-counterpart.ts';
 
 // `valueCents` é bigint no agregado relido → JSON.stringify cru lança "Do not know how to serialize a
@@ -85,7 +87,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('ExpectedCounterpartStore — Drizzle + MySQL (integração · #269)', () => {
     let handle: FinancialMysqlHandle;
@@ -406,6 +408,134 @@ if (!process.env['MYSQL_INTEGRATION']) {
         true,
         'evento Discarded no outbox',
       );
+    });
+
+    it('#450: findByMatchedTransaction + undoCounterpartDestination — undo da perna B reabre a contrapartida (Pending)', async () => {
+      const statementRepo = createDrizzleBankStatementRepository(handle);
+      const counterpartStore = createDrizzleExpectedCounterpartStore(handle);
+      const reconRepo = createDrizzleReconciliationRepository(handle);
+
+      const day = new Date('2026-07-05T00:00:00.000Z');
+      const accountB = CedenteAccountId.generate();
+      const fitid = Fitid.fromNative(`fB450-${newUuid()}`);
+      if (!fitid.ok) throw new Error('setup: fitid');
+      const imported = importStatement(
+        {
+          debitAccountRef: String(accountB),
+          period: { start: day, end: day },
+          file: { name: 'b450.ofx', format: 'OFX', hash: newUuid() },
+          openingBalanceCents: 0,
+          closingBalanceCents: 0,
+          transactions: [
+            {
+              fitid: fitid.value,
+              date: day,
+              movement: 'Credit',
+              entryType: 'TED',
+              payeeName: 'TRANSF',
+              memo: 't',
+              valueCents: 150000,
+              balanceAfterCents: 0,
+            },
+          ],
+          occurredAt: day,
+        },
+        new Set(),
+      );
+      if (!imported.ok) throw new Error('setup: importStatement');
+      const txB = imported.value.statement.transactions[0];
+      if (txB === undefined) throw new Error('setup: tx');
+      assert.equal((await statementRepo.save(imported.value.statement)).ok, true);
+
+      // Contrapartida Pending no destino B.
+      const created = create({
+        id: ExpectedCounterpartId.generate(),
+        destinationAccountRef: accountB,
+        originAccountRef: CedenteAccountId.generate(),
+        originReconciliationRef: ReconciliationId.generate(),
+        originTransactionRef: newUuid(),
+        originMovement: 'Debit',
+        valueCents: 150000n,
+        expectedDate: day,
+      });
+      if (!created.ok) throw new Error('setup: counterpart');
+      assert.equal((await counterpartStore.save(created.value.counterpart)).ok, true);
+
+      // Casa a perna B (ManualEntry Transfer) → contrapartida Matched + tx B Reconciled.
+      const matched = match(created.value.counterpart, String(txB.id));
+      if (!matched.ok) throw new Error('setup: match');
+      const legB = confirmManualEntry({
+        reconciliationId: ReconciliationId.generate(),
+        transactionId: txB.id,
+        type: 'Transfer',
+        valueCents: 150000,
+        destinationAccountRef: String(created.value.counterpart.originAccountRef),
+        reconciledBy: newUuid(),
+        occurredAt: day,
+      });
+      if (!legB.ok) throw new Error('setup: legB');
+      assert.equal(
+        (
+          await reconRepo.confirmCounterpartMatch(
+            legB.value.reconciliation,
+            matched.value.counterpart,
+            txB.id,
+            [...legB.value.events, ...matched.value.events],
+          )
+        ).ok,
+        true,
+      );
+
+      // #450: localiza a contrapartida PELA TRANSAÇÃO CASADA (matched_transaction_ref = txB).
+      const byMatched = await counterpartStore.findByMatchedTransaction(txB.id);
+      assert.equal(
+        byMatched.ok &&
+          byMatched.value !== null &&
+          String(byMatched.value.id) === String(created.value.counterpart.id),
+        true,
+        'findByMatchedTransaction localiza a contrapartida pela transação de B',
+      );
+      if (!byMatched.ok || byMatched.value === null) return;
+      assert.equal(byMatched.value.status, 'Matched');
+
+      // Reabre + desfaz a perna B, atômico (contrapartida Matched→Pending + tx B Reconciled→Pending).
+      const reopened = reopen(byMatched.value);
+      if (!reopened.ok) throw new Error('setup: reopen');
+      const undoneB = undo(legB.value.reconciliation, { undoneBy: newUuid(), occurredAt: day });
+      if (!undoneB.ok) throw new Error('setup: undoB');
+      const saved = await reconRepo.undoCounterpartDestination(
+        undoneB.value.reconciliation,
+        reopened.value.counterpart,
+        [...undoneB.value.events, ...reopened.value.events],
+      );
+      assert.equal(saved.ok, true, j(saved));
+
+      // Contrapartida reaberta → Pending + matched_transaction_ref null (não presa em Matched).
+      const cp = await counterpartStore.findById(created.value.counterpart.id);
+      assert.equal(cp.ok && cp.value?.status === 'Pending', true, 'contrapartida reaberta');
+      if (cp.ok && cp.value) assert.equal(cp.value.matchedTransactionRef, null);
+
+      // Reaparece na fila de pendentes do destino (regressão #450).
+      const pending = await counterpartStore.listPendingByAccount(accountB);
+      assert.equal(
+        pending.ok &&
+          pending.value.some((c) => String(c.id) === String(created.value.counterpart.id)),
+        true,
+        'contrapartida reaberta reaparece em listPendingByAccount(destino)',
+      );
+
+      // Perna B desfeita; conciliação de B → Undone.
+      const txRows = await handle.db
+        .select()
+        .from(finStatementTransactions)
+        .where(eq(finStatementTransactions.id, String(txB.id)));
+      assert.equal(txRows[0]?.reconciliationStatus, 'Pending', 'perna B desfeita (re-conciliável)');
+
+      const recRows = await handle.db
+        .select()
+        .from(finReconciliations)
+        .where(eq(finReconciliations.id, String(legB.value.reconciliation.id)));
+      assert.equal(recRows[0]?.status, 'Undone', 'conciliação de B marcada Undone');
     });
   });
 }

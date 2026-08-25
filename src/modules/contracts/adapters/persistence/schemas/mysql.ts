@@ -18,21 +18,21 @@
 //   - F-L1: endedAt IS NOT NULL ⟺ status IN ('Expired','Terminated')
 //   - F-L2: status='Homologated' ⟹ homologatedAt + homologatedBy + signedDocumentRef
 //
-// ⚠️ CHARSET/COLLATE — aplicado em SQL manual (CTR-DB-SCHEMA-HARDENING — audit §M1)
+// ⚠️ CHARSET table-level — em SQL manual (CTR-DB-SCHEMA-HARDENING — audit §M1)
 // =============================================================================
 // `drizzle-orm@0.45.x` NÃO expõe `charset`/`collate` na API table-level (verificado
 // em `node_modules/.../mysql-core/table.d.ts`). Aplicamos em SQL puro na migration
-// `0000_*.sql`:
-//   - Por tabela: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
-//                 (alinhado ADR-0014 server-default; vence audit `0002` §M1).
-//   - Em UUIDs (`id`, `contract_id`, `amendment_id`, `signed_document_ref`,
-//                `homologated_by`): `COLLATE utf8mb4_bin` — comparação binária,
-//                ~mais rápida e elimina drift Unicode em FK matches.
+// `0000_*.sql`: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+// (alinhado ADR-0014 server-default; vence audit `0002` §M1).
 //
-// **RESPONSABILIDADE DO PRÓXIMO DEV**: se `drizzle-kit generate` emitir uma
-// migration 0001+, edite o SQL gerado para inserir `ENGINE=InnoDB DEFAULT
-// CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` em qualquer CREATE TABLE novo, e
-// `COLLATE utf8mb4_bin` em qualquer coluna UUID nova. Os testes em
+// A collation das COLUNAS de identificador deixou de ser manual (#636): vem dos tipos de
+// `shared/persistence/identifier-columns.ts` — comparação binária, mais rápida e sem drift
+// Unicode em FK matches, agora garantida pelo tipo em vez da memória de quem gera a migration.
+//
+// **RESPONSABILIDADE DO PRÓXIMO DEV**: se `drizzle-kit generate` emitir uma migration nova, edite
+// o SQL gerado para inserir `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` em
+// qualquer CREATE TABLE novo — isso segue manual. Coluna UUID nova NÃO: declare com o tipo de
+// `identifier-columns.ts` e o `COLLATE utf8mb4_bin` sai no DDL sozinho. Os testes em
 // `schema-hardening.test.ts` (CA-15/16) cobrem `0000_*.sql` apenas — estender
 // para novas migrations conforme aparecerem.
 //
@@ -42,7 +42,6 @@
 import {
   bigint,
   boolean,
-  char,
   check,
   date,
   datetime,
@@ -52,17 +51,26 @@ import {
   mysqlTable,
   primaryKey,
   smallint,
+  text,
   varchar,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
+import {
+  documentStorageKey,
+  opaqueKey,
+  sha256HexKey,
+  uuidKey,
+  uuidKeyFixed,
+} from '#src/shared/persistence/identifier-columns.ts';
+
 export const contracts = mysqlTable(
   'ctr_contracts',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     sequentialNumber: varchar('sequential_number', { length: 16 }).notNull().unique(),
     title: varchar('title', { length: 255 }).notNull(),
-    objective: varchar('objective', { length: 1000 }).notNull(),
+    objective: text('objective').notNull(),
     // ADR-0023: NULL em contrato `Pending` (sem assinatura).
     signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }),
     originalValueCents: bigint('original_value_cents', { mode: 'number' }).notNull(),
@@ -80,22 +88,22 @@ export const contracts = mysqlTable(
     terminationReason: varchar('termination_reason', { length: 1000 }),
     // Contratado (referência cross-módulo a Parceiros) — sem FK física (cross-db, ADR-0014).
     contractorType: varchar('contractor_type', { length: 16 }).notNull(),
-    contractorId: varchar('contractor_id', { length: 36 }).notNull(),
+    contractorId: uuidKey('contractor_id').notNull(),
     // CTR-NUMBER-PROGRAM: classificação (CT/OS) + metadados de cadastro. `program_id`/`budget_plan_id`
     // são refs leves (UUID) cross-módulo/cross-BC — sem FK física (ADR-0014). `categorizacao`/
     // `centro_de_custo` são rótulos livres. classification NOT NULL DEFAULT 'CT' (legado vira CT).
     classification: varchar('classification', { length: 8 }).notNull().default('CT'),
-    programId: varchar('program_id', { length: 36 }),
-    budgetPlanId: varchar('budget_plan_id', { length: 36 }),
+    programId: uuidKey('program_id'),
+    budgetPlanId: uuidKey('budget_plan_id'),
     categorizacao: varchar('categorizacao', { length: 255 }),
     centroDeCusto: varchar('centro_de_custo', { length: 255 }),
     // CTR-TAXONOMY-REFS (S3 do épico #502): Centro de Custo / Categoria / Subcategoria como refs
     // reais da árvore do plano (bgp_*). Refs leves (UUID) — sem FK física (ADR-0014), opacos. `null`
     // quando ausentes. Convivem com `categorizacao`/`centro_de_custo` (texto livre, back-compat).
-    // COLLATE utf8mb4_bin na migration (UUID — header §CHARSET/COLLATE).
-    costCenterRef: varchar('cost_center_ref', { length: 36 }),
-    categoryRef: varchar('category_ref', { length: 36 }),
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
+    // `uuidKey` carrega o COLLATE utf8mb4_bin (#636).
+    costCenterRef: uuidKey('cost_center_ref'),
+    categoryRef: uuidKey('category_ref'),
+    subcategoryRef: uuidKey('subcategory_ref'),
     // Metadados de cadastro editáveis (FR-009) — nullable.
     observations: varchar('observations', { length: 1000 }),
     email: varchar('email', { length: 255 }),
@@ -207,17 +215,17 @@ export const ctrContractSeq = mysqlTable('ctr_contract_seq', {
 // CHARSET/COLLATE: `contract_id` é UUID → `COLLATE utf8mb4_bin` na migration (header §CHARSET).
 // Sem FK (espelha `ctr_contract_seq`): contador interno; contratos são imutáveis (nunca apagados).
 export const ctrAmendmentSeq = mysqlTable('ctr_amendment_seq', {
-  contractId: varchar('contract_id', { length: 36 }).primaryKey().notNull(),
+  contractId: uuidKey('contract_id').primaryKey().notNull(),
   lastSeq: int('last_seq', { unsigned: true }).notNull().default(0),
 });
 
 export const amendments = mysqlTable(
   'ctr_amendments',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     // FK declarada table-level abaixo (`ctr_amend_contract_fk`) — audit §L2
     // renomeou o nome default de 47 chars para 21 chars.
-    contractId: varchar('contract_id', { length: 36 }).notNull(),
+    contractId: uuidKey('contract_id').notNull(),
     amendmentNumber: varchar('amendment_number', { length: 32 }).notNull(),
     description: varchar('description', { length: 1000 }).notNull(),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
@@ -225,13 +233,13 @@ export const amendments = mysqlTable(
     impactValueCents: bigint('impact_value_cents', { mode: 'number' }),
     newEndDate: date('new_end_date', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
-    signedDocumentRef: varchar('signed_document_ref', { length: 36 }),
+    signedDocumentRef: uuidKey('signed_document_ref'),
     // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G2): data de assinatura do aditivo, capturada
     // junto com o documento assinado. NULL em PendingWithoutDocument; preenchida a partir
     // de PendingWithDocument (bicondicional com signed_document_ref no CHECK abaixo).
     signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }),
     homologatedAt: datetime('homologated_at', { mode: 'date', fsp: 3 }),
-    homologatedBy: varchar('homologated_by', { length: 36 }),
+    homologatedBy: uuidKey('homologated_by'),
   },
   (t) => [
     // CHECKs de domínio (enums)
@@ -282,8 +290,8 @@ export const amendments = mysqlTable(
 export const contractHomologatedAmendments = mysqlTable(
   'ctr_contract_homologated_amendments',
   {
-    contractId: varchar('contract_id', { length: 36 }).notNull(),
-    amendmentId: varchar('amendment_id', { length: 36 }).notNull(),
+    contractId: uuidKey('contract_id').notNull(),
+    amendmentId: uuidKey('amendment_id').notNull(),
   },
   // Nomes de FK explícitos: o nome default gerado pelo drizzle (
   // `<table>_<col>_<reftable>_<refcol>_fk`) ultrapassa os 64 chars do limite
@@ -323,9 +331,9 @@ export const ctrOutbox = mysqlTable(
   'ctr_outbox',
   {
     // UUID v4 do evento — gerado pelo domínio antes do INSERT.
-    eventId: char('event_id', { length: 36 }).primaryKey().notNull(),
+    eventId: uuidKeyFixed('event_id').primaryKey().notNull(),
     // ContractId ou AmendmentId (UUID v4).
-    aggregateId: char('aggregate_id', { length: 36 }).notNull(),
+    aggregateId: uuidKeyFixed('aggregate_id').notNull(),
     // 'Contract' | 'Amendment' — controlado por CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN: ContractCreated, ContractStateUpdated, AmendmentHomologated, …
@@ -363,16 +371,27 @@ export const ctrOutbox = mysqlTable(
   ],
 );
 
-// ─── ctr_outbox_dead_letter — eventos que falharam N tentativas ───────────────
+// ─── ctr_outbox_dead_letter — eventos que UM consumidor desistiu de entregar ──
 //
-// O worker move para cá quando `attempts >= MAX_ATTEMPTS`. A row é uma cópia
-// da outbox original + `failed_at` + `last_error`.
-// Sem FK com `ctr_outbox` — a row original pode ser apagada da outbox.
+// O worker move para cá quando `attempts >= MAX_ATTEMPTS` **daquele consumidor**. A row é uma
+// cópia da outbox original + `consumer_id` + `failed_at` + `last_error`.
+//
+// A PK é composta (`consumer_id`, `event_id`) desde #800/#824: sob fanout, o mesmo evento pode
+// esgotar as tentativas de um consumidor e ser entregue com sucesso a outro — com PK só de
+// `event_id`, a segunda desistência colidiria com a primeira.
+//
+// Sem FK com `ctr_outbox`, e agora por um motivo mais forte do que antes: a linha de origem
+// **permanece** na outbox depois da desistência (ADR-0022:27-29 — o outbox retém as entradas),
+// justamente para seguir disponível aos demais consumidores e à reconstrução de 0022:40.
 export const ctrOutboxDeadLetter = mysqlTable(
   'ctr_outbox_dead_letter',
   {
-    eventId: char('event_id', { length: 36 }).primaryKey().notNull(),
-    aggregateId: char('aggregate_id', { length: 36 }).notNull(),
+    // Quem desistiu. Sem DEFAULT: as linhas existentes receberiam string vazia num ALTER — o que
+    // é inócuo aqui porque a tabela está vazia em todos os ambientes medidos (21/08/2026), e é
+    // por isso que a migration não precisa de backfill dirigido.
+    consumerId: opaqueKey('consumer_id').notNull(),
+    eventId: uuidKeyFixed('event_id').notNull(),
+    aggregateId: uuidKeyFixed('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
     schemaVersion: smallint('schema_version').notNull(),
@@ -395,15 +414,15 @@ export const ctrOutboxDeadLetter = mysqlTable(
       'ctr_outbox_dlq_aggregate_type_chk',
       sql`${t.aggregateType} IN ('Contract', 'Amendment', 'Document')`,
     ),
+    // PK composta: a desistência é por consumidor, não do evento (#800, #824).
+    primaryKey({ columns: [t.consumerId, t.eventId] }),
     // Índice por failed_at — suporta monitoramento "eventos mortos nos últimos N dias".
     index('ctr_outbox_dlq_failed_at_idx').on(t.failedAt),
   ],
 );
 
-// ─── eventos_processados — idempotência do consumer ───────────────────────────
+// ─── ctr_documents — agregado DocumentoContratual (CTR-DOCUMENT-AGGREGATE) ────
 //
-// Nota linguística: nome PT-BR é exceção justificada por ADR-0015 §"Idempotência".
-// ctr_documents — agregado DocumentoContratual (CTR-DOCUMENT-AGGREGATE).
 //
 // Parent polimórfico: parent_type ∈ {Contract, Amendment} + parent_id (sem FK,
 // convenção do projeto). Status reservado com 3 valores (Active hoje;
@@ -412,30 +431,30 @@ export const ctrOutboxDeadLetter = mysqlTable(
 export const ctrDocuments = mysqlTable(
   'ctr_documents',
   {
-    id: char('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKeyFixed('id').primaryKey().notNull(),
     parentType: varchar('parent_type', { length: 16 }).notNull(),
-    parentId: char('parent_id', { length: 36 }).notNull(),
+    parentId: uuidKeyFixed('parent_id').notNull(),
     categoria: varchar('categoria', { length: 32 }).notNull(),
     fileName: varchar('file_name', { length: 255 }).notNull(),
     mimeType: varchar('mime_type', { length: 127 }).notNull(),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
-    hashSha256: char('hash_sha256', { length: 64 }).notNull(),
+    hashSha256: sha256HexKey('hash_sha256').notNull(),
     bucket: varchar('bucket', { length: 63 }).notNull(),
-    storageKey: varchar('storage_key', { length: 1024 }).notNull(),
+    storageKey: documentStorageKey('storage_key').notNull(),
     signedElectronically: boolean('signed_electronically').notNull().default(false),
     version: smallint('version', { unsigned: true }).notNull().default(1),
     uploadedAt: datetime('uploaded_at', { mode: 'date', fsp: 3 }).notNull(),
-    uploadedBy: char('uploaded_by', { length: 36 }).notNull(),
+    uploadedBy: uuidKeyFixed('uploaded_by').notNull(),
     retentionUntil: datetime('retention_until', { mode: 'date', fsp: 3 }),
     status: varchar('status', { length: 16 }).notNull().default('Active'),
     // CTR-USECASE-DELETE-DOCUMENT: campos audit de exclusao logica (RN-11).
     deletedAt: datetime('deleted_at', { mode: 'date', fsp: 3 }),
-    deletedBy: char('deleted_by', { length: 36 }),
+    deletedBy: uuidKeyFixed('deleted_by'),
     deletedReason: varchar('deleted_reason', { length: 500 }),
     // CTR-USECASE-SUPERSEDE-DOCUMENT: campos audit de substituicao (RN-AS-02).
     supersededAt: datetime('superseded_at', { mode: 'date', fsp: 3 }),
-    supersededBy: char('superseded_by', { length: 36 }),
-    supersededByDocumentId: char('superseded_by_document_id', { length: 36 }),
+    supersededBy: uuidKeyFixed('superseded_by'),
+    supersededByDocumentId: uuidKeyFixed('superseded_by_document_id'),
   },
   (t) => [
     check('ctr_documents_parent_type_chk', sql`${t.parentType} IN ('Contract','Amendment')`),
@@ -472,27 +491,16 @@ export const ctrDocuments = mysqlTable(
   ],
 );
 
-// Tabela cross-módulo (sem prefix `ctr_*` — ADR-0014 §"Exceção linguística").
+// ─── eventos_processados — progresso de consumo POR CONSUMIDOR ────────────────
 //
-// Consumer verifica event_id antes de processar. Se presente → ignorar.
-// INSERT feito na mesma transação que o processamento do evento (idempotência).
-export const eventosProcessados = mysqlTable(
-  'eventos_processados',
-  {
-    // Identificador do consumidor (ex.: 'logger-default', 'financial-module').
-    consumerId: varchar('consumer_id', { length: 64 }).notNull(),
-    // UUID v4 do evento (não é FK — tabela cross-módulo sem acoplamento direto).
-    eventId: char('event_id', { length: 36 }).notNull(),
-    // Timestamp de quando este consumer processou o evento.
-    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }).notNull(),
-  },
-  (t) => [
-    // PK composta: cada consumer registra o event_id independentemente.
-    primaryKey({ columns: [t.consumerId, t.eventId] }),
-    // Índice temporal — suporta auditoria "eventos processados nas últimas N horas".
-    index('eventos_processados_processed_at_idx').on(t.processedAt),
-  ],
-);
+// Tabela cross-módulo (sem prefix `ctr_*` — ADR-0014 §"Exceção linguística"), declarada em
+// `shared/persistence/schemas/eventos-processados.ts` porque o adapter de outbox de MAIS DE UM
+// módulo a lê (`contracts` e `partners`) — declarar nos dois schemas emitiria dois `CREATE TABLE`
+// para a mesma tabela física. O `contracts` segue sendo o DONO das migrations dela, desde a
+// `0001`, e é por este re-export que `drizzle-kit generate --config db/drizzle/contracts.ts`
+// continua a enxergando. A razão de a tabela existir e o significado de cada coluna estão no
+// arquivo de origem — não duplicar aqui.
+export { eventosProcessados } from '#src/shared/persistence/schemas/eventos-processados.ts';
 
 // ─── ctr_job_runs ───────────────────────────────────────────────────────────────
 //

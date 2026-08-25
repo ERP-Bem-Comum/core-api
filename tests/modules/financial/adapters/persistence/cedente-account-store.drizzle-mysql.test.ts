@@ -5,7 +5,7 @@
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 // Espelha `supplier-view-store.drizzle-mysql.test.ts`. CA5 do 000-request.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -14,6 +14,8 @@ import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persi
 import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import { create, close } from '#src/modules/financial/domain/cedente/cedente-account.ts';
+import { finCedenteAccounts } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // W1 (FR-016): cada chamada gera uma CHAVE NATURAL distinta (accountNumber via contador) — o
 // UNIQUE INDEX da migration 0009 colidiria se dois testes reusassem 237/1234/567890/1.
@@ -41,7 +43,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('CedenteAccountStore — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
@@ -52,6 +54,23 @@ if (!process.env['MYSQL_INTEGRATION']) {
         throw new Error(`[financial:cedente-account-store] Falha ao conectar ao MySQL: ${r.error}`);
       }
       handle = r.value;
+    });
+
+    // Limpeza na ENTRADA e por TABELA (#747 · `.claude/rules/testing.md`).
+    //
+    // `naturalKeySeq` é contador de PROCESSO: reinicia do zero a cada execução, e a suíte roda
+    // `--test-concurrency=1` no MESMO banco, sem recriação entre arquivos. Na 2ª execução a chave
+    // natural repete e colide em `fin_cedente_accounts_natural_key_uq`.
+    //
+    // ⚠️ E a colisão é SILENCIOSA, porque o `save` é upsert: o ODKU vira UPDATE da linha antiga, o
+    // id novo nunca é inserido, e o sintoma só aparece adiante como `findById` devolvendo `null` —
+    // mandando quem depura para o adapter, que está certo.
+    //
+    // Por TABELA, não por PK: limpar `where id in (…)` não alcança resíduo gravado com OUTRO id que
+    // colide na UNIQUE de negócio, que é exatamente o resíduo em questão. A tabela não tem seed de
+    // migration, então apagá-la inteira é seguro.
+    beforeEach(async () => {
+      await handle.db.delete(finCedenteAccounts);
     });
 
     after(async () => {

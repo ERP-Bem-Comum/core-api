@@ -13,6 +13,10 @@ cli-state.json
 .agents/worktrees/
 epic/
 
+# Fixtures do gate Semgrep — código com violações de ADR intencionais e anotações
+# `# ruleid:`/`# ok:` que o prettier não deve tocar (quebraria os testes de rule).
+.semgrep/tests/
+
 # Documentação organizacional fica fora — mantemos formatação manual
 .claude/
 .pipeline/

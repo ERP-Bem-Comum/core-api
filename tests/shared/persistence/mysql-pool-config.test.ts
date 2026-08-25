@@ -14,8 +14,9 @@ import { strict as assert } from 'node:assert';
 import { createPool } from 'mysql2/promise';
 
 import { buildPoolOptions } from '#src/shared/persistence/mysql-pool-config.ts';
+import { mysqlTestConnectionString, mysqlTestUrl } from '#tests/support/mysql-conn.ts';
 
-const CONN = 'mysql://core:pw@127.0.0.1:3306/core';
+const CONN = mysqlTestConnectionString({ user: 'core', password: 'pw' });
 
 describe('buildPoolOptions — invariante estrutural (CORE-DB-POOL-CONFIG-INVARIANT)', () => {
   it('CA-1: config válida → ok e maxIdle < connectionLimit (reaper do mysql2 arma)', () => {
@@ -81,8 +82,7 @@ describe('buildPoolOptions — invariante estrutural (CORE-DB-POOL-CONFIG-INVARI
 // (a contagem viva converge para maxIdle). É o que faltava no ticket original — presença de
 // campo nunca provou reciclagem. Opt-in MYSQL_INTEGRATION=1, validar no x99 (nunca Docker no Mac).
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
-const EFFECT_CONN =
-  process.env['MYSQL_TEST_URL'] ?? 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const EFFECT_CONN = mysqlTestUrl();
 
 describe('buildPoolOptions — EFEITO de reaping (CA-8)', { skip: !integrationEnabled() }, () => {
   it('CA-8: conexões ociosas acima de maxIdle fecham após idleTimeout', async () => {

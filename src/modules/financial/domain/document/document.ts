@@ -25,12 +25,17 @@ import type {
   ApprovedDocument,
   DraftDocument,
   Document,
+  DocumentStatus,
 } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
 import type { DocumentEvent, PayableSnapshot } from './events.ts';
 import type { DocumentError } from './errors.ts';
 import { computeNetValue } from './financial-data.ts';
 import { allowedRetentionsFor } from './document-type-metadata.ts';
+// A MESMA régua que o pré-voo e o gerador da remessa usam (#708). Uma segunda definição de "este
+// título paga?" divergiria da primeira, e a divergência apareceria como título que uma camada
+// aprova e a outra recusa.
+import { checkPayoutReadiness } from '../payout/payout-readiness.ts';
 
 // Padrão D (module-as-namespace): consumir com `import * as Document from './document.ts'`.
 
@@ -78,17 +83,43 @@ const retentionsAllowed = (type: DocumentType, retentions: readonly Retention[])
   return retentions.every((r) => allowed.includes(r.type));
 };
 
-// Gera os títulos em `Open`: 1 pai (valor líquido) + 1 filho por retenção. Usado por create e adjust
-// (no adjust, os filhos antigos são descartados e estes substituem — hard delete + recria, R8.1).
+// O id do filho de `type` na `occurrence`-ésima aparição, entre os títulos ANTERIORES — ou `null`
+// quando não havia um equivalente (retenção nova). Casar por `(kind, retentionType)` e consumir cada
+// anterior uma única vez dá bijeção determinística mesmo com duas retenções do mesmo tipo: a n-ésima
+// casa com a n-ésima. Retenção removida simplesmente não é procurada; o título dela deixa de existir.
+const priorChildId = (
+  prior: Payables | null,
+  type: Retention['type'],
+  occurrence: number,
+): Payable['id'] | null => {
+  if (prior === null) return null;
+  return prior.children.filter((c) => c.retentionType === type)[occurrence]?.id ?? null;
+};
+
+// Gera os títulos em `Open`: 1 pai (valor líquido) + 1 filho por retenção.
+//
+// ⚠️ `prior` é o que separa CRIAR de REAJUSTAR. Com `prior`, o título que continua existindo mantém
+// o `PayableId` — porque a identidade de uma entidade não é atributo dela, e sim o fio de
+// continuidade que a torna referenciável de fora (Evans, DDD p.49). E `fin_remittance_payables`
+// referencia exatamente esse id: regenerá-lo transformava toda remessa emitida num vínculo órfão, e
+// fazia a trava anti-dupla-emissão (`findHeldPayableIds`) deixar de reconhecer o título — pagamento
+// em duplicidade, que é o que aquela tabela existe para impedir (`schemas/mysql.ts:1199-1201`).
+//
+// Isto REVISA a R8.1: o ajuste continua regenerando VALOR, forma e complemento; deixa de regenerar
+// IDENTIDADE. A premissa original da R8.1 — nada fora do agregado referencia `Payable.id` — deixou
+// de valer quando a migration 0050 passou a apontar para dentro.
 const buildOpenPayables = (params: {
   readonly documentId: DocumentId;
   readonly retentions: readonly Retention[];
   readonly netValue: Money;
   readonly dueDate: Date;
   readonly paymentMethod: PaymentMethod;
+  readonly paymentDetail: string | null;
+  readonly prior: Payables | null;
 }): Payables => {
   const parent: Payable = immutable<Payable>({
-    id: PayableId.generate(),
+    // O pai é único por documento: se havia um, é o mesmo título economicamente — mudou quanto, não o quê.
+    id: params.prior?.parent.id ?? PayableId.generate(),
     origin: params.documentId,
     kind: 'Parent',
     retentionType: null,
@@ -96,21 +127,27 @@ const buildOpenPayables = (params: {
     value: params.netValue,
     dueDate: params.dueDate,
     paymentMethod: params.paymentMethod,
+    paymentDetail: params.paymentDetail,
     paidAt: null,
   });
-  const children: readonly Payable[] = params.retentions.map((r) =>
-    immutable<Payable>({
-      id: PayableId.generate(),
+  const children: readonly Payable[] = params.retentions.map((r, index) => {
+    const occurrence = params.retentions.slice(0, index).filter((x) => x.type === r.type).length;
+    return immutable<Payable>({
+      id: priorChildId(params.prior, r.type, occurrence) ?? PayableId.generate(),
       origin: params.documentId,
       kind: 'Child',
       retentionType: r.type,
       status: 'Open',
       value: r.value,
       dueDate: params.dueDate,
+      // O filho nasce herdando a forma e o complemento da nota — e é só uma SEMENTE. A guia de
+      // recolhimento do imposto tem código de barras próprio, que chega por `updatePayablePayment`.
+      // Herdar mantém a compatibilidade de quem já lançava sem distinguir; divergir é o caso novo.
       paymentMethod: params.paymentMethod,
+      paymentDetail: params.paymentDetail,
       paidAt: null,
-    }),
-  );
+    });
+  });
   return immutable<Payables>({ parent, children });
 };
 
@@ -120,6 +157,7 @@ type DocumentRefsSource = Readonly<{
   supplier: SupplierRef;
   contractRef: ContractRef | null;
   categoryRef: CategoryRef | null;
+  budgetPlanRef: BudgetPlanRef | null;
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   debitAccountRef: string | null;
@@ -147,6 +185,7 @@ const documentSavedEvents = (
       supplierRef: document.supplier,
       contractRef: document.contractRef,
       categoryRef: document.categoryRef,
+      budgetPlanRef: document.budgetPlanRef,
       costCenterRef: document.costCenterRef,
       programRef: document.programRef,
       debitAccountRef: document.debitAccountRef,
@@ -177,6 +216,9 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     netValue: net.value,
     dueDate: input.dueDate,
     paymentMethod: input.paymentMethod,
+    paymentDetail: input.paymentDetail ?? null,
+    // Criação: não há título anterior de quem herdar identidade.
+    prior: null,
   });
 
   // #115: formato (44 dígitos) e obrigatoriedade na DANFE são invariantes do documento submetido.
@@ -291,16 +333,35 @@ export type PayPayableManuallyOutput = Readonly<{
   events: readonly DocumentEvent[];
 }>;
 
-// #223: baixa manual de UM título (Aprovado→Pago), por título (#201). Relaxa a invariante
-// "payable espelha documento": um título pode ficar Pago enquanto os irmãos seguem Aprovados. O
-// documento permanece Approved (rollup do documento p/ Pago é fatia futura). Só Approved vira Pago.
+// As DUAS origens de uma baixa manual (ADR-0065 §6), e a fonte única da pré-condição.
+//
+//  - `Approved`    — pagamento feito FORA da VAN: cheque, caixa, boleto avulso. O caminho de sempre.
+//  - `Transmitted` — pagamento que saiu pela VAN e que o operador conferiu no site do banco. A P.O.
+//    decidiu na #59 que `Pago` continua manual: o retorno do banco (#690) não existe, então quem
+//    afirma que o dinheiro saiu é a pessoa que olhou o extrato.
+//
+// É a MESMA ação humana, e por isso não há slug distinto por origem — inventar um obrigaria a tela a
+// explicar uma diferença que não muda o que ninguém faz.
+//
+// ⚠️ Exportada porque o CAS do adapter (`payable-repository.drizzle.ts`) precisa da mesma lista: lá a
+// pré-condição vale no INSTANTE da escrita, aqui vale sobre o agregado que se leu. Duas listas
+// divergiriam em silêncio, e a divergência apareceria como baixa aceita em memória e recusada no
+// banco — ou pior, o contrário.
+export const MANUALLY_PAYABLE_STATUSES: readonly DocumentStatus[] = ['Approved', 'Transmitted'];
+
+// #223: baixa manual de UM título (→Pago), por título (#201). Relaxa a invariante "payable espelha
+// documento": um título pode ficar Pago enquanto os irmãos seguem Aprovados. O documento permanece
+// Approved (rollup do documento p/ Pago é fatia futura).
 export const payPayableManually = (
   input: PayPayableManuallyInput,
 ): Result<PayPayableManuallyOutput, DocumentError> => {
   const all = [input.payables.parent, ...input.payables.children];
   const target = all.find((p) => p.id === input.payableId);
   if (target === undefined) return err('payable-not-found');
-  if (target.status !== 'Approved') return err('payable-not-approved');
+  // O slug continua `payable-not-approved` mesmo agora que `Transmitted` também serve: ele nomeia o
+  // que o operador precisa fazer (aprovar), e `Draft`/`Open` — os únicos que chegam aqui recusados —
+  // são exatamente os que ainda não passaram pela aprovação.
+  if (!MANUALLY_PAYABLE_STATUSES.includes(target.status)) return err('payable-not-approved');
 
   const pay = (p: Payable): Payable =>
     p.id === input.payableId ? immutable<Payable>({ ...p, status: 'Paid', paidAt: input.at }) : p;
@@ -367,6 +428,71 @@ export const updatePayableDueDate = (
   );
 };
 
+export type UpdatePayablePaymentInput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  payableId: PayableId.PayableId;
+  // Ambos opcionais e independentes: `undefined` preserva, e em `paymentDetail` o `null` APAGA —
+  // mesma semântica de `editMetadata`/`adjust`, para não haver duas convenções no mesmo agregado.
+  paymentMethod?: PaymentMethod;
+  paymentDetail?: string | null;
+}>;
+
+export type UpdatePayablePaymentOutput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// Altera a FORMA DE PAGAMENTO e o COMPLEMENTO de UM título isolado, sem propagar ao documento-pai
+// nem aos irmãos — irmã de `updatePayableDueDate` (#270), mesma natureza e mesmo contrato de erro.
+//
+// A premissa que a justifica: retenção É título a pagar. O pai pode sair em boleto e o filho de ISS
+// em guia de recolhimento, cada um com o seu código de barras — e o pai pode ser pago sem que o
+// filho seja. Enquanto forma e complemento vivessem só na nota, esse arranjo não tinha onde existir.
+export const updatePayablePayment = (
+  input: UpdatePayablePaymentInput,
+): Result<UpdatePayablePaymentOutput, DocumentError> => {
+  const all = [input.payables.parent, ...input.payables.children];
+  const target = all.find((p) => p.id === input.payableId);
+  if (target === undefined) return err('payable-not-found');
+
+  const paymentMethod = input.paymentMethod ?? target.paymentMethod;
+  const paymentDetail =
+    input.paymentDetail !== undefined ? input.paymentDetail : target.paymentDetail;
+
+  // Decisão do P.O.: o dado entra limpo ou não entra. Complemento ausente e complemento torto são
+  // recusados igualmente — os dois terminam no mesmo lugar, um arquivo que o banco não processa, e
+  // o momento barato de descobrir é agora, com o operador ainda na tela do título.
+  //
+  // ⚠️ A régua vale só onde o dinheiro segue o CÓDIGO DE BARRAS. PIX e transferência pagam por
+  // chave e por conta do favorecido — dado do cadastro, que este agregado não alcança (o `payee`
+  // chega por composição na borda, ADR-0032). Julgá-las aqui com `payee: null` reprovaria toda
+  // troca para PIX, recusando por ignorância em vez de por dado sujo. Quem as julga é o pré-voo,
+  // que tem o favorecido em mãos.
+  const paysByBarcode = paymentMethod === 'Boleto' || paymentMethod === 'GuiaRecolhimento';
+  if (paysByBarcode) {
+    const readiness = checkPayoutReadiness({ paymentMethod, paymentDetail, payee: null });
+    if (readiness.status !== 'ready') return err('payable-payment-detail-invalid');
+  }
+
+  const repay = (p: Payable): Payable =>
+    p.id === input.payableId ? immutable<Payable>({ ...p, paymentMethod, paymentDetail }) : p;
+
+  const payables = immutable<Payables>({
+    parent: repay(input.payables.parent),
+    children: input.payables.children.map(repay),
+  });
+
+  return ok(
+    immutable<UpdatePayablePaymentOutput>({
+      document: input.document,
+      payables,
+      events: documentSavedEvents(input.document, payables),
+    }),
+  );
+};
+
 export type AdjustDocumentChanges = Readonly<{
   grossValue?: Money;
   sourceDiscounts?: Money;
@@ -383,6 +509,15 @@ export type AdjustDocumentInput = Readonly<{
   document: OpenDocument;
   payables: Payables;
   changes: AdjustDocumentChanges;
+  // Títulos presos numa remessa viva, resolvidos pela aplicação (`findHeldPayableIds`). O domínio
+  // não conhece remessa — recebe o fato pronto e decide sobre ele, que é o que mantém a regra aqui
+  // em vez de virar um `if` de orquestração (`.claude/rules/application.md`).
+  //
+  // `string` e não `PayableId`: são ids apurados por OUTRA parte do sistema, e o que se faz com eles
+  // aqui é comparar. Marcá-los como branded exigiria um cast — que produz um tipo que mente sobre
+  // uma validação que não aconteceu (`.claude/rules/domain.md`). Comparar string com string é o que
+  // a operação de fato é.
+  heldPayableIds: readonly string[];
 }>;
 
 export type AdjustDocumentOutput = Readonly<{
@@ -395,6 +530,17 @@ export type AdjustDocumentOutput = Readonly<{
 export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput, DocumentError> => {
   const d = input.document;
   const c = input.changes;
+
+  // Guarda ANTES de qualquer cálculo: se há dinheiro em trânsito por esta nota, o ajuste de valor
+  // não acontece. A comparação é contra os títulos DESTA nota — hold de outra não trava esta.
+  const ownIds: readonly string[] = [
+    input.payables.parent.id,
+    ...input.payables.children.map((child) => child.id),
+  ];
+  if (input.heldPayableIds.some((heldId) => ownIds.includes(heldId))) {
+    return err('document-has-held-payable');
+  }
+
   const retentions = c.retentions ?? d.retentions;
   if (!retentionsAllowed(d.type, retentions)) return err('retention-not-allowed-for-type');
 
@@ -404,6 +550,9 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
   const penalty = c.penalty ?? d.penalty;
   const interest = c.interest ?? d.interest;
   const dueDate = c.dueDate ?? d.dueDate;
+  // null apaga (undefined preserva) — calculado ANTES dos payables porque a semente dos títulos usa
+  // o mesmo valor que o documento vai guardar; lê-lo em dois lugares abriria a porta para divergirem.
+  const paymentDetail = c.paymentDetail !== undefined ? c.paymentDetail : d.paymentDetail;
 
   const net = computeNetValue({
     grossValue,
@@ -415,12 +564,21 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
   });
   if (!net.ok) return err(net.error);
 
+  // ⚠️ `adjust` REGENERA os títulos (R8.1): forma e complemento próprios de um título são perdidos
+  // aqui. É o contrato do ajuste completo, não um descuido — quem quer preservar o complemento usa
+  // `editMetadata` ou `updatePayablePayment`.
+  //
+  // O que NÃO se perde mais é a IDENTIDADE: `prior` faz o título que continua existindo manter o
+  // `PayableId`. A R8.1 original também descartava o id, sob a premissa de que nada fora do agregado
+  // o referenciava — premissa que a migration 0050 (`fin_remittance_payables`) revogou.
   const payables = buildOpenPayables({
     documentId: d.id,
     retentions,
     netValue: net.value,
     dueDate,
     paymentMethod: d.paymentMethod,
+    paymentDetail,
+    prior: input.payables,
   });
 
   const document: OpenDocument = immutable<OpenDocument>({
@@ -434,8 +592,7 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
     netValue: net.value,
     dueDate,
     description: c.description ?? d.description,
-    // null apaga (undefined preserva): semântica correta p/ CA6.2 mesmo no caminho completo.
-    paymentDetail: c.paymentDetail !== undefined ? c.paymentDetail : d.paymentDetail,
+    paymentDetail,
     status: 'Open',
   });
 

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Git commit-msg hook — ponto de entrada exigido pelo git (nome exato, sem extensão).
+#
+# Instalação: a mesma do pre-commit — `git config core.hooksPath .githooks`.
+#
+# Existe porque o gate de trailer do CI (`check-commit-trailers.ts`) só roda depois que a história
+# já foi escrita: quando ele acusa, o conserto é rebase. Este pega no momento do commit.
+#
+# Só delega. A lógica vive em scripts/ci/check-commit-message.ts, que importa o regex canônico do
+# próprio gate de CI — para que os dois nunca discordem sobre o que é um trailer válido.
+#
+# Exit 0 = commit segue. Exit != 0 = commit recusado. Escape: git commit --no-verify.
+
+set -uo pipefail
+
+MSG_FILE="${1:-}"
+[ -z "${MSG_FILE}" ] && exit 0
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -z "${REPO_ROOT}" ] && exit 0
+
+GATE="${REPO_ROOT}/scripts/ci/check-commit-message.ts"
+
+# Ausente, segue. Diferente do pre-commit, que é fail-closed: lá o gate de qualidade é a defesa
+# principal e sua ausência indica checkout corrompido. Aqui a ausência do arquivo é o próprio
+# sinal de que a árvore não tem o gate — travar o commit não o traria de volta.
+[ -f "${GATE}" ] || exit 0
+
+# Node via fnm não está no PATH de shell não-interativa; resolve como o pre-commit-typecheck.sh faz.
+NODE_BIN="$(command -v node || true)"
+if [ -z "${NODE_BIN}" ]; then
+  FNM_NODE="$(ls -d "${HOME}"/.local/share/fnm/node-versions/*/installation/bin 2>/dev/null | tail -1)"
+  [ -n "${FNM_NODE}" ] && NODE_BIN="${FNM_NODE}/node"
+fi
+[ -x "${NODE_BIN}" ] || exit 0
+
+exec "${NODE_BIN}" --experimental-strip-types --no-warnings "${GATE}" "${MSG_FILE}"

@@ -76,4 +76,3 @@ Quando o aluno disser "quero ver isso num código real", aponte:
 | Exemplos vivos de funções pequenas, nomeadas, com return type explícito | `src/modules/contracts/domain/contract/contract.ts`, `amendment/amendment.ts` |
 | Exemplos vivos de discriminated unions vs herança | `src/modules/contracts/domain/amendment/types.ts` (`Amendment` é union de 4 kinds, não classe abstrata) |
 | Refactoring com rede de segurança (testes verdes antes e depois) | Tickets `CTR-DEFECTS-CRITICAL/` e `CTR-DEFECTS-MEDIUM/` mostram refactor disciplinado |
-| Pipeline 4-wave como aplicação prática de "small steps + refactor" (Beck/Fowler) | [`../pipeline-maestro/SKILL.md`](../pipeline-maestro/SKILL.md) |

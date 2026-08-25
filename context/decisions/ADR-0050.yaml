@@ -1,0 +1,447 @@
+id: ADR-0050
+title: Leitura de Documento Fiscal em Cascata (nativo-first)
+source: handbook/architecture/adr/0050-document-reader-cascade-supersedes-0034.md
+decided_on: 2026-07-08
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0056]
+  superseded_by: []
+  related: [ADR-0006, ADR-0011, ADR-0019, ADR-0021]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O ADR mais bem implementado do inventário até aqui. Sete das nove alegações se sustentam com
+    evidência direta, e o código CITA o ADR nos comentários dos pontos críticos — o port declara
+    "Recebe BYTES, nunca URL (ADR-0050, anti-SSRF)" e o tipo de resultado declara "MINIMIZADO (LGPD)".
+    Duas divergências, ambas previstas pelo próprio ADR e nenhuma acidental:
+    (1) o terceiro degrau da cascata é `unpdf`, não OCR self-hosted — o ADR adia o degrau escaneado e
+    autoriza `unpdf` como fallback "só se o in-house não bater a métrica"; a suíte tem três fixtures
+    marcadas como `todo` do #388 (Identity-H sem `/ToUnicode`), o que É a métrica não batida;
+    (2) a union `resolvedVia` ficou `'xml' | 'native-text' | 'unpdf'` em vez do
+    `'xml' | 'native-text' | 'ocr-external'` que o ADR escreveu.
+    Há também hardening ACIMA do ADR: erros de recurso (`source-too-large`,
+    `decompression-limit-exceeded`) são terminais e não são mascarados como `scanned-unsupported`,
+    para preservar o sinal de abuso na borda.
+
+extraction:
+  state: complete
+  covers: |
+    9 alegações — port por bytes, ordem da cascata, invariante fiscal, minimização LGPD, limite de
+    inflate, lista de proibidos, condição de entrada do `unpdf`, log sem conteúdo, e as guardas da
+    borda de upload. As Consequências e as 5 Alternativas Rejeitadas não geram alegação própria.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      Destilação de alta qualidade — capturou o port por bytes (anti-SSRF), a cascata, o "nunca valor
+      errado silencioso" como invariante fiscal, a minimização LGPD, o log sem conteúdo e a lista de
+      licenças proibidas. É o veredito mais completo da 039 no lote de dados.
+      O que faltou é o de sempre: verificação. Ela registrou a cascata como "XML → texto nativo → OCR
+      externo → erro explícito", que é o texto do ADR; o código tem `unpdf` no terceiro degrau e a
+      union `resolvedVia` diverge. Nenhuma das duas é violação — são o ADR sendo cumprido pela cláusula
+      de escape que ele mesmo escreveu — mas a rule descreve um estado que o código não tem.
+
+claims:
+  - id: ADR-0050-C1
+    text: |
+      `DocumentReaderPort.read` recebe BYTES (`Buffer`/`Uint8Array`), ou uma `StorageKey` resolvida
+      server-side, e NUNCA uma URL vinda de input do cliente — elimina SSRF e vazamento de URL
+      assinada a terceiros.
+    kind: prohibition
+    source_lines: [30, 73, 21]
+    applies_to:
+      - 'src/modules/financial/application/ports/document-reader.ts'
+      - 'src/modules/financial/adapters/document-reader/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/application/ports/document-reader.ts:7 — DocumentReaderInput é Readonly<{ bytes: Uint8Array; declaredMime?: string }>'
+        - 'src/modules/financial/application/ports/document-reader.ts:5 — comentário: "Recebe BYTES, nunca URL (ADR-0050, anti-SSRF)"'
+        - 'nota: nenhum campo de URL no input; o mime é declarado, não confiado'
+      verify: |
+        grep -n "DocumentReaderInput" -A 5 src/modules/financial/application/ports/document-reader.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o tipo do input do reader, quando aparecer campo de URL ou o adapter fizer `fetch` de
+        endereço vindo de request, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Port de leitura de documento MUST receber bytes ou chave de storage resolvida server-side.
+        MUST NOT receber URL originada de input do cliente.
+      rationale: |
+        É a correção de segurança que motivou o ADR: o `ADR-0056` desenhava
+        `OcrPort.extract(pdfUrl: string)`, que é vetor de SSRF. O código já está correto e cita o ADR
+        no comentário — a regra existe para impedir a volta do desenho antigo.
+
+  - id: ADR-0050-C2
+    text: |
+      Cascata de estratégias em ordem: XML estruturado → parser de texto nativo in-house → OCR
+      self-hosted (microserviço externo, escaneado) → exceção. `unpdf` é o fallback.
+    kind: obligation
+    source_lines: ['32-36', 48]
+    applies_to:
+      - 'src/modules/financial/adapters/document-reader/cascade.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/document-reader/cascade.ts:8 — comentário: XML (topo) → nativo (in-house) → fallback (unpdf, ADR-0050) → scanned-unsupported'
+        - 'src/modules/financial/adapters/document-reader/cascade.ts:31 — primeiro degrau: readers.xml.read'
+        - 'src/modules/financial/adapters/document-reader/cascade.ts:35 — segundo degrau: readers.native.read'
+        - 'src/modules/financial/adapters/document-reader/cascade.ts:39 — terceiro degrau: fallback unpdf, citando ADR-0050'
+        - 'ausência: não existe degrau de OCR self-hosted — o ADR o adia explicitamente (linha 63)'
+      verify: |
+        grep -n "xml\|native\|fallback\|scanned" src/modules/financial/adapters/document-reader/cascade.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um XML estruturado, quando lido, então MUST resolver no primeiro degrau sem chamar os
+        seguintes. Dado um PDF nativo, MUST resolver no segundo. Se a ordem inverter, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        A leitura MUST tentar, nesta ordem: XML estruturado, parser de texto nativo in-house, fallback
+        `unpdf`, e então erro explícito. O degrau de OCR self-hosted permanece ADIADO — quando
+        entrar, MUST ficar depois do fallback, nunca antes.
+      rationale: |
+        A ordem real tem quatro degraus, com `unpdf` onde o ADR escreveu OCR, e o OCR adiado pelo
+        próprio ADR. Substituir pelo texto que descreve a cascata existente é mais útil que adotar um
+        que descreve uma que não existe — e preserva a invariante que importa: nativo antes de
+        biblioteca, biblioteca antes de OCR.
+
+  - id: ADR-0050-C3
+    text: |
+      Exceção (cifrado, estrutura não suportada, escaneado ruim) resulta em `Result` de erro
+      explícito, levando a lançamento manual. NUNCA valor errado silencioso — invariante fiscal.
+    kind: prohibition
+    source_lines: [36, 72]
+    applies_to:
+      - 'src/modules/financial/adapters/document-reader/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - "src/modules/financial/adapters/document-reader/cascade.ts:45 — err('scanned-unsupported') como saída terminal, nunca resultado parcial"
+        - 'src/modules/financial/adapters/document-reader/cascade.ts:18 — erros de recurso são terminais e NÃO mascarados como scanned-unsupported, para preservar o sinal de abuso na borda'
+        - 'nota: o hardening da linha 18 é ACIMA do que o ADR pediu — distinguir esgotamento de recurso de documento ilegível'
+      verify: |
+        grep -n "err(" src/modules/financial/adapters/document-reader/cascade.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um documento ilegível, quando lido, então MUST retornar erro — nunca resultado com campo
+        vazio, zero ou default. Dado um documento que estoure o limite de inflate, o erro MUST ser de
+        recurso, não `scanned-unsupported`.
+      expected_error: 'scanned-unsupported'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Leitura que não resolva MUST retornar erro tipado. MUST NOT retornar campo com valor default,
+        zero ou vazio. Erro de recurso MUST ser distinguível de documento ilegível.
+      rationale: |
+        Em valor fiscal, um zero silencioso é pior que uma falha — vira lançamento errado sem
+        rastro. O código já implementa a distinção extra entre esgotamento de recurso e ilegibilidade,
+        que vale promover junto.
+
+  - id: ADR-0050-C4
+    text: |
+      O domínio recebe `DocumentReaderResult` de campos TIPADOS (fornecedor/CNPJ, valores, retenções,
+      competência) mais `resolvedVia`, NÃO texto bruto — minimização LGPD (art. 6 III).
+    kind: prohibition
+    source_lines: [38]
+    applies_to:
+      - 'src/modules/financial/domain/document-reader/types.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/domain/document-reader/types.ts:2 — comentário: Imutável (Readonly) e MINIMIZADO (LGPD): só campos extraídos + resolvedVia'
+        - 'src/modules/financial/domain/document-reader/types.ts:25 — resolvedVia é a union xml | native-text | unpdf'
+        - "nota: a union do código diverge do ADR, que escreveu 'xml' | 'native-text' | 'ocr-external' — consequência de C2, não erro"
+      verify: |
+        grep -n "resolvedVia\|rawText\|text:" src/modules/financial/domain/document-reader/types.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `DocumentReaderResult`, quando existir campo de texto bruto ou payload do documento
+        original, então o teste falha. A tag de proveniência MUST existir.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O resultado da leitura MUST conter apenas campos extraídos tipados mais a tag de proveniência.
+        MUST NOT carregar texto bruto nem o documento original para o domínio.
+      rationale: |
+        Minimização não é opcional em dado com CPF/CNPJ, e o comentário no tipo mostra que a intenção
+        está clara para quem escreveu. A regra protege contra alguém "só adicionar o texto para
+        debug" — que é como a minimização morre.
+
+  - id: ADR-0050-C5
+    text: |
+      O parser nativo usa `node:zlib.inflateSync` com `maxOutputLength` EXPLÍCITO
+      (anti-decompression-bomb).
+    kind: obligation
+    source_lines: [34]
+    applies_to:
+      - 'src/modules/financial/adapters/document-reader/pdf-lowlevel.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/document-reader/pdf-lowlevel.ts:1 — importa inflateSync e inflateRawSync de node:zlib'
+        - 'src/modules/financial/adapters/document-reader/pdf-lowlevel.ts:40 — a assinatura exige maxOutputLength no objeto de opções'
+        - 'src/modules/financial/adapters/document-reader/pdf-lowlevel.ts:44 — maxOutputLength MAX_INFLATE aplicado em toda chamada'
+      verify: |
+        grep -n "maxOutputLength\|MAX_INFLATE" src/modules/financial/adapters/document-reader/pdf-lowlevel.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um stream comprimido que expanda além do limite, quando inflado, então MUST retornar erro
+        de limite — nunca alocar até estourar a memória do processo.
+      expected_error: 'decompression-limit-exceeded'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Toda descompressão MUST declarar `maxOutputLength` explícito. MUST NOT usar o default do
+        `node:zlib`.
+      rationale: |
+        Descompressão sem teto é DoS por documento de poucos KB. Está implementado no ponto certo — a
+        assinatura do helper OBRIGA o parâmetro, o que é melhor que confiar em quem chama.
+
+  - id: ADR-0050-C6
+    text: |
+      Proibidos: `mupdf.js` (AGPL, colide com ADR-0011), Qwen2.5-VL-3B (licença Research), qualquer
+      OCR cloud sem DPA anti-treinamento mais instrumento do art. 33 mais RIPD. Free-tier é proibido
+      permanentemente. `pdf2json` também rejeitado por garbling silencioso.
+    kind: prohibition
+    source_lines: [48, '70-72']
+    applies_to:
+      - 'package.json'
+      - 'src/modules/financial/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'ausência: mupdf.js, Qwen e pdf2json não aparecem em package.json nem em src/'
+        - 'nota: as dependências reais do caminho de leitura são fast-xml-parser 5.7.3 e unpdf 1.6.2, ambas MIT'
+      verify: |
+        grep -rn "mupdf\|Qwen\|pdf2json" src/ package.json --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando qualquer pacote da lista proibida aparecer, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST NOT depender de `mupdf.js`, `pdf2json`, Qwen2.5-VL-3B, nem de OCR cloud sem DPA
+        anti-treinamento, instrumento do art. 33 e RIPD. Free-tier de OCR cloud é proibido
+        permanentemente.
+      rationale: |
+        Duas razões distintas empacotadas: licença (AGPL colide com ADR-0011; Research não é
+        comercial) e LGPD (transferência internacional sem instrumento). Ambas são varredura de
+        `package.json` — candidata direta a `no-restricted-imports` ou a teste de dependência.
+
+  - id: ADR-0050-C7
+    text: |
+      O parser in-house é gated pela métrica objetiva do estudo — 12/12 campos vs gabarito e 0
+      alucinação. `unpdf` (MIT) entra SÓ se o in-house não bater a métrica no W0.
+    kind: permission
+    source_lines: [48, 62]
+    applies_to:
+      - 'src/modules/financial/adapters/document-reader/*.ts'
+      - 'tests/modules/financial/adapters/document-reader/*.ts'
+    reality:
+      verdict: exercised
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/document-reader/unpdf-reader.ts:18 — createUnpdfDocumentReader, o adapter de fallback, injetado no cascade'
+        - 'src/modules/financial/adapters/document-reader/unpdf-reader.ts:29 — extractText(input.bytes) — consome bytes, mantendo a invariante do C1'
+        - 'tests/modules/financial/adapters/document-reader/native-pdf-real.local.test.ts:45 — fixture marcada todo: "#388: Identity-H com CMap mas decode sem âncoras"'
+        - 'tests/modules/financial/adapters/document-reader/native-pdf-real.local.test.ts:47 — fixture marcada todo: "#388: hex Identity-H sem /ToUnicode"'
+        - 'nota: três fixtures reais marcadas como todo do #388 são a métrica não batida que autoriza o fallback — a cláusula de escape foi usada pela razão documentada'
+      verify: |
+        grep -n "388" tests/modules/financial/adapters/document-reader/native-pdf-real.local.test.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado o conjunto de fixtures fiscais reais, quando o parser nativo resolver 12/12 campos em
+        todas, então o fallback `unpdf` deixa de ser necessário e sua presença passa a exigir
+        justificativa nova. Hoje três fixtures falham e o fallback é legítimo.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        `unpdf` MUST permanecer como fallback apenas enquanto o parser nativo não resolver as fixtures
+        fiscais reais. A ativação do fallback MUST estar rastreável a uma fixture que falha.
+      rationale: |
+        A permissão do ADR é condicional e a condição foi satisfeita — mas em nenhum lugar está
+        ESCRITO que a métrica não foi batida e que por isso o `unpdf` entrou. O vínculo existe de
+        fato (as três fixtures `todo` do #388) e não de direito. Estreitar para exigir a
+        rastreabilidade torna a condição auditável em vez de tácita.
+
+  - id: ADR-0050-C8
+    text: |
+      Log nunca contém bytes, texto extraído nem resultado da leitura.
+    kind: prohibition
+    source_lines: [50]
+    applies_to:
+      - 'src/modules/financial/adapters/document-reader/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum console, logger ou process.stderr nos sete arquivos de src/modules/financial/adapters/document-reader/'
+        - 'nota: a invariante se sustenta por ausência total de log no reader, o que é mais forte que log filtrado'
+      verify: |
+        grep -rn "console\.\|logger\|process.stderr" src/modules/financial/adapters/document-reader/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o adapter de leitura, quando qualquer chamada de log receber bytes, texto extraído ou o
+        resultado, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Adapter de leitura de documento MUST NOT registrar em log bytes, texto extraído ou o resultado
+        da leitura. Log de erro MUST conter apenas o identificador tipado do erro.
+      rationale: |
+        Dado fiscal em log é vazamento com retenção — e log costuma sair do perímetro (agregador,
+        terceiro). A ausência total de log hoje é a forma mais segura; a regra impede que o primeiro
+        `console.log` de debug vire permanente.
+
+  - id: ADR-0050-C9
+    text: |
+      Na borda: upload `application/octet-stream` para Buffer com `bodyLimit` por rota, magic-bytes
+      `%PDF-`, `requireAuth`, `authorize` e verificação de ownership.
+    kind: obligation
+    source_lines: [50]
+    applies_to:
+      - 'src/modules/financial/adapters/http/plugin.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/http/plugin.ts:352 — helper magicBytesMatch(mimeType, bytes)'
+        - 'src/modules/financial/adapters/http/plugin.ts:404 — magic-bytes checado antes de processar o upload'
+        - 'src/modules/financial/adapters/http/plugin.ts:471 — rejeita corpo vazio e mime que não casa com os bytes'
+        - 'nota: 6 ocorrências de bodyLimit e 55 de requireAuth/authorize no mesmo plugin'
+      verify: |
+        grep -c "bodyLimit" src/modules/financial/adapters/http/plugin.ts; grep -cE "requireAuth|authorize" src/modules/financial/adapters/http/plugin.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um upload com mime declarado `application/pdf` e bytes que não começam com `%PDF-`,
+        quando enviado, então MUST ser rejeitado. Dado corpo acima do `bodyLimit` da rota, MUST ser
+        rejeitado antes de virar Buffer.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Rota de upload MUST declarar `bodyLimit` próprio, validar magic-bytes contra o mime declarado,
+        e exigir `requireAuth`, `authorize` e ownership. MUST NOT confiar no `Content-Type` do cliente.
+      rationale: |
+        Mime declarado é input do cliente; magic-bytes é fato. As quatro guardas estão implementadas
+        e a regra existe para a próxima rota de upload, que é onde uma delas costuma ser esquecida.
+
+findings:
+  - |
+    Melhor caso de rastreabilidade do inventário: o código CITA o ADR nos pontos críticos —
+    `document-reader.ts:5` ("Recebe BYTES, nunca URL (ADR-0050, anti-SSRF)"),
+    `cascade.ts:8` e `:39` (fallback unpdf, ADR-0050), `types.ts:2` (MINIMIZADO LGPD). Quando o código
+    referencia a decisão no lugar onde ela morde, verificar custa um grep. Vale como padrão a
+    generalizar.
+  - |
+    A cláusula de escape do ADR ("`unpdf` entra só se o in-house não bater a métrica 12/12") foi
+    ACIONADA e não está registrada em lugar algum como acionada. O vínculo existe de fato: três
+    fixtures fiscais reais marcadas `todo` do #388 (Identity-H sem `/ToUnicode`, CMap sem âncoras). A
+    permissão condicional virou permissão simples por decurso — ninguém escreveu "a métrica não foi
+    batida, o fallback entrou".
+  - |
+    A union `resolvedVia` do código é `'xml' | 'native-text' | 'unpdf'`; o ADR escreveu
+    `'xml' | 'native-text' | 'ocr-external'`. Consequência direta do item acima, e um bom exemplo de
+    por que a tag de proveniência tem de ser lida do código: ela diz qual via resolveu, e a via real
+    não é a que o ADR nomeou.
+  - |
+    Hardening acima do ADR: `cascade.ts:18` trata erro de recurso (`source-too-large`,
+    `decompression-limit-exceeded`) como TERMINAL, sem mascarar como `scanned-unsupported`, "para
+    preservar o sinal de abuso na borda". O ADR não pediu essa distinção. Registrar antes que alguém
+    "simplifique" unificando os erros.
+  - |
+    `unpdf` é usado em DOIS lugares: no fallback do reader de documento e no parser de extrato
+    bancário (`statement-parsers/bank-statement-parser.ts:2`). O segundo uso não é coberto por este
+    ADR — o extrato é a issue #145. Uma dependência autorizada condicionalmente para um caminho
+    virou dependência de dois caminhos.
+
+provenance:
+  tickets:
+    - FIN-DOC-READER-CASCADE
+    - FIN-DOC-READER-NATIVE
+    - FIN-DOC-READER-PDF-REAL
+    - FIN-DOC-READER-PORT
+    - FIN-DOC-READER-XML
+  issues: []
+  note: |
+    Issues citadas pelo ADR: #62 (ingestão OCR, adiada), #145 (extrato PDF), #290 (divergência de
+    alíquota). O acervo tem FIN-DOC-READER-PORT, FIN-DOC-READER-NATIVE, FIN-DOC-READER-CASCADE,
+    FIN-DOC-READER-PDF-REAL, FIN-DOC-READER-XML e FIN-READER-* (multifont-cmap, flate-syncflush,
+    touni-guard, tabular-fields, line-reconstruct) — nenhum lido. O #388 (Fatia 2 do reader) está
+    anotado como `todo` na própria suíte. Preencher na Fase 3.

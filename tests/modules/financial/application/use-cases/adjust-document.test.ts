@@ -11,8 +11,12 @@ import * as Retention from '#src/modules/financial/domain/shared/retention.ts';
 import * as Document from '#src/modules/financial/domain/document/document.ts';
 import { createInMemoryDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
+import { createInMemoryRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.in-memory.ts';
 import type { DocumentRepository } from '#src/modules/financial/domain/document/repository.ts';
 import { adjustDocument } from '#src/modules/financial/application/use-cases/adjust-document.ts';
+
+// Fake real (não mock): remessa vazia, então nenhum título está preso e o ajuste segue seu caminho.
+const noRemittances = () => createInMemoryRemittanceRepository();
 
 const SUP = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
@@ -78,7 +82,7 @@ describe('financial/application — adjustDocument', () => {
     const outbox = createInMemoryOutbox();
     const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedOpen(repo);
-    const r = await adjustDocument({ repo, clock: CLOCK })({
+    const r = await adjustDocument({ repo, clock: CLOCK, remittances: noRemittances() })({
       documentId: id,
       expectedVersion: 0,
       interestCents: 500,
@@ -97,12 +101,18 @@ describe('financial/application — adjustDocument', () => {
     const outbox = createInMemoryOutbox();
     const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedApproved(repo);
-    const r = await adjustDocument({ repo, clock: CLOCK })({
+    const r = await adjustDocument({ repo, clock: CLOCK, remittances: noRemittances() })({
       documentId: id,
       expectedVersion: 0,
       interestCents: 100,
     });
     assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'invalid-state-transition');
+    // `.error.error`: o use case devolve o envelope `AdjustDocumentFailure`, e todo `kind` carrega
+    // o slug. Asserir o `kind` junto prende a variante — sem isso, uma recusa que virasse
+    // `held-payables` por engano passaria neste assert.
+    if (!r.ok) {
+      assert.equal(r.error.kind, 'plain');
+      assert.equal(r.error.error, 'invalid-state-transition');
+    }
   });
 });

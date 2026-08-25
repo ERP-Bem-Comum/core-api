@@ -1,8 +1,15 @@
+---
+inquiry: 0010
+title: "Correção de assunção — engine real é MySQL 8, não PostgreSQL"
+state: decided
+opened: 2026-04-28
+decided: 2026-04-28
+last_reviewed: 2026-08-06
+open_outputs: 1  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0010: Correção de assunção — engine real é MySQL 8, não PostgreSQL
 
-- **Status:** Decided
-- **Opened:** 2026-04-28
-- **Closed/Decided:** 2026-04-28
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Análise interna (revisão crítica de premissas)
 - **Impact:** [ADR-0013](../architecture/adr/0013-mysql-database-engine.md), [ADR-0014](../architecture/adr/0014-mysql-database-isolation.md), [ADR-0015](../architecture/adr/0015-mysql-outbox-pattern.md). Supersedes parcialmente ADRs 0003, 0004, 0008.

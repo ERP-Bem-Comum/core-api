@@ -1,8 +1,14 @@
+---
+inquiry: 0015
+title: "Charset/collate por tabela via API drizzle-orm — roadmap"
+state: blocked
+opened: 2026-05-18
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0015: Charset/collate por tabela via API drizzle-orm — roadmap
 
-- **Status:** Open
-- **Opened:** 2026-05-18
-- **Closed/Decided:** —
 - **Opened by:** Gabriel Aderaldo (via `pipeline-maestro`, ticket `CTR-DB-SCHEMA-HARDENING`)
 - **Asked to:** drizzle-orm maintainers / observação de roadmap upstream
 - **Impact:** `src/modules/contracts/adapters/persistence/schemas/mysql.ts`, qualquer migration emitida via `drizzle-kit generate` no futuro. Eventual ADR de **dependência tipográfica** quando suportado.
@@ -44,6 +50,68 @@ drizzle-orm@0.45.2: MySqlTableExtraConfigValue =
 
 - `drizzle-orm@0.45.2` confirmadamente **sem** suporte table-level `charset`/`collate`. Nem coluna-level `collate`.
 - Não há mention de `charset` ou `collate` em nenhum `.d.ts` sob `mysql-core/` ou `node_modules/.pnpm/drizzle-orm@0.45.2_*/`.
+
+### 2026-08-05 — MEDIDO: a pergunta 2 está respondida, e sem esperar upstream
+
+A pergunta 2 (`collate` por coluna, necessária para o `utf8mb4_bin` em UUIDs) **não depende de suporte
+novo**. O `customType` do `drizzle-orm@0.45.2` já resolve, e foi reproduzido — não é leitura de doc:
+
+```ts
+const binId = customType<{ data: string }>({
+  dataType: () => 'varchar(36) COLLATE utf8mb4_bin',
+});
+```
+
+`drizzle-kit generate` emitiu, verbatim:
+
+```sql
+`id` varchar(36) COLLATE utf8mb4_bin NOT NULL,
+```
+
+E a 2ª geração respondeu `No schema changes, nothing to migrate` — **idempotente, sem drift**, que
+era o risco real de injetar SQL num `dataType()`. Testado em worktree descartável com a config do
+repo.
+
+**O que isso muda no §"O que decide o futuro deste inquiry":** os passos 2 e 3 ficam disponíveis
+HOJE, sem bump de versão. A sintaxe especulativa que o passo 2 imaginava
+(`varchar('id', { length: 36, collate: 'utf8mb4_bin' })`) não existe e não é necessária — o caminho é
+o `customType`, que é API de primeira classe.
+
+**O que NÃO muda:** a pergunta 1 (charset/collate **table-level**) segue sem resposta. A doc viva de
+`orm.drizzle.team/docs/mysql/column-types` (verificada em 2026-08-05) não documenta nenhuma das duas,
+e `drizzle-orm@0.45.2` é o dist-tag `latest` — a próxima linha é `1.0.0`, hoje em `rc.4`. O
+table-level continua exigindo edição manual da migration.
+
+**Correção de um argumento que este repositório chegou a registrar:** durante a triagem da alegação
+`ADR-0014-C8` afirmei que expressar collation exigiria "passo manual permanente a cada
+`db:generate`". Está errado, e o erro foi ler documentação em vez de medir — ver a correção em
+`context/decisions/ADR-0014.yaml`.
+
+**Encaminhamento:** adotar o `customType` para identificadores toca schema de 8 módulos e muda o SQL
+gerado; merece ciclo próprio, não cabe nesta inquiry. Esta permanece `Open` pela pergunta 1
+(table-level), agora com o escopo reduzido à metade que de fato depende de upstream. Ver
+[Inquiry-0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) para a avaliação do `1.0.0`.
+
+### 2026-08-05 — Pergunta 2 FECHADA: o ciclo próprio aconteceu (#636)
+
+Os tipos vivem em `src/shared/persistence/identifier-columns.ts` e cobrem as **119** colunas
+binárias dos 6 módulos que as têm. `db:generate` responde `No schema changes` em todos — nenhum
+`ALTER` foi gerado para coluna existente.
+
+Duas coisas que só apareceram na execução, e que a medição de maio/agosto não previa:
+
+1. **O `binId` único da prova de conceito não bastava.** A collation binária vale para 7 larguras
+   distintas, e a largura carrega significado (`varchar(14)` é CNPJ do ADR-0044, `varchar(11)` é
+   CPF, `char(64)` é SHA-256 hex). Um tipo parametrizado por `length` devolveria ao schema a decisão
+   de qual número usar — que é onde o erro mora. Viraram 7 tipos nomeados pelo que a coluna É.
+
+2. **O CA4 exigiu corrigir o snapshot, e a razão é que ele MENTIA.** O `meta/*_snapshot.json`
+   gravava `varchar(36)` enquanto o banco tem `utf8mb4_bin`, porque a migration foi editada à mão —
+   a divergência nasceu na edição manual, não na adoção do `customType`. Sem corrigir, o diff via
+   mudança de tipo e gerava `MODIFY COLUMN` em cada uma das colunas.
+
+**A pergunta 1 (table-level) segue `Open`** — o `CHARSET`/`COLLATE` de tabela continua exigindo
+edição manual da migration, e é o que mantém esta inquiry aberta.
 
 ### Pendente — issues e roadmap upstream
 

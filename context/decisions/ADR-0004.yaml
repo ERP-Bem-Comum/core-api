@@ -1,0 +1,65 @@
+id: ADR-0004
+title: Postgres Outbox como Mecanismo de Eventos Inicial
+source: handbook/architecture/adr/0004-postgres-outbox-pattern.md
+decided_on: 2026-04-27
+
+declared:
+  status: Superseded by ADR-0015 em 2026-04-28
+  status_normalized: superseded
+  supersedes: []
+  superseded_by: [ADR-0015]
+  related: [ADR-0003, ADR-0013]
+
+assessment:
+  verdict: obsolete
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Morto como norma pelo mesmo motivo do ADR-0003: assumia PostgreSQL. O pattern foi readaptado para
+    MySQL no ADR-0015, que preservou as propriedades conceituais (atomicidade via transação ACID,
+    idempotência por `event_id`, durabilidade em tabela) e trocou sintaxe e otimizações.
+    O ADR-0015 herdou bem os gatilhos de reavaliação — repetiu os quatro. O que não herdou foram as
+    CONSEQUÊNCIAS NEGATIVAS: latência maior que broker dedicado, throughput limitado pela tabela e
+    pelo I/O, e fanout de muitos consumidores sobrecarregando o banco. Essas três só existem aqui.
+
+extraction:
+  state: complete
+  covers: |
+    Zero alegações, deliberadamente — a norma vigente vive no ADR-0015 e está extraída lá em 9
+    alegações. Duplicar aqui criaria duas fontes para a mesma regra. O valor deste registro está no
+    `findings`.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: Inelegível na triagem por status — não gera regra
+    applied_to: []
+    gap: |
+      Classificação correta para o propósito da 039. Não captura que as consequências negativas do
+      pattern — os custos que a decisão aceitou de olhos abertos — ficaram só no documento superseded.
+
+claims: []
+
+findings:
+  - |
+    As três consequências negativas do outbox só existem neste arquivo morto: latência maior que
+    broker dedicado (polling em segundos), throughput limitado pela tabela e pelo I/O do banco, e
+    fanout de muitos consumidores sobrecarregando o banco. O ADR-0015 tem a seção "Por quê MySQL e
+    não Kafka/NATS/Redis" com os POSITIVOS, e nenhuma seção com os negativos. Um leitor do ADR
+    vigente vê só o lado bom de uma decisão que foi tomada com trade-off explícito.
+  - |
+    Padrão confirmado no lote: as duas supersessões deste lote (0003→0014, 0004→0015) preservaram a
+    DECISÃO e perderam parte do RACIOCÍNIO — negativas, alternativas rejeitadas, gatilhos de revisão.
+    Não é descuido isolado, são duas de duas. Vale considerar exigir, no template de ADR que
+    supersede, que as consequências negativas e os gatilhos sejam reafirmados ou explicitamente
+    revogados.
+  - |
+    Este ADR já previa `outbox_dead_letter` após N falhas (linha 35) e o ADR-0015 repetiu. Quatro dos
+    sete outboxes do código não têm a tabela — ver `ADR-0015-C7`. A exigência atravessou duas
+    supersessões e não chegou inteira na implementação.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Decisão anterior ao código atual. A linhagem de implementação está nos tickets de outbox listados
+    em `ADR-0015.yaml#provenance`, não lidos nesta fase.

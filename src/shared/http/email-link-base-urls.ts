@@ -9,6 +9,7 @@
  */
 
 import { err, ok, type Result } from '#src/shared/primitives/result.ts';
+import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 
 const FIELDS = [
   ['resetBaseUrl', 'AUTH_RESET_BASE_URL'],
@@ -32,7 +33,7 @@ const isAbsoluteHttpUrl = (value: string): boolean => {
 export const readEmailLinkBaseUrls = (
   env: Readonly<Record<string, string | undefined>>,
 ): Result<EmailLinkBaseUrls, readonly string[]> => {
-  const isProduction = env['NODE_ENV'] === 'production';
+  const isProduction = isProductionEnv(env);
   const errors: string[] = [];
   const urls: Partial<Record<Field, string>> = {};
   for (const [field, name] of FIELDS) {
@@ -50,4 +51,37 @@ export const readEmailLinkBaseUrls = (
     urls[field] = value;
   }
   return errors.length > 0 ? err(errors) : ok(urls);
+};
+
+/** Links resolvidos que o boot injeta nas composições (auth: reset/ativação; partners: autocadastro). */
+export type ResolvedEmailLinkUrls = Readonly<{
+  resetBaseUrl?: string;
+  activationBaseUrl?: string;
+  autocadastroBaseUrl?: string;
+}>;
+
+/** Paths fixos das telas do front (rotas na raiz do web-app) — o convite deriva a origem do reset. */
+const ACTIVATION_PATH = '/activate';
+const AUTOCADASTRO_PATH = '/autocadastro';
+
+/**
+ * #739: resolve os três links a partir das bases lidas do ambiente. Quando a base própria de
+ * **ativação** ou **autocadastro** não vem, deriva da ORIGEM do link de **reset** — o e-mail de
+ * recuperação de senha é a fonte confiável do domínio do front no ambiente (se ele funciona, a
+ * `AUTH_RESET_BASE_URL` está setada certo). Sem isto, ativação/autocadastro caíam nos defaults
+ * `localhost` das composições e o link do e-mail não abria a tela. A base própria de cada um segue
+ * valendo como override. `resetBaseUrl` já é URL absoluta (validada em `readEmailLinkBaseUrls`).
+ */
+export const resolveEmailLinkUrls = (base: EmailLinkBaseUrls): ResolvedEmailLinkUrls => {
+  const origin = base.resetBaseUrl !== undefined ? new URL(base.resetBaseUrl).origin : undefined;
+  const activation =
+    base.activationBaseUrl ?? (origin !== undefined ? `${origin}${ACTIVATION_PATH}` : undefined);
+  const autocadastro =
+    base.selfRegistrationBaseUrl ??
+    (origin !== undefined ? `${origin}${AUTOCADASTRO_PATH}` : undefined);
+  return {
+    ...(base.resetBaseUrl !== undefined ? { resetBaseUrl: base.resetBaseUrl } : {}),
+    ...(activation !== undefined ? { activationBaseUrl: activation } : {}),
+    ...(autocadastro !== undefined ? { autocadastroBaseUrl: autocadastro } : {}),
+  };
 };

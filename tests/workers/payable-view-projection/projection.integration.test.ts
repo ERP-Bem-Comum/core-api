@@ -12,6 +12,8 @@ import process from 'node:process';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 import { runOnce } from '#src/shared/outbox/index.ts';
+import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
+import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { eq } from 'drizzle-orm';
@@ -22,6 +24,7 @@ import {
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { createDrizzleFinancialOutboxReader } from '#src/modules/financial/adapters/persistence/repos/fin-outbox-reader.drizzle.ts';
 import { createDrizzlePayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 import {
   createPayableProjectionDelivery,
   rowToMessage,
@@ -33,18 +36,28 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('payable-view-projection — e2e fin_outbox → fin_payable_view', () => {
+    let contracts: MysqlHandle;
     let financial: FinancialMysqlHandle;
 
     before(async () => {
+      // ⚠️ Mesma dependência do `supplier-view-projection`: o claim por consumidor consulta
+      // `eventos_processados` (ADR-0064), criada apenas pelo journal do `contracts` — tabela
+      // cross-módulo sem dono entre os journals (#830). Sem isto, o SELECT do claim estoura com
+      // tabela ausente e a falha aparece como se fosse defeito da projeção.
+      const c = await openMysql({ connectionString, applyMigrations: true });
+      if (!c.ok) throw new Error(`[e2e] contracts (eventos_processados): ${c.error}`);
+      contracts = c.value;
+
       const f = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!f.ok) throw new Error(`[e2e] financial: ${f.error}`);
       financial = f.value;
     });
 
     after(async () => {
+      await contracts?.close();
       await financial?.close();
     });
 
@@ -127,19 +140,34 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
 
       const outbox = createDrizzleFinancialOutboxReader(financial);
+      // Mesmo `consumerId` do worker real (`payable-view-projection/delivery.ts:22`) — as
+      // tentativas gravadas na DLQ são as DESTE consumidor (#800/#824).
+      const CONSUMER_ID = 'financial-payable-view';
 
-      const failed = await outbox.markFailed(eventId, new Date(), 'apply-payable-event', 3);
+      const failed = await outbox.markFailed(CONSUMER_ID, eventId, {
+        now: new Date(),
+        errorTag: 'apply-payable-event',
+        attempt: 3,
+      });
       assert.equal(failed.ok, true);
 
-      const moved = await outbox.moveToDeadLetter(eventId, new Date(), 'max-retries: bad payload');
+      const moved = await outbox.moveToDeadLetter(
+        CONSUMER_ID,
+        eventId,
+        new Date(),
+        'max-retries: bad payload',
+      );
       assert.equal(moved.ok, true);
 
-      // fin_outbox não tem mais a row; a DLQ recebeu a cópia completa.
+      // A row de origem PERMANECE em `fin_outbox` (#800/#824, ADR-0022:27-29: "o outbox retém as
+      // entradas após a entrega… não deleta") — outros consumidores ainda precisam vê-la. Antes
+      // do fanout, `moveToDeadLetter` fazia DELETE e este teste afirmava 0 rows; era o próprio
+      // defeito que a mudança corrige. A DLQ recebeu a cópia completa em paralelo.
       const stillPending = await financial.db
         .select()
         .from(finOutbox)
         .where(eq(finOutbox.eventId, eventId));
-      assert.equal(stillPending.length, 0);
+      assert.equal(stillPending.length, 1, 'fin_outbox deve reter a row após moveToDeadLetter');
       const dl = await financial.db
         .select()
         .from(finOutboxDeadLetter)
@@ -149,7 +177,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.equal(dl[0]?.attempts, 3);
 
       // moveToDeadLetter de eventId inexistente → err (OutboxEventNotFound).
-      const notFound = await outbox.moveToDeadLetter(newUuid(), new Date(), 'x');
+      const notFound = await outbox.moveToDeadLetter(CONSUMER_ID, newUuid(), new Date(), 'x');
       assert.equal(notFound.ok, false);
     });
   });

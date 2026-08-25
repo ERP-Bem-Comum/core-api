@@ -5,7 +5,14 @@
 # partners → mysql; storage → minio) e os seeds completos (SEED-CONTRACT), e executa a coleção
 # unificada `api-collections/core-api`:
 #   - PRINCIPAL (0-auth + 1-7): deve PASSAR — determina o exit code (FR-008).
-#   - z-pending-fixes: EXPECTED-FAIL (regressão de fix + feature pendente) — roda à parte, NÃO bloqueia.
+#   - z-pending-fixes: suíte de REGRESSÃO. Roda em processo próprio, mas o rc dela entra no exit
+#     code junto com o da principal (linha final: `[ $RC_MAIN -eq 0 ] && [ $RC_PENDING -eq 0 ]`).
+#     ⚠️ O NOME MENTE, e é dívida conhecida. A pasta nasceu expected-fail — o ADR-0038 §2 manda
+#     isolar teste que reprova de propósito —, mas os 5 tickets foram implementados e ela virou
+#     regressão bloqueante. Renomear tocaria 17 registros históricos (`.claude/.pipeline/`,
+#     `specs/007/safety-net/`) que o ADR-0057 §5 proíbe reescrever, mais errata no ADR-0038, que é
+#     imutável. Custo maior que o do nome errado — decidido em 2026-08-05, com a Inquiry-0026 aberta
+#     para medir se o Bruno permanece.
 #
 # Uso: pnpm run test:integration:all   (exige Docker + bru CLI; NÃO faz parte de `pnpm test`).
 # Token compartilhado: o `bru run` recebe TODAS as pastas principais num único processo (o token

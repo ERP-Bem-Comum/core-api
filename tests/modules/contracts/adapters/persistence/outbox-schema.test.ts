@@ -25,8 +25,9 @@ import { sql } from 'drizzle-orm';
 
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 
@@ -271,12 +272,18 @@ if (integrationEnabled()) {
 
       await assert.rejects(
         async () =>
+          // `consumer_id` entrou na DLQ com a PK composta (#800, #824 / ADR-0064): a desistência
+          // é de UM consumidor, não do evento. Sem ele o INSERT morre em 1364 ("doesn't have a
+          // default value") ANTES de alcançar o CHECK que este caso existe para exercitar — o
+          // teste passaria a falhar pelo motivo errado, e continuaria vermelho depois de o CHECK
+          // ser removido.
           handle!.db.execute(sql`
             INSERT INTO ctr_outbox_dead_letter
-              (event_id, aggregate_id, aggregate_type, event_type, schema_version,
+              (consumer_id, event_id, aggregate_id, aggregate_type, event_type, schema_version,
                occurred_at, enqueued_at, failed_at, attempts, last_error, payload)
             VALUES
-              (${EVENT_ID_DLQ}, ${AGGREGATE_ID}, ${'Invalid'}, ${'ContractCreated'}, ${1},
+              (${'contracts-outbox'}, ${EVENT_ID_DLQ}, ${AGGREGATE_ID}, ${'Invalid'},
+               ${'ContractCreated'}, ${1},
                ${occurredAt}, ${enqueuedAt}, ${failedAt}, ${3},
                ${'max-retries-exceeded'}, ${payloadJson})
           `),

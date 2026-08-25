@@ -24,6 +24,7 @@ import type {
   MysqlHandle,
 } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ─── Paths ────────────────────────────────────────────────────────────────
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -32,8 +33,12 @@ const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
 
 // Credenciais sincronizadas com os secrets fixos do `pnpm test:integration`
 // (escritos pelo script no `package.json`). Não usar em produção.
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
-const BAD_AUTH_CONN = 'mysql://invalid:invalid@127.0.0.1:3306/inexistente';
+const VALID_CONN = mysqlTestConnectionString();
+const BAD_AUTH_CONN = mysqlTestConnectionString({
+  user: 'invalid',
+  password: 'invalid',
+  database: 'inexistente',
+});
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 const skipReason = (): string =>
@@ -57,13 +62,18 @@ const resetCoreDatabase = (): void => {
 
 // ─── CA-1 — Dependência mysql2 ────────────────────────────────────────────
 describe('CTR-DB-DRIVER-MYSQL — CA-1: dependência mysql2', () => {
-  it('CA-1: package.json#dependencies.mysql2 é ^3.x', () => {
+  // A asserção cobra o MAJOR, não a forma da faixa. Nasceu como `^3.x` porque era assim que a
+  // dependência estava declarada; o objetivo sempre foi barrar major diferente (mysql2 2.x tem
+  // outra API de promise, 4.x não existe). Desde 2026-08-04 toda `dependencies` é pinada — ver
+  // `.claude/rules/supply-chain.md` — então `3.22.3` satisfaz a intenção original e ainda fixa a
+  // versão exata. Aceita as duas formas para não amarrar este CA à política de pin.
+  it('CA-1: package.json#dependencies.mysql2 é major 3', () => {
     const pkg = JSON.parse(readFileSync(PACKAGE_JSON, 'utf-8')) as {
       dependencies?: Record<string, string>;
     };
     const v = pkg.dependencies?.['mysql2'];
     assert.ok(v, 'mysql2 não declarado em dependencies');
-    assert.match(v, /^\^3\./, `mysql2 deve ser ^3.x (atual: ${v})`);
+    assert.match(v, /^\^?3\./, `mysql2 deve ser major 3 (atual: ${v})`);
   });
 });
 

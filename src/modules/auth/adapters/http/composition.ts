@@ -9,7 +9,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { generateKeyPair, importPKCS8, importSPKI } from 'jose';
+import { generateKeyPair } from 'jose';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 
@@ -22,6 +22,7 @@ import { createDrizzleUserStore } from '../persistence/repos/user-repository.dri
 import { createDrizzleRefreshTokenStore } from '../persistence/repos/refresh-token-repository.drizzle.ts';
 import { createDrizzleRoleStore } from '../persistence/repos/role-repository.drizzle.ts';
 import { openAuthMysql } from '../persistence/drivers/mysql-driver.ts';
+import type { AuthJwtKeys } from './jwt-key-config.ts';
 import { makeArgon2PasswordHasher } from '../crypto/password-hasher.argon2.ts';
 import { makeNodePasswordResetTokenMinter } from '../crypto/password-reset-token-minter.node.ts';
 import { makeInMemoryLoginLockoutStore } from '../persistence/repos/login-lockout-store.in-memory.ts';
@@ -132,6 +133,12 @@ export type AuthCompositionConfig = Readonly<{
    * `hasPermission` sempre `true` — todo autenticado é super-usuário. `requireAuth` NÃO é afetado.
    */
   rbacMode?: RbacMode;
+  /**
+   * Par ES256 já resolvido do ambiente pelo composition root (#515). Ausente → par efêmero gerado
+   * no boot (dev/test). Em produção o `server.ts` derruba o boot antes de chegar aqui quando a
+   * chave falta, então "ausente" nunca significa produção sem chave.
+   */
+  jwtKeys?: AuthJwtKeys;
 }>;
 
 export type AuthHttpDeps = Readonly<{
@@ -165,6 +172,7 @@ export type AuthHttpDeps = Readonly<{
    * Fábrica de preHandler RBAC por NOME de permissão (C1 D1). Recebe `string` (não o VO
    * `Permission`) para não vazar `auth/domain` a outros módulos (ADR-0006); valida internamente.
    */
+  /** Fábrica de preHandler RBAC. Sob `bypass` vira no-op — em todas as rotas, sem exceção. */
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
   /**
    * Checagem CONSULTÁVEL de permissão (não-preHandler): `(req, permissionName) => Promise<boolean>`.
@@ -270,16 +278,18 @@ const buildProfilePhotoStorage = (env: Readonly<NodeJS.ProcessEnv>): ProfilePhot
   });
 };
 
-const loadOrGenerateKeys = async (
-  env: Readonly<Record<string, string | undefined>>,
+/**
+ * #515: a leitura do ambiente saiu daqui para `readAuthJwtKeys` (guarda de boot pura, rodada pelo
+ * `server.ts` antes de qualquer handle abrir). Aqui resta só a decisão binária — usar o par
+ * resolvido, ou gerar um efêmero.
+ *
+ * Antes, esta função lia `process.env` direto e, se a chave faltasse, gerava par efêmero em
+ * SILÊNCIO — inclusive em produção. Ver `jwt-key-config.ts`.
+ */
+const resolveKeys = async (
+  keys: AuthJwtKeys | undefined,
 ): Promise<Pick<Es256Config, 'privateKey' | 'publicKey'>> => {
-  const priv = env['AUTH_JWT_PRIVATE_KEY'];
-  const pub = env['AUTH_JWT_PUBLIC_KEY'];
-  if (priv !== undefined && priv.length > 0 && pub !== undefined && pub.length > 0) {
-    const privateKey = await importPKCS8(priv, 'ES256');
-    const publicKey = await importSPKI(pub, 'ES256');
-    return { privateKey, publicKey };
-  }
+  if (keys !== undefined) return keys;
   // Dev/test: par efêmero — tokens não sobrevivem a restart (aceitável fora de prod).
   return generateKeyPair('ES256', { extractable: false });
 };
@@ -405,7 +415,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   const rbacMode: RbacMode = config.rbacMode ?? 'enforced'; // ADR-0052 — default seguro.
 
   const stores = await buildStores(config);
-  const keys = await loadOrGenerateKeys(process.env);
+  const keys = await resolveKeys(config.jwtKeys);
   const tokenIssuer = makeEs256TokenIssuer({ ...keys, issuer, ttlSeconds: accessTtlSeconds });
   const passwordHasher = makeArgon2PasswordHasher();
   const refreshTokenMinter = makeNodeRefreshTokenMinter();
@@ -585,6 +595,12 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     // Em `bypass`, a autorização por permissão é neutralizada; a autenticação (`requireAuth`, injetado
     // à parte) permanece. A validação do nome da permissão continua no wiring mesmo no bypass — um
     // nome inválido é bug de código, não de runtime, e deve estourar no boot em qualquer modo.
+    //
+    // ⚠️ SEM EXCEÇÃO — nem para a rota que move dinheiro. Decisão do dono (Gabriel, 25/08/2026):
+    // enquanto o modelo de permissões não for validado com a gerência e o time de negócio, TODO
+    // usuário autenticado é super-usuário em TODA rota, inclusive `POST /financial/remittances`.
+    // Colocar permissão numa rota antes desse acordo é fixar em código um desenho que ainda vai
+    // mudar. O gatilho para reabrir é o aceite de negócio, não uma decisão técnica.
     authorize: (permissionName: string): preHandlerAsyncHookHandler => {
       const parsed = Permission.parse(permissionName);
       if (!parsed.ok) {

@@ -12,8 +12,9 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { createPoolRegistry } from '#src/shared/persistence/pool-registry.ts';
+import { mysqlTestConnectionString, mysqlTestUrl } from '#tests/support/mysql-conn.ts';
 
-const URL_A = 'mysql://core_app:pw@127.0.0.1:3306/core';
+const URL_A = mysqlTestConnectionString({ user: 'core_app', password: 'pw' });
 const URL_B = 'mysql://core_app:pw@10.0.0.9:3306/core';
 
 describe('PoolRegistry — dedup por connection-string (CORE-WORKER-RUNNER-POOL-REGISTRY)', () => {
@@ -73,8 +74,7 @@ describe('PoolRegistry — dedup por connection-string (CORE-WORKER-RUNNER-POOL-
 // UM pool (não N pools). É o núcleo do ganho da issue #407 contra o Incident-0001. Opt-in
 // MYSQL_INTEGRATION=1, validar no x99 (memory validate-mysql-always-x99-never-mac-docker).
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
-const EFFECT_CONN =
-  process.env['MYSQL_TEST_URL'] ?? 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const EFFECT_CONN = mysqlTestUrl();
 
 describe('PoolRegistry — dedup real de conexões (CA-9)', { skip: !integrationEnabled() }, () => {
   it('CA-9: 3 getOrCreate na MESMA url → 1 pool; conexões vêm do pool único (não 3×)', async () => {

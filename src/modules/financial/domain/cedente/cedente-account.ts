@@ -6,6 +6,7 @@ import {
   type CedenteAccountError,
   type CreateInput,
 } from './types.ts';
+import * as Nsa from './nsa.ts';
 
 const isBlank = (value: string): boolean => value.trim().length === 0;
 
@@ -15,8 +16,10 @@ export const create = (input: CreateInput): Result<CedenteAccount, CedenteAccoun
   if (isBlank(input.accountNumber)) return err('account-number-required');
   if (isBlank(input.document)) return err('document-required');
 
-  const nextNsa = input.nextNsa ?? 1;
-  if (nextNsa < 1) return err('invalid-nsa');
+  // A faixa válida vive no VO `Nsa` (seis dígitos, teto do campo no CNAB 240) — validar aqui com
+  // regra própria seria a segunda definição do mesmo limite, e as duas divergiriam.
+  const nextNsa = input.nextNsa ?? Nsa.MIN;
+  if (!Nsa.rehydrate(nextNsa).ok) return err('invalid-nsa');
 
   if (input.type !== undefined && !ACCOUNT_TYPES.includes(input.type)) {
     return err('invalid-account-type');
@@ -62,3 +65,27 @@ export const close = (
   account.status === 'Active'
     ? ok(immutable<CedenteAccount>({ ...account, status: 'Closed' }))
     : err('cedente-account-already-closed');
+
+export type AllocateNsaError = 'cedente-account-not-active' | 'nsa-exhausted';
+
+export type NsaAllocation = Readonly<{ nsa: Nsa.Nsa; account: CedenteAccount }>;
+
+// Consome o NSA corrente e devolve a conta já apontando para o próximo. Não persiste nada: a
+// ATOMICIDADE entre ler e gravar é responsabilidade do adapter (lock de linha), e não pode ser
+// simulada aqui — duas remessas concorrentes que leiam o mesmo número geram arquivos com NSA
+// repetido, e o banco trata repetição como retransmissão.
+//
+// A conta pode terminar apontando para fora da faixa: é deliberado. O último número da faixa é
+// entregue normalmente, e só a alocação SEGUINTE falha — em vez de recusar uma remessa legítima
+// por antecipação.
+export const allocateNsa = (account: CedenteAccount): Result<NsaAllocation, AllocateNsaError> => {
+  if (!isActive(account)) return err('cedente-account-not-active');
+
+  const current = Nsa.rehydrate(account.nextNsa);
+  if (!current.ok) return err('nsa-exhausted');
+
+  return ok({
+    nsa: current.value,
+    account: immutable<CedenteAccount>({ ...account, nextNsa: account.nextNsa + 1 }),
+  });
+};

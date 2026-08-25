@@ -9,7 +9,7 @@ export type Movement = 'Debit' | 'Credit';
 export type ReconciliationStatus = 'Pending' | 'Reconciled' | 'ManualEntry';
 
 export type StatementPeriod = Readonly<{ start: Date; end: Date }>;
-export type StatementFile = Readonly<{ name: string; format: 'OFX' | 'CSV'; hash: string }>;
+export type StatementFile = Readonly<{ name: string; format: 'OFX' | 'CSV' | 'PDF'; hash: string }>;
 
 // Transação já dentro do boundary do agregado (com id e status).
 export type StatementTransaction = Readonly<{

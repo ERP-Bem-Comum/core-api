@@ -33,8 +33,8 @@ export type StatementMapperError =
   | 'invalid-statement-entry-type'
   | 'invalid-statement-reconciliation-status';
 
-const toFormat = (raw: string): 'OFX' | 'CSV' | null =>
-  raw === 'OFX' || raw === 'CSV' ? raw : null;
+const toFormat = (raw: string): 'OFX' | 'CSV' | 'PDF' | null =>
+  raw === 'OFX' || raw === 'CSV' || raw === 'PDF' ? raw : null;
 
 const toMovement = (raw: string): Movement | null =>
   raw === 'Debit' || raw === 'Credit' ? raw : null;

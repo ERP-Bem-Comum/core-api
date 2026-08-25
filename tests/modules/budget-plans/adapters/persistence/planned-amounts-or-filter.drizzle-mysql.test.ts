@@ -22,6 +22,7 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { sql } from 'drizzle-orm';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 import {
   buildBudgetPlansReadPort,
@@ -33,7 +34,7 @@ import {
   type BudgetPlansMysqlHandle,
 } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 
 if (integrationEnabled()) {

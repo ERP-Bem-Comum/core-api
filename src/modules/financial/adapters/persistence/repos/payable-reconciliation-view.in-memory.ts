@@ -20,8 +20,14 @@ export type PayableRecord = Readonly<{
 }>;
 export type PayableStore = Map<string, PayableRecord>;
 
+// Status do DOCUMENTO por documentId (paridade com o LEFT JOIN em fin_documents do adapter real).
+// O `searchPaid` decide candidatura pela fonte do grid Contas a Pagar — o status do documento —
+// não só pelo status do próprio título. Vazio por padrão (back-compat: cai no OR do título Paid).
+export type DocumentStatusStore = Map<string, DocumentStatus>;
+
 export const createInMemoryPayableReconciliationView = (
   payables: PayableStore = new Map<string, PayableRecord>(),
+  documentStatuses: DocumentStatusStore = new Map<string, DocumentStatus>(),
 ): PayableReconciliationView => ({
   findSnapshotsByIds: async (
     ids: readonly string[],
@@ -42,7 +48,11 @@ export const createInMemoryPayableReconciliationView = (
   > => {
     const paid: PaidPayableView[] = [];
     for (const rec of payables.values()) {
-      if (rec.status !== 'Paid') continue;
+      // Paridade com o #323: título é candidato se o DOCUMENTO está Pago (traz as retenções ainda
+      // Open/Approved) OU o próprio título é Paid (líquido). Salvaguarda: exclui já conciliados.
+      const docPaid = documentStatuses.get(rec.documentId) === 'Paid';
+      const selfPaid = rec.status === 'Paid';
+      if ((!docPaid && !selfPaid) || rec.status === 'Reconciled') continue;
       paid.push({
         id: rec.id,
         documentId: rec.documentId,

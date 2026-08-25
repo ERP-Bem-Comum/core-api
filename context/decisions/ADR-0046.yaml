@@ -1,0 +1,205 @@
+id: ADR-0046
+title: Contrato de eventos contracts → partners (contractorRef aditivo ao wire-format v1)
+source: handbook/architecture/adr/0046-contracts-contractor-ref-integration-events.md
+decided_on: 2026-06-17
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0022, ADR-0023, ADR-0039, ADR-0043]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    A metade PRODUTORA está implementada e é a prova viva da regra de evolução do `ADR-0043`:
+    `contracts/adapters/persistence/mappers/outbox.mapper.ts:360` abre a seção rotulada "US6a:
+    enriquecimento aditivo com `contractorRef` (ADR-0046, Opção A)", a linha 363 documenta que o mapper
+    "tem o snapshot em escopo e passa `contract.contractor`", e a 389 faz
+    `JSON.stringify({ ...base, contractorRef })` — spread aditivo sobre o payload base, sem bump de
+    `schema_version`. O domínio não foi tocado.
+    A metade CONSUMIDORA existe: `par_contract_count_view` e `par_contract_count_processed` estão no
+    schema de `partners`, e há o worker `contract-count-projection` com idempotência por `eventId`
+    (verificado no `ADR-0022-C3`).
+    O que fica `unverified` é a semântica da contagem — quais eventos somam e subtraem, e se a contagem
+    é de vigentes ou total. O próprio ADR delega isso às specs 6a/6b e fixa aqui apenas QUAIS eventos
+    carregam `contractorRef`.
+
+extraction:
+  state: complete
+  covers: |
+    3 alegações — o enriquecimento aditivo do produtor, a fronteira de exposição, e o conjunto de eventos
+    do contrato de contagem. O fatiamento em US6a/US6b é organização de trabalho, não norma.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA (agrupado com o ADR-0043)
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      Agrupou com o `ADR-0043` e destilou o essencial comum — payload montado no adapter a partir do
+      snapshot, campo aditivo sem bump. Correto.
+      O que o agrupamento perdeu: este ADR tem uma alegação própria e mais estrita que a do `0043` — a
+      exposição ao consumidor é via `contracts/public-api/`, e `partners` lê `contractorRef` do CONTRATO
+      DE INTEGRAÇÃO, nunca das tabelas `ctr_*`. É a mesma proibição que a `ADR-0032-C2` faz no sentido
+      inverso, e juntas fecham as duas direções entre os dois módulos.
+
+claims:
+  - id: ADR-0046-C1
+    text: |
+      `contracts` enriquece o wire-format com `contractorRef`, adicionado ao PAYLOAD DE OUTBOX dos
+      eventos de ciclo de vida relevantes (`ContractCreated` mais os terminais `ContractEnded` e
+      `ContractCancelled`), montado no adapter de persistência a partir do snapshot do agregado (Opção A
+      do ADR-0043 — o evento de domínio NÃO muda). É ADITIVO ao wire-format v1: sem bump de
+      `schema_version`.
+    kind: obligation
+    source_lines: [30]
+    applies_to:
+      - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts'
+      - 'src/modules/contracts/domain/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:360 — seção rotulada "US6a: enriquecimento aditivo com contractorRef (ADR-0046, Opção A)"'
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:363 — comentário: o mapper tem o snapshot em escopo e passa contract.contractor; estampa contractorRef ({ type, id })'
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:385 — const contractorRef: ContractorRefPayload é construído no adapter'
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:389 — JSON.stringify({ ...base, contractorRef }): spread ADITIVO sobre o payload base, sem bump'
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:105 — ContractActivatedPayload existe como tipo próprio, o que confirma que os payloads são tipados por evento'
+      verify: |
+        grep -n "contractorRef\|aditivo" src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts | head
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um evento de ciclo de vida do contrato, quando o mapper monta a mensagem, então ela MUST
+        conter `contractorRef` vindo do snapshot — e o payload base MUST permanecer decodificável por um
+        consumidor v1 que ignore o campo. Se o evento de DOMÍNIO ganhar o campo, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é a aplicação exata da `ADR-0043-C2` (montar no adapter a partir do
+        snapshot) e da `ADR-0043-C4` (aditivo sem bump), ambas já propostas com escopo geral. Este ADR é
+        a EVIDÊNCIA de que as duas funcionam — vale mais citado nos findings do `0043` do que repetido
+        como quarta fonte da mesma regra.
+
+  - id: ADR-0046-C2
+    text: |
+      A exposição ao consumidor é via `contracts/public-api/`. O `partners` lê `contractorRef` do
+      CONTRATO DE INTEGRAÇÃO, NUNCA das tabelas `ctr_*`.
+    kind: prohibition
+    source_lines: [32]
+    applies_to:
+      - 'src/modules/partners/**/*.ts'
+      - 'src/modules/contracts/public-api/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma referência a tabela ctr_* dentro de src/modules/partners/ — a proibição central se sustenta'
+        - 'src/modules/contracts/public-api/events.ts:47 — os eventos de ciclo de vida são expostos pela public-api, incluindo ContractActivated'
+        - 'nota: o caminho exato pelo qual o worker de contagem obtém o contractorRef não foi rastreado nesta fase — só a ausência de acesso direto a ctr_*'
+      verify: |
+        grep -rn "ctr_" src/modules/partners/ --include='*.ts' | grep -v "public-api" | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/partners/`, quando aparecer referência a tabela `ctr_*` ou import de
+        `contracts/domain|application`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto e registrar a simetria: esta é a mesma proibição da `ADR-0032-C2`
+        (`contracts` não toca `par_*`) no sentido inverso, e a `ADR-0032-C2` já foi proposta com escopo
+        geral — "MUST NOT haver referência a tabela de outro módulo (`par_*`, `fin_*`, `auth_*`…) fora do
+        módulo dono". Aquela redação já cobre `ctr_*` a partir de `partners`. As duas direções fechadas
+        por uma regra só.
+
+  - id: ADR-0046-C3
+    text: |
+      Eventos no contrato de contagem: `ContractCreated` soma +1 para o `contractorRef`;
+      `ContractEnded` e `ContractCancelled` subtraem −1; `ContractActivated` e `ContractStateUpdated`
+      NÃO mudam a contagem. A semântica exata (vigentes vs total) é detalhe das specs 6a/6b.
+    kind: obligation
+    source_lines: ['34-43']
+    applies_to:
+      - 'src/workers/contract-count-projection/**/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rn "ContractCreated\|ContractEnded\|ContractCancelled\|ContractActivated" src/workers/contract-count-projection/*.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada a sequência `ContractCreated` seguida de `ContractCancelled` para o mesmo `contractorRef`,
+        quando ambos são projetados, então a contagem MUST voltar a zero. E `ContractActivated` entre os
+        dois MUST NÃO alterar o valor.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O conjunto de eventos que altera um read-model de contagem MUST estar declarado, com o sinal de
+        cada um. Evento fora do conjunto MUST ser ignorado explicitamente pelo projetor, nunca por
+        omissão de `case`.
+      rationale: |
+        A cláusula final é a que protege: um `switch` sem `default` explícito ignora evento novo em
+        silêncio, e numa contagem isso aparece como número errado sem erro. O `ADR-0022-C3` já exige
+        idempotência; esta exige COMPLETUDE declarada do conjunto — são invariantes diferentes do mesmo
+        projetor.
+
+findings:
+  - |
+    Este ADR é a prova observável de que a regra de evolução do `ADR-0043` funciona.
+    `outbox.mapper.ts:389` faz `JSON.stringify({ ...base, contractorRef })` — o campo novo entra por
+    spread sobre o payload base, sem bump de `schema_version`, e o domínio não foi tocado. Um contrato de
+    integração evoluiu aditivamente na prática, não só na especificação.
+  - |
+    As duas direções entre `contracts` e `partners` estão fechadas por proibições espelhadas: a
+    `ADR-0032-C2` impede `contracts` de tocar `par_*`, e a `C2` deste impede `partners` de tocar `ctr_*`.
+    Ambas se resolvem com a MESMA regra geral já proposta na `ADR-0032-C2` — o que é um bom sinal: duas
+    decisões independentes, escritas com quinze dias de diferença, convergindo numa invariante única.
+  - |
+    O código rotula a seção com a US e o ADR (`outbox.mapper.ts:360` — "US6a: enriquecimento aditivo com
+    `contractorRef` (ADR-0046, Opção A)"). É o quinto caso do inventário em que a citação no ponto de
+    aplicação torna a verificação um grep — junto com `ADR-0050`, `ADR-0027`, `ADR-0032` e `ADR-0020`.
+    Todos os cinco são ADRs de junho ou depois; nenhum dos fundacionais de abril tem isso.
+  - |
+    A semântica da contagem (vigentes vs total, tratamento de transições) foi deliberadamente delegada às
+    specs 6a/6b e não está em ADR. Fica como `unverified` porque auditá-la exige ler as specs e o worker —
+    e é o tipo de regra cuja violação aparece como número errado no grid, sem erro nem log.
+
+provenance:
+  tickets:
+    - CTR-CONTRACT-EVENT-CONTRACTOR-REF
+    - PAR-AGG-CONTRACT-COUNT
+    - PAR-CONTRACT-COUNT-BACKFILL
+    - PAR-CONTRACT-COUNT-READMODEL
+    - PAR-GRID-CONTRACT-COUNT
+  issues: []
+  note: |
+    O acervo tem PAR-CONTRACT-COUNT-READMODEL, PAR-CONTRACT-COUNT-BACKFILL, PAR-GRID-CONTRACT-COUNT,
+    CTR-CONTRACT-EVENT-CONTRACTOR-REF e PAR-AGG-CONTRACT-COUNT — nenhum lido. As specs 6a/6b, que o ADR
+    delega a semântica da contagem, também não. O ADR-0039 (`ContractCancelled`) é pré-requisito do
+    conjunto de eventos e entra no lote 8c.

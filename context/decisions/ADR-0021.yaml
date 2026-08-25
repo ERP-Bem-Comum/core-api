@@ -1,0 +1,305 @@
+id: ADR-0021
+title: Topologia Cloud — AWS primária + MagaluCloud PBE interno
+source: handbook/architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md
+decided_on: 2026-05-22
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0007]
+  superseded_by: []
+  related: [ADR-0001, ADR-0005, ADR-0008, ADR-0015, ADR-0017, ADR-0019]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Este ADR é quase todo sobre infraestrutura provisionada fora deste repositório, então a maior
+    parte das alegações é `unverified` por construção — não por descuido. O que dá para verificar
+    daqui, verifica bem: os quatro adapters S3 aceitam `endpoint` e `forcePathStyle` por configuração,
+    exatamente como o ADR exige para apontar ao object-storage da MGC sem tocar o adapter.
+    Duas alegações estão `absent` e são achado real: não existe pipeline de promoção PBE → AWS (o
+    único workflow de deploy é `deploy-qa.yml`, baseado em SSH, sem nenhuma etapa ECS), e não existe
+    ambiente de staging dentro da AWS — que o próprio ADR exige para validar o que o PBE não cobre.
+    A restrição de LGPD do PBE (sem dump legado, sem dado real, sem Bradesco real) é a única parte
+    deste ADR que chegou às rules, e chegou correta.
+
+extraction:
+  state: complete
+  covers: |
+    6 alegações — topologia produtiva, restrição de dado no PBE, object-storage por configuração,
+    estratégia de longo prazo, critério de promoção e a exigência de staging. As "Implicações nos ADRs
+    vigentes" (linhas 99-112) não são alegações próprias: são reafirmações de outros ADRs, e cada um
+    tem (ou terá) registro seu.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/supply-chain.md']
+    gap: |
+      Destilou corretamente, e é um dos melhores acertos da 039: reconheceu que a restrição de dado no
+      PBE é "restrição de LGPD acionável em config de deploy" e a levou para `supply-chain.md:48-50`,
+      com `paths` cobrindo `package.json`, `pnpm-workspace.yaml`, `Dockerfile*` e `.npmrc`.
+      Duas imprecisões pequenas: (1) a rule atribui a este ADR a região `sa-east-1`, que não aparece
+      nele — vem do ADR-0050 compondo ADR-0019 e ADR-0021, logo é rastreável, mas a atribuição está
+      errada; (2) nada da topologia produtiva ou do critério de promoção foi destilado, e o critério
+      de promoção não existe no repo.
+
+claims:
+  - id: ADR-0021-C1
+    text: |
+      Toda a produção vive em AWS, operada pela Codebit: legado e novo no MESMO VPC — `legacy-api`,
+      `core-api`, `bff-gateway`, MySQL `legacy` e `core`, VM Windows do Bradesco, S3 de documentos e
+      observabilidade.
+    kind: obligation
+    source_lines: ['37-44']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Topologia de infraestrutura provisionada fora deste repositório (ERP-INFRA). Verificar de lá.'
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum teste possível a partir do core-api. A topologia de VPC e a operação da cloud não têm
+        representação no código — o único artefato local é o `compose.yaml`, que descreve dev.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Não é regra de edição: nenhum arquivo deste repositório muda de conteúdo em função dela.
+        Descartar aqui e manter no ADR como contexto de infraestrutura — que é onde um agente deve
+        buscar quando o assunto for topologia, não numa rule por path.
+
+  - id: ADR-0021-C2
+    text: |
+      O PBE MagaluCloud NÃO recebe dump do banco legado, NÃO recebe dados reais ou pessoais e NÃO
+      integra com Bradesco real (apenas sandbox ou fake). O banco é DBaaS da MGC com dataset
+      sintético.
+    kind: prohibition
+    source_lines: [42, 28]
+    applies_to:
+      - 'compose.yaml'
+      - '.github/workflows/**'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rniE "magalu|mgc\b" .github/workflows/ compose.yaml
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dada a configuração de deploy do PBE, quando ela apontar para dump legado, credencial de
+        Bradesco real ou base com dado pessoal, então o teste falha.
+      expected_error: null
+      blocker: |
+        Nada neste repositório provisiona o PBE — `grep -riE "magalu|mgc"` em workflows e compose não
+        retorna nada. O teste só é escrevível quando a configuração do PBE for versionada aqui, ou
+        precisa viver no ERP-INFRA.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Ambiente de homologação/PBE MUST NOT receber dump do banco legado, dado real ou pessoal, nem
+        credencial de integração bancária real. Dataset MUST ser sintético.
+      rationale: |
+        É a única alegação deste ADR com consequência jurídica, e a única que a 039 destilou — com
+        razão. Vale notar que `.claude/rules/supply-chain.md` a INSTRUI, mas não a enforça: rule é
+        texto que o agente lê, não gate que bloqueia. Por isso `enforced_by` fica vazio mesmo com a
+        rule existindo.
+
+  - id: ADR-0021-C3
+    text: |
+      O PBE usa object-storage da própria MGC (compatível com S3), não o S3 da AWS — o adapter
+      `@aws-sdk/client-s3` aponta para o endpoint da MGC via configuração de ambiente, SEM mudar o
+      adapter.
+    kind: obligation
+    source_lines: [75, 111]
+    applies_to:
+      - 'src/modules/*/adapters/storage/*.s3.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, programs]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/storage/source-file-storage.s3.ts:27 — endpoint vem de config'
+        - 'src/modules/financial/adapters/storage/source-file-storage.s3.ts:38 — forcePathStyle vem de config'
+        - 'src/modules/auth/adapters/storage/profile-photo-storage.s3.ts:26 — endpoint no tipo de config'
+        - 'src/server.ts:105 — forcePathStyle do logo lido de env, com default seguro'
+        - 'nota: quatro adapters S3 (contracts, financial, auth, programs), todos sobre @aws-sdk/client-s3, nenhum com endpoint fixo'
+      verify: |
+        grep -rn "endpoint\|forcePathStyle" src/modules/*/adapters/storage/*.s3.ts src/server.ts | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um adapter de storage, quando o endpoint ou o `forcePathStyle` estiver hardcoded em vez
+        de vir de configuração, então o teste falha — trocar de provedor exigiria editar código.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Adapter de object-storage MUST receber `endpoint` e `forcePathStyle` por configuração.
+        MUST NOT fixar endpoint de provedor no código.
+      rationale: |
+        É a alegação deste ADR que de fato mora no código, e ela se sustenta nos quatro adapters. É
+        também o que torna PBE, dev com MinIO e produção AWS o mesmo código — a propriedade que o
+        ADR-0019 chamou de "0 emulação custom".
+
+  - id: ADR-0021-C4
+    text: |
+      AWS permanece como única cloud produtiva indefinidamente. Quando o legado for estrangulado, ele
+      desliga DENTRO do mesmo AWS — não existe "saída de AWS para outra cloud".
+    kind: aspiration
+    source_lines: [44]
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Afirmação sobre estado futuro da infraestrutura. Sem representação em código.'
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum. É compromisso de estratégia sobre um futuro indefinido — nada no sistema o falsifica
+        hoje nem amanhã.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Estratégia, não norma de edição. Descartar como regra e preservar no ADR — inclusive porque a
+        consequência negativa que o próprio ADR registra (vendor lock-in profundo) é o contraponto que
+        alguém vai querer ler junto.
+
+  - id: ADR-0021-C5
+    text: |
+      Mudanças validadas no PBE MagaluCloud podem ser promovidas para AWS produção via pipeline de
+      release (CodePipeline ou equivalente).
+    kind: permission
+    source_lines: [46]
+    applies_to:
+      - '.github/workflows/**'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'ausência: dos 9 workflows, o único de deploy é deploy-qa.yml; não há pipeline de promoção nem etapa de release para produção'
+        - 'ausência: nenhuma referência a ECS ou task-definition em .github/workflows/'
+        - 'nota: deploy-qa.yml é baseado em SSH, não em serviço gerenciado de deploy'
+      verify: |
+        ls .github/workflows/; grep -lE "ecs|task-definition" .github/workflows/*.yml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o conjunto de workflows, quando não existir caminho versionado de promoção para
+        produção, então o teste falha. Hoje falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Promoção para produção MUST ter caminho versionado e auditável. Enquanto o pipeline de release
+        não existir neste repositório, o procedimento MUST estar documentado em runbook citado aqui.
+      rationale: |
+        O ADR trata a promoção como decisão tática posterior e ela nunca aconteceu por aqui. Estreitar
+        para "versionado ou documentado" dá uma exigência cumprível hoje, em vez de uma permissão
+        pendurada em pipeline inexistente.
+
+  - id: ADR-0021-C6
+    text: |
+      O PBE não exercita 100% do cenário produtivo — sem legado real, integrações cross-período não
+      podem ser validadas lá. A validação real precisa acontecer em STAGING DENTRO do próprio AWS,
+      antes da produção.
+    kind: obligation
+    source_lines: [67]
+    applies_to:
+      - '.github/workflows/**'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma referência a staging em .github/workflows/ nem no compose.yaml'
+        - 'nota: o único ambiente com deploy automatizado é o QA do deploy-qa.yml, que não roda em AWS'
+      verify: |
+        grep -rniE "staging" .github/workflows/ compose.yaml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o conjunto de ambientes com deploy versionado, quando não existir um que rode dentro da
+        AWS antes da produção, então o teste falha. Hoje falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Validação que dependa do legado real MUST ocorrer em ambiente dentro da mesma cloud da
+        produção, antes do deploy produtivo. MUST NOT ser considerada coberta por validação no PBE.
+      rationale: |
+        O ADR nomeia a lacuna e prescreve o remédio, e o remédio não existe. A consequência é
+        concreta: auditoria fiscal cross-período (ADR-0017) não tem onde ser validada antes de
+        produção — nem no PBE, que não tem legado, nem no QA, que não roda em AWS.
+
+findings:
+  - |
+    Não existe pipeline de promoção para produção neste repositório. Dos 9 workflows, o único de
+    deploy é `deploy-qa.yml`, baseado em SSH, sem qualquer etapa ECS ou task-definition. O critério de
+    promoção do ADR ficou como "decisão tática posterior" e a decisão nunca foi registrada.
+  - |
+    O ADR exige staging DENTRO da AWS para validar o que o PBE não cobre, e não há staging algum. A
+    consequência mais concreta é a auditoria fiscal cross-período do ADR-0017: ela precisa do legado
+    real, que o PBE não tem, e de AWS, que o QA não é.
+  - |
+    Nada em `.github/workflows/` ou `compose.yaml` menciona MagaluCloud ou MGC. Se o PBE existe, é
+    provisionado inteiramente fora deste repositório — o que significa que a restrição de LGPD do C2
+    é instruída por `.claude/rules/supply-chain.md` e enforçada por ninguém.
+  - |
+    Distinção que este lote deixou clara: `.claude/rules/*.md` NÃO é `enforced_by`. Rule é texto que
+    o agente lê e pode ignorar; `enforced_by` é mecanismo que barra (teste, semgrep, hook, lint). A
+    rule aparece corretamente em `prior_art.applied_to`, nunca em `enforced_by`.
+  - |
+    Quatro alegações deste ADR são sobre infraestrutura fora do repositório, e duas delas são
+    `unfalsifiable`. É o primeiro ADR do inventário onde a maioria do conteúdo legitimamente não vira
+    regra de edição — sinal de que ADR de topologia serve para orientar decisão humana, não para
+    alimentar `.claude/rules/`.
+
+provenance:
+  tickets:
+    - CTR-CLOUD-AWS-MAGALU-PBE
+    - CTR-STORAGE-MAGALU-CONFIG
+  issues: []
+  note: |
+    O acervo tem CTR-CLOUD-AWS-MAGALU-PBE e CTR-STORAGE-MAGALU-CONFIG, ambos diretamente ligados a
+    este ADR e NÃO lidos. A Inquiry-0003 foi fechada como `Decided` apontando para este ADR, e a
+    Inquiry-0012 §4.2 perdeu a premissa de bloqueio — nenhuma das duas lida. Preencher na Fase 3.

@@ -1,0 +1,290 @@
+id: ADR-0044
+title: CNPJ alfanumérico (Serpro/Receita 2026) no VO `Cnpj` do kernel
+source: handbook/architecture/adr/0044-cnpj-alphanumeric-kernel.md
+decided_on: 2026-06-16
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0020, ADR-0031, ADR-0043]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O VO está correto e completo. `src/shared/kernel/cnpj.ts:25` tem o formato literal
+    `/^[0-9A-Z]{12}[0-9]{2}$/`, a linha 28 normaliza com `toUpperCase()` mantendo `A-Z`, a 37 faz o
+    checksum com `charCodeAt(i) - 48` e as 42-43 documentam a rejeição do degenerado. Onze arquivos
+    consomem o VO do kernel; nenhum duplicou o módulo 11, e o `financial/domain/shared/tax-id.ts` que o
+    docstring antigo citava de fato **não existe** — a referência stale foi limpa.
+    O que NÃO se realizou é a consequência que o próprio ADR declarou, e o prazo dela **já venceu**.
+    Ele avisa que "camadas que assumiam só dígitos precisam revisão quando o CNPJ alfanumérico real
+    entrar em circulação" e que eventos descrevendo `document` como "14 dígitos" devem passar a dizer
+    "14 caracteres alfanuméricos". A circulação começa em **07/2026** — este mês — e seis descrições da
+    borda HTTP em três agregados seguem dizendo "14 dígitos".
+    Ressalva importante: NÃO é bug funcional. Nenhuma regex numérica na borda rejeita letras; a
+    validação é `z.string().length(14)`, que um CNPJ alfanumérico satisfaz. O que está errado é o
+    CONTRATO PUBLICADO — a descrição vai para o OpenAPI (ADR-0027), e o consumidor lê "14 dígitos".
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — as quatro linhas da tabela de validação (agrupadas em duas: escolha de desenho e regra)
+    mais a natureza do valor brandado, a ausência de migration, e a consequência de revisão das camadas
+    que assumem dígitos. Os exemplos de CNPJ são casos de teste, não norma.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/domain.md']
+    gap: |
+      Destilou o essencial: CNPJ pode conter letras, VO único no kernel, sem duplicar por módulo.
+      O que não verificou: a consequência declarada pelo próprio ADR — as camadas que assumem "só
+      dígitos". Ela é o único ponto onde este ADR ainda não se cumpriu, e o gatilho ("quando entrar em
+      circulação") venceu em 07/2026. Um veredito de destilação que não olha as consequências perde
+      justamente a parte com prazo.
+
+claims:
+  - id: ADR-0044-C1
+    text: |
+      ESTENDER o VO `Cnpj` do kernel (`src/shared/kernel/cnpj.ts`) para o formato alfanumérico, em vez de
+      criar um VO separado por módulo — que duplicaria o módulo 11 e divergiria os Bounded Contexts.
+    kind: obligation
+    source_lines: [28]
+    applies_to:
+      - 'src/shared/kernel/cnpj.ts'
+      - 'src/modules/*/domain/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, partners]
+      absent_in: []
+      evidence:
+        - 'src/shared/kernel/cnpj.ts:25 — o VO único do kernel carrega o formato alfanumérico'
+        - 'src/shared/kernel/index.ts:1 — o kernel reexporta o VO como fonte cross-BC'
+        - 'nota: onze arquivos importam de kernel/cnpj — supplier, financier e act mappers/repos, act.ts, find-supplier-by-cnpj, contractor-read e o import legado de contracts'
+        - 'ausência: src/modules/financial/domain/shared/tax-id.ts não existe — a referência stale do docstring antigo foi removida, e nenhum módulo tem VO de CNPJ próprio'
+      verify: |
+        grep -rln "kernel/cnpj" src/ --include='*.ts'; ls src/modules/financial/domain/shared/tax-id.ts 2>&1 | head -1
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/`, quando aparecer implementação de validação de CNPJ (módulo 11, pesos
+        `[5,4,3,2,9,8,7,6,5,4,3,2]`) fora de `src/shared/kernel/`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Regra de validação de identificador fiscal (CPF, CNPJ) MUST viver apenas em `src/shared/kernel/`.
+        Módulo MUST NOT reimplementar o cálculo de dígito verificador.
+      rationale: |
+        O ADR nomeia o custo exato de violar: duplicar o módulo 11 e **divergir os BCs**. Duplicata de
+        algoritmo de checksum é especialmente cara porque as duas cópias validam igual até a regra
+        mudar — e a regra mudou agora, com o alfanumérico. Uma cópia esquecida rejeitaria CNPJ válido em
+        produção sem nenhum erro de compilação.
+
+  - id: ADR-0044-C2
+    text: |
+      Regra de validação: normalização remove máscara (`.` `/` `-` espaços) e aplica `toUpperCase()`
+      MANTENDO `A-Z`; formato `^[0-9A-Z]{12}[0-9]{2}$` (12 alfanuméricos + 2 DVs numéricos); rejeita os
+      14 caracteres idênticos (degenerado); checksum módulo 11 com pesos `[5,4,3,2,9,8,7,6,5,4,3,2]`
+      (DV1) e `[6,5,4,3,2,9,8,7,6,5,4,3,2]` (DV2), com `valor(c) = ASCII(c) − 48`.
+    kind: obligation
+    source_lines: ['32-37']
+    applies_to:
+      - 'src/shared/kernel/cnpj.ts'
+    reality:
+      verdict: holds
+      holds_in: [kernel]
+      absent_in: []
+      evidence:
+        - 'src/shared/kernel/cnpj.ts:25 — const CNPJ_SHAPE = /^[0-9A-Z]{12}[0-9]{2}$/, o formato literal do ADR'
+        - "src/shared/kernel/cnpj.ts:28 — normalize remove [.\\-/\\s] e aplica toUpperCase(), mantendo A-Z"
+        - 'src/shared/kernel/cnpj.ts:37 — moduleEleven com (chars.charCodeAt(i) - 48) * weight, a conversão ASCII−48 da NT Serpro'
+        - 'src/shared/kernel/cnpj.ts:42 — docstring: rejeita comprimento != 14, formato fora do shape e os 14 caracteres idênticos'
+        - 'src/shared/kernel/cnpj.ts:35 — comentário cita a NT Serpro/Receita e registra que é idêntico ao numérico para dígitos'
+        - 'nota: tests/shared/kernel/cnpj.test.ts cobre o alfanumérico — a suíte tem o caso 12ABC'
+      verify: |
+        grep -n "0-9A-Z\|toUpperCase\|charCodeAt" src/shared/kernel/cnpj.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado `12ABC34501DE35`, quando validado, então MUST retornar `ok`. Dado `12abc34501de35`, MUST
+        normalizar para uppercase. Dado `11222333000181` (numérico legado), MUST seguir válido —
+        retrocompatibilidade. Dado `12ABC34501DEAB` (DV não-numérico), MUST falhar.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/shared/kernel/cnpj.test.ts']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como regra de EDIÇÃO: a especificação já está codificada no VO e coberta por teste
+        próprio. Repetir a tabela de pesos num arquivo de regra criaria a terceira cópia da
+        especificação (ADR + código + rule) — e a cópia em prosa é a que envelhece sem ninguém notar.
+        O valor aqui é a `C1`, que impede a duplicata.
+
+  - id: ADR-0044-C3
+    text: |
+      O valor BRANDADO (`Cnpj`) passa a ser os 14 caracteres uppercase sem máscara — PODE conter letras.
+    kind: permission
+    source_lines: [39]
+    applies_to:
+      - 'src/shared/kernel/cnpj.ts'
+      - 'src/modules/*/adapters/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [kernel, financial, partners]
+      absent_in: []
+      evidence:
+        - 'src/shared/kernel/cnpj.ts:28 — o valor normalizado é uppercase sem máscara, por construção'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:537 — comentário: CNPJ alfanumérico (ADR-0044) — 14 chars; varchar(20) com folga. Texto, sem máscara'
+        - 'ausência: nenhuma regex numérica (\d{14} ou [0-9]{14}) em src/modules/*/adapters/http/ para cnpj/document — a borda não rejeita letras'
+      verify: |
+        grep -rn 'regex(\|\\d{14}\|\[0-9\]{14}' src/modules/*/adapters/http/*.ts | grep -i "cnpj\|document"
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado um `POST` com CNPJ alfanumérico válido na borda HTTP, quando processado, então MUST NÃO
+        retornar 400 de validação de formato. Se a borda tiver regex numérica, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Validação de CNPJ na borda MUST NOT impor formato numérico (`\d{14}`, `[0-9]{14}`). A borda
+        MUST limitar-se a comprimento e delegar o formato ao VO do kernel.
+      rationale: |
+        A proibição é mais útil que a permissão, porque o modo de falhar é assimétrico: uma regex
+        numérica na borda devolve **400 antes do domínio ver o valor** — o CNPJ é válido, o VO o
+        aceitaria, e o cliente recebe erro de formato. Hoje o código está certo por acidente
+        (`z.string().length(14)`), não por regra: nada impede o próximo schema de apertar para `\d{14}`.
+
+  - id: ADR-0044-C4
+    text: |
+      SEM migration: a persistência é `varchar` (ADR-0020) e já comporta os 14 caracteres alfanuméricos.
+    kind: permission
+    source_lines: [56]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial, partners]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:538 — document: varchar(document, { length: 20 }), texto com folga sobre os 14'
+        - 'ausência: nenhum CHECK nem REGEXP sobre coluna de CNPJ/document nos schemas — o ADR previa "inexistentes hoje" e segue verdade'
+      verify: |
+        grep -rn "document" src/modules/*/adapters/persistence/schemas/mysql.ts | grep -i "varchar\|check" | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema, quando uma coluna de CNPJ ganhar CHECK ou REGEXP que exija dígitos, então o teste
+        falha — o formato é do VO, não do banco.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Coluna de identificador fiscal MUST ser `varchar` sem CHECK de formato. A validação de formato
+        MUST permanecer no VO do kernel — nunca duplicada no schema.
+      rationale: |
+        Estende o mesmo raciocínio da `C1` ao banco: um CHECK de formato é uma segunda cópia da regra,
+        na camada mais caro de mudar (exige migration). O `ADR-0035` usa CHECK legitimamente para
+        COERÊNCIA entre colunas; formato de valor é outra coisa, e o ADR já registra que hoje não
+        existe. Vale fixar antes de alguém acrescentar "por defesa em profundidade".
+
+  - id: ADR-0044-C5
+    text: |
+      Camadas que assumiam "só dígitos" — máscaras de UI, exports, eventuais `CHECK`/`REGEXP` de schema
+      (inexistentes hoje) — precisam REVISÃO quando o CNPJ alfanumérico real entrar em circulação. E
+      eventos de integração que descrevem `document` como "14 dígitos" (ex.: ADR-0043) devem passar a
+      dizer "14 caracteres alfanuméricos".
+    kind: obligation
+    source_lines: ['60-61']
+    applies_to:
+      - 'src/modules/*/adapters/http/*schemas*.ts'
+      - 'handbook/architecture/adr/0043-partners-supplier-integration-events.md'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [partners]
+      evidence:
+        - "src/modules/partners/adapters/http/supplier-schemas.ts:70 — description: 'CNPJ (14 dígitos)'"
+        - "src/modules/partners/adapters/http/supplier-schemas.ts:129 — description: 'CNPJ — 14 dígitos (DV validado no domínio)'"
+        - 'src/modules/partners/adapters/http/financier-schemas.ts:47 — a mesma descrição em financier'
+        - 'src/modules/partners/adapters/http/financier-schemas.ts:88 — idem, com length(14)'
+        - 'src/modules/partners/adapters/http/act-schemas.ts:36 — idem em act'
+        - 'src/modules/partners/adapters/http/act-schemas.ts:111 — idem, com length(14)'
+        - 'nota: seis descrições, três agregados; a circulação do alfanumérico começa em 07/2026, e a data de verificação é 2026-07-31 — o gatilho da revisão JÁ disparou'
+        - 'nota: NÃO é bug funcional — a validação é z.string().length(14), que o alfanumérico satisfaz; o que está errado é a descrição, que vai para o OpenAPI (ADR-0027)'
+      verify: |
+        grep -rn "14 dígitos" src/modules/*/adapters/http/*schemas*.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/*/adapters/http/`, quando um campo de CNPJ tiver `description` contendo
+        "dígitos", então o teste falha — o contrato publicado MUST dizer "caracteres alfanuméricos".
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        A `description` de campo de CNPJ no schema de borda MUST dizer "14 caracteres alfanuméricos",
+        nunca "14 dígitos" — a descrição é o contrato publicado no OpenAPI (ADR-0027).
+      rationale: |
+        Estreitado do genérico ("camadas que assumem só dígitos") para o único lugar onde a divergência é
+        verificável por grep e tem consumidor externo. As máscaras de UI e exports que o ADR também cita
+        vivem fora deste repo — para elas o cabível é issue, não regra. E o gatilho já disparou: o
+        alfanumérico circula desde 07/2026.
+
+findings:
+  - |
+    **Consequência declarada com gatilho vencido.** O ADR previu corretamente o que precisaria de revisão
+    ("camadas que assumiam só dígitos") e o momento ("quando o CNPJ alfanumérico real entrar em
+    circulação" — 07/2026). A data de verificação é 2026-07-31: o gatilho disparou e a revisão não
+    ocorreu. Seis descrições de borda em três agregados seguem dizendo "14 dígitos".
+    É o mesmo modo de falha do `ADR-0017` — prazo sem mecanismo de cobrança — mas dentro de um ADR
+    `Accepted` e cumprido no essencial. Sinal de que o problema não é o status: **consequência com data
+    não é cobrada por nada** neste repositório.
+  - |
+    A divergência é de CONTRATO, não de comportamento, e essa distinção mudou o veredito. Nenhuma regex
+    numérica rejeita letras na borda; a validação é `z.string().length(14)`, que o alfanumérico satisfaz.
+    Um CNPJ com letras entra, o VO valida, persiste em `varchar`. O que está errado é a `description`,
+    que o `ADR-0027` publica no OpenAPI — o consumidor lê "14 dígitos" e pode implementar máscara
+    numérica do lado dele. Bug de contrato publicado, não de código.
+  - |
+    O código está certo **por acidente, não por regra**. `z.string().length(14)` aceita letras porque
+    ninguém apertou o schema, não porque alguma norma proíba apertar. É o que motiva a proposta da `C3`
+    como PROIBIÇÃO (`MUST NOT` regex numérica) em vez de permissão: o próximo schema de CNPJ pode
+    legitimamente escrever `\d{14}` "por rigor" e derrubar cadastro válido com 400.
+  - |
+    O ADR limpou uma referência stale ao criar a decisão: o docstring antigo do VO citava
+    `financial/domain/shared/tax-id.ts`, que **nunca existiu**. Hoje o arquivo continua não existindo e a
+    citação não está mais lá. É o único caso do inventário em que um ADR corrigiu documentação errada
+    como parte da própria decisão — em vez de deixar a limpeza para depois.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Nenhum ticket lido. A consequência não cumprida (`C5`) é candidata natural a issue via
+    [`issue-report`](../../.claude/skills/issue-report/SKILL.md): seis descrições, um grep, critério de
+    aceite óbvio. Não abro nada nesta fase — o inventário registra, não age.

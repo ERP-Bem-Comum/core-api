@@ -116,8 +116,9 @@ describe('CTR-OUTBOX-WORKER — unit: runOnce', () => {
     assert.equal(result.value.failed, 0, 'não deve ter falhas');
     assert.equal(result.value.movedToDeadLetter, 0, 'não deve mover para DLQ');
     assert.equal(delivery.deliveredEvents().length, 3, 'InMemoryEventDelivery deve ter 3 eventos');
-    // Todos os eventos devem estar marcados como processed
-    const pendingAfter = outbox.pending();
+    // Todos os eventos devem estar marcados como processed PARA ESTE consumidor (#800/#824:
+    // `pending()` virou `pendingFor(consumerId)` — pendência é por consumidor, não global).
+    const pendingAfter = outbox.pendingFor('consumer-test');
     assert.equal(pendingAfter.length, 0, 'não deve restar eventos pendentes');
   });
 
@@ -153,13 +154,13 @@ describe('CTR-OUTBOX-WORKER — unit: runOnce', () => {
     assert.equal(result.value.failed, 1, 'deve contar 1 falha');
     assert.equal(result.value.delivered, 0, 'não deve ter delivered');
     assert.equal(result.value.movedToDeadLetter, 0, 'não deve mover para DLQ ainda');
-    // O evento deve ainda estar pendente (não foi processado nem movido)
-    const pending = outbox.pending();
+    // O evento deve ainda estar pendente para o consumidor que falhou (#800/#824).
+    const pending = outbox.pendingFor('failing-consumer');
     assert.equal(pending.length, 1, 'evento deve continuar pendente');
-    // A row deve ter attempts incrementado para 1
-    const rows = outbox.all();
-    assert.equal(rows.length, 1);
-    const row = rows[0];
+    // A row deve ter attempts incrementado para 1 PARA ESTE CONSUMIDOR — `attempts` deixou de
+    // viver na row global (`all()` sempre mostra 0, nunca mais é escrita); só `pendingFor`
+    // reflete o progresso por consumidor.
+    const row = pending[0];
     assert.ok(row !== undefined);
     assert.equal(row.attempts, 1, 'attempts deve ter sido incrementado para 1');
   });
@@ -188,9 +189,9 @@ describe('CTR-OUTBOX-WORKER — unit: runOnce', () => {
     assert.equal(rows.length, 1);
     const row = rows[0];
     assert.ok(row !== undefined);
-    // Forçar attempts = maxAttempts-1 = 4 (para maxAttempts=5)
-    // O InMemoryOutbox expandido deve ter setAttempts para este cenário
-    outbox.setAttempts(row.eventId, 4);
+    // Forçar attempts = maxAttempts-1 = 4 (para maxAttempts=5), para o consumidor que vai falhar
+    // (#800/#824: `setAttempts` ganhou `consumerId` — tentativas são por consumidor).
+    outbox.setAttempts('failing-consumer', row.eventId, 4);
 
     const deps: WorkerDeps = {
       outbox,
@@ -207,8 +208,13 @@ describe('CTR-OUTBOX-WORKER — unit: runOnce', () => {
     assert.equal(result.value.movedToDeadLetter, 1, 'deve mover para DLQ');
     assert.equal(result.value.failed, 0, 'não deve contar como failed (foi para DLQ)');
     assert.equal(result.value.delivered, 0);
-    // O evento deve ter saído da outbox (pending = 0)
-    assert.equal(outbox.pending().length, 0, 'evento deve sair da outbox pendente');
+    // O evento deve ter saído da fila deste consumidor (pending = 0) — a row de origem PERMANECE
+    // no outbox (ADR-0022:27-29), só o progresso do consumidor vira dead-lettered.
+    assert.equal(
+      outbox.pendingFor('failing-consumer').length,
+      0,
+      'evento deve sair da fila do consumidor',
+    );
     // O evento deve estar na dead letter
     const dlqRows = outbox.deadLetter();
     assert.equal(dlqRows.length, 1, 'evento deve estar na dead letter');
@@ -247,8 +253,12 @@ describe('CTR-OUTBOX-WORKER — unit: runOnce', () => {
     assert.equal(result.value.failed, 0, 'não conta como failed — vai direto para DLQ');
     // Nenhum evento foi entregue ao consumer
     assert.equal(delivery.deliveredEvents().length, 0);
-    // Evento saiu da outbox pendente
-    assert.equal(outbox.pending().length, 0, 'evento corrompido deve sair da outbox');
+    // Evento saiu da fila deste consumidor (#800/#824).
+    assert.equal(
+      outbox.pendingFor('consumer-test').length,
+      0,
+      'evento corrompido deve sair da fila',
+    );
     // Evento está na DLQ
     const dlqRows = outbox.deadLetter();
     assert.equal(dlqRows.length, 1, 'evento deve estar na dead letter');

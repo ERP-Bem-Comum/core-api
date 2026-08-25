@@ -21,6 +21,12 @@ const orchestrator = readFileSync(
   fileURLToPath(new URL('../../scripts/ci/test-integration.ts', import.meta.url)),
   'utf-8',
 );
+// CI-RUNNER-NON-DESTRUCTIVE (Parte A da #500): os args do compose saíram do orquestrador para o
+// módulo `compose-project.ts`, agora no projeto isolado `core-api-test` (`-p` antes do subcomando).
+const composeProject = readFileSync(
+  fileURLToPath(new URL('../../scripts/ci/compose-project.ts', import.meta.url)),
+  'utf-8',
+);
 
 describe('test:integration:auth (orquestrador)', () => {
   it('CA1: o script existe e delega ao orquestrador com a suite auth', () => {
@@ -40,10 +46,12 @@ describe('test:integration:auth (orquestrador)', () => {
     assert.match(orchestrator, /schema-hardening/);
   });
 
-  it('CA4: sobe mysql via compose --wait e faz cleanup (down -v + secrets)', () => {
-    assert.match(orchestrator, /'compose', 'up'/);
-    assert.match(orchestrator, /'--wait'/);
-    assert.match(orchestrator, /'compose', 'down', '-v'/);
-    assert.match(orchestrator, /removeTestSecrets/);
+  it('CA4: sobe mysql via compose --wait e faz cleanup (down -v + secrets) no projeto isolado', () => {
+    // `-p core-api-test` ANTES de `up`/`down` (projeto isolado — CI-RUNNER-NON-DESTRUCTIVE / #500).
+    assert.match(composeProject, /'compose',\s*'-p',\s*TEST_COMPOSE_PROJECT,\s*'up'/);
+    assert.match(composeProject, /'--wait'/);
+    assert.match(composeProject, /'compose',\s*'-p',\s*TEST_COMPOSE_PROJECT,\s*'down',\s*'-v'/);
+    // O cleanup dos secrets agora é backup→restore (restaura os do dev; remove os de teste).
+    assert.match(orchestrator, /restoreSecrets/);
   });
 });

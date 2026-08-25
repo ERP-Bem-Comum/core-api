@@ -4,7 +4,8 @@
     "BASH_DEFAULT_TIMEOUT_MS": "300000"
   },
   "attribution": {
-    "commit": ""
+    "commit": "",
+    "pr": ""
   },
   "permissions": {
     "deny": [
@@ -18,15 +19,81 @@
       "mcp__plugin_maestro_maestro__*"
     ]
   },
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Backend do ERP Bem Comum: monorepo TypeScript/Node com harness próprio em `.claude/`. O gerenciador de pacotes é **pnpm** — `npm` é recusado por hook.",
+      "Os repositórios `core-api` e `ERP-INFRA` são PÚBLICOS no GitHub: issue, PR, comentário e mensagem de commit são leitura pública e, na prática, irreversíveis.",
+      "`dev` e `main` são protegidas (PR obrigatório + required checks). Merge em `dev` dispara deploy automático no QA; `main` dispara deploy em PRODUÇÃO (AWS ECS).",
+      "As 16 rules de `.claude/rules/` só entram em contexto por Read/Edit/Write (`path_glob_match`). Ler ou escrever código do repositório por Bash (`cat`, `sed -i`, `>`) opera SEM o harness, e já é recusado pelo hook `block-bash-file-io.sh`.",
+      "Hooks `PreToolUse(Bash)` recusam: `npm`, interpretador inline (python/perl), I/O de arquivo de código por shell, e docker cruzando para o projeto legado. O hook `Stop` roda o gate: typecheck, format, lint e test.",
+      "Arquivo temporário vai no scratchpad da sessão — nunca no repositório.",
+      "Máquina de 8 GB de RAM: build ou container em paralelo derrubam o ambiente. Os hosts remotos são o x99 (homelab, via Tailscale) e a VPS de QA.",
+      "Segredos vivem em `~/.secrets` e em cofre sops/age; referenciar sempre pelo NOME da variável, nunca pelo valor.",
+      "`handbook/guidelines/` está no `.gitignore` — documentação Bradesco com restrição de redistribuição. A leitura local é autorizada."
+    ],
+    "allow": [
+      "$defaults",
+      "Ler, buscar e navegar o repositório com Read/Grep/Glob, inclusive `handbook/`, `.claude/` e os logs de `.claude/*.log`.",
+      "Rodar gate e diagnóstico read-only: `pnpm run typecheck`, `lint`, `format:check`, `test`, `logbook`, `docs:*`, `audit`.",
+      "Git de leitura (`status`, `log`, `diff`, `show`, `branch`, `rev-parse`, `check-ignore`) e `gh` de leitura (`pr view/list`, `issue view/list`, `run view/list`, `api` em GET).",
+      "Inspecionar container já de pé: `docker ps`, `docker logs`, `docker compose ps`.",
+      "Criar e editar código, teste, script e documentação do repositório por Edit/Write — é o caminho que carrega as rules e passa pelo Prettier.",
+      "Escrever, mover e apagar arquivo dentro do scratchpad da sessão.",
+      "Consultar documentação de fornecedor e MCP de referência (acdg-skills, aws-docs, docker-docs) para ancorar decisão em fonte primária."
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Publicar no GitHub: `git push`, `gh pr create`, `gh pr merge`, `gh issue create`, `gh issue comment` — repositório público.",
+      "`git commit` (inclusive `-a`): fechar mudança em commit é decisão do humano.",
+      "Reescrever ou descartar trabalho: `git reset --hard`, `git checkout --`, `git restore`, `git rebase`, `git stash drop`, `git branch -D`.",
+      "Subir stack pesada ou build longo: `docker compose up`, `docker build`, `pnpm run dev`, `pnpm run serve` — 8 GB de RAM, exige OK explícito.",
+      "`pnpm run test:integration*`: sobe MySQL via Docker e DERRUBA a infra de dev no processo (`down -v`).",
+      "Apagar estado de container: `docker compose down -v`, `docker volume rm`, `docker system prune`.",
+      "Rodar job, worker ou seed que escreve em banco: `pnpm run job:*`, `worker:*`, `seed:*`, `db:seed:*`, `db:generate*`.",
+      "Alterar `compose.yaml`, `Dockerfile` ou `.github/workflows/**` — é a planta do deploy.",
+      "Executar por `ssh` comando que muda estado em host remoto (x99, VPS de QA).",
+      "`rm -rf`, mover ou sobrescrever arquivo fora do repositório e do scratchpad."
+    ],
+    "hard_deny": [
+      "$defaults",
+      "Ler, imprimir, ecoar, copiar ou gravar VALOR de segredo: `.env`, `.env.*`, `secrets/**`, `~/.secrets`, chave privada, token. Referenciar pelo nome da variável, jamais pelo valor.",
+      "Publicar em repositório público (issue, PR, commit, comentário) hostname, IP, caminho de host, credencial ou nome/valor de segredo.",
+      "Push direto ou `--force`/`--force-with-lease` em `dev` ou `main`; furar o gate com `gh pr merge --admin` ou `git commit --no-verify`.",
+      "Silenciar vermelho: apagar ou afrouxar teste, marcar `skip`, desabilitar hook, gate, regra de lint ou entrada de settings para o gate passar. Vermelho se conserta ou se escala — nunca se esconde.",
+      "Adicionar `Signed-off-by` em commit: só um humano certifica o DCO (ADR-0054).",
+      "Executar DDL, DML ou job contra o banco de PRODUÇÃO (RDS).",
+      "Cancelar run de CI em andamento.",
+      "Copiar trecho de `handbook/guidelines/` para arquivo commitável — restrição de redistribuição.",
+      "Deletar os containers `acdg-control` ou `acdg-prod` no x99, ou operar dentro da worktree de outra sessão."
+    ]
+  },
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/inject-ticket-context.sh",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/ensure-git-hookspath.sh",
             "timeout": 10,
-            "statusMessage": "Detectando ticket ativo da pipeline..."
+            "statusMessage": "Conferindo core.hooksPath deste clone..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/post-compact-rules-reminder.sh",
+            "timeout": 10,
+            "statusMessage": "Listando rules que a compactação derrubou..."
           }
         ]
       }
@@ -46,6 +113,18 @@
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-cross-project-docker.sh",
             "timeout": 10,
             "statusMessage": "Verificando isolamento Docker core-api <-> legacy..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-inline-interpreter.sh",
+            "timeout": 10,
+            "statusMessage": "Verificando interpretador inline (use Edit/Write)..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-bash-file-io.sh",
+            "timeout": 10,
+            "statusMessage": "Verificando leitura/escrita de código por Bash (rules)..."
           }
         ]
       }
@@ -59,6 +138,12 @@
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/prettier-write.sh",
             "timeout": 30,
             "statusMessage": "Aplicando Prettier no arquivo tocado..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/regen-inquiry-index.sh",
+            "timeout": 30,
+            "statusMessage": "Regerando índice de inquiries..."
           }
         ]
       }
@@ -68,35 +153,70 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-typecheck.sh",
-            "timeout": 90,
-            "statusMessage": "Rodando typecheck em background...",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-quality-gate.sh",
+            "timeout": 420,
+            "asyncRewake": true,
+            "statusMessage": "Gate de qualidade (typecheck · format · lint · test)..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
             "async": true
           }
         ]
       }
     ],
-    "SubagentStop": [
+    "SessionEnd": [
       {
-        "matcher": "contratos-orchestrator",
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/subagent-stop-validate.sh",
-            "timeout": 15,
-            "statusMessage": "Validando fechamento da wave pelo sub-agent..."
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
           }
         ]
       }
     ],
-    "SessionStart": [
+    "PreCompact": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-context.sh",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
             "timeout": 10,
-            "statusMessage": "Carregando contexto do projeto..."
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/post-compact-rules-reminder.sh",
+            "timeout": 10,
+            "statusMessage": "Listando rules que a compactação derrubou..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-instructions-loaded.sh",
+            "timeout": 5,
+            "async": true
           }
         ]
       }
@@ -107,7 +227,6 @@
     "command": "${CLAUDE_PROJECT_DIR}/.claude/statusline.sh",
     "padding": 1
   },
-  "outputStyle": "erp-contracts",
   "enabledPlugins": {
     "chrome-devtools-mcp@claude-plugins-official": true
   }

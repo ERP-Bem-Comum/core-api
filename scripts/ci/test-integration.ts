@@ -9,8 +9,10 @@
 // Sem dependências novas (ADR-0011): só node:child_process (spawnSync, shell:false) + node:fs.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
 import process from 'node:process';
+import { composeUpArgs, composeDownArgs } from './compose-project.ts';
+import { backupAndWriteTestSecrets, restoreSecrets, type SecretBackup } from './secrets-vault.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const EX_USAGE = 64; // sysexits.h — uso inválido.
 
@@ -22,11 +24,15 @@ type Suite = Readonly<{
   paths: readonly string[];
 }>;
 
+// Diretório dos secrets (o compose lê de `./secrets/*.txt`).
+const SECRETS_DIR = 'secrets';
+
 // Secrets de TESTE (valores fixos, não-prod) — espelham o que os scripts inline criavam.
+// Chave = nome do arquivo (sem o prefixo `secrets/`); o `secrets-vault` resolve contra o `SECRETS_DIR`.
 const TEST_SECRETS: Readonly<Record<string, string>> = {
-  'secrets/mysql_root_password.txt': 'rootpw-migration-test-only',
-  'secrets/mysql_app_password.txt': 'apppw-migration-test-only',
-  'secrets/mysql_readonly_password.txt': 'ropw-migration-test-only',
+  'mysql_root_password.txt': 'rootpw-migration-test-only',
+  'mysql_app_password.txt': 'apppw-migration-test-only',
+  'mysql_readonly_password.txt': 'ropw-migration-test-only',
 };
 
 const mysqlSuite = (env: Readonly<Record<string, string>>, paths: readonly string[]): Suite => ({
@@ -40,11 +46,10 @@ const mysqlSuite = (env: Readonly<Record<string, string>>, paths: readonly strin
 // ETL sem Docker (ETL-LEGACY-DIRECT-CONNECTION): legado e core-api ficam em DBs distintos do
 // MESMO MySQL de teste (compose.yaml). A fixture SINTÉTICA é carregada via mysql2 no `before`
 // de cada suite (helper load-fixture) — sem `compose.etl.yaml`. root já tem DROP/CREATE DATABASE.
-const ETL_TEST_MYSQL_PORT = process.env['MYSQL_PORT'] ?? '3306';
 const ETL_DB_ENV: Readonly<Record<string, string>> = {
   PARTNERS_ETL_INTEGRATION: '1',
-  ETL_LEGACY_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/legacy`,
-  ETL_CORE_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/core`,
+  ETL_LEGACY_CONNECTION_STRING: mysqlTestConnectionString({ database: 'legacy' }),
+  ETL_CORE_CONNECTION_STRING: mysqlTestConnectionString({ database: 'core' }),
 };
 
 const SUITES: Readonly<Record<string, Suite>> = {
@@ -57,14 +62,17 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // subcategory_ref em ctr_contracts (CA1 estrutural + round-trip CA2/CA8). NÃO executado nesta
     // janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
     'tests/modules/contracts/adapters/persistence/contract-taxonomy-refs.drizzle-mysql.test.ts',
+    // #425 — backfill de renumeração pelo ano de vigência inicial: renumera afetados, resolve
+    // colisão sem duplicar, reconcilia ctr_contract_seq e idempotência (2ª execução = 0 afetados).
+    'tests/modules/contracts/adapters/persistence/renumber-by-vigencia.drizzle-mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/contract-repository-paged.integration.test.ts',
     'tests/modules/contracts/adapters/persistence/outbox-schema.test.ts',
     'tests/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.test.ts',
     'tests/modules/contracts/adapters/persistence/repos/find-expirable.mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/job-run.drizzle-mysql.test.ts',
-    // #437: contratantes com contrato Active (public-api) — fonte do anti-join do relatório
-    // "Fornecedores sem Contrato" no módulo reports.
-    'tests/modules/contracts/public-api/active-contractor-read.drizzle-mysql.test.ts',
+    // REP-6 (#442 · Slice D): número do contrato (public-api) — fonte do NÚMERO costurado no
+    // Relatório Geral (reports) a partir do contractRef.
+    'tests/modules/contracts/public-api/contract-number-read.drizzle-mysql.test.ts',
     'tests/modules/contracts/worker/outbox-worker.integration.test.ts',
   ]),
   auth: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
@@ -134,8 +142,27 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/supplier-view-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/document-supplier-view-join.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',
+    // Alocação de NSA sob concorrência real: prova que o SELECT ... FOR UPDATE serializa e que dois
+    // pedidos simultâneos nunca recebem o mesmo número. NSA repetido = retransmissão para o banco.
+    'tests/modules/financial/adapters/persistence/nsa-allocation.drizzle-mysql.test.ts',
+    // Remessa (migration 0044): cabeçalho + vínculos na mesma transação, anti-join de documento
+    // preso no BANCO, e os UNIQUEs de NSA-por-conta e nome de arquivo.
+    'tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts',
+    // Acompanhamento de remessa (#728): listPaged ordena por generatedAt DESC no banco, total real,
+    // documentIds da página em batch (sem N+1), e findById com os vínculos.
+    'tests/modules/financial/adapters/persistence/remittance-read.drizzle-mysql.test.ts',
+    // Quarentena do retorno (#753, migration 0048): o ODKU preserva `first_seen_at` e reabre o
+    // liberado, o CHECK recusa motivo fora da união, e `object_key` compara em collation binária —
+    // chave de S3 é case-sensitive, e `unicode_ci` faria dois objetos distintos colidirem na PK.
+    'tests/modules/financial/adapters/persistence/van-return-quarantine-store.drizzle-mysql.test.ts',
+    // Casamento do retorno (#690): o JOIN que traz o arquivo de remessa, e a UNIQUE de
+    // `your_number` — que é o que torna o casamento uma decisão em vez de heurística.
+    'tests/modules/financial/adapters/persistence/van-return-match-reader.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
+    // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
+    // 'PartiallyReconciled' (19 chars). RED por errno 1406 (varchar(16) curta) até o widen p/ varchar(24).
+    'tests/modules/financial/adapters/persistence/payable-status-width.drizzle-mysql.test.ts',
     // #269 — ExpectedCounterpartStore (fin_expected_counterpart 0034 + outbox na tx)
     'tests/modules/financial/adapters/persistence/expected-counterpart-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/match-suggestion.drizzle-mysql.test.ts',
@@ -146,6 +173,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
     'tests/modules/financial/adapters/persistence/manual-entry-taxonomy.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/manual-payment.drizzle-mysql.test.ts',
+    // Fatia 1 — concorrência da escrita por título (CAS). Sem MySQL real este arquivo não prova
+    // nada: o que ele mede é o InnoDB sob escrita simultânea, e um fake responderia o que o autor
+    // do fake imaginou.
+    'tests/modules/financial/adapters/persistence/payable-cas-concurrency.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/cost-center-read.drizzle-mysql.test.ts',
@@ -159,12 +190,30 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #357 — PayableSummaryByIdsView (JOIN fin_payables × fin_documents × fin_supplier_view p/ payables:batch)
     'tests/modules/financial/adapters/persistence/payable-summary-by-ids-view.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/document-summary-by-ids-view.drizzle-mysql.test.ts',
+    // #323 — searchPaid reflete o status do DOCUMENTO (paridade com o grid Contas a Pagar): documento
+    // Pago traz líquido Paid + retenções Open/Approved; salvaguarda <> 'Reconciled'. Regressão fix.
+    'tests/modules/financial/adapters/persistence/payable-reconciliation-view.drizzle-mysql.test.ts',
     // #240 REP-2: agregação "fornecedores sem contrato" (fin_payable_view ⟕ fin_supplier_view)
     'tests/modules/financial/public-api/suppliers-without-contract.drizzle-mysql.test.ts',
+    // #242 DASH-F5: Top-5 "fornecedores sem contrato" do Dashboard (listTop — ORDER BY sum DESC,
+    // supplier_ref ASC LIMIT 5; corte e desempate no SQL). Reusa a agregação do REP-2.
+    'tests/modules/financial/public-api/suppliers-without-contract-top.drizzle-mysql.test.ts',
+    // #241 DASH-F1: KPI "Despesas por Centro de Custo" — dois CASE-SUM sobre paid_at (M-1/M-2) por CC,
+    // WHERE status='Paid', GROUP BY cost_center_ref + LEFT JOIN fin_cost_centers (nome).
+    'tests/modules/financial/public-api/dashboard-cost-centers.drizzle-mysql.test.ts',
     // #243 REP-4: "posição de pagamentos" (fin_payable_view × cost_center × categoria, 3 baldes)
     'tests/modules/financial/public-api/payment-position.drizzle-mysql.test.ts',
     // REP-3 #114: "análise de planejamento" (fin_payable_view por categoria×CC×mês, DATE_FORMAT)
     'tests/modules/financial/public-api/payables-analysis.drizzle-mysql.test.ts',
+    // REP-6 #442 (Slice A): "relatório geral" — linhas planas paginadas de fin_payable_view com
+    // LEFT JOINs same-module (documento/fornecedor/CC/categoria + self-join subcategoria) + filtros.
+    'tests/modules/financial/public-api/general-report.drizzle-mysql.test.ts',
+    // REP #590 (Slice A): "fluxo de caixa" — fin_payable_view agregado por Categoria × Subcategoria
+    // em 2 baldes (EXPECTED=Σ Open+Approved; REALIZED=Σ Paid; Cancelled fora) + self-join subcategoria.
+    'tests/modules/financial/public-api/cashflow.drizzle-mysql.test.ts',
+    // REP #590 (Slice B): "fluxo de caixa /chart" — série temporal. fin_payable_view agregado por
+    // Categoria × Subcategoria × MÊS (DATE_FORMAT due_date '%Y-%m-01'), 2 baldes, ordenado por mês ASC.
+    'tests/modules/financial/public-api/cashflow-chart.drizzle-mysql.test.ts',
     // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
     // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
     'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
@@ -191,7 +240,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
     secrets: false,
     env: { STORAGE_INTEGRATION: '1' },
     concurrency1: false,
-    paths: ['tests/modules/contracts/adapters/storage/s3.integration.test.ts'],
+    paths: [
+      'tests/modules/contracts/adapters/storage/s3.integration.test.ts',
+      // Bucket da VAN (ADR-0061): prova que a chave montada é a chave gravada, que a listagem por
+      // prefixo não vaza vizinho e que chave ausente vira not-found — contra S3 de verdade.
+      'tests/modules/financial/adapters/van/van-storage.s3.integration.test.ts',
+    ],
   },
   photo: {
     services: ['minio'],
@@ -247,26 +301,11 @@ const SUITES: Readonly<Record<string, Suite>> = {
   },
 };
 
-const writeTestSecrets = (): void => {
-  mkdirSync('secrets', { recursive: true });
-  for (const [path, value] of Object.entries(TEST_SECRETS)) {
-    writeFileSync(path, value);
-    chmodSync(path, 0o644);
-  }
-};
-
-const removeTestSecrets = (): void => {
-  for (const path of Object.keys(TEST_SECRETS)) {
-    rmSync(path, { force: true });
-  }
-};
-
 const dockerUp = (services: readonly string[]): number =>
-  spawnSync('docker', ['compose', 'up', '-d', ...services, '--wait'], { stdio: 'inherit' })
-    .status ?? 1;
+  spawnSync('docker', composeUpArgs(services), { stdio: 'inherit' }).status ?? 1;
 
 const dockerDown = (): void => {
-  spawnSync('docker', ['compose', 'down', '-v'], { stdio: 'ignore' });
+  spawnSync('docker', composeDownArgs(), { stdio: 'ignore' });
 };
 
 const runNodeTest = (suite: Suite): number => {
@@ -295,7 +334,11 @@ const main = (): number => {
     return EX_USAGE;
   }
 
-  if (suite.secrets) writeTestSecrets();
+  // Backup dos secrets de dev preexistentes + escrita dos de teste (0o644). O restore roda no
+  // `finally` — mesmo que o `up` falhe ou o `node --test` saia com exit≠0 — devolvendo o dev intacto.
+  const backup: SecretBackup | undefined = suite.secrets
+    ? backupAndWriteTestSecrets(SECRETS_DIR, TEST_SECRETS)
+    : undefined;
   try {
     if (suite.services.length > 0) {
       const up = dockerUp(suite.services);
@@ -304,7 +347,7 @@ const main = (): number => {
     return runNodeTest(suite);
   } finally {
     if (suite.services.length > 0) dockerDown();
-    if (suite.secrets) removeTestSecrets();
+    if (backup !== undefined) restoreSecrets(backup);
   }
 };
 

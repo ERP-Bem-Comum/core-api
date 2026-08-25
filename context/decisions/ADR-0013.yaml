@@ -1,0 +1,178 @@
+id: ADR-0013
+title: Engine de Banco de Dados — MySQL 8 (correção de assunção)
+source: handbook/architecture/adr/0013-mysql-database-engine.md
+decided_on: 2026-04-28
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0003, ADR-0004, ADR-0008, ADR-0014, ADR-0015, ADR-0020]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Primeiro ADR do inventário com veredito `realized` sem ressalva relevante. As quatro escolhas
+    técnicas conferem inteiras: MySQL 8.4 como engine, `mysql2` como driver, `drizzle-orm/mysql2` como
+    ORM (8 arquivos importando), `drizzle-kit` para migrations (7 configs, uma por módulo).
+    É também o ADR mais influente do acervo em proporção ao tamanho: corrigiu uma assunção errada
+    (PostgreSQL) que estava espalhada por três ADRs anteriores, e a correção se propagou por supersessão
+    (`0003`→`0014`, `0004`→`0015`) em vez de por remendo.
+    A única alegação não verificável daqui é a hospedagem gerenciada, que é infraestrutura.
+
+extraction:
+  state: complete
+  covers: |
+    3 alegações — engine, stack de acesso a dados, e hospedagem. A análise "migrar para PostgreSQL ou
+    manter MySQL" é fundamentação, e a mais bem construída do acervo: ancora a decisão no ADR-0001
+    ("não travar batalhas simultâneas") em vez de em preferência técnica.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: JÁ COBERTO — engine, mysql2, drizzle-orm/mysql2 e drizzle-kit já estão em adapters.md e no AGENTS.md; é stack, não regra de edição
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      Classificação correta, e a distinção que ela faz é boa: stack declarada não é regra de edição —
+      ninguém "viola" a escolha de engine ao editar um arquivo, viola ao adicionar dependência. O que
+      ela não registrou é que este ADR é o pivô de correção de três ADRs anteriores, o que o torna a
+      referência certa para entender por que `0003` e `0004` morreram.
+
+claims:
+  - id: ADR-0013-C1
+    text: |
+      MySQL 8 (preferencialmente 8.4 LTS) é o engine de banco ÚNICO, para o legado e para o core-api
+      novo. Zero conversão de dados.
+    kind: obligation
+    source_lines: [35, '37-39']
+    applies_to:
+      - 'compose.yaml'
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: o ADR-0020 (posterior) fixou MySQL 8.4 como único DIALETO e removeu o SQLite, com suíte dedicada garantindo — ver ADR-0020-C1'
+        - 'nota: nenhum driver ou ORM de outro engine em package.json'
+        - 'ausência: nenhuma referência a PostgreSQL (pg, postgres) nas dependências'
+      verify: |
+        node -e "const d=require('./package.json').dependencies;for(const k of ['pg','postgres','better-sqlite3','sqlite3'])if(d[k])console.log('presente:',k)"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando aparecer driver de engine relacional que não seja MySQL, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/cleanup/sqlite-removal.test.ts']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como TEXTO: a norma vigente e mais estrita é o `ADR-0020-C1` (MySQL 8.4 como único
+        dialeto em todo o ciclo de vida), que já tem suíte de 18 critérios garantindo. Duas fontes para
+        a mesma regra é o que este formato existe para evitar — e a mais nova é a mais forte.
+
+  - id: ADR-0013-C2
+    text: |
+      A stack de acesso a dados é: driver `mysql2`, ORM `drizzle-orm/mysql2`, migrations `drizzle-kit`
+      em modo MySQL.
+    kind: obligation
+    source_lines: ['40-42']
+    applies_to:
+      - 'package.json'
+      - 'src/modules/*/adapters/persistence/**'
+      - 'db/drizzle/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, budget-plans, contracts, financial, notifications, partners, programs]
+      absent_in: []
+      evidence:
+        - 'package.json:110 — mysql2 ^3.22.3; :104 — drizzle-orm 0.45.2; :88 — drizzle-kit ^0.31.10'
+        - 'nota: 8 arquivos de src/ importam drizzle-orm/mysql2'
+        - 'nota: 7 configs drizzle-kit em db/drizzle/, uma por módulo — ver ADR-0014-C6'
+      verify: |
+        grep -rln "drizzle-orm/mysql2" src/ --include='*.ts'; ls db/drizzle/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado os adapters de persistência, quando algum usar driver ou ORM fora da stack declarada,
+        então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Acesso a banco MUST usar `mysql2` como driver e `drizzle-orm/mysql2` como ORM. Migration MUST
+        ser gerada por `drizzle-kit`, nunca escrita à mão.
+      rationale: |
+        Adesão total nos 7 módulos com persistência. É a alegação que dá sentido às regras de schema do
+        `ADR-0020` — sem stack fixada, a lista de features SQL permitidas não tem contra o que ser
+        verificada. Nota de dívida cruzada: `mysql2` é o driver e está sem pin, contra o `ADR-0011-C3`.
+
+  - id: ADR-0013-C3
+    text: |
+      A hospedagem é gerenciada (RDS, Cloud SQL ou equivalente), com uma instância e dois databases
+      isolados (`legacy` + `core`).
+    kind: obligation
+    source_lines: ['43-44']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Infraestrutura provisionada fora deste repositório (ERP-INFRA). A topologia de databases está extraída no ADR-0014-C2.'
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum. Escolha de hospedagem não tem representação no código — o `compose.yaml` descreve dev,
+        não produção.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Não é regra de edição, e a parte acionável (dois databases isolados, um escritor cada) já está
+        no `ADR-0014-C1` e `ADR-0014-C2`. Descartar daqui para não criar terceira fonte.
+
+findings:
+  - |
+    ADR mais influente do acervo em proporção ao tamanho: 131 linhas que corrigiram uma assunção errada
+    (PostgreSQL) espalhada por `0003`, `0004` e `0008`. A correção se propagou por SUPERSESSÃO — o
+    `0003` virou `0014`, o `0004` virou `0015` — em vez de por remendo nos originais. É o contraste
+    exato com o caso do `ADR-0012`, onde a norma foi superseded e as ~18 citações ficaram apontando
+    para o documento morto.
+  - |
+    A fundamentação é a melhor do acervo e vale citar: em vez de comparar features de engine, o ADR
+    ancora a decisão no `ADR-0001` — "trocar engine de banco no meio de uma migração de paradigma de
+    domínio, arquitetura nova e cultura de código nova é exatamente o tipo de risco adicional a
+    evitar". Decidiu por gestão de risco simultâneo, não por preferência técnica.
+  - |
+    Ele declara "Supersedes engine choice in: ADR-0003, ADR-0004 (referências indiretas em ADR-0008
+    também são corrigidas por este)" — ou seja, é supersessão parcial de TRÊS ADRs de uma vez, e por
+    ASSUNTO (a escolha de engine), não por seção. Quarta forma de supersessão parcial encontrada, e a
+    única que atinge múltiplos documentos.
+
+provenance:
+  tickets:
+    - CTR-DB-DRIVER-MYSQL
+    - CTR-DB-MIGRATION-MYSQL
+  issues: []
+  note: |
+    Inquiry-0010 (correção de assunção — engine real é MySQL 8) embasou este ADR e é citada pelo INDEX
+    como origem de três ADRs (`0013`, `0014`, `0015`) — não lida. O acervo tem CTR-DB-DRIVER-MYSQL e
+    CTR-DB-MIGRATION-MYSQL, nenhum lido.

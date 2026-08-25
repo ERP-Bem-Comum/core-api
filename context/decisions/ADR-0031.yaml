@@ -1,0 +1,354 @@
+id: ADR-0031
+title: Módulo partners — fronteira de Cadastros/Counterparties migrada do legado
+source: handbook/architecture/adr/0031-partners-registry-module.md
+decided_on: 2026-06-01
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related:
+    [ADR-0006, ADR-0014, ADR-0020, ADR-0024, ADR-0035, ADR-0036, ADR-0043, ADR-0044, ADR-0046]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    A alegação mais frágil deste ADR é a que se sustenta melhor, e isso vale registrar: ele manda
+    preservar o TYPO do legado `ONGANIZACAO_DE_EVENTOS` por fidelidade de ETL, e o typo está em
+    `supplier/service-category.ts:39`, com comentário na linha 4 dizendo "LITERAIS (não traduz) — inclui
+    os typos do legado". As siglas `PARC|DDI|DCE|EPV` também estão lá.
+    Duas divergências, ambas por decisão posterior declarada e não por drift: o módulo tem CINCO
+    agregados, não três — `act` veio do ADR-0036 e `user-profile` do §6 deste próprio ADR; e a
+    caracterização de geografia como "lookup sem ciclo de vida" (§3) foi fechada pelo ADR-0035 no outro
+    sentido, com a PARCERIA territorial virando Entity com soft-delete enquanto o catálogo segue
+    read-only.
+    Uma pendência que o ADR já previa: dos três VOs que ele promove ao Shared Kernel, `cpf` e `cnpj`
+    estão lá e `email` não — segue em `auth/domain/identity/email.ts`. O próprio ADR chama isso de
+    "passo posterior, sem bloquear Parceiros", então é pendência declarada, não violação.
+
+extraction:
+  state: complete
+  covers: |
+    7 alegações — as sete decisões numeradas. As questões abertas D1-D9 não geram alegação própria: a D9
+    foi fechada pelo ADR-0035 e está extraída lá.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA — originou a .claude/rules/partners-module.md
+    applied_to: ['.claude/rules/partners-module.md']
+    gap: |
+      Boa destilação, e a justificativa da rule nova é a mais precisa das seis que a 039 criou:
+      "soft-delete padronizado + **4 enums que não devem ser traduzidos** — violáveis por puro
+      desconhecimento". Acertou o que importa: as exceções de enum são o tipo de regra que ninguém
+      adivinha e que um refactor "de limpeza" destrói.
+      O que não verificou: se o typo está lá (está, e documentado), e que o módulo já tem cinco
+      agregados, não três — informação que muda a leitura de "um módulo, três agregados".
+
+claims:
+  - id: ADR-0031-C1
+    text: |
+      Um módulo `partners` com TRÊS agregados raiz internos: `supplier`, `financier`, `collaborator`.
+      Não fatiar em N módulos — cardinalidade modesta e mesma linguagem ubíqua de "cadastro de
+      contraparte".
+    kind: obligation
+    source_lines: ['34-36']
+    applies_to:
+      - 'src/modules/partners/domain/**'
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: src/modules/partners/domain/ tem sete diretórios — act, collaborator, financier, geography, shared, supplier, user-profile'
+        - 'nota: os três do ADR existem; act veio do ADR-0036 e user-profile do §6 deste próprio ADR, logo são adições POR DECISÃO declarada'
+        - 'nota: geography é lookup (§3) e shared é código comum do módulo — nenhum dos dois é agregado'
+      verify: |
+        ls src/modules/partners/domain/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/partners/domain/`, quando aparecer agregado sem registro de decisão que o
+        autorize, então o teste falha. O RED depende de uma lista de agregados registrados.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        `partners` MUST conter os agregados registrados — hoje `supplier`, `financier`, `collaborator`,
+        `act` e `user-profile`. Agregado novo MUST vir com registro de decisão próprio.
+      rationale: |
+        Estreitado para a lista real, com a origem de cada um. "Três agregados" ficou desatualizado por
+        duas decisões legítimas, e manter o número antigo faria um agente ler `act` e `user-profile` como
+        drift. O que vale como regra é a exigência de decisão para o próximo, não a contagem.
+
+  - id: ADR-0031-C2
+    text: |
+      `collaborator` permanece em `partners` — não vira módulo `people`/`hr` agora. Por YAGNI, fundido
+      com os demais. Reavaliar se RH ganhar regras próprias (remuneração, jornada, avaliação).
+    kind: obligation
+    source_lines: [40]
+    applies_to:
+      - 'src/modules/**'
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: o diretório src/modules/partners/domain/collaborator/ existe — o agregado vive dentro de partners'
+        - 'ausência: não existe módulo people nem hr em src/modules/'
+      verify: |
+        ls src/modules/; ls src/modules/partners/domain/collaborator | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/`, quando `collaborator` for extraído para módulo próprio sem registro de
+        decisão, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é decisão de não-fazer com gatilho de reavaliação ("se RH ganhar regras próprias"), e
+        o `ADR-0006` já normatiza que módulo novo exige decisão. Não vira regra de edição — vale como
+        contexto de por que `collaborator` não está sozinho.
+
+  - id: ADR-0031-C3
+    text: |
+      Geografias são LOOKUP, não agregado: `partner_states`/`partner_municipalities` são dados de
+      referência (UF + código IBGE), sem ciclo de vida nem regra de negócio. Modelados como tabela
+      read-only/seed e VOs (`StateAbbreviation`, `IbgeCode`).
+    kind: obligation
+    source_lines: [44]
+    applies_to:
+      - 'src/modules/partners/domain/geography/**'
+      - 'src/modules/partners/adapters/persistence/schemas/mysql.ts'
+    superseded_by: ADR-0035
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: o diretório src/modules/partners/domain/geography/ existe — o catálogo é domínio do módulo'
+        - 'nota: par_states e par_municipalities existem e TÊM ciclo de vida (active + deactivated_at + CHECK), o oposto do que este ADR caracteriza'
+        - 'handbook/architecture/adr/0035-partner-territory-soft-delete.md:35 — o ADR-0035 resolve a D9 e mantém o catálogo read-only, dando ciclo de vida à PARCERIA, que o referencia'
+      verify: |
+        grep -rhoE "'par_(states|municipalities)'" src/modules/partners/adapters/persistence/schemas/mysql.ts; ls src/modules/partners/domain/geography/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema, quando o catálogo geográfico ganhar coluna mutável de negócio, então o teste
+        falha — catálogo e parceria MUST permanecer separados.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        O catálogo geográfico MUST ser read-only. A PARCERIA territorial MUST ser Entity persistida com
+        soft-delete, referenciando o catálogo — nunca mutando-o.
+      rationale: |
+        Substituir pela redação do `ADR-0035`, que fechou a D9 deste ADR no outro sentido. A confusão é
+        de nome, não de conceito: `partner_states` aqui significava catálogo; `par_states` lá significa
+        parceria. A regra separa os dois explicitamente para que a próxima leitura não misture.
+
+  - id: ADR-0031-C4
+    text: |
+      VOs `Cpf`, `Cnpj` e `Email` promovidos ao Shared Kernel (`src/shared/kernel/`), como VOs brandados
+      com smart constructor `Result<T,E>`. São genuinamente cross-BC.
+    kind: obligation
+    source_lines: [48]
+    applies_to:
+      - 'src/shared/kernel/**'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: src/shared/kernel/ tem cpf.ts, cnpj.ts, money.ts, non-zero-money.ts, period.ts, plain-date.ts, user-ref.ts e index.ts'
+        - 'ausência: não existe email.ts no kernel — o VO Email segue em src/modules/auth/domain/identity/email.ts'
+        - "nota: o próprio ADR declara que auth.Email migra 'num passo posterior, sem bloquear Parceiros' — é pendência declarada, não violação"
+      verify: |
+        ls src/shared/kernel/; ls src/modules/auth/domain/identity/ | grep -i email
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um VO usado por mais de um módulo, quando ele viver dentro de um módulo em vez do kernel,
+        então o teste falha. Hoje falharia no `Email`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        VO usado por mais de um módulo MUST viver em `src/shared/kernel/`. MUST NOT ser importado do
+        domínio de um módulo por outro.
+      rationale: |
+        A regra é a certa e o `Email` é a exceção pendente. Vale notar que o `ADR-0006-C4` já proíbe
+        importar `domain/` de outro módulo — então, se algum módulo além de `auth` precisar de `Email`
+        hoje, ele já está em violação ou duplicando. A migração pendente tem custo crescente.
+
+  - id: ADR-0031-C5
+    text: |
+      Enums do legado viram string literal unions em EN kebab-case, com dicionário PT-BR nos formatters
+      — EXCETO quatro: `race` e `gender_identity` (categorias oficiais do IBGE, manter rótulo legado
+      opaco) e `serviceCategory` (~40 valores, com o typo legado `ONGANIZACAO_DE_EVENTOS`) e
+      `occupationArea` (`PARC|DDI|DCE|EPV`, siglas internas) — literais por fidelidade de ETL.
+    kind: prohibition
+    source_lines: ['50-55']
+    applies_to:
+      - 'src/modules/partners/domain/**/*.ts'
+      - 'scripts/etl/**'
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'src/modules/partners/domain/supplier/service-category.ts:39 — o literal ONGANIZACAO_DE_EVENTOS está preservado'
+        - 'src/modules/partners/domain/supplier/service-category.ts:4 — comentário: "LITERAIS (não traduz) — inclui os typos do legado ONGANIZACAO_DE_EVENTOS"'
+        - "nota: as siglas 'PARC', 'DDI', 'DCE' e 'EPV' de occupationArea existem literais em src/"
+        - 'nota: src/modules/partners/domain/collaborator/sex.ts existe — os campos sensíveis de identidade vivem em arquivo próprio do agregado'
+      verify: |
+        grep -rn "ONGANIZACAO" src/ --include='*.ts'; grep -rhoE "'(PARC|DDI|DCE|EPV)'" src/ --include='*.ts' | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o domínio de partners, quando um dos quatro enums de exceção for traduzido para EN
+        kebab-case, então o teste falha. O typo `ONGANIZACAO_DE_EVENTOS` é o canário: se ele for
+        "corrigido", o ETL passa a divergir do legado em silêncio.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Enum do legado MUST ser traduzido para EN kebab-case, EXCETO `race`, `gender_identity`,
+        `serviceCategory` e `occupationArea`, que MUST permanecer literais — incluindo o typo
+        `ONGANIZACAO_DE_EVENTOS`. Corrigir o typo MUST ser tratado como quebra de contrato de ETL.
+      rationale: |
+        A 039 acertou ao chamar isso de "violável por puro desconhecimento", e o código já se defende com
+        o comentário no ponto. Vale como regra porque a violação é ATRAENTE: corrigir um typo parece
+        melhoria. O canário explícito na regra é o que impede.
+
+  - id: ADR-0031-C6
+    text: |
+      O perfil administrativo de usuário é agregado SEPARADO, não extensão de `auth.User` — referencia
+      `auth.User` por ID via `auth/public-api`. O `massApprovalPermission` vira uma `Permission` do RBAC
+      (`contract:mass-approve`), não um boolean solto. Login, credencial e sessão continuam em `auth`.
+    kind: obligation
+    source_lines: [59]
+    applies_to:
+      - 'src/modules/partners/domain/user-profile/**'
+      - 'src/modules/partners/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners, auth]
+      absent_in: []
+      evidence:
+        - 'nota: o diretório src/modules/partners/domain/user-profile/ existe — o agregado de perfil é separado de auth'
+        - 'nota: a tabela par_user_profiles existe no schema de partners, com prefixo do módulo dono'
+        - 'nota: as tabelas de credencial e sessão seguem em auth (auth_user, auth_refresh_token) — ver ADR-0024-C8'
+      verify: |
+        ls src/modules/partners/domain/user-profile/; grep -rhoE "'par_user_profiles'" src/modules/partners/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `par_user_profiles`, quando ela ganhar coluna de credencial (hash de senha, token), então o
+        teste falha — credencial é de `auth`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Perfil administrativo MUST ser agregado próprio em `partners`, referenciando `auth.User` por ID
+        via `public-api`. Credencial e sessão MUST permanecer em `auth`. Flag de autorização MUST ser
+        `Permission` do RBAC, nunca boolean em tabela de perfil.
+      rationale: |
+        A última cláusula é a que mais protege: `massApprovalPermission` como boolean numa tabela de
+        perfil seria autorização fora do RBAC — exatamente a armadilha que o `ADR-0052` documenta como
+        "RBAC não é ponto único". Fixar que flag de autorização é `Permission` fecha a porta.
+
+  - id: ADR-0031-C7
+    text: |
+      Contratos e Financeiro consomem Parceiros EXCLUSIVAMENTE via `partners/public-api/`, por ID mais
+      snapshot mais evento.
+    kind: prohibition
+    source_lines: ['61-64']
+    applies_to:
+      - 'src/modules/*/adapters/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/http/composition.ts:63 — contracts lê partners pela public-api (ver ADR-0032-C2)'
+        - 'src/modules/financial/adapters/http/composition.ts:615 — financial abre o partners read port pela public-api'
+        - 'nota: o padrão "por ID + snapshot + evento" é materializado pelos ADR-0043 (SupplierRegistered/Edited) e ADR-0046 (contractorRef)'
+      verify: |
+        grep -rn "partners/public-api" src/modules/contracts/ src/modules/financial/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `contracts` ou `financial`, quando importarem de `partners/domain/` ou lerem `par_*` direto,
+        então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é caso particular da `ADR-0006-C4` (cross-módulo só por `public-api`) mais
+        a `ADR-0032-C2` (nunca ler tabela de outro módulo), ambas já propostas com escopo geral. Vale como
+        evidência de que a regra geral funciona — dois módulos consomem partners e nenhum fura.
+
+findings:
+  - |
+    A alegação mais frágil deste ADR é a que se sustenta melhor. Ele manda PRESERVAR o typo legado
+    `ONGANIZACAO_DE_EVENTOS` por fidelidade de ETL, e o typo está em `service-category.ts:39` com
+    comentário na linha 4 explicando por quê. É a defesa certa no lugar certo: sem o comentário, o typo
+    parece bug e alguém "conserta". A 039 chamou esse grupo de regras de "violável por puro
+    desconhecimento" — e é o único caso do acervo em que o código se defende preventivamente contra uma
+    melhoria aparente.
+  - |
+    O módulo tem CINCO agregados, não três, e as duas adições são legítimas: `act` veio do `ADR-0036` e
+    `user-profile` do §6 deste próprio ADR. Não é drift — é o número no título da decisão envelhecendo
+    enquanto o resto do documento continua certo. Mesma classe do `ADR-0023` (4 estados que viraram 5).
+  - |
+    O `Email` não foi promovido ao Shared Kernel e segue em `auth/domain/identity/email.ts`. O ADR previu
+    ("passo posterior"), então é pendência declarada. Mas o custo cresce: o `ADR-0006-C4` proíbe importar
+    `domain/` de outro módulo, então qualquer módulo além de `auth` que precise de `Email` hoje está
+    duplicando ou violando. Pendência com prazo implícito que ninguém está contando.
+  - |
+    A D9 deste ADR foi fechada pelo `ADR-0035` no sentido OPOSTO à caracterização do §3: geografia como
+    "lookup sem ciclo de vida" virou parceria territorial como Entity com soft-delete. A confusão é de
+    nome — `partner_states` aqui é catálogo, `par_states` lá é parceria — e as duas coisas coexistem no
+    código. É o tipo de divergência que só aparece lendo os dois ADRs juntos.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Origem declarada: Inquiry-0014 (schema legado vs modelo alvo) e a banca de 2026-06-01 — não lidas. O
+    acervo tem ~25 tickets PARTNERS-* e PAR-*, nenhum lido. As questões abertas D1-D9 deste ADR foram
+    resolvidas em ADRs e tickets posteriores; só a D9 tem ADR próprio (`0035`).

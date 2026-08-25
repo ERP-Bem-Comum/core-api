@@ -12,6 +12,7 @@ import type { ManualEntry, ManualEntryType, Reconciliation } from './types.ts';
 
 export type ManualEntryError =
   | 'manual-entry-value-not-positive'
+  | 'manual-entry-classification-required'
   | 'transfer-requires-destination'
   | 'investment-requires-product'
   | 'realloc-forbids-supplier';
@@ -35,6 +36,11 @@ export type ConfirmManualEntryInput = Readonly<{
   description?: string;
   destinationAccountRef?: string;
   productLabel?: string;
+  // #370: campos de documento. `documentValueCents` omitido → default = `valueCents` (valor da transação).
+  documentNumber?: string;
+  documentType?: string;
+  issueDate?: Date;
+  documentValueCents?: number;
   reconciledBy: string;
   occurredAt: Date;
 }>;
@@ -64,6 +70,18 @@ export const confirmManualEntry = (
     return err('investment-requires-product');
   }
 
+  // Classificação obrigatória ao conciliar (regra da P.O.): tipos que NÃO são realocação patrimonial
+  // (Payment/Receipt/FeePenaltyInterest) exigem categoria + centro de custo — em título normal e manual.
+  // Transfer/Investment/Redemption circulam entre contas da própria empresa → isentos. A obrigatoriedade é
+  // no ATO de conciliar, não no export: transação não conciliada (sem ManualEntry) nunca passa por aqui, e
+  // segue exportável vazia (#649 — o arquivo pode ser gerado antes de a conciliação estar concluída).
+  if (
+    !isCapitalReallocation(input.type) &&
+    (input.categoryRef === undefined || input.costCenterRef === undefined)
+  ) {
+    return err('manual-entry-classification-required');
+  }
+
   const manualEntry: ManualEntry = immutable<ManualEntry>({
     id: ManualEntryId.generate(),
     type: input.type,
@@ -77,6 +95,11 @@ export const confirmManualEntry = (
     description: input.description ?? null,
     destinationAccountRef: input.destinationAccountRef ?? null,
     productLabel: input.productLabel ?? null,
+    documentNumber: input.documentNumber ?? null,
+    documentType: input.documentType ?? null,
+    issueDate: input.issueDate ?? null,
+    // #370: default = valor da transação conciliada quando o front não envia (regra da P.O.).
+    documentValueCents: input.documentValueCents ?? input.valueCents,
   });
 
   const reconciliation: Reconciliation = immutable<Reconciliation>({

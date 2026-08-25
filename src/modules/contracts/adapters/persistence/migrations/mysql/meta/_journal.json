@@ -127,6 +127,48 @@
       "when": 1784687108605,
       "tag": "0017_chilly_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1784826480502,
+      "tag": "0018_bent_masque",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1785969687244,
+      "tag": "0019_wild_wither",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1787363746572,
+      "tag": "0020_busy_doctor_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1787527034057,
+      "tag": "0021_giant_mentor",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "5",
+      "when": 1787542939900,
+      "tag": "0022_overrated_susan_delgado",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1787544629391,
+      "tag": "0023_blue_tigra",
+      "breakpoints": true
     }
   ]
 }

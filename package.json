@@ -1,7 +1,12 @@
 {
   "name": "core-api",
-  "version": "0.1.0",
-  "description": "Modular Monolith do ERP Bem Comum. Fase 1: módulo Contratos.",
+  "version": "1.0.0-rc.1",
+  "description": "Backend do ERP Bem Comum — modular monolith em Node.js e TypeScript, com borda HTTP em Fastify e persistência MySQL via Drizzle.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ERP-Bem-Comum/core-api.git"
+  },
   "private": true,
   "type": "module",
   "engines": {
@@ -15,18 +20,26 @@
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@11.15.1+sha512.81350b07e53c9538a02f1f2303b4290fa2d7be04e56e2a970c4cc4b417dc761de196edabd49d55c7dc9580db81007c44143e4e3d7e462b3000d23c255122d065",
+  "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c",
   "imports": {
     "#src/*": "./src/*",
-    "#scripts/*": "./scripts/*"
+    "#scripts/*": "./scripts/*",
+    "#tests/*": "./tests/*"
   },
   "scripts": {
     "preinstall": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/only-allow-pnpm.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "eslint . --cache",
+    "lint:fix": "eslint . --fix --cache",
+    "docs:inventory": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inventory.ts",
+    "docs:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inquiry-index.ts",
+    "docs:refs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/refs.ts",
+    "docs:links": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/link-scan.ts",
+    "cnab:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/cnab-manual-index.ts",
+    "logbook": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/claude/logbook.ts",
+    "release:notes": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/release-notes.ts",
     "audit": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "test": "node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/**/*.test.ts'",
@@ -41,12 +54,10 @@
     "job:financial:supplier-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/supplier-view-backfill/run.ts",
     "job:financial:payable-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/payable-view-backfill/run.ts",
     "job:partners:contract-count-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/partners/contract-count-backfill/run.ts",
+    "job:outbox-sweeper": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/shared/outbox-sweeper/run.ts",
     "job:migrate": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts",
     "job:auth:sync-permissions": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/auth/sync-permissions/run.ts",
-    "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings ./scripts/setup/secrets.ts",
-    "pipeline:state": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/state-cli.ts",
-    "pipeline:status": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/dashboard-cli.ts",
-    "pipeline:metrics": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/metrics-cli.ts",
+    "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/setup/secrets.ts",
     "test:integration:infra": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts infra",
     "test:integration:notifications": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts notifications",
     "test:integration:storage": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts storage",
@@ -76,11 +87,13 @@
     "db:generate:notifications": "drizzle-kit generate --config db/drizzle/notifications.ts",
     "db:generate:budget-plans": "drizzle-kit generate --config db/drizzle/budget-plans.ts",
     "db:seed:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/partners.ts",
-    "seed:admin": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/admin-user.ts"
+    "seed:admin": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/admin-user.ts",
+    "financial:projection-health": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/diagnostics/projection-health.ts",
+    "financial:payee-bank-distribution": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/diagnostics/payee-bank-distribution.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.10.0",
+    "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.1",
     "@typescript/native-preview": "7.0.0-dev.20260515.1",
     "@usebruno/cli": "3.4.2",
@@ -89,11 +102,12 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.3",
     "typescript": "^6.0.0",
-    "typescript-eslint": "^8.59.3"
+    "typescript-eslint": "^8.59.3",
+    "yaml": "^2.9.0"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1052.0",
-    "@aws-sdk/s3-request-presigner": "^3.1052.0",
+    "@aws-sdk/client-s3": "3.1052.0",
+    "@aws-sdk/s3-request-presigner": "3.1052.0",
     "@fastify/cors": "11.2.0",
     "@fastify/helmet": "13.0.2",
     "@fastify/rate-limit": "10.3.0",
@@ -103,11 +117,11 @@
     "fast-xml-parser": "5.7.3",
     "fastify": "5.8.5",
     "fastify-zod-openapi": "5.6.1",
-    "hash-wasm": "^4.12.0",
-    "jose": "^6.2.3",
-    "mysql2": "^3.22.3",
-    "nodemailer": "^9.0.1",
-    "resend": "^6.12.4",
+    "hash-wasm": "4.12.0",
+    "jose": "6.2.3",
+    "mysql2": "3.22.3",
+    "nodemailer": "9.0.1",
+    "resend": "6.12.4",
     "unpdf": "1.6.2",
     "zod": "4.4.3",
     "zod-openapi": "5.4.6"

@@ -1,0 +1,400 @@
+id: ADR-0042
+title: Dead-man's switch redundante (S3/R2 ⟂ GitHub Actions, JSONL append-only) para detecção de jobs mortos
+source: handbook/architecture/adr/0042-deadman-switch-redundant.md
+decided_on: 2026-06-16
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0002, ADR-0009, ADR-0041]
+
+assessment:
+  verdict: unrealized
+  checked_at: 2026-08-17
+  checked_against: d8599aaa
+  summary: |
+    **O mecanismo foi construído por inteiro e nunca vigiou nada. Removido do repositório em
+    2026-08-17.** A verificação anterior (2026-07-31, contra `722b0371`, veredito
+    `partially-realized`) inventariou peça por peça — emissor Go com HMAC, dois planos de ingestão,
+    dois workflows, auditor rodando — e concluiu que o desenho estava quase todo de pé. Ela conferiu
+    as peças; não conferiu se o sistema recebia sinal.
+    Recebia zero. `deadman/history.jsonl` esteve **vazio, 0 linhas**, do início ao fim: nenhum ping
+    jamais chegou por nenhum dos dois planos, porque o emissor nunca foi implantado em lugar algum.
+    O auditor rodou 23 vezes com sucesso e escreveu 22 vereditos em `deadman/audit.jsonl` — todos em
+    bootstrap, o estado que o próprio script trata como "não é morte" por não haver `last_seen`.
+    Um detector de ausência sem sinal de entrada não detecta ausência: ele apenas confirma, todo dia,
+    que nunca soube de nada.
+    Em 2026-07-24 ele parou até de rodar. A proteção da branch `main` (#523 Fase 2) passou a recusar
+    o `git push` do commit de keep-alive — `GH006: Protected branch update failed`. O workflow ficou
+    **24 dias vermelho** sem que ninguém notasse, e é aqui que a falha se fecha sobre si mesma: o
+    único canal pelo qual este sistema avisaria que algo morreu era o mesmo push que morreu. Ele não
+    tinha como anunciar a própria morte.
+    A decisão declarada segue `Accepted` e **não** foi superada — o problema que ela ataca (job que
+    morre em silêncio) continua real e sem cobertura. Falta o desenho que a substitua. Registro da
+    falha e do que a próxima tentativa precisa resolver:
+    `handbook/inquiries/0030-deadman-switch-nunca-vigiou.md`.
+    As `claims` abaixo são a aferição de 2026-07-31 contra `722b0371` e ficam como registro histórico:
+    suas evidências e comandos `verify` apontam para arquivos que esta remoção apagou.
+
+extraction:
+  state: complete
+  covers: |
+    7 alegações — os quatro componentes do padrão "Cinto e Suspensório", as três decisões D1/D2/D3, e a
+    proibição de SaaS/Python que fundamenta a D1. Os contratos de dados são delegados ao doc 07.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: NÃO GERA REGRA (infraestrutura, fora de src/)
+    applied_to: []
+    gap: |
+      Correto para o alvo de uma rule de edição de `src/` — o emissor é Go em `tools/` e os auditores são
+      workflows.
+      Mas duas coisas aqui valem como norma e escapam: a proibição de Python para utilitários (que já é uma
+      preferência registrada na memória do projeto, não só deste ADR) e a exigência de que detector de
+      ausência falhe fechado. O falso positivo de 14 issues mostra que a segunda não é teórica.
+
+claims:
+  - id: ADR-0042-C1
+    text: |
+      Padrão "Cinto e Suspensório": DOIS PLANOS INDEPENDENTES de ingestão do sinal de vida, convergindo via
+      JSONL APPEND-ONLY, com um Auditor que decide a inatividade e dispara a contingência. O emissor faz
+      DUAL-WRITE: `PUT`/append no Object Storage (`status.jsonl`) E webhook `repository_dispatch` para o
+      GitHub.
+    kind: obligation
+    source_lines: [29, '31-33']
+    applies_to:
+      - 'tools/deadman-emitter/**'
+      - '.github/workflows/deadman-*.yml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: tools/deadman-emitter/ tem sigv4.go (assinatura para o Object Storage) e dispatch.go (o webhook repository_dispatch) — os dois planos'
+        - 'nota: .github/workflows/deadman-ingest.yml e deadman-audit.yml existem — ingestão de fallback e auditor'
+        - 'nota: deadman/history.jsonl está versionado no repo — o plano de fallback grava de fato'
+        - 'nota: o status.jsonl vive no Object Storage e não é verificável a partir do repositório'
+      verify: |
+        ls tools/deadman-emitter/*.go .github/workflows/deadman-*.yml deadman/history.jsonl
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um plano de ingestão indisponível (Object Storage fora), quando o emissor pinga, então o sinal
+        MUST chegar pelo outro plano. Se a falha de um plano impedir o registro, a redundância não existe.
+      expected_error: null
+      blocker: null
+      # Era `tools/deadman-emitter/s3_integration_test.go`, removido em 2026-08-17 junto com o
+      # mecanismo (ver `assessment`). O teste existia e passava — exercitava a gravação no Object
+      # Storage, não a chegada de um ping real ao auditor, que é o que nunca aconteceu.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Sinal de vida MUST ser gravado por dois caminhos independentes. A decisão de inatividade MUST usar o
+        registro mais recente entre as fontes (`last_seen = max(...)`), nunca uma fonte só.
+      rationale: |
+        A segunda frase é a que evita o falso positivo, e este ADR tem o incidente para provar: o auditor
+        disparou 14 issues "sem sinal há 0h" (`deadman-audit.yml:78`). Um detector de AUSÊNCIA falha de
+        forma assimétrica — se ele lê uma fonte vazia e conclui "morto", produz alarme falso em massa; se
+        cruza as fontes pelo máximo, um plano vazio é absorvido pelo outro.
+
+  - id: ADR-0042-C2
+    text: |
+      GitHub Actions — AUDITOR CRON (diário): baixa `status.jsonl`, compara com `history.jsonl`, decide
+      inatividade pelo REGISTRO MAIS RECENTE entre as duas fontes (`last_seen = max(remoto, local)`), faz
+      SELF-HEALING (merge das linhas faltantes), e o COMMIT DE AUDITORIA atua como KEEP-ALIVE contra a
+      suspensão de 60 dias de workflows agendados do GitHub. Dispara o payload se
+      `now − last_seen > limite`.
+    kind: obligation
+    source_lines: [37]
+    applies_to:
+      - '.github/workflows/deadman-audit.yml'
+    reality:
+      verdict: partial
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'handbook/infrastructure/07-deadman-switch-data-contracts.md:154 — o contrato registra que basta uma das duas fontes ter o ping para o sistema ser considerado vivo'
+        - '.github/workflows/deadman-audit.yml:125 — o disparo monta o título "DEAD-MAN FIRED — <emitter> sem sinal há <age>h (limite <th>d)"'
+        - '.github/workflows/deadman-audit.yml:134 — há também notificação por webhook, além da issue'
+        - '.github/workflows/deadman-audit.yml:78 — comentário: (…) é indefinida. O bash inline que decidia isso gerou 14 issues `sem sinal há 0h`'
+        - 'ausência: não existe scripts/deadman/ — a lógica do auditor segue inline no workflow, que tem 172 linhas'
+        - 'nota: o keep-alive contra a suspensão de 60 dias depende do commit de auditoria e não foi verificado nesta fase'
+      verify: |
+        grep -n "THRESHOLD_DAYS\|DEAD-MAN FIRED\|14 issues" .github/workflows/deadman-audit.yml | head -5; ls scripts/deadman/ 2>&1 | head -1
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado `last_seen` mais antigo que o limite, quando o auditor roda, então MUST disparar. Dado
+        `last_seen` recente numa das fontes, MUST NÃO disparar. E dado uma fonte VAZIA ou ilegível, MUST NÃO
+        disparar — é o caso que gerou os 14 falsos positivos.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Detector de ausência MUST distinguir "sem sinal" de "sem dado" e MUST NOT disparar quando a fonte
+        está vazia, ilegível ou indefinida. Lógica de decisão MUST viver em script versionado e testável,
+        não inline no workflow.
+      rationale: |
+        As duas frases vêm do incidente registrado no próprio arquivo: 14 issues "sem sinal há 0h" — idade
+        zero disparando alarme é a assinatura de "fonte indefinida tratada como morta". E a lógica segue
+        inline num workflow de 172 linhas, onde não há como escrever teste unitário para o caso de borda que
+        já falhou. O `no-python-scripts` do projeto e a `C3` (Go para utilitários) dão o caminho: extrair
+        para binário testável.
+
+  - id: ADR-0042-C3
+    text: |
+      D1 — Linguagem do Emissor (e utilitários não-Node): GO. Critério: mais leve possível + fácil em Docker
+      + bom em JSONL. Go dá binário ESTÁTICO ÚNICO → imagem `FROM scratch` (~10–15 MB), `encoding/json` +
+      `bufio.Scanner`, `crypto/hmac` na stdlib, ZERO RUNTIME no container. REJEITADOS: Deno/Bun (binário
+      ~90 MB com runtime embutido), Zig/Rust (JSONL/build menos fáceis), self-host do healthchecks.io
+      (Python). SEM PYTHON.
+    kind: obligation
+    source_lines: [41, 23]
+    applies_to:
+      - 'tools/**'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: tools/deadman-emitter/ tem config.go, ping.go, sigv4.go, dispatch.go e dois arquivos de teste Go'
+        - 'tools/deadman-emitter/Dockerfile:4 — FROM golang:1.26-alpine AS build'
+        - 'tools/deadman-emitter/Dockerfile:12 — FROM scratch, exatamente o alvo do critério'
+        - 'tools/deadman-emitter/ping.go:10 — import "crypto/hmac", a stdlib que a decisão cita como vantagem'
+        - 'ausência: nenhum arquivo .py no repositório fora de node_modules — a proibição de Python se sustenta'
+      verify: |
+        find . -name '*.go' -not -path './node_modules/*' | head; grep -n "FROM" tools/deadman-emitter/Dockerfile
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `tools/`, quando aparecer utilitário em Python, então o teste falha. E o `Dockerfile` de
+        utilitário Go MUST terminar em `FROM scratch` — runtime embutido reintroduz o custo que motivou a
+        escolha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Utilitário fora do runtime Node MUST ser escrito em Go, com imagem final `FROM scratch`. MUST NOT
+        usar Python.
+      rationale: |
+        A proibição de Python não é preferência isolada deste ADR — é política registrada do projeto, e este
+        é o ADR que a materializa com critério técnico explícito (leve × fácil × JSONL) e alternativas
+        avaliadas e nomeadas. A cláusula do `FROM scratch` é o que preserva o motivo: um `Dockerfile` que
+        termine em `golang:alpine` entrega o mesmo binário com dezenas de MB de runtime, desfazendo a razão
+        da escolha sem trocar de linguagem.
+
+  - id: ADR-0042-C4
+    text: |
+      D2 — SPOF na DETECÇÃO: a redundância do desenho cobre a INGESTÃO (S3 ⟂ Actions), mas a detecção
+      (Auditor) roda SÓ no GitHub Actions → um outage do Actions no dia do disparo = ninguém dispara o
+      payload. Decisão: adicionar um 2º AUDITOR INDEPENDENTE (cron no ERP-INFRA cruzando o mesmo
+      `status.jsonl`) — SPOF-free também na detecção.
+    kind: obligation
+    source_lines: [42]
+    applies_to:
+      - '.github/workflows/deadman-audit.yml'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [repo]
+      evidence:
+        - 'handbook/infrastructure/07-deadman-switch-data-contracts.md:155 — O 2º auditor independente (ADR-0042 D2, em ERP-INFRA) roda o **mesmo** algoritmo sobre as **mesmas** [fontes]'
+        - 'ausência: o único auditor no repositório é .github/workflows/deadman-audit.yml — o segundo, por desenho, vive no ERP-INFRA'
+        - 'nota: o algoritmo está especificado no doc 07, o que é o pré-requisito correto; a implementação está fora do alcance desta verificação'
+        - 'nota: enquanto só o Actions decide, o SPOF que a D2 identifica segue aberto — e o keep-alive contra a suspensão de 60 dias depende do mesmo Actions'
+      verify: |
+        ls .github/workflows/deadman-*.yml; grep -n "2º auditor" handbook/infrastructure/07-deadman-switch-data-contracts.md
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado o GitHub Actions indisponível, quando o limite de inatividade é excedido, então o payload MUST
+        ser disparado por outro caminho. Hoje não seria — o teste falha por ausência do segundo auditor.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Mecanismo de detecção de falha MUST NOT depender de um único provedor. Redundância na INGESTÃO do
+        sinal MUST NOT ser confundida com redundância na DECISÃO.
+      rationale: |
+        A segunda frase é a contribuição própria do ADR e é sutil o bastante para valer regra: o desenho
+        original tinha dois planos de ingestão e parecia SPOF-free, mas quem decide "está morto" era um só.
+        Um sistema com dois caminhos de gravação e um caminho de decisão falha inteiro quando o decisor cai —
+        e pior, falha em SILÊNCIO, porque o modo de falha de um dead-man's switch é não disparar. É o
+        segundo caso do lote em que a redundância aparente esconde ponto único.
+
+  - id: ADR-0042-C5
+    text: |
+      D3 — SLO EXPLÍCITO: definir o objetivo de detecção ("miss detectado em ≤ X") ANTES de fixar a cadência
+      do auditor. Para o `contracts-sweeper` (sweep diário), detectar em ≤ 24-48h é provavelmente
+      suficiente — mas o número ENTRA NO CONTRATO.
+    kind: obligation
+    source_lines: [43]
+    applies_to:
+      - '.github/workflows/deadman-audit.yml'
+      - 'handbook/infrastructure/07-deadman-switch-data-contracts.md'
+    reality:
+      verdict: partial
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - ".github/workflows/deadman-audit.yml:23 — THRESHOLD_DAYS: '3' # SLO provisório — D3/#72 fixa o valor por emitter"
+        - '.github/workflows/deadman-audit.yml:125 — o limite aparece na mensagem do alerta ("limite ${th}d"), logo é observável por quem recebe'
+        - 'nota: o número existe e é configurável, mas é declarado PROVISÓRIO e a issue #72 (fixar por emitter) segue pendente'
+        - 'nota: 3 dias é mais frouxo que os 24-48h que o ADR estimava suficientes'
+      verify: |
+        grep -n "THRESHOLD_DAYS" -A 1 .github/workflows/deadman-audit.yml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o auditor, quando o limite de detecção não estiver declarado como valor nomeado, então o teste
+        falha. O número MUST estar no contrato e MUST aparecer na mensagem do alerta.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Detector de ausência MUST declarar o limite como valor nomeado e configurável, e MUST exibi-lo na
+        mensagem do alerta. Limite marcado como provisório MUST citar a decisão pendente que o fixa.
+      rationale: |
+        Estreitado para a prática que o repo já adota bem: `THRESHOLD_DAYS: '3'` com comentário nomeando a
+        decisão pendente (D3/#72) é melhor que um número solto ou que esperar a decisão para só então ligar o
+        detector. E exibir o limite no alerta ("limite 3d") é o que permite a quem recebe julgar se o
+        disparo faz sentido — foi a ausência desse tipo de contexto que fez 14 issues "sem sinal há 0h"
+        parecerem plausíveis até alguém olhar.
+
+  - id: ADR-0042-C6
+    text: |
+      REJEITADO: SaaS (healthchecks.io / Dead Man's Snitch) — decisão in-house por controle, custo e
+      privacidade. Self-host do healthchecks.io também rejeitado (Python — D1).
+    kind: prohibition
+    source_lines: [23, 63]
+    applies_to:
+      - 'tools/**'
+      - '.github/workflows/**'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - "ausência: nenhuma referência a healthchecks.io ou Dead Man's Snitch no repositório"
+        - 'nota: os dois planos de ingestão usam Object Storage próprio e GitHub Actions — nenhum serviço de monitoramento terceiro'
+      verify: |
+        grep -rn "healthchecks\|snitch" --include='*.yml' --include='*.go' --include='*.md' . 2>/dev/null | grep -v node_modules | grep -v "adr/0042" | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o mecanismo de heartbeat, quando ele passar a depender de SaaS de monitoramento, então o teste
+        falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como norma de edição: é decisão de sourcing tomada pelo P.O. (in-house por controle, custo
+        e privacidade), sem invariante de código. Registrar o critério, que é reusável: o que decidiu contra
+        o self-host não foi a arquitetura, foi a linguagem (Python) — a `C3` já carrega essa proibição, e ela
+        é a que tem consequência prática.
+
+  - id: ADR-0042-C7
+    text: |
+      REVERSÍVEL: é aditivo — remover NÃO afeta o job, que permanece com as 3 camadas
+      (exit code · `systemd timer Persistent=true` + convergência D+1 · rollback da tx). A 4ª camada
+      (scheduler morrer) é o único ponto cego que este ADR fecha.
+    kind: permission
+    source_lines: ['15-21', 57]
+    applies_to:
+      - 'src/jobs/**'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma dependência do job em relação ao emissor ou aos auditores — src/jobs/contracts/sweeper/ não conhece o deadman'
+        - 'nota: a 3ª camada (rollback da tx) é a mesma que o ADR-0041-C6 usa para justificar o job não escutar SIGTERM — as duas decisões se apoiam na mesma propriedade'
+        - 'nota: a 2ª camada (systemd timer Persistent=true) vive no ERP-INFRA e não é verificável daqui'
+      verify: |
+        grep -rn "deadman\|heartbeat\|ping" src/jobs/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/jobs/`, quando um job importar ou depender do mecanismo de heartbeat, então o teste falha —
+        a observabilidade MUST ser aditiva e removível sem afetar o trabalho.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Mecanismo de observabilidade MUST ser aditivo: o trabalho observado MUST NOT depender dele para
+        funcionar nem para ser correto.
+      rationale: |
+        É a propriedade que torna o desenho seguro de ligar e desligar, e o ADR a declara explicitamente
+        ("Reversível? Sim — é aditivo; remover não afeta o job"). Vale como regra porque a violação é
+        tentadora: fazer o job escrever o próprio heartbeat na mesma transação pareceria mais confiável, e
+        acoplaria a correção do trabalho à disponibilidade do monitoramento — exatamente ao contrário do que
+        se quer.
+
+findings:
+  - |
+    **Único ADR do inventário que fechou um item que ele próprio declarava aberto.** As consequências
+    negativas registram "assinatura/integridade do ping (anti-spoof) é um item aberto"; hoje
+    `tools/deadman-emitter/ping.go:4` assina a linha por HMAC-SHA256 e `config.go:59` faz fail-fast sem a
+    chave — não é opcional. Contrasta com o padrão dominante do acervo, em que consequência e recomendação
+    não se cumprem (`ADR-0044`, `ADR-0047` §5, `ADR-0034` gatilhos). A diferença aqui: o item aberto virou
+    parte de um binário que alguém tinha de escrever de todo modo.
+  - |
+    **O detector de ausência já falhou aberto, e o próprio arquivo registra.**
+    `deadman-audit.yml:78` diz que "o bash inline que decidia isso gerou 14 issues `sem sinal há 0h`" —
+    idade zero disparando alarme é a assinatura de "fonte indefinida tratada como morta". A lógica segue
+    **inline num workflow de 172 linhas**, sem `scripts/deadman/`, ou seja sem onde escrever teste para o
+    caso de borda que já falhou. É a lacuna de enforcement mais concreta do lote: existe um bug conhecido,
+    documentado no lugar certo, num código que não é testável na forma atual.
+  - |
+    **"Redundância na ingestão não é redundância na decisão" é a lição transferível.** A D2 identifica que o
+    desenho tinha dois planos de gravação e **um** decisor — e um dead-man's switch cujo decisor cai falha em
+    silêncio, porque o modo de falha dele é *não disparar*. A D2 segue `absent`: o segundo auditor está
+    especificado no doc 07 e mora no ERP-INFRA. Enquanto isso, o mesmo GitHub Actions decide a inatividade
+    **e** provê o keep-alive contra a suspensão de 60 dias — duas responsabilidades críticas no mesmo
+    provedor.
+  - |
+    A D1 é o exemplo mais bem-argumentado de escolha de tecnologia do acervo: critério do P.O. explícito
+    (leve × fácil em Docker × bom em JSONL), quatro alternativas nomeadas com o motivo da rejeição
+    (Deno/Bun por binário de ~90 MB, Zig/Rust por facilidade, healthchecks.io por Python), e a verificação
+    confirma o resultado — `Dockerfile:12` termina em `FROM scratch`. A cláusula do `scratch` na regra
+    proposta existe porque é o que preserva o motivo: terminar em `golang:alpine` entrega o mesmo binário
+    com o runtime que a decisão queria evitar.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita o spike #66 e as issues #50/#39; a issue #72 (fixar o SLO por emitter) aparece no comentário
+    do workflow. `handbook/infrastructure/07-deadman-switch-data-contracts.md` foi lido nos pontos citados;
+    o doc 06 não. O 2º auditor (D2) e o `systemd timer` vivem no ERP-INFRA, fora do alcance desta
+    verificação.

@@ -37,10 +37,11 @@ import { runOutboxContract } from '../../../application/ports/outbox.contract.ts
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import type { ContractsModuleEvent } from '#src/modules/contracts/application/ports/event-bus.ts';
 import { isOk } from '#src/shared/index.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 
@@ -268,21 +269,28 @@ if (integrationEnabled()) {
         makeContractCreatedEvent(t3),
       ]);
 
-      // Marcar o 1º inserido (t2) como processado via markProcessed.
+      // Marcar o 1º inserido (t2) como processado — via `repo.markProcessed`, não mais UPDATE
+      // direto em `ctr_outbox.processed_at`: essa coluna não decide mais pendência (#800/#824);
+      // quem decide é o progresso do consumidor em `eventos_processados`.
+      const CONSUMER_ID = 'ctr-outbox-drizzle-test-3a';
       const allRows = await handle.db
         .select({ eventId: handle.schema.ctrOutbox.eventId })
         .from(handle.schema.ctrOutbox);
       assert.equal(allRows.length, 3, 'deve haver 3 rows na ctr_outbox');
 
-      // Selecionar a row com occurred_at = t2 para marcar como processada.
       const { eq } = await import('drizzle-orm');
-      await handle.db
-        .update(handle.schema.ctrOutbox)
-        .set({ processedAt: new Date() })
+      const t2Rows = await handle.db
+        .select({ eventId: handle.schema.ctrOutbox.eventId })
+        .from(handle.schema.ctrOutbox)
         .where(eq(handle.schema.ctrOutbox.occurredAt, t2));
+      const t2Row = t2Rows[0];
+      assert.ok(t2Row !== undefined, 'row com occurred_at = t2 deve existir');
+      const markResult = await repo.markProcessed(CONSUMER_ID, t2Row.eventId, new Date());
+      assert.ok(markResult.ok, 'markProcessed deve ter sucesso');
 
-      // findPendingForUpdate deve retornar apenas as 2 pendentes, em ordem t1 < t3.
-      const pending = await repo.findPendingForUpdate(10);
+      // findPendingForUpdate deve retornar apenas as 2 pendentes PARA ESTE CONSUMIDOR, em ordem
+      // t1 < t3.
+      const pending = await repo.findPendingForUpdate(CONSUMER_ID, 10);
       assert.equal(
         isOk(pending),
         true,
@@ -321,7 +329,7 @@ if (integrationEnabled()) {
         makeContractCreatedEvent(new Date('2026-01-15T10:02:00.000Z')),
       ]);
 
-      const pending = await repo.findPendingForUpdate(1);
+      const pending = await repo.findPendingForUpdate('ctr-outbox-drizzle-test-3b', 1);
       assert.equal(isOk(pending), true);
       if (!pending.ok) return;
       assert.equal(pending.value.length, 1, 'limit=1 deve retornar exatamente 1 row');
@@ -331,9 +339,10 @@ if (integrationEnabled()) {
   // ── CA-4 — markProcessed idempotente ─────────────────────────────────────
 
   describe('CTR-OUTBOX-ADAPTER-DRIZZLE — CA-4: markProcessed idempotente', () => {
-    it('CA-4: markProcessed chamado 2x retorna ok ambas as vezes; processed_at não muda na 2ª', async () => {
+    it('CA-4: markProcessed chamado 2x retorna ok ambas as vezes; processed_at reflete a chamada MAIS RECENTE', async () => {
       if (handle === null) throw new Error('fixture: handle não inicializado');
       const repo = createDrizzleOutboxRepository(handle);
+      const CONSUMER_ID = 'ctr-outbox-drizzle-test-4';
 
       const event = makeContractCreatedEvent(new Date('2026-01-15T10:00:00.000Z'));
       await repo.append([event]);
@@ -348,38 +357,47 @@ if (integrationEnabled()) {
       const t2 = new Date('2026-05-21T12:05:00.000Z');
 
       // Primeira chamada.
-      const r1 = await repo.markProcessed(row.eventId, t1);
+      const r1 = await repo.markProcessed(CONSUMER_ID, row.eventId, t1);
       assert.equal(
         isOk(r1),
         true,
         `1ª markProcessed falhou: ${JSON.stringify(!r1.ok ? r1.error : '')}`,
       );
 
-      // Segunda chamada com timestamp diferente — o WHERE processed_at IS NULL não bate → no-op.
-      const r2 = await repo.markProcessed(row.eventId, t2);
+      // Segunda chamada com timestamp diferente. #800/#824: `markProcessed` virou upsert na PK
+      // (consumer_id, event_id) — não mais `WHERE processed_at IS NULL` na linha do outbox. A
+      // 2ª marcação do MESMO consumidor REESCREVE o carimbo; "idempotente" passou a significar
+      // "sempre sucede", não "ignora repetição".
+      const r2 = await repo.markProcessed(CONSUMER_ID, row.eventId, t2);
       assert.equal(
         isOk(r2),
         true,
         `2ª markProcessed falhou (deve ser idempotente): ${JSON.stringify(!r2.ok ? r2.error : '')}`,
       );
 
-      // Verificar que processed_at ficou com t1 (o da 1ª chamada, não sobrescrita pela 2ª).
-      const { eq } = await import('drizzle-orm');
-      const updated = await handle.db
-        .select({ processedAt: handle.schema.ctrOutbox.processedAt })
-        .from(handle.schema.ctrOutbox)
-        .where(eq(handle.schema.ctrOutbox.eventId, row.eventId));
-      assert.equal(updated.length, 1);
-      const updatedRow = updated[0];
-      assert.ok(updatedRow !== undefined);
+      // O progresso vive em `eventos_processados` — `ctr_outbox.processed_at` nunca mais é escrito
+      // pelo worker, então verificar a coluna antiga acusaria sempre `null`.
+      const { and, eq } = await import('drizzle-orm');
+      const progress = await handle.db
+        .select({ processedAt: handle.schema.eventosProcessados.processedAt })
+        .from(handle.schema.eventosProcessados)
+        .where(
+          and(
+            eq(handle.schema.eventosProcessados.consumerId, CONSUMER_ID),
+            eq(handle.schema.eventosProcessados.eventId, row.eventId),
+          ),
+        );
+      assert.equal(progress.length, 1);
+      const progressRow = progress[0];
+      assert.ok(progressRow !== undefined);
       assert.ok(
-        updatedRow.processedAt !== null,
+        progressRow.processedAt !== null,
         'processed_at não deve ser null após markProcessed',
       );
       assert.equal(
-        updatedRow.processedAt?.getTime(),
-        t1.getTime(),
-        'processed_at deve ser t1 (1ª chamada), não t2 (2ª chamada foi no-op)',
+        progressRow.processedAt?.getTime(),
+        t2.getTime(),
+        'processed_at deve ser t2 (a chamada MAIS RECENTE) — upsert por consumidor, não "primeira vence"',
       );
     });
   });
@@ -387,7 +405,7 @@ if (integrationEnabled()) {
   // ── CA-5 — moveToDeadLetter atômico ─────────────────────────────────────
 
   describe('CTR-OUTBOX-ADAPTER-DRIZZLE — CA-5: moveToDeadLetter atômico', () => {
-    it('CA-5a: moveToDeadLetter move row da outbox para DLQ atomicamente', async () => {
+    it('CA-5a: moveToDeadLetter registra a DLQ e RETÉM a row de origem', async () => {
       if (handle === null) throw new Error('fixture: handle não inicializado');
       const repo = createDrizzleOutboxRepository(handle);
 
@@ -402,16 +420,24 @@ if (integrationEnabled()) {
       const failedAt = new Date('2026-05-21T12:00:00.000Z');
       const errorMsg = 'max-retries-exceeded: delivery failed 5 times';
 
-      const moveResult = await repo.moveToDeadLetter(row.eventId, failedAt, errorMsg);
+      const moveResult = await repo.moveToDeadLetter(
+        'ctr-outbox-drizzle-test-5a',
+        row.eventId,
+        failedAt,
+        errorMsg,
+      );
       assert.equal(
         isOk(moveResult),
         true,
         `moveToDeadLetter falhou: ${JSON.stringify(!moveResult.ok ? moveResult.error : '')}`,
       );
 
-      // Verificar que a row foi removida da outbox.
+      // A row de origem PERMANECE em `ctr_outbox` (#800/#824, ADR-0022:27-29: "o outbox retém as
+      // entradas após a entrega… não deleta") — outros consumidores ainda precisam vê-la. Antes
+      // do fanout, `moveToDeadLetter` fazia DELETE e este teste afirmava 0 rows; era o próprio
+      // defeito que a mudança corrige.
       const outboxAfter = await handle.db.select().from(handle.schema.ctrOutbox);
-      assert.equal(outboxAfter.length, 0, 'ctr_outbox deve estar vazia após moveToDeadLetter');
+      assert.equal(outboxAfter.length, 1, 'ctr_outbox deve reter a row após moveToDeadLetter');
 
       // Verificar que a row está na DLQ.
       const dlq = await handle.db.select().from(handle.schema.ctrOutboxDeadLetter);
@@ -434,7 +460,12 @@ if (integrationEnabled()) {
       const repo = createDrizzleOutboxRepository(handle);
 
       const nonExistentId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
-      const result = await repo.moveToDeadLetter(nonExistentId, new Date(), 'not-found');
+      const result = await repo.moveToDeadLetter(
+        'ctr-outbox-drizzle-test-5b',
+        nonExistentId,
+        new Date(),
+        'not-found',
+      );
 
       assert.equal(result.ok, false, 'deve retornar err para eventId inexistente');
       if (!result.ok) {
@@ -508,7 +539,10 @@ if (integrationEnabled()) {
 
           // Enquanto h1 mantém o lock, h2 faz findPendingForUpdate(2) com SKIP LOCKED.
           // Deve pegar as outras 2 rows que h1 não bloqueou.
-          const pending2 = await repo2.findPendingForUpdate(2);
+          // consumidor fresco: nada em `eventos_processados` ainda para ele, então os 4 eventos
+          // seguem pendentes — o universo elegível não muda em relação ao antigo `processed_at
+          // IS NULL` (#800/#824).
+          const pending2 = await repo2.findPendingForUpdate('ctr-outbox-drizzle-test-h2', 2);
           assert.equal(
             isOk(pending2),
             true,
@@ -547,9 +581,10 @@ if (integrationEnabled()) {
   // ── markFailed — UPDATE attempts + last_error ────────────────────────────
 
   describe('CTR-OUTBOX-ADAPTER-DRIZZLE — markFailed: incrementa attempts e registra last_error', () => {
-    it('markFailed atualiza attempts e last_error da row', async () => {
+    it('markFailed atualiza attempts e last_error do progresso DESTE consumidor', async () => {
       if (handle === null) throw new Error('fixture: handle não inicializado');
       const repo = createDrizzleOutboxRepository(handle);
+      const CONSUMER_ID = 'ctr-outbox-drizzle-test-markfailed';
 
       const event = makeContractCreatedEvent(new Date('2026-01-15T10:00:00.000Z'));
       await repo.append([event]);
@@ -558,24 +593,41 @@ if (integrationEnabled()) {
       const row = rows[0];
       assert.ok(row !== undefined);
 
-      const markResult = await repo.markFailed(row.eventId, new Date(), 'delivery-timeout', 1);
+      const markResult = await repo.markFailed(CONSUMER_ID, row.eventId, {
+        now: new Date(),
+        errorTag: 'delivery-timeout',
+        attempt: 1,
+      });
       assert.equal(
         isOk(markResult),
         true,
         `markFailed falhou: ${JSON.stringify(!markResult.ok ? markResult.error : '')}`,
       );
 
-      // ctr_outbox não tem coluna last_error — só ctr_outbox_dead_letter.
-      // markFailed atualiza apenas `attempts`; o errorTag é passado para uso
-      // futuro pelo worker (#5) e para moveToDeadLetter.
-      const { eq } = await import('drizzle-orm');
-      const updated = await handle.db
-        .select({ attempts: handle.schema.ctrOutbox.attempts })
-        .from(handle.schema.ctrOutbox)
-        .where(eq(handle.schema.ctrOutbox.eventId, row.eventId));
-      const updatedRow = updated[0];
-      assert.ok(updatedRow !== undefined);
-      assert.equal(updatedRow.attempts, 1, 'attempts deve ser 1 após markFailed com attempt=1');
+      // #800/#824: `ctr_outbox` não é mais tocada por `markFailed` — `attempts`/`last_error`
+      // vivem em `eventos_processados`, por (consumidor, evento). A coluna antiga da linha
+      // continuaria em 0 para sempre, e este teste checava exatamente ela antes da mudança.
+      const { and, eq } = await import('drizzle-orm');
+      const progress = await handle.db
+        .select({
+          attempts: handle.schema.eventosProcessados.attempts,
+          lastError: handle.schema.eventosProcessados.lastError,
+        })
+        .from(handle.schema.eventosProcessados)
+        .where(
+          and(
+            eq(handle.schema.eventosProcessados.consumerId, CONSUMER_ID),
+            eq(handle.schema.eventosProcessados.eventId, row.eventId),
+          ),
+        );
+      const progressRow = progress[0];
+      assert.ok(progressRow !== undefined);
+      assert.equal(progressRow.attempts, 1, 'attempts deve ser 1 após markFailed com attempt=1');
+      assert.equal(
+        progressRow.lastError,
+        'delivery-timeout',
+        'last_error deve registrar o errorTag',
+      );
     });
   });
 }

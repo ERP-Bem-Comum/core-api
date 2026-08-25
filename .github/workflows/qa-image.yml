@@ -1,0 +1,102 @@
+name: qa-image (deploy suspenso)
+
+# Build da imagem de QA do core-api e publicação no GitHub Container Registry.
+# Dispara em push na branch `dev` (a branch de QA deste repo). Build pesado roda aqui
+# no runner (a VPS de QA não compila — ver ERP-INFRA/platform/vps-qa).
+#
+# ⚠️ A ETAPA DE DEPLOY ESTÁ SUSPENSA (19/08/2026) — este workflow constrói e publica a
+# imagem `qa`, e NÃO a entrega em host nenhum. O nome diz isso de propósito: um workflow
+# chamado `deploy-qa` ficando verde sem deployar é registro que mente, e alguém acabaria
+# lendo a imagem publicada como ambiente atualizado.
+#
+# O ARQUIVO foi renomeado em 20/08/2026 (`deploy-qa.yml` → `qa-image.yml`), e a razão é uma
+# falha medida: trocar só o `name:` não fecha o buraco. `gh run list --workflow=deploy-qa.yml`
+# e a aba Actions exibem o **caminho do arquivo** em vários pontos, então quem consultava o
+# histórico por ali continuava lendo "deploy-qa" e concluindo que a `dev` entrega em host.
+# Foi exatamente o que aconteceu: o estado do QA foi reportado errado três vezes num único
+# dia, com o `name:` correto já no lugar desde a véspera. Sinal só vale onde o leitor olha.
+#
+# Preço pago, para quem for restaurar: o histórico de execuções do GitHub é indexado pelo
+# caminho, então as execuções anteriores a 20/08 ficam sob a entrada `deploy-qa.yml` na aba
+# Actions. Nada se perde; o histórico é que fica em duas entradas.
+#
+# Por que saiu: o job `deploy` vinha vermelho desde o merge do #743 (`erp-bem-comum-qa-…-1
+# is unhealthy` no boot; suspeito é o fail-fast do #516), e o QA será retomado no contexto
+# PBE, em sessão própria. Vermelho crônico que ninguém vai tratar hoje treina o time a
+# ignorar deploy vermelho — sai, em vez de virar ruído de fundo.
+#
+# O job removido fazia: `tailscale/github-action` com `secrets.TS_AUTHKEY` (reusable+
+# ephemeral, tag:ci, expira a cada 90 dias) para entrar na tailnet, e então Tailscale SSH
+# como `ubuntu` rodando `/opt/erp-qa/deploy.sh` no host de QA. A policy `ssh` da tailnet
+# concede `tag:ci → tag:cd-target`. Está inteiro em `git show 23927024:.github/workflows/
+# deploy-qa.yml` — restaurar é reverter este commit, não reescrever.
+#
+# Versões das actions conferidas na doc oficial (jun/2026):
+#   https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images
+#   https://github.com/docker/build-push-action
+
+on:
+  push:
+    branches: [dev]
+    paths-ignore:
+      - '**/*.md'
+      - 'handbook/**'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: qa-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/erp-bem-comum/core-api
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # ADR-0011 §"Pin de versões" — pin por SHA (tag flutuante pode ser reescrita upstream).
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Login no ghcr.io
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadata (tags + labels OCI)
+        id: meta
+        # Upgrade v5→v6.1.0: v5 roda em Node 20 (EOL 2026-03-24); v6 migra para Node 24.
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=qa
+            type=sha,prefix=sha-,format=short
+
+      - name: Build + push (linux/amd64, target runtime)
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Manifesto simples (single-arch) — sem provenance/attestation.
+          provenance: false
+
+      # A imagem fica publicada como `ghcr.io/erp-bem-comum/core-api:qa`. Enquanto o deploy
+      # estiver suspenso, entregá-la ao host é passo MANUAL — não há automação atrás disto.

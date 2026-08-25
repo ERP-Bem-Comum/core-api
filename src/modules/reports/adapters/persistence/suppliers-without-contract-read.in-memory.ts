@@ -11,5 +11,5 @@ import type {
 export const InMemorySuppliersWithoutContractRead = (
   seed: readonly SupplierWithoutContract[] = [],
 ): SuppliersWithoutContractReadPort => ({
-  list: async () => ok(seed),
+  list: async (_filter) => ok(seed),
 });

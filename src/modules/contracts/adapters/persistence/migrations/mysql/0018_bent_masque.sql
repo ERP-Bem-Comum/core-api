@@ -1,0 +1,1 @@
+ALTER TABLE `ctr_contracts` MODIFY COLUMN `objective` text NOT NULL;

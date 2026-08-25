@@ -34,7 +34,21 @@ export const BUDGET_PLAN_CSV_HEADER: readonly string[] = [
 
 const MONTHS_AFTER_JAN = 11;
 
-// pt-BR currency — paridade com o legado (mesmo toLocaleString): `R$ 1.234,56` (espaço U+00A0).
+// ⚠️ EXCEÇÃO DECLARADA ao ADR-0049 — decidida em 2026-08-05, não descuido.
+//
+// O ADR-0049 §"Domain API" proíbe formatação de apresentação na borda do core: dinheiro sai em
+// `bigint` cents, e renderizar artefato (CSV/PDF) é trabalho do BFF. Aqui a régua é quebrada de
+// propósito, e a razão é PARIDADE BYTE-A-BYTE com o legado: o `getOneForCsv` do ERP-BACKEND usa o
+// mesmo `toLocaleString('pt-BR')`, que produz `R$ 1.234,56` com espaço U+00A0 (não 0x20). Quem
+// consome o CSV compara com o arquivo do legado; um espaço diferente já quebra a comparação.
+//
+// A P.O. pediu CSV server-side no #319. O ADR reconhece o pedido e diz que "é satisfeita gerando no
+// BFF" — mas o BFF não gera hoje, e a entrega saiu por aqui. Enquanto o #319 não migrar, esta função
+// é o ponto único onde a exceção vive: formatação de moeda NÃO deve se espalhar para outras rotas
+// deste módulo nem para outros módulos.
+//
+// A alegação `ADR-0049-C2` do inventário registra a contradição com a evidência ancorada; esta nota
+// é a contraparte no código, para que quem chegar aqui não trate como bug a corrigir.
 export const formatCentsBRL = (cents: number): string =>
   (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 

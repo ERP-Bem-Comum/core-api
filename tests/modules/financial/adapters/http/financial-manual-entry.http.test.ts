@@ -153,7 +153,12 @@ describe('financial/http — manual-entry / batch (US5)', () => {
       method: 'POST',
       url: `/api/v2/financial/statement-transactions/${String(txIds[0])}/manual-entry`,
       headers: { authorization: `Bearer ${WRITER}` },
-      payload: { type: 'FeePenaltyInterest', description: 'tarifa bancária' },
+      payload: {
+        type: 'FeePenaltyInterest',
+        description: 'tarifa bancária',
+        categoryRef: '11111111-1111-4111-8111-111111111111',
+        costCenterRef: '22222222-2222-4222-8222-222222222222',
+      },
     });
     assert.equal(res.statusCode, 201, res.body);
     const body = res.json() as { type: string; reconciliationId: string; manualEntryId: string };
@@ -166,7 +171,14 @@ describe('financial/http — manual-entry / batch (US5)', () => {
       method: 'POST',
       url: '/api/v2/financial/reconciliations/batch',
       headers: { authorization: `Bearer ${WRITER}` },
-      payload: { transactionIds: [txIds[1], txIds[2]], template: { type: 'Payment' } },
+      payload: {
+        transactionIds: [txIds[1], txIds[2]],
+        template: {
+          type: 'Payment',
+          categoryRef: '11111111-1111-4111-8111-111111111111',
+          costCenterRef: '22222222-2222-4222-8222-222222222222',
+        },
+      },
     });
     assert.equal(res.statusCode, 201, res.body);
     const body = res.json() as {

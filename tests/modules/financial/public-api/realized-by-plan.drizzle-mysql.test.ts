@@ -27,6 +27,7 @@ import {
   finReconciliationItems,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // Assinatura pinada pelo W0 (o W1 implementa exatamente isto):
 //   openRealizedByPlanReader({ connectionString }): Promise<Result<RealizedByPlanReader, string>>
@@ -50,7 +51,7 @@ type OpenRealizedByPlanReader = (opts: Readonly<{ connectionString: string }>) =
 const connectionString =
   process.env['FINANCIAL_DATABASE_URL'] ??
   process.env['CONTRACTS_DATABASE_URL'] ??
-  'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  mysqlTestConnectionString();
 
 const P1 = '10000000-0000-4000-8000-000000000001';
 const P2 = '20000000-0000-4000-8000-000000000002';

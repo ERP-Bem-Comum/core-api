@@ -11,12 +11,15 @@ import process from 'node:process';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 import { runOnce } from '#src/shared/outbox/index.ts';
+import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
+import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { openPartnersMysql } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import type { PartnersMysqlHandle } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleOutboxRepository } from '#src/modules/partners/adapters/persistence/repos/outbox-repository.drizzle.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleSupplierViewStore } from '#src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 import {
   createSupplierProjectionDelivery,
   rowToMessage,
@@ -28,13 +31,30 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('supplier-view-projection — e2e par_outbox → fin_supplier_view', () => {
+    let contracts: MysqlHandle;
     let partners: PartnersMysqlHandle;
     let financial: FinancialMysqlHandle;
 
     before(async () => {
+      // ⚠️ As migrations do `contracts` entram PRIMEIRO, e não por capricho de ordem: o claim por
+      // consumidor consulta `eventos_processados` (ADR-0064), e essa tabela é criada apenas pelo
+      // journal do `contracts` (`0001_motionless_wind_dancer.sql:34`) — ela é cross-módulo por
+      // desenho (ADR-0014 §"Exceção linguística") e não tem dono entre os journals.
+      //
+      // Sem esta linha o teste falha de um jeito que engana: o SELECT do claim estoura com tabela
+      // ausente, `runOnce` devolve erro, e a asserção quebra em `processed.ok` — parecendo defeito
+      // da projeção, quando é o schema do banco de teste que está incompleto. Foi assim que o CI
+      // reprovou este arquivo enquanto o gate local passava (aqui o banco já tinha tudo migrado).
+      //
+      // A dependência sem dono está registrada em #830; enquanto ela existir, todo ambiente que
+      // rode consumidor de outbox precisa do journal do `contracts` aplicado.
+      const c = await openMysql({ connectionString, applyMigrations: true });
+      if (!c.ok) throw new Error(`[e2e] contracts (eventos_processados): ${c.error}`);
+      contracts = c.value;
+
       const p = await openPartnersMysql({ connectionString, applyMigrations: true });
       if (!p.ok) throw new Error(`[e2e] partners: ${p.error}`);
       partners = p.value;
@@ -44,6 +64,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     });
 
     after(async () => {
+      await contracts?.close();
       await partners?.close();
       await financial?.close();
     });

@@ -1,0 +1,362 @@
+id: ADR-0009
+title: Node.js 24 LTS + TypeScript 6 com plano de migração para TS 7.0
+source: handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md
+decided_on: 2026-04-28
+
+declared:
+  status: Accepted (supersedes parcialmente ADR-0002 — apenas a seção de versão)
+  status_normalized: accepted
+  supersedes: [ADR-0002]
+  superseded_by: []
+  related: [ADR-0002, ADR-0011]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Primeiro registro do inventário cuja realidade foi apurada por MEDIÇÃO e não por grep — a
+    Inquiry-0023 (spike de TS 7, 2026-07-31) mediu tudo nesta máquina.
+    O que se sustenta: Node 24 (`engines.node >=24.0.0`), TS 6 (`^6.0.0`), as NOVE flags de strict
+    total presentes no `tsconfig.json`, domínio livre de capability de runtime, e nenhum cliente HTTP
+    legado (`axios`/`node-fetch` ausentes).
+    O que NÃO se sustenta, e é a lacuna mais concreta: **a exigência de rodar `tsgo --noEmit` em CI
+    em paralelo ao `tsc`, "validando compatibilidade desde o dia 1", nunca rodou.** O pacote está em
+    `package.json:86`, descontinuado, e nenhum dos 9 workflows o invoca. A rede de aviso antecipado
+    que justificava o plano de migração não existe.
+    E o gatilho de reavaliação DISPAROU: o ADR manda gerar ADR novo "quando TypeScript 7.0 estável
+    for lançado"; a Inquiry-0023 mediu `typescript@latest` = 7.0.2. Junto com isso, a previsão de
+    "troca de comando + ajustes mínimos" foi refutada — `typescript-eslint` não importa sob TS 7.
+
+extraction:
+  state: complete
+  covers: |
+    7 alegações — runtime, linguagem, os dois checkers em CI, strict total, o plano de migração,
+    Web Standards-first e o isolamento de capabilities. A justificativa comparativa entre Node 22/24/25
+    (linhas 73-86) é fundamentação da escolha, não regra de edição.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: JÁ COBERTO — stack já vive no AGENTS.md e no tsconfig.json, este último enforcement real
+    applied_to: []
+    gap: |
+      A conclusão está certa quanto ao `tsconfig.json` ser enforcement real — as 9 flags conferem. Mas
+      "já coberto" abrange apenas a parte ESTÁTICA da decisão. A 039 não verificou a exigência
+      operacional do ADR (dois checkers em CI), que é a única parte não coberta pelo `tsconfig` e a
+      única que falhou. Classificar um ADR como "coberto" pelo que ele fixa em config deixa passar o
+      que ele exige em pipeline.
+  - source: handbook/inquiries/0023-typescript-7-native-spike.md
+    verdict: Spike medido — gatilho de reavaliação disparado, pede ADR novo de supersessão parcial
+    applied_to: []
+    gap: |
+      Nenhum: é a evidência que faltava. Mediu paridade de diagnóstico (9 probes), curva de
+      performance por escala, consumo de memória, o bug latente do `erasableSyntaxOnly`, e a quebra
+      total do `typescript-eslint` sob TS 7. As saídas estão classificadas em ADR / mecânico / issue /
+      não-fazer na §6 dela.
+
+claims:
+  - id: ADR-0009-C1
+    text: |
+      Node.js 24 LTS em todos os serviços novos (`bff-gateway` e `core-api`).
+    kind: obligation
+    source_lines: [30]
+    applies_to:
+      - 'package.json'
+      - 'Dockerfile*'
+    reality:
+      verdict: holds
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'package.json:8 — engines.node é >=24.0.0'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.1 — Node medido nesta máquina: v24.16.0'
+      verify: |
+        node -e "console.log(require('./package.json').engines.node)"; node --version
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json` e o Dockerfile, quando a major do Node declarada divergir de 24, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `engines.node` MUST declarar a major LTS vigente e o Dockerfile MUST usar a mesma.
+        MUST NOT rodar em linha ímpar (não-LTS).
+      rationale: |
+        Verificável em `package.json` e barato. O ADR já prevê o gatilho de troca (Node 26 LTS em
+        outubro/2026), então a regra é sobre coerência entre manifesto e imagem, não sobre a versão.
+
+  - id: ADR-0009-C2
+    text: |
+      TypeScript 6.0 estável como linguagem inicial.
+    kind: obligation
+    source_lines: [34, 38]
+    applies_to:
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'package.json:92 — devDependencies.typescript é ^6.0.0'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.9 — medido: o script `typecheck` resolve para typescript@6'
+      verify: |
+        node -e "console.log(require('./package.json').devDependencies.typescript)"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando a major do `typescript` divergir da declarada no registro de
+        decisão vigente, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A major do compilador MUST corresponder à fixada pelo registro de decisão vigente.
+      rationale: |
+        Vale como está, mas com prazo: a Inquiry-0023 disparou o gatilho de migração para TS 7, e a
+        `C5` registra o que isso exige. Esta alegação será a primeira a mudar no ADR sucessor.
+
+  - id: ADR-0009-C3
+    text: |
+      O CI roda `tsc` (tipo-check estável) e `tsgo --noEmit` (validação 7.0) EM PARALELO, validando
+      compatibilidade desde o dia 1.
+    kind: obligation
+    source_lines: [34, 40, 59]
+    applies_to:
+      - '.github/workflows/**'
+      - 'package.json'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'package.json:86 — @typescript/native-preview pinado em 7.0.0-dev.20260515.1'
+        - 'ausência: nenhum dos 9 workflows em .github/workflows/ invoca tsgo ou native-preview'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.9 — o pacote está DESCONTINUADO; o sucessor é typescript@7'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §4.2 — registrado como premissa refutada: "nunca rodou"'
+      verify: |
+        grep -rn "tsgo\|native-preview" .github/workflows/ package.json
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o conjunto de workflows, quando existir dependência de checker declarada no
+        `package.json` que nenhum job invoque, então o teste falha. Hoje falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Dependência de ferramenta de checagem MUST ser invocada por pelo menos um job de CI, ou MUST
+        ser removida. MUST NOT permanecer declarada e inerte.
+      rationale: |
+        A exigência original ("dois checkers em paralelo") não faz mais sentido: o `tsgo` deixou de
+        existir com esse nome, e sob o side-by-side proposto pela Inquiry-0023 os dois compiladores
+        coexistem por construção (`tsc` = 7, `tsc6` = 6). Substituir pela regra que pega a classe do
+        defeito — dependência declarada e não usada é superfície de supply-chain sem benefício.
+
+  - id: ADR-0009-C4
+    text: |
+      `tsconfig.json` em modo strict TOTAL desde o dia 1, para minimizar incompatibilidades futuras.
+    kind: obligation
+    source_lines: [39]
+    applies_to:
+      - 'tsconfig.json'
+    reality:
+      verdict: holds
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: as nove flags conferidas presentes em tsconfig.json — strict, noUncheckedIndexedAccess, noImplicitOverride, noFallthroughCasesInSwitch, noImplicitReturns, exactOptionalPropertyTypes, useUnknownInCatchVariables, isolatedModules, verbatimModuleSyntax'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.3 — paridade de diagnóstico TS6/TS7 de 9 em 9 probes, o que confirma a premissa de que strict total reduz incompatibilidade'
+      verify: |
+        node -e "const t=require('fs').readFileSync('tsconfig.json','utf8');for(const k of ['strict','noUncheckedIndexedAccess','exactOptionalPropertyTypes','verbatimModuleSyntax','isolatedModules'])console.log(k, t.includes(k))"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `tsconfig.json`, quando qualquer flag da lista de strict total estiver ausente ou
+        desligada, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tsconfig.json']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        O `tsconfig.json` MUST manter as nove flags de strict total. MUST incluir também
+        `erasableSyntaxOnly`, porque todo o runtime é strip-only.
+      rationale: |
+        Estreitado para acrescentar a décima flag. A Inquiry-0023 §3.9 mediu o bug latente: sem
+        `erasableSyntaxOnly`, um `enum` passa o typecheck, passa o CI, e o worker morre ao subir com
+        `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. É correção de uma linha que substitui qualquer regra
+        escrita sobre não usar `enum` — mecânico vence texto.
+
+  - id: ADR-0009-C5
+    text: |
+      Migração completa para 7.0 quando o stable for lançado (estimado Q3/Q4 2026). Como o port é
+      estrutural, espera-se troca de comando e ajustes mínimos.
+    kind: aspiration
+    source_lines: ['41-42', '92-94']
+    applies_to:
+      - 'package.json'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §1 — medido: typescript@latest é 7.0.2, o stable saiu e o gatilho disparou'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.7 — typescript-eslint NÃO importa sob TS 7; a falha é no import do módulo e nenhuma regra roda'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §4.2 — "ajustes mínimos" registrado como premissa REFUTADA'
+        - 'nota: a adoção viável é side-by-side (dois compiladores), não troca de comando — o lint fica no TS 6 até a issue #10940 do typescript-eslint'
+      verify: |
+        node -e "console.log(require('./package.json').devDependencies.typescript)"
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum. É previsão sobre o custo de um trabalho futuro — não há estado do sistema que a
+        falsifique. A refutação veio de medição, não de teste.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: drop
+      text: null
+      rationale: |
+        O gatilho disparou e a previsão está errada. Descartar como regra e tratar no ADR sucessor,
+        que a Inquiry-0023 §6.1 já especifica: adoção side-by-side, lint preso no TS 6 até a #10940, e
+        o breaking change semântico de template literal com emoji registrado como risco declarado.
+        Terceiro gatilho de reavaliação do acervo a disparar — depois do `:117` do 0024 e do #1 do 0018.
+
+        PROMOVIDA em 2026-08-05. O dono do repo registrou no mesmo ato que outras inquiries virão —
+        coerente com a política declarada na `ADR-0002-C2`: troca de tecnologia se justifica por
+        inquiry, e a estimativa em ADR ("ajustes mínimos") foi justamente o que a medição refutou.
+        Estimar esforço futuro dentro de um ADR é o antipadrão que esta alegação documenta.
+
+  - id: ADR-0009-C6
+    text: |
+      Web Standards-first onde o ecossistema permite — `fetch`, Web Crypto, `URL`, `URLPattern`,
+      `structuredClone`.
+    kind: obligation
+    source_lines: [46]
+    applies_to:
+      - 'src/**/*.ts'
+      - 'package.json'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'ausência: axios e node-fetch não estão em package.json — nenhum cliente HTTP legado'
+        - 'ausência: nenhuma chamada fetch( em src/ — a adoção não é exercitada porque ainda não há saída HTTP no core'
+        - 'nota: o ADR-0050 prevê fetch nativo para o microserviço de OCR, degrau que segue adiado'
+      verify: |
+        node -e "const p=require('./package.json');console.log('axios:',p.dependencies?.axios??'ausente')"; grep -rn "fetch(" src/ --include='*.ts' | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando entrar cliente HTTP de terceiros (`axios`, `node-fetch`, `got`),
+        então o teste falha — a saída HTTP MUST usar `fetch` nativo.
+      expected_error: null
+      blocker: null
+      enforced_by: ['eslint.config.js']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Saída HTTP MUST usar `fetch` nativo. MUST NOT adicionar cliente HTTP de terceiros.
+      rationale: |
+        A metade proibitiva já é enforçada — o `no-restricted-imports` do `eslint.config.js` barra
+        libs do ADR-0011 §4 com a mensagem do ADR no erro. A metade positiva não é exercitada porque
+        ainda não há chamada externa; o primeiro caso real será o microserviço de OCR.
+
+  - id: ADR-0009-C7
+    text: |
+      Capabilities específicas do runtime (`fs`, `env`, signals) ficam ISOLADAS em adapters —
+      facilita futura agnosticidade.
+    kind: prohibition
+    source_lines: [47]
+    applies_to:
+      - 'src/modules/*/domain/**/*.ts'
+      - 'src/modules/*/application/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum import de node:fs ou node:process, nenhum process.env e nenhum process.on em src/modules/*/domain/'
+        - 'nota: verificado nos oito módulos de uma vez; o domínio é puro também quanto a framework (sem fastify, drizzle ou mysql2)'
+      verify: |
+        grep -rn "from 'node:fs'\|from 'node:process'\|process\.env\|process\.on(" src/modules/*/domain/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/*/domain/`, quando algum arquivo importar capability de runtime ou ler
+        `process.env`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Domínio e application MUST NOT importar `node:fs`, `node:process`, nem ler `process.env`
+        diretamente. Capability de runtime MUST entrar por adapter.
+      rationale: |
+        Invariante com 100% de adesão nos oito módulos e zero enforcement mecânico — mesmo perfil da
+        `ADR-0006-C4` (fronteira entre módulos). Candidata direta a `no-restricted-imports` por glob,
+        onde o RED passa hoje e protege o futuro.
+
+findings:
+  - |
+    A exigência mais operacional deste ADR — dois checkers em CI, "validando compatibilidade desde o
+    dia 1" — nunca rodou. O pacote `@typescript/native-preview` está em `package.json:86`, hoje
+    DESCONTINUADO, e nenhum dos 9 workflows o invoca. O plano de migração foi desenhado em cima de uma
+    rede de aviso antecipado que não existe.
+  - |
+    A 039 classificou este ADR como "já coberto", apontando o `tsconfig.json` como enforcement real —
+    e está certa quanto às nove flags. Mas "coberto" abrangeu só a parte estática. A única exigência
+    que vive em pipeline, e não em config, é justamente a que falhou. Classificar ADR como coberto
+    pelo que ele fixa em `tsconfig` deixa passar o que ele exige em CI.
+  - |
+    Bug latente medido pela Inquiry-0023 §3.9: falta `erasableSyntaxOnly` e todo o runtime é
+    strip-only. Testado com o `tsconfig` exato do projeto — `enum` passa o typecheck (`exit 0`), e o
+    Node recusa com `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`. Uma flag fecha o furo; nenhuma regra escrita
+    fecharia melhor.
+  - |
+    `@types/node` está em `^22.10.0` com `engines.node >=24` — os tipos não cobrem as APIs do runtime
+    declarado. Achado da Inquiry-0023 §3.9, sem impacto conhecido além de inconsistência.
+  - |
+    Terceiro gatilho de reavaliação do acervo a disparar. Os três funcionaram: `:117` do ADR-0024
+    gerou o ADR-0055, o #1 do ADR-0018 gerou o ADR-0020, e este pede o sucessor agora. Reforça o
+    achado transversal: onde o gatilho existe, ele funciona — o problema é a sua ausência
+    (`0014` e `0015` não têm nenhum).
+  - |
+    O maior ganho de performance medido pela Inquiry-0023 **não é o compilador**. Trocar para TS 7
+    nativo dá ~10× no typecheck; parar de recriar o container entre suites de integração dá **~108s
+    por bateria** (11 × 10,8s → 10,8s + 10 × 21ms). O gargalo estava em `scripts/ci/test-integration.ts`,
+    não na linguagem.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Inquiry-0004 embasou o ADR original; Inquiry-0023 (2026-07-31) o reavalia com medição e classifica
+    as saídas em ADR / mecânico / issue / não-fazer na §6. Nenhum ticket do acervo lido nesta fase.
+    A issue #10940 do `typescript-eslint` é bloqueio EXTERNO ao repositório e condiciona a migração.

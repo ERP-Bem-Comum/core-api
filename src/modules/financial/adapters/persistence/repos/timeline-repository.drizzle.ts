@@ -65,7 +65,11 @@ const appendWithDb = async (
     await db.insert(s.finDocumentTimeline).values([...entryRows]);
 
     // INSERT em lote das change rows — só se houver ao menos 1 change.
-    // mysql2 lança ER_PARSE_ERROR se values([]) for chamado — guard obrigatório.
+    // Guard obrigatório para lote vazio — mas a causa NÃO é o mysql2: quem barra é o builder do
+    // Drizzle, sincronamente, com um `Error` genérico ("values() must be called with at least one
+    // value", `mysql-core/query-builders/insert.js:20-24`). Como é lançado antes da query, não
+    // vira `DrizzleQueryError` e não tem `errno`. Procurar `ER_PARSE_ERROR` no log é caçar
+    // fantasma — ele nunca vai aparecer.
     const changeRows = mapped.flatMap((m) => [...m.changeRows]);
     if (changeRows.length > 0) {
       await db.insert(s.finTimelineFieldChanges).values(changeRows);

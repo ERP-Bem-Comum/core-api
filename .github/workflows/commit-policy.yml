@@ -1,0 +1,42 @@
+name: commit-policy
+
+# Enforcement da ADR-0054 §1 (formato do trailer Assisted-by), LABEL-GATED (#549).
+#   - PR com label `ai-assisted` → todo commit do range precisa de Assisted-by bem-formado.
+#   - PR sem a label → só valida o FORMATO quando presente.
+# Roda tambem em labeled/unlabeled para reavaliar quando a label muda. Actions SHA-pinadas (ADR-0011).
+# Zero dependencia: script Node puro (--experimental-strip-types) lendo os trailers via `git log`.
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch: {}
+
+concurrency:
+  group: commit-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  assisted-by:
+    name: commit-policy (Assisted-by)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Verifica trailers Assisted-by dos commits do PR
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AI_ASSISTED: ${{ contains(github.event.pull_request.labels.*.name, 'ai-assisted') }}
+        run: node --experimental-strip-types --no-warnings scripts/ci/check-commit-trailers.ts

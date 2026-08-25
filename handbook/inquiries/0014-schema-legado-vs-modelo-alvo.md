@@ -1,7 +1,14 @@
+---
+inquiry: 0014
+title: "Schema legado real vs. modelo alvo do handbook"
+state: blocked
+opened: 2026-05-14
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0014: Schema legado real vs. modelo alvo do handbook
 
-- **Status:** Open
-- **Opened:** 2026-05-14
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Banca interna (squad de arquitetura) + P.O.
 - **Impact:** [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) (revisar), [Inquiry-0011](./0011-auditoria-fiscal-cross-periodo.md) (atualizar premissa), [`../domain/02-context-map.md`](../domain/02-context-map.md) (faltam BCs), [`../architecture/03-data-architecture.md`](../architecture/03-data-architecture.md) (collation real).
@@ -13,6 +20,13 @@
 Após receber o dump do banco legado (`Cloud_SQL_Export_2026-04-30 (15_09_35).sql`, 1.3MB) e extrair somente o schema (`schema-only.sql`, 49KB — sem dados pessoais, atende LGPD), foi feito o mapeamento sistemático das 32 tabelas contra o modelo alvo do handbook.
 
 **Documento mestre da descoberta:** [`../domain/10-mapeamento-legado-schema.md`](../domain/10-mapeamento-legado-schema.md).
+
+> ⚠️ **O documento mestre não existe mais (verificado em 2026-08-07).** O mapeamento das 32 tabelas
+> não sobreviveu à reorganização de `handbook/domain/` → `handbook/domain_questions/`, e não há cópia
+> em lugar nenhum do repositório — declarado como lápide em [`../redirects.json`](../redirects.json).
+> **Retomar esta inquiry exige refazer o mapeamento** a partir de `database/.dump/schema-only.sql`,
+> que segue disponível. Os achados C1–C5 e as perguntas Q1–Q4 abaixo continuam válidos: foram
+> transcritos para cá quando o documento existia, e é essa transcrição que restou dele.
 
 A análise revelou **discrepâncias estruturais** que precisam de decisão antes do início da implementação do `core-api`.
 

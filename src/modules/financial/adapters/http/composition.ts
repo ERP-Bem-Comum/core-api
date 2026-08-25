@@ -13,11 +13,14 @@
  */
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
+import type { Clock } from '#src/shared/ports/clock.ts';
+import { ok, err } from '#src/shared/primitives/result.ts';
 
 import {
   createInMemoryDocumentRepository,
   type DocumentStore,
 } from '../persistence/repos/document-repository.in-memory.ts';
+import { createInMemoryPayableRepository } from '../persistence/repos/payable-repository.in-memory.ts';
 import {
   createInMemoryPayableListView,
   derivePayableListItems,
@@ -29,6 +32,22 @@ import { createDrizzleSupplierViewStore } from '../persistence/repos/supplier-vi
 // #239: read-model de payables (Top-5 "Últimos pagamentos") — molde de supplier-view-store acima.
 import { createInMemoryPayableViewStore } from '../persistence/repos/payable-view-store.in-memory.ts';
 import { createDrizzlePayableViewStore } from '../persistence/repos/payable-view-store.drizzle.ts';
+// #242 DASH-F5: reader da agregação "Fornecedores sem Contrato" (REP-2/#240) reusado para o Top-5
+// do Dashboard. memory: fake in-memory (seedável em testes); mysql: reader Drizzle boot-scoped.
+import { createInMemorySuppliersWithoutContractReader } from '../persistence/repos/suppliers-without-contract-reader.in-memory.ts';
+import {
+  openSuppliersWithoutContractReader,
+  type SuppliersWithoutContractReader,
+} from '../../public-api/suppliers-without-contract-projection.ts';
+// #241 DASH-F1: reader do KPI "Despesas por Centro de Custo". memory: fake in-memory (seedável em
+// testes); mysql: reader Drizzle boot-scoped. As janelas M-1/M-2 são computadas na borda (clock).
+import { createInMemoryDashboardCostCentersReader } from '../persistence/repos/dashboard-cost-centers-reader.in-memory.ts';
+import {
+  openDashboardCostCentersReader,
+  type DashboardCostCentersReader,
+} from '../../public-api/dashboard-cost-centers-projection.ts';
+// #237: motor de variação PURO (M-1 vs M-2). A referência é o `clock.now()` da composição (borda).
+import { comparisonWindows } from '../../domain/dashboard/variation.ts';
 import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
 import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
 // #357: resumo de título em lote — POST /financial/payables:batch (ADR-0049).
@@ -44,6 +63,31 @@ import {
   loadedDocumentToSummaryRow,
 } from '../persistence/repos/document-summary-by-ids-view.in-memory.ts';
 import { createDrizzleDocumentSummaryByIdsView } from '../persistence/repos/document-summary-by-ids-view.drizzle.ts';
+import { createDrizzleRemittancePreviewReader } from '../persistence/repos/remittance-preview-reader.drizzle.ts';
+import { createInMemoryRemittancePreviewReader } from '../persistence/repos/remittance-preview-reader.in-memory.ts';
+import { createDrizzleRemittancePaymentReader } from '../persistence/repos/remittance-payment-reader.drizzle.ts';
+import { createInMemoryRemittancePaymentReader } from '../persistence/repos/remittance-payment-reader.in-memory.ts';
+import { createDrizzleRemittanceRepository } from '../persistence/repos/remittance-repository.drizzle.ts';
+import { createInMemoryRemittanceRepository } from '../persistence/repos/remittance-repository.in-memory.ts';
+import { createS3VanStorage } from '../van/van-storage.s3.ts';
+import { createInMemoryVanStorage } from '../van/van-storage.in-memory.ts';
+import { parseVanS3Env } from '../van/van-s3-config.ts';
+import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-translator.ts';
+import { createRemittanceBatchPlanner } from '../cnab/batch-planner.ts';
+import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
+import { discardRemittance } from '../../application/use-cases/discard-remittance.ts';
+import { listRemittances } from '../../application/use-cases/list-remittances.ts';
+import { getRemittance } from '../../application/use-cases/get-remittance.ts';
+import { downloadRemittanceFile } from '../../application/use-cases/download-remittance-file.ts';
+import { listVanReturnQuarantine } from '../../application/use-cases/list-van-return-quarantine.ts';
+import type { VanReturnQuarantineStore } from '../../application/ports/van-return-quarantine-store.ts';
+import { createInMemoryVanReturnQuarantine } from '../persistence/repos/van-return-quarantine-store.in-memory.ts';
+import { createDrizzleVanReturnQuarantineStore } from '../persistence/repos/van-return-quarantine-store.drizzle.ts';
+import * as RemittanceIdVo from '../../domain/remittance/remittance-id.ts';
+import { sha256Hex } from '#src/shared/utils/hash.ts';
+import type { RemittancePaymentReader } from '../../application/ports/remittance-payment-reader.ts';
+import type { RemittanceRepository } from '../../application/ports/remittance-repository.ts';
+import type { VanStoragePort } from '../../application/ports/van-storage.ts';
 import type { DocumentSummaryByIdsView } from '../../application/ports/document-summary-by-ids-view.ts';
 import {
   createInMemoryTimelineRepository,
@@ -79,7 +123,12 @@ import {
   type AuthUserReadPort,
   type ApproverAuthorityReadPort,
 } from '#src/modules/auth/public-api/read.ts';
-import { composePayeeBank, type PayeeBankBlock } from './payee-bank-composition.ts';
+import {
+  composePayeeBank,
+  readPayeeBank,
+  readPayeeContractor,
+  type PayeeBankBlock,
+} from './payee-bank-composition.ts';
 import { resolveUserName } from './user-name-composition.ts';
 // #289: adapta o ApproverAuthorityReadPort do auth (ACL) → ApproverAuthorityReader do financial.
 import { createAuthApproverAuthorityReader } from '../read/approver-authority-reader.auth.ts';
@@ -101,6 +150,7 @@ import { createProgramsApiReadStore } from '../persistence/repos/program-read.fr
 import { buildProgramsReadPort } from '#src/modules/programs/public-api/index.ts';
 import type { ProgramReadPort, ProgramView } from '../../application/ports/program-read.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
+import { createDrizzlePayableRepository } from '../persistence/repos/payable-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
 import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-statement-repository.drizzle.ts';
 import { createDrizzlePayableReconciliationView } from '../persistence/repos/payable-reconciliation-view.drizzle.ts';
@@ -120,6 +170,9 @@ import {
 import { saveDocument } from '../../application/use-cases/save-document.ts';
 import { saveDraft } from '../../application/use-cases/save-draft.ts';
 import { ingestDocument } from '../../application/use-cases/ingest-document.ts';
+import { parseDocument } from '../../application/use-cases/parse-document.ts';
+import { previewRemittance } from '../../application/use-cases/preview-remittance.ts';
+import type { RemittancePreviewReader } from '../../application/ports/remittance-preview-reader.ts';
 import type { SourceFileStoragePort } from '../../application/ports/source-file-storage.ts';
 import { createInMemorySourceFileStorage } from '../storage/source-file-storage.in-memory.ts';
 import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts';
@@ -136,6 +189,7 @@ import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
 import { getDocumentTimeline } from '../../application/use-cases/get-document-timeline.ts';
 import { importBankStatement } from '../../application/use-cases/import-bank-statement.ts';
+import { deleteBankStatement } from '../../application/use-cases/delete-bank-statement.ts';
 import { confirmReconciliation } from '../../application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '../../application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
@@ -161,6 +215,7 @@ import { listReconciliationPeriods } from '../../application/use-cases/list-reco
 import { getStatementSuggestions } from '../../application/use-cases/get-statement-suggestions.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository, LoadedDocument } from '../../domain/document/repository.ts';
+import type { PayableRepository } from '../../domain/payable/repository.ts';
 import type { PayeeKind } from '../../domain/document/types.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -195,12 +250,37 @@ export type FinancialCompositionConfig = Readonly<{
    *  composition root. Injetado em testes HTTP para semear dados determinísticos via `applyPayableEvent`;
    *  ambos os drivers constroem uma store vazia automaticamente se ausente. */
   payableViewStore?: PayableViewStore;
+  /** #242 · DASH-F5 — reader da agregação "Fornecedores sem Contrato" (REP-2/#240), reusado para o
+   *  Top-5 do Dashboard. Injetado em testes HTTP (memory) com dados determinísticos; ambos os drivers
+   *  constroem um reader por padrão se ausente (memory: fake vazio; mysql: reader Drizzle boot-scoped). */
+  suppliersWithoutContractReader?: SuppliersWithoutContractReader;
+  /** #241 · DASH-F1 — reader do KPI "Despesas por Centro de Custo". Injetado em testes HTTP (memory)
+   *  com dados determinísticos; ambos os drivers constroem um reader por padrão se ausente
+   *  (memory: fake vazio; mysql: reader Drizzle boot-scoped). */
+  dashboardCostCentersReader?: DashboardCostCentersReader;
+  /** #241 · DASH-F1 — fonte da referência de "agora" (M-1/M-2). Injetável em testes (ClockFixed) para
+   *  asserir as janelas de forma determinística; default `ClockReal()`. */
+  clock?: Clock;
+  /** #720 · Pré-voo da remessa — leitura crua do documento + destino de pagamento. Injetável em
+   *  testes HTTP (memory) com linhas determinísticas; no driver mysql o reader Drizzle é montado
+   *  com a leitura de `partners` que preserva indisponibilidade. */
+  remittancePreviewReader?: RemittancePreviewReader;
+  /** #720 · Títulos prontos para emitir. Injetável em testes HTTP (memory); no driver mysql o
+   *  reader Drizzle converte o cadastro pela mesma régua que o pré-voo usa para diagnosticar. */
+  remittancePaymentReader?: RemittancePaymentReader;
+  /** #728 · Registro de remessa (acompanhamento — GET /financial/remittances[/:id]). Injetável em
+   *  testes HTTP (memory) para semear remessas determinísticas; ambos os drivers constroem o repo
+   *  por padrão se ausente (memory: in-memory vazio; mysql: adapter Drizzle). */
+  remittanceRepo?: RemittanceRepository;
+  /** #753 · Quarentena do retorno da VAN. Injetável para semear objetos presos no teste HTTP. */
+  vanReturnQuarantine?: VanReturnQuarantineStore;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
   saveDocument: ReturnType<typeof saveDocument>;
   saveDraft: ReturnType<typeof saveDraft>;
   ingestDocument: ReturnType<typeof ingestDocument>; // #62: ingestão (leitura + storage + rascunho)
+  parseDocument: ReturnType<typeof parseDocument>; // #580: leitura pura (parse-only, sem persistir)
   adjustDocument: ReturnType<typeof adjustDocument>;
   bulkUpdateDueDate: ReturnType<typeof bulkUpdateDueDate>; // #162: vencimento em lote
   approveDocument: ReturnType<typeof approveDocument>;
@@ -213,14 +293,22 @@ export type FinancialHttpDeps = Readonly<{
   submitDraft: ReturnType<typeof submitDraft>;
   /** Leitura direta do repositório — usado pelo GET /documents/:id. */
   findDocumentById: DocumentRepository['findById'];
+  /** #62/Feature 2: serve os bytes do comprovante-fonte INLINE — GET /documents/:id/source-file. */
+  downloadSourceFile: SourceFileStoragePort['download'];
+  /** #577: sobe o comprovante no create atômico — POST /documents/with-source-file. */
+  uploadSourceFile: SourceFileStoragePort['upload'];
+  /** #577: compensação (F4) — remove o comprovante órfão se o save falhar após o upload. */
+  removeSourceFile: SourceFileStoragePort['remove'];
   /** Listagem paginada (US1 — read path no writer pool; split reader/writer diferido — ADR-0003). */
   listDocuments: DocumentRepository['findPaged'];
   /** Listagem payable-centric (#201/#222) — GET /financial/payable-titles (pai+filhos como linhas). */
   listPayables: PayableListView['findPaged'];
+  countPayableTitles: PayableListView['countByStatus'];
   /** Trilha por-campo (Time Travel) de um documento — consumido pelo GET /documents/:id/timeline. */
   getDocumentTimeline: ReturnType<typeof getDocumentTimeline>;
   /** Importação de extrato bancário (US1 conciliação) — POST /bank-statements. */
   importBankStatement: ReturnType<typeof importBankStatement>;
+  deleteBankStatement: ReturnType<typeof deleteBankStatement>;
   /** Leitura das transações de um extrato — GET /bank-statements/:id/transactions. */
   listStatementTransactions: BankStatementRepository['listTransactions'];
   /** Confirma a conciliação (US2/4) — POST /reconciliations. */
@@ -277,6 +365,12 @@ export type FinancialHttpDeps = Readonly<{
   listPrograms: ProgramReadPort['list'];
   /** #239 · Últimos pagamentos — GET /financial/dashboard/recent-payments. */
   listRecentPaid: PayableViewStore['listRecentPaid'];
+  /** #242 · Fornecedores sem contrato (Top-5) — GET /financial/dashboard/no-contract-suppliers. */
+  listTopSuppliersWithoutContract: SuppliersWithoutContractReader['listTop'];
+  /** #241 · KPI Despesas por Centro de Custo — GET /financial/dashboard/cost-centers. Zero-arg: a
+   *  borda computa as janelas M-1/M-2 de `clock.now()` (motor #237) e chama o reader. Devolve o
+   *  agregado bruto por CC (o assembler puro monta total/top/distribuição). */
+  listDashboardCostCenters: () => ReturnType<DashboardCostCentersReader['list']>;
   /** #357 · Resolução em lote de payableId[] — POST /financial/payables:batch (ADR-0049). */
   getPayablesSummaryByIds: PayableSummaryByIdsView['getPayablesSummaryByIds'];
   /** #358 · Resolução em lote de documentId[] — POST /financial/documents:batch (ADR-0049). */
@@ -286,8 +380,45 @@ export type FinancialHttpDeps = Readonly<{
     kind: PayeeKind | null;
     id: string | null;
   }) => Promise<PayeeBankBlock | null>;
+  /**
+   * #720 · Pré-voo da remessa — POST /financial/remittances:preview.
+   *
+   * Leitura pura: não consome NSA, não prende documento e não toca no bucket. É o que o operador
+   * consulta antes de decidir gerar, e o que responde "o que não sai, e por quê" por título.
+   */
+  previewRemittance: ReturnType<typeof previewRemittance>;
+  /**
+   * #720 · Geração da remessa — POST /financial/remittances.
+   *
+   * Consome NSA, prende os documentos e grava em `saida/`. Gravar ali É enfileirar pagamento
+   * (ADR-0060), então esta é a única rota do módulo cuja chamada move dinheiro.
+   */
+  generateRemittance: ReturnType<typeof generateRemittance>;
+  discardRemittance: ReturnType<typeof discardRemittance>;
+  /**
+   * #728 · Acompanhamento — GET /financial/remittances (lista paginada) e
+   * GET /financial/remittances/:id (detalhe). Read-only: leem o registro que o generate/worker já
+   * mantém, sem consumir NSA nem tocar no bucket.
+   */
+  listRemittances: ReturnType<typeof listRemittances>;
+  getRemittance: ReturnType<typeof getRemittance>;
+  /**
+   * GET /financial/remittances/:id/file — o arquivo que foi ao banco. **A rota só é registrada fora
+   * de produção**; a dep existe sempre, porque montá-la condicionalmente faria o composition root
+   * ter dois formatos e o teste de um deles nunca rodaria.
+   */
+  downloadRemittanceFile: ReturnType<typeof downloadRemittanceFile>;
+  /**
+   * #753 · Quarentena do retorno — GET /financial/van-returns/quarantine. Read-only sobre o que o
+   * worker `van-return-scan` gravou; a borda nunca escreve na quarentena.
+   */
+  listVanReturnQuarantine: ReturnType<typeof listVanReturnQuarantine>;
   /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
   resolveUserName: (id: string | null) => Promise<string | null>;
+  /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
+  resolveCategoryName: (ref: string | null) => Promise<string | null>;
+  /** Fatia 2: categoryRef do documento conciliado (payableId → doc). null = sem doc/categoria (graceful). */
+  resolveTitleCategoryRef: (payableId: string) => Promise<string | null>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -296,6 +427,9 @@ type Pools = Readonly<{
   // mysql: read-port de contracts na MESMA conexão (ctr_* no mesmo DB do monólito).
   contractCategorizationReader: ContractCategorizationReadPort;
   repo: DocumentRepository;
+  // Fatia 1: escrita POR TÍTULO, separada do `repo`. Quem só muda um título não passa pelo `save`
+  // do documento — ver `domain/payable/repository.ts`.
+  payableRepo: PayableRepository;
   documentStorage: SourceFileStoragePort; // #62: storage do comprovante-fonte
   payableListView: PayableListView;
   // Repo de LEITURA da trilha. Na escrita, o `save` do DocumentRepository grava a trilha
@@ -322,9 +456,26 @@ type Pools = Readonly<{
   payableSummaryByIdsView: PayableSummaryByIdsView;
   // #358: SELECT fin_documents ⟕ recon ⟕ fin_supplier_view p/ POST /financial/documents:batch.
   documentSummaryByIdsView: DocumentSummaryByIdsView;
+  // #720: leitura crua do pré-voo (documento + destino de pagamento do favorecido). Quem julga
+  // aptidão é `checkPayoutReadiness`, no domínio — este reader não decide nada.
+  remittancePreviewReader: RemittancePreviewReader;
+  // #720: os mesmos títulos, convertidos para emissão. Tudo-ou-nada, ao contrário do pré-voo.
+  remittancePaymentReader: RemittancePaymentReader;
+  // #720: registro da remessa (o que segura o documento entre gravar e confirmar) e o bucket.
+  remittanceRepo: RemittanceRepository;
+  vanStorage: VanStoragePort;
+  // #753: a quarentena do prefixo de retorno — quem escreve é o worker `van-return-scan`; a borda
+  // só lê. Vive aqui, e não no grupo de leitura, porque é o mesmo assunto operacional da VAN.
+  vanReturnQuarantine: VanReturnQuarantineStore;
   // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
   // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
   payableViewStore: PayableViewStore;
+  // #242: reader da agregação "Fornecedores sem Contrato" (REP-2) reusado para o Top-5 do Dashboard.
+  // memory: fake in-memory (injetável em testes); mysql: reader Drizzle boot-scoped (pool próprio).
+  suppliersWithoutContractReader: SuppliersWithoutContractReader;
+  // #241: reader do KPI "Despesas por Centro de Custo". memory: fake in-memory (injetável em testes);
+  // mysql: reader Drizzle boot-scoped (pool próprio).
+  dashboardCostCentersReader: DashboardCostCentersReader;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
   // #207/#289: port de leitura do nome de usuário + alçada do aprovador (ADR-0032). memory:
@@ -379,13 +530,36 @@ const seededProgramsStub = (): readonly ProgramView[] => [
   { id: '7b000000-0000-4000-8000-000000000003', name: 'Captação de recursos' },
 ];
 
+// Seams injetáveis do driver memory (todos read-models do Dashboard/Reports). Injetados em testes HTTP
+// com dados determinísticos; default = fake vazio. Agrupados num objeto para não estourar max-params.
+type MemoryPoolSeams = Readonly<{
+  // #239: injetável em testes (semear via applyPayableEvent); vazio por padrão — em produção quem
+  // popula é o worker payable-view-projection (async), não este composition root (ADR-0022).
+  payableViewStore?: PayableViewStore;
+  // #242: fake vazio por padrão; testes HTTP injetam um reader semeado (Top-5 determinístico).
+  suppliersWithoutContractReader?: SuppliersWithoutContractReader;
+  // #241: fake vazio por padrão; testes HTTP injetam um reader semeado/capturador (janelas M-1/M-2).
+  dashboardCostCentersReader?: DashboardCostCentersReader;
+  // #720: fake vazio por padrão; testes HTTP injetam linhas de pré-voo determinísticas.
+  remittancePreviewReader?: RemittancePreviewReader;
+  // #720: fake vazio por padrão; testes HTTP injetam pagamentos prontos para emitir.
+  remittancePaymentReader?: RemittancePaymentReader;
+  // #728: in-memory vazio por padrão; testes HTTP injetam um repo semeado (acompanhamento).
+  remittanceRepo?: RemittanceRepository;
+  // #753: in-memory vazio por padrão; testes HTTP injetam objetos presos.
+  vanReturnQuarantine?: VanReturnQuarantineStore;
+}>;
+
 const buildMemoryPools = (
   contractorReadPort: ContractorReadPort | null,
   authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | null,
-  // #239: injetável em testes (semear via applyPayableEvent); vazio por padrão — em produção quem
-  // popula é o worker payable-view-projection (async), não este composition root (ADR-0022).
-  payableViewStore: PayableViewStore = createInMemoryPayableViewStore(),
+  seams: MemoryPoolSeams = {},
 ): Pools => {
+  const payableViewStore = seams.payableViewStore ?? createInMemoryPayableViewStore();
+  const suppliersWithoutContractReader =
+    seams.suppliersWithoutContractReader ?? createInMemorySuppliersWithoutContractReader();
+  const dashboardCostCentersReader =
+    seams.dashboardCostCentersReader ?? createInMemoryDashboardCostCentersReader();
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
   const timelineStore: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
@@ -436,6 +610,8 @@ const buildMemoryPools = (
     costCenterReader,
     programReader,
     repo,
+    // Mesmo `documentStore` do `repo` — o title escrito aqui é o que o `findById` lê (#222).
+    payableRepo: createInMemoryPayableRepository(documentStore, timelineStore),
     payableListView: createInMemoryPayableListView(documentSource),
     timelineRepo,
     statementRepo,
@@ -484,10 +660,24 @@ const buildMemoryPools = (
     documentSummaryByIdsView: createInMemoryDocumentSummaryByIdsView(() =>
       documentSource().map(loadedDocumentToSummaryRow),
     ),
+    // #720: no driver memory o pré-voo nasce VAZIO — sem `partners` ligado não há destino de
+    // pagamento a compor, e inventar um faria o pré-voo aprovar título que o arquivo recusaria.
+    // Teste HTTP injeta um reader semeado pelo seam, como os demais read-models.
+    remittancePreviewReader:
+      seams.remittancePreviewReader ?? createInMemoryRemittancePreviewReader(),
+    remittancePaymentReader:
+      seams.remittancePaymentReader ?? createInMemoryRemittancePaymentReader(),
+    remittanceRepo: seams.remittanceRepo ?? createInMemoryRemittanceRepository(),
+    vanReturnQuarantine: seams.vanReturnQuarantine ?? createInMemoryVanReturnQuarantine(),
+    // In-memory: gravar aqui NÃO enfileira pagamento nenhum. É o que permite exercitar a rota de
+    // geração em teste sem a menor chance de tocar no bucket real.
+    vanStorage: createInMemoryVanStorage(),
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
     payableViewStore,
+    suppliersWithoutContractReader,
+    dashboardCostCentersReader,
     contractorReadPort,
     authUserReadPort,
     shutdown: () => Promise.resolve(),
@@ -501,6 +691,14 @@ const buildDocumentStorage = (): SourceFileStoragePort => {
   return s3.ok
     ? createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' })
     : createInMemorySourceFileStorage();
+};
+
+// Bucket da VAN — envs `VAN_S3_*` PRÓPRIAS, nunca o singleton `S3_*`: é outro bucket, possivelmente
+// em outra conta (ADR-0060). Sem configuração, in-memory: o boot não quebra, e o que não sobe para
+// `saida/` não vira pagamento.
+const buildVanStorage = (): VanStoragePort => {
+  const config = parseVanS3Env(process.env);
+  return config.ok ? createS3VanStorage(config.value) : createInMemoryVanStorage();
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
@@ -569,9 +767,51 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     authUserReadPort = authPortR.value;
     closeAuthUserPort = authPortR.value.close;
   }
+  // #242 DASH-F5: reader boot-scoped (pool próprio — molde dos outros readers do Dashboard), aberto
+  // por ÚLTIMO → só seu próprio caminho de erro fecha os anteriores. Injetado tem precedência (testes).
+  let suppliersWithoutContractReader: SuppliersWithoutContractReader | null =
+    config.suppliersWithoutContractReader ?? null;
+  let closeSuppliersReader: () => Promise<void> = () => Promise.resolve();
+  if (suppliersWithoutContractReader === null) {
+    const readerR = await openSuppliersWithoutContractReader({ connectionString: writerUrl });
+    if (!readerR.ok) {
+      await closeAuthUserPort();
+      await closeContractorPort();
+      await programsReadPort.close();
+      await contractsReadPort.close();
+      await handle.close();
+      throw new Error(
+        `financial-composition: falha ao abrir suppliers-without-contract reader (${readerR.error})`,
+      );
+    }
+    suppliersWithoutContractReader = readerR.value;
+    closeSuppliersReader = readerR.value.close;
+  }
+  // #241 DASH-F1: reader boot-scoped (pool próprio — molde dos outros readers do Dashboard), aberto
+  // por ÚLTIMO → só seu próprio caminho de erro fecha os anteriores. Injetado tem precedência (testes).
+  let dashboardCostCentersReader: DashboardCostCentersReader | null =
+    config.dashboardCostCentersReader ?? null;
+  let closeDashboardCostCentersReader: () => Promise<void> = () => Promise.resolve();
+  if (dashboardCostCentersReader === null) {
+    const readerR = await openDashboardCostCentersReader({ connectionString: writerUrl });
+    if (!readerR.ok) {
+      await closeSuppliersReader();
+      await closeAuthUserPort();
+      await closeContractorPort();
+      await programsReadPort.close();
+      await contractsReadPort.close();
+      await handle.close();
+      throw new Error(
+        `financial-composition: falha ao abrir dashboard-cost-centers reader (${readerR.error})`,
+      );
+    }
+    dashboardCostCentersReader = readerR.value;
+    closeDashboardCostCentersReader = readerR.value.close;
+  }
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
+    payableRepo: createDrizzlePayableRepository(handle),
     documentStorage: buildDocumentStorage(),
     payableListView: createDrizzlePayableListView(handle),
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
@@ -592,14 +832,32 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     // #357: JOIN fin_payables × fin_documents × fin_supplier_view via Drizzle.
     payableSummaryByIdsView: createDrizzlePayableSummaryByIdsView(handle),
     documentSummaryByIdsView: createDrizzleDocumentSummaryByIdsView(handle),
+    // #720: a leitura do favorecido usa a variante que PRESERVA o erro. Se o `partners` não
+    // responder, o pré-voo recusa em bloco — degradar aqui faria o operador ler "sem dados
+    // bancários" em títulos cujo cadastro está completo, e agir sobre isso.
+    remittancePreviewReader: createDrizzleRemittancePreviewReader(handle, (ref) =>
+      readPayeeBank(contractorReadPort, ref),
+    ),
+    remittancePaymentReader: createDrizzleRemittancePaymentReader(handle, (ref) =>
+      readPayeeContractor(contractorReadPort, ref),
+    ),
+    remittanceRepo: createDrizzleRemittanceRepository(handle),
+    vanStorage: buildVanStorage(),
+    vanReturnQuarantine: createDrizzleVanReturnQuarantineStore(handle),
     // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
+    // #242: reader da agregação REP-2 reusado para o Top-5 do Dashboard (aberto acima, boot-scoped).
+    suppliersWithoutContractReader,
+    // #241: reader do KPI "Despesas por Centro de Custo" (aberto acima, boot-scoped).
+    dashboardCostCentersReader,
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
     contractorReadPort,
     authUserReadPort,
     shutdown: async () => {
+      await closeDashboardCostCentersReader();
+      await closeSuppliersReader();
       await closeAuthUserPort();
       await closeContractorPort();
       await programsReadPort.close();
@@ -609,12 +867,13 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   };
 };
 
-const makeDeps = (pools: Pools): FinancialHttpDeps => {
+const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps => {
   // #127: NENHUM use-case recebe mais `outbox` — todo evento de domínio do financial é gravado no
   // `fin_outbox` na MESMA tx do agregado/unit-of-work (atomicidade — ADR-0015), via os repos
   // (`save`/`delete`/`confirm`/`confirmManualEntry`/`undo`/`close`). No driver memory cada repo usa
   // um outbox interno (descartável); no mysql → tabela `fin_outbox`. Sem dual-write.
-  const clock = ClockReal();
+  // #241: o clock (default ClockReal; ClockFixed em testes) é a fonte da referência M-1/M-2 do KPI
+  // de Centro de Custo — mantém o domínio `variation.ts` PURO (a referência é INPUT, não o relógio).
   // #289: leitura cross-módulo da alçada do aprovador (auth/public-api). Opt-in — construído só
   // quando o port existe (memory sem injeção: gate de alçada não roda nos use-cases).
   const approverAuthorityReader =
@@ -626,6 +885,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
   const deps = {
     cedenteAccountStore: pools.cedenteStore,
     repo: pools.repo,
+    payableRepo: pools.payableRepo,
     clock,
     contractCategorizationReader: pools.contractCategorizationReader,
     ...(approverAuthorityReader !== undefined ? { approverAuthorityReader } : {}),
@@ -646,6 +906,17 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     rejected: pools.rejectedSuggestionRepo,
   });
   const saveDraftUseCase = saveDraft(deps);
+  // const p/ narrow no closure do resolveSupplierByCnpj (método opcional no port). #FIN-OCR-AUTOFILL:
+  // só quando o partners está disponível (driver mysql); memory → sem resolução (seleção manual). Um
+  // closure compartilhado por ingest (#560) e parse (#580).
+  const resolveSupplierId = pools.contractorReadPort?.findSupplierIdByCnpj;
+  const resolveSupplierByCnpj =
+    resolveSupplierId !== undefined
+      ? async (taxId: string) => {
+          const r = await resolveSupplierId(taxId);
+          return r.ok ? ok(r.value) : err('supplier-resolve-unavailable' as const);
+        }
+      : undefined;
   return {
     saveDocument: saveDocument(deps),
     saveDraft: saveDraftUseCase,
@@ -654,9 +925,18 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       storage: pools.documentStorage,
       saveDraft: saveDraftUseCase,
       idGen: DocumentIdVo.generate,
+      ...(resolveSupplierByCnpj !== undefined ? { resolveSupplierByCnpj } : {}),
     }),
-    adjustDocument: adjustDocument(deps),
-    bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust
+    parseDocument: parseDocument({
+      reader: createDocumentReader(),
+      ...(resolveSupplierByCnpj !== undefined ? { resolveSupplierByCnpj } : {}),
+    }),
+    // O ajuste de VALOR consulta a remessa antes de decidir: título preso é dinheiro em trânsito, e
+    // mudar o valor faria o arquivo já enviado divergir do título.
+    adjustDocument: adjustDocument({ ...deps, remittances: pools.remittanceRepo }),
+    // #162: delega ao próprio `adjustDocument`, então carrega as mesmas deps — inclusive a remessa.
+    // Na prática só percorre o caminho leve (dueDate), que não consulta hold.
+    bulkUpdateDueDate: bulkUpdateDueDate({ ...deps, remittances: pools.remittanceRepo }),
     approveDocument: approveDocument(deps),
     registerManualPayment: registerManualPayment(deps),
     updatePayableDueDate: updatePayableDueDate(deps), // #270: mesmas deps (repo + clock)
@@ -664,8 +944,12 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
     findDocumentById: pools.repo.findById,
+    downloadSourceFile: pools.documentStorage.download,
+    uploadSourceFile: pools.documentStorage.upload,
+    removeSourceFile: pools.documentStorage.remove,
     listDocuments: pools.repo.findPaged,
     listPayables: pools.payableListView.findPaged,
+    countPayableTitles: pools.payableListView.countByStatus,
     getDocumentTimeline: getDocumentTimeline({ timelineRepo: pools.timelineRepo }),
     importBankStatement: importBankStatement({
       parser: bankStatementParser,
@@ -673,6 +957,10 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       periods: pools.periodStore,
       cedenteStore: pools.cedenteStore,
       clock,
+    }),
+    deleteBankStatement: deleteBankStatement({
+      repo: pools.statementRepo,
+      periods: pools.periodStore,
     }),
     listStatementTransactions: pools.statementRepo.listTransactions,
     confirmReconciliation: confirmReconciliation({
@@ -761,10 +1049,68 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listCostCenters: pools.costCenterReader.list,
     listPrograms: pools.programReader.list,
     listRecentPaid: pools.payableViewStore.listRecentPaid,
+    listTopSuppliersWithoutContract: pools.suppliersWithoutContractReader.listTop,
+    // #241: computa as janelas M-1/M-2 do `clock.now()` (motor #237) e chama o reader por-request.
+    listDashboardCostCenters: () => {
+      const { m1, m2 } = comparisonWindows(clock.now());
+      return pools.dashboardCostCentersReader.list({
+        m1Start: m1.start,
+        m1End: m1.end,
+        m2Start: m2.start,
+        m2End: m2.end,
+      });
+    },
     getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
+    previewRemittance: previewRemittance({
+      preview: pools.remittancePreviewReader,
+      // A conta-cedente e o planejador entram porque o pré-voo passou a devolver a composição dos
+      // lotes (#804, CA7): a forma de lançamento depende do banco do cedente, e o agrupamento é o
+      // MESMO do emissor — o adapter reusa `batchProfileFor`, sem segunda régua.
+      cedenteAccounts: pools.cedenteStore,
+      batchPlanner: createRemittanceBatchPlanner(),
+    }),
+    generateRemittance: generateRemittance({
+      cedenteAccounts: pools.cedenteStore,
+      remittances: pools.remittanceRepo,
+      payments: pools.remittancePaymentReader,
+      translator: createBradescoMultipagTranslator(),
+      storage: pools.vanStorage,
+      now: () => clock.now(),
+      newRemittanceId: RemittanceIdVo.generate,
+      hashContent: sha256Hex,
+    }),
+    // O MESMO `vanStorage` da geração, e não é detalhe: o descarte decide olhando se o objeto está
+    // no bucket, então os dois têm de enxergar o mesmo armazenamento. Dois storages diferentes
+    // fariam o descarte concluir "não há arquivo" sobre um bucket em que ele está.
+    discardRemittance: discardRemittance({
+      remittances: pools.remittanceRepo,
+      storage: pools.vanStorage,
+      now: () => clock.now(),
+    }),
+    listRemittances: listRemittances({ remittances: pools.remittanceRepo }),
+    getRemittance: getRemittance({ remittances: pools.remittanceRepo }),
+    // `sha256Hex` é o MESMO que o generate usa acima para gravar o `contentHash` — se um dia forem
+    // duas funções, a conferência do download passa a reprovar todo arquivo íntegro.
+    downloadRemittanceFile: downloadRemittanceFile({
+      remittances: pools.remittanceRepo,
+      storage: pools.vanStorage,
+      hashContent: sha256Hex,
+    }),
+    listVanReturnQuarantine: listVanReturnQuarantine({ quarantine: pools.vanReturnQuarantine }),
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
+    resolveCategoryName: async (ref) => {
+      if (ref === null) return null;
+      const r = await pools.categoryReader.list();
+      if (!r.ok) return null;
+      return r.value.find((c) => String(c.id) === ref)?.name ?? null;
+    },
+    resolveTitleCategoryRef: async (payableId) => {
+      const r = await pools.payableDocView.findByPayableIds([payableId]);
+      if (!r.ok) return null;
+      return r.value[0]?.categoryRef ?? null;
+    },
     shutdown: pools.shutdown,
   };
 };
@@ -774,16 +1120,33 @@ export const buildFinancialHttpDeps = async (
 ): Promise<FinancialHttpDeps> => {
   if (config.driver === 'memory') {
     return makeDeps(
-      buildMemoryPools(
-        config.contractorReadPort ?? null,
-        config.authUserReadPort ?? null,
-        config.payableViewStore,
-      ),
+      buildMemoryPools(config.contractorReadPort ?? null, config.authUserReadPort ?? null, {
+        ...(config.payableViewStore !== undefined
+          ? { payableViewStore: config.payableViewStore }
+          : {}),
+        ...(config.suppliersWithoutContractReader !== undefined
+          ? { suppliersWithoutContractReader: config.suppliersWithoutContractReader }
+          : {}),
+        ...(config.dashboardCostCentersReader !== undefined
+          ? { dashboardCostCentersReader: config.dashboardCostCentersReader }
+          : {}),
+        ...(config.remittancePreviewReader !== undefined
+          ? { remittancePreviewReader: config.remittancePreviewReader }
+          : {}),
+        ...(config.remittancePaymentReader !== undefined
+          ? { remittancePaymentReader: config.remittancePaymentReader }
+          : {}),
+        ...(config.remittanceRepo !== undefined ? { remittanceRepo: config.remittanceRepo } : {}),
+        ...(config.vanReturnQuarantine !== undefined
+          ? { vanReturnQuarantine: config.vanReturnQuarantine }
+          : {}),
+      }),
+      config.clock,
     );
   }
 
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {
     throw new Error('financial-composition: driver mysql exige writerUrl');
   }
-  return makeDeps(await buildMysqlPools(config));
+  return makeDeps(await buildMysqlPools(config), config.clock);
 };

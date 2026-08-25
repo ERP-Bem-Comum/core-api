@@ -1,0 +1,486 @@
+id: ADR-0024
+title: Identidade & RBAC — Módulo auth (identidade própria OIDC-ready, sessão híbrida, permissions granulares)
+source: handbook/architecture/adr/0024-identity-and-rbac-auth-module.md
+decided_on: 2026-05-27
+
+declared:
+  status: Accepted (authN superseded parcialmente por ADR-0055)
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0005, ADR-0006, ADR-0014, ADR-0020, ADR-0022, ADR-0025, ADR-0052, ADR-0055]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Este é o caso que motivou `claims[].superseded_by`. O `declared.superseded_by` está VAZIO de
+    propósito: o ADR-0055 supersede apenas quatro alegações deste documento (fonte de identidade,
+    emissão de token, refresh opaco server-side e a invariante `:128`), e marcar o documento inteiro
+    como morto mataria o RBAC, que é a metade vigente e mais implementada.
+    A metade vigente está toda no código e confere: `authorize` é função pura que recebe `ActiveUser`
+    e não toca repositório (`authorize.ts:16`), as 9 tabelas `auth_*` existem, `password_hash` é
+    nullable como desenhado, e argon2id vem via `hash-wasm`.
+    A metade superseded TAMBÉM está no código, e continua correta — o corte do ADR-0055 não começou
+    (`external_subject` e `aws-jwt-verify` ausentes). Por isso as quatro alegações substituídas ficam
+    `narrow`/`replace` e não `drop`: elas governam o código de hoje, com condição de término
+    declarada.
+
+extraction:
+  state: complete
+  covers: |
+    11 alegações — as 5 invariantes normativas, os 4 pilares da decisão, o prefixo de tabela e o
+    vocabulário. O §5 (destravar o AuditLog do ADR-0022) ficou fora: é consequência habilitada, não
+    regra de edição, e o AuditLog segue diferido.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/auth-module.md']
+    gap: |
+      GRAVE, e não é imprecisão de detalhe: a 039 destilou este ADR como "identidade própria
+      OIDC-ready por port `Authenticator`" para a `auth-module.md:9`, incluindo a frase "federação não
+      foi descartada — foi adiada". O ADR-0055 decidiu a federação em 2026-07-29, um a dois dias ANTES
+      da destilação, e não é julgado em nenhum ponto da 039 — que declara "44 de 44 julgados (100%)" e
+      "SC-010 satisfeito: todos os 54 ADRs têm veredito registrado".
+      Consequência viva: nenhuma das 12 rules menciona Cognito ou o ADR-0055, e a rule de auth afirma
+      como norma um modelo cuja metade de autenticação foi superseded por decisão de diretoria.
+
+claims:
+  - id: ADR-0024-C1
+    text: |
+      O core-api é a fonte de identidade: guarda usuários e verifica credencial localmente, com a
+      fonte de autenticação abstraída por um port `Authenticator`. Federação é adiada, não descartada.
+    kind: obligation
+    source_lines: ['32-34']
+    applies_to:
+      - 'src/modules/auth/**/*.ts'
+    superseded_by: ADR-0055
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/crypto/token-issuer.es256.ts:27 — makeEs256TokenIssuer emite access token localmente'
+        - 'src/modules/auth/adapters/crypto/password-hasher.argon2.ts:2 — verificação de credencial local via argon2id'
+        - 'nota: external_subject e identity_provider, exigidos pelo ADR-0055, não existem no schema — o corte não começou'
+      verify: |
+        grep -rn "external_subject\|makeEs256TokenIssuer" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o módulo auth, quando existir `external_subject` no schema E o emissor local ainda for o
+        único caminho de autenticação, então a transição está inconsistente e o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        O modelo de identidade própria (emissão local ES256, verificação de credencial no core-api)
+        MUST continuar funcionando como estado TRANSITÓRIO até o corte do ADR-0055 (issue #603).
+        MUST NOT ser estendido com funcionalidade nova de autenticação.
+      rationale: |
+        Superseded pelo ADR-0055, mas é o que o código faz hoje e precisa continuar fazendo até o
+        corte. `drop` diria ao agente que o código atual está errado, o que é falso. Estreitar para
+        "transitório, não estender" é a leitura correta, e traz a condição de término embutida.
+
+  - id: ADR-0024-C2
+    text: |
+      Access token é JWT de vida curta (~15 min), assinado pelo core-api e validado stateless pelo
+      BFF, sem tocar banco.
+    kind: obligation
+    source_lines: [44, '47-49']
+    applies_to:
+      - 'src/modules/auth/adapters/crypto/*.ts'
+      - 'src/modules/auth/adapters/http/*.ts'
+    superseded_by: ADR-0055
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/crypto/token-issuer.es256.ts:30 — SignJWT({}) com payload vazio, só sub/iat/iss/exp'
+        - 'src/modules/auth/adapters/http/composition.ts:34 — o emissor ES256 é injetado na composição HTTP'
+        - 'nota: o payload vazio é o que torna o corte do ADR-0055 de baixo risco — nenhuma claim de autorização viaja hoje'
+      verify: |
+        grep -n "SignJWT\|setExpirationTime" src/modules/auth/adapters/crypto/token-issuer.es256.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado o emissor de access token, quando o payload carregar qualquer claim além de
+        `sub`/`iat`/`iss`/`exp`, então o teste falha — em especial claim de papel ou permissão.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        O access token MUST ter payload mínimo (`sub`, `iat`, `iss`, `exp`) e MUST NOT carregar claim
+        de autorização. A emissão local ES256 é transitória até o corte do ADR-0055.
+      rationale: |
+        A parte "emitido pelo core-api" é superseded; a parte "payload sem autorização" é
+        INEGOCIÁVEL e o ADR-0055 a reforça explicitamente. Estreitar preserva a segunda ao aposentar
+        a primeira.
+
+  - id: ADR-0024-C3
+    text: |
+      Refresh token é opaco, persistido apenas como `token_hash`; a renovação rotaciona (revoga o
+      antigo, emite novo) e logout ou ação administrativa revoga imediatamente.
+    kind: obligation
+    source_lines: [45, 126]
+    applies_to:
+      - 'src/modules/auth/adapters/persistence/**/*.ts'
+    superseded_by: ADR-0055
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:3 — token_hash é char(64), nunca o token em claro'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:18 — token_hash com COLLATE utf8mb4_bin, justificado: hash SHA-256 hex é ASCII'
+        - 'nota: a tabela auth_refresh_token existe entre as 9 tabelas auth_*'
+      verify: |
+        grep -n "token_hash" src/modules/auth/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma renovação de refresh, quando o token antigo continuar válido após a rotação, ou
+        quando o valor em claro aparecer em qualquer coluna, então o teste falha.
+      expected_error: 'refresh-token-revoked'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Refresh token MUST ser persistido só como hash e MUST rotacionar na renovação. O mecanismo
+        server-side é transitório até o corte do ADR-0055, que move a renovação para o IdP.
+      rationale: |
+        A invariante "nunca em claro" vale enquanto existir refresh próprio, e o ADR-0055 mantém o
+        emissor legado vivo durante a transição. Estreitar com condição de término.
+
+  - id: ADR-0024-C4
+    text: |
+      O BFF valida credencial, nunca emite. Emissão, registro, troca de senha e autorização são
+      regra de negócio e vivem no core-api.
+    kind: prohibition
+    source_lines: [128, 24, '47-49']
+    applies_to: []
+    superseded_by: ADR-0055
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'O BFF vive em repositório separado (web-app). Não verificável a partir do core-api.'
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum teste possível a partir deste repositório — o BFF é outro código-base. A alegação só
+        é falsificável de dentro do web-app.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        O BFF MUST NOT emitir credencial. Sob o ADR-0055 ele CONDUZ o fluxo OAuth (redirect, PKCE,
+        callback) e guarda tokens server-side, mas a emissão é do IdP — nunca do BFF.
+      rationale: |
+        O ADR-0055 nomeia esta invariante (`:128`) como superseded, e com razão: sob Cognito o BFF
+        passa a participar da obtenção da credencial. Mas a proibição de EMITIR sobrevive, e sob
+        bypass de RBAC ela é o que resta de controle. Substituir com a redação nova em vez de
+        descartar.
+
+  - id: ADR-0024-C5
+    text: |
+      RBAC com permissions granulares: `Permission` é branded `resource:action`, `Role` agrega
+      `readonly Permission[]`, `User` agrega `readonly Role[]`.
+    kind: obligation
+    source_lines: ['36-39']
+    applies_to:
+      - 'src/modules/auth/domain/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/domain/authorization/authorize.ts:16 — varre user.roles usando Role.hasPermission'
+        - 'nota: as tabelas auth_permission, auth_role, auth_role_permission e auth_user_role existem, papéis e permissões como linhas relacionais'
+      verify: |
+        grep -rhoE "'auth_[a-z_]+'" src/modules/auth/adapters/persistence/schemas/mysql.ts | grep -vE "_idx|_chk|_fk" | sort -u
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um usuário sem a permissão exigida, quando `authorize` é chamado, então o resultado MUST
+        ser `err('forbidden')`. Default-deny: usuário sem papel algum nunca passa.
+      expected_error: 'forbidden'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Autorização MUST ser por permissão granular `resource:action`. Papel e permissão MUST ser
+        linhas relacionais, nunca enum nem lista em código.
+      rationale: |
+        É a metade VIGENTE deste ADR — o ADR-0055 a preserva explicitamente e inteira. Adotar como
+        está.
+
+  - id: ADR-0024-C6
+    text: |
+      O serviço de autorização é PURO: recebe o agregado e nunca consulta repositório.
+    kind: obligation
+    source_lines: [40, 127]
+    applies_to:
+      - 'src/modules/auth/domain/authorization/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/domain/authorization/authorize.ts:16 — assinatura (ActiveUser, Permission) => Result, sem porta de repositório'
+        - 'nota: o arquivo importa apenas Result, Role, Permission e ActiveUser — nenhum import de adapter ou porta'
+      verify: |
+        grep -n "^import" src/modules/auth/domain/authorization/authorize.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `domain/authorization/`, quando algum arquivo importar porta de repositório ou adapter,
+        então o teste falha. Pureza é verificável pelos imports.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O serviço de autorização MUST ser função pura sobre o agregado. MUST NOT importar porta de
+        repositório nem adapter.
+      rationale: |
+        Vigente, implementado e verificável estaticamente pelos imports — candidato direto a
+        `no-restricted-imports` por glob, na linha dos 4 candidatos a enforcement que a 039 listou.
+
+  - id: ADR-0024-C7
+    text: |
+      Senha nunca trafega nem é persistida em claro; apenas `password_hash`, com argon2id no adapter.
+    kind: prohibition
+    source_lines: [125, 61]
+    applies_to:
+      - 'src/modules/auth/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:116 — coluna password_hash varchar(255), nullable'
+        - 'src/modules/auth/adapters/crypto/password-hasher.argon2.ts:2 — adapter argon2id via hash-wasm, outputType encoded (PHC)'
+        - 'src/modules/auth/adapters/crypto/password-hasher.fake.ts:4 — o fake declara explicitamente que NÃO é argon2 e não serve para produção'
+      verify: |
+        grep -rn "password_hash\|argon2" src/modules/auth/adapters/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o módulo auth, quando existir coluna, log ou payload de evento que carregue senha em
+        claro, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Senha MUST ser persistida apenas como hash argon2id. MUST NOT aparecer em claro em coluna,
+        log, payload de evento ou mensagem de erro.
+      rationale: |
+        Vigente e não afetada pelo ADR-0055 durante a transição. O `password-hasher.fake.ts` já
+        carrega o aviso de não-produção, o que sugere que o risco de troca acidental é conhecido.
+
+  - id: ADR-0024-C8
+    text: |
+      Tabelas do módulo usam prefixo `auth_*` dentro do database `core`, respeitando o isolamento do
+      ADR-0014.
+    kind: obligation
+    source_lines: [57]
+    applies_to:
+      - 'src/modules/auth/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'nota: 9 tabelas, todas prefixadas — auth_user, auth_role, auth_permission, auth_role_permission, auth_user_role, auth_refresh_token, auth_login_lockout, auth_password_reset, auth_outbox'
+        - 'nota: três delas (auth_login_lockout, auth_password_reset, auth_outbox) não constam da tabela do ADR — vieram de tickets posteriores e seguiram a convenção'
+      verify: |
+        grep -rhoE "'auth_[a-z_]+'" src/modules/auth/adapters/persistence/schemas/mysql.ts | grep -vE "_idx|_chk|_fk" | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema do módulo auth, quando uma tabela não começar com `auth_`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Toda tabela do módulo `auth` MUST usar prefixo `auth_`.
+      rationale: |
+        Caso concreto que sustenta a `ADR-0020-C9`: a convenção de prefixo é seguida por módulos que
+        o ADR-0020 nem nomeia. Reforça que a lista canônica de prefixos falta ser escrita, não
+        inventada.
+
+  - id: ADR-0024-C9
+    text: |
+      Sem JSON nem ENUM nativos para papéis e permissões — são linhas relacionais.
+    kind: prohibition
+    source_lines: [129, 57]
+    applies_to:
+      - 'src/modules/auth/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'nota: papéis e permissões vivem em auth_role, auth_permission e auth_role_permission, sem coluna JSON nem mysqlEnum'
+        - '.semgrep/rules.yml:11 — mysql-enum-forbidden já barra ENUM por AST'
+        - '.semgrep/rules.yml:19 — mysql-json-forbidden já barra JSON nativo por AST'
+      verify: |
+        grep -rn "mysqlEnum(\|mode: 'json'" src/modules/auth/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Já coberto pelas duas rules semgrep — a violação falha o gate de CI, não um teste próprio.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.semgrep/rules.yml']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Repetição local do que o `ADR-0020-C3` e o `ADR-0020-C5` já normatizam, e ambos já são
+        enforçados por AST. Descartar daqui evita duas fontes para uma regra — a proibição continua
+        valendo, ancorada no ADR-0020.
+
+  - id: ADR-0024-C10
+    text: |
+      Vocabulário do módulo: eventos em EN passado (`UserRegistered`, `AccessTokenRefreshed`,
+      `SessionRevoked`…) e erros em kebab-case EN (`'invalid-credentials'`, `'forbidden'`…).
+    kind: obligation
+    source_lines: ['70-73']
+    applies_to:
+      - 'src/modules/auth/domain/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/domain/authorization/authorize.ts:16 — erro tipado como literal EN kebab-case forbidden'
+        - "nota: a AuthorizeError é a union 'forbidden', exatamente a forma que o ADR prescreve"
+      verify: |
+        grep -rhoE "'[a-z]+(-[a-z]+)+'" src/modules/auth/domain/**/*.ts | sort -u | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o domínio do módulo, quando um identificador de erro não estiver em kebab-case EN, ou um
+        evento não estiver em EN passado PascalCase, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        A tabela de idioma do `AGENTS.md` é a fonte única declarada para isso — e o próprio AGENTS.md
+        diz "não replicar a tabela em outro arquivo". Descartar daqui pelo mesmo motivo que descartei
+        a `ADR-0015-C8`, mantendo consistência: quem legisla idioma é uma fonte só.
+
+  - id: ADR-0024-C11
+    text: |
+      Reavaliar quando: um IdP corporativo entrar em cena (ativar `OidcAuthenticator`, gerando ADR de
+      federação); o volume de refresh pressionar o MySQL; ou surgir requisito de ABAC além de RBAC.
+    kind: aspiration
+    source_lines: ['115-119']
+    applies_to: []
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'nota: o primeiro gatilho DISPAROU — o ADR-0055 é exatamente o "IdP corporativo entrou em cena", e cita esta linha 117 como previsão cumprida'
+        - 'handbook/architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md:34 — o ADR-0055 cita :117 deste ADR como o caminho previsto'
+      verify: |
+        grep -n "0024" handbook/architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md | head -4
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Gatilho de reavaliação não é regra de edição — não há teste. Registrado porque o primeiro
+        gatilho disparou e o ADR sucessor o cita, o que é o exemplo positivo do padrão.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Cumpriu a função: o gatilho disparou e gerou o ADR-0055, que o cita nominalmente. Não vira
+        regra. Vale como contraprova do achado do lote 1 — aqui a supersessão PRESERVOU o raciocínio,
+        porque o sucessor foi buscar o gatilho no antecessor.
+
+findings:
+  - |
+    A `.claude/rules/auth-module.md:9` afirma como norma vigente que "federação não foi descartada —
+    foi adiada", citando este ADR. A federação foi DECIDIDA pela diretoria no ADR-0055 em 2026-07-29.
+    Nenhuma das 12 rules menciona Cognito ou o ADR-0055. Um agente que edite `src/modules/auth/`
+    hoje recebe a rule que carrega o modelo superseded e nenhuma menção ao que o substitui.
+  - |
+    O ADR-0055 não aparece em nenhum ponto da destilação da spec 039, que declara "44 de 44 julgados
+    (100%)" e "todos os 54 ADRs têm veredito registrado". O ADR é de 2026-07-29; a destilação foi
+    commitada em 2026-07-31. Mesma classe do achado da citação em massa do ADR-0012 que a própria
+    039 documentou — só que desta vez a lacuna é dela.
+  - |
+    Prova de que a supersessão parcial precisa ser por alegação: quatro das onze alegações deste ADR
+    estão superseded e sete estão vigentes. Um `superseded_by` no nível do documento obrigaria a
+    escolher entre matar o RBAC implementado ou ressuscitar a autenticação substituída.
+  - |
+    As quatro alegações superseded ficaram `narrow`/`replace`, não `drop`, porque o corte do ADR-0055
+    não começou: `external_subject` e `aws-jwt-verify` não existem no código. Norma substituída que
+    ainda governa o código é estado legítimo de transição — e é exatamente o que um formato de
+    "declarado × realidade × regra" consegue expressar e um markdown de rule não.
+  - |
+    `token_hash char(64)` traz `COLLATE utf8mb4_bin` com justificativa escrita no schema
+    (`mysql.ts:18`: hash SHA-256 hex é ASCII, `bin` evita comparação case-insensitive). É o critério
+    que a `ADR-0014-C8` propõe como regra geral, existindo isolado num módulo. O critério existe na
+    cabeça de quem escreveu; falta virar norma.
+  - |
+    Imprecisão menor no ADR-0055: a linha 18 afirma "126 arquivos de teste no módulo auth". Medido em
+    2026-07-31, `find tests/modules/auth -name '*.test.ts'` devolve **110**. Número usado como
+    argumento de maturidade da implementação — vale conferir antes de repetir.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O acervo tem ~40 tickets AUTH-* e USR-* diretamente ligados a este ADR, nenhum lido nesta fase.
+    A issue #603 (briefing de implementação do ADR-0055) e a issue #515 (inicialização com chave
+    efêmera, bloqueante do corte) são citadas pelo ADR-0055 e não foram abertas. Preencher na Fase 3.

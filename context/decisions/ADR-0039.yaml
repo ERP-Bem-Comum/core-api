@@ -1,0 +1,353 @@
+id: ADR-0039
+title: Ciclo de vida do Contrato — estado terminal `Cancelled` (5 estados)
+source: handbook/architecture/adr/0039-contract-cancelled-state.md
+decided_on: 2026-06-09
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0023, ADR-0046]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Décimo segundo `realized`, e o mais literal do inventário em matéria de persistência: os TRÊS CHECKs
+    revisados estão no schema com a expressão exata que o ADR escreve, e o comentário da linha 127 cita
+    "ADR-0023/0039" — a cadeia dos dois ADRs que definem os cinco estados.
+    O tipo refinado é o que o ADR desenha, incluindo a distinção fina que é o coração da decisão:
+    `types.ts:122` declara `CancelledContract = ContractRegistration & Readonly<{ status: 'Cancelled';
+    endedAt: Date }>` — estende só `ContractRegistration`, **não** `EffectiveContractCore`, e o docstring
+    da linha 117 explica por quê ("NÃO tem vigência efetiva"). É o oposto da alternativa (A) rejeitada:
+    tipo, não flag nulável.
+    A borda também fecha: `cancelContract` existe como use case (`composition.ts:324`), e
+    `plugin.ts:76,82` mapeia `contract-not-pending`/`ContractNotPending` para 409, com o comentário da
+    linha 81 citando o ADR.
+    Uma imprecisão do próprio ADR, e é datada: as consequências dizem que a mudança toca "o agregado
+    central + persistência + mappers + public-api + borda + **CLI**". O `ADR-0037` aposentou a CLI
+    embutida **dois dias antes** (2026-06-07), e `src/modules/contracts/cli` não existe.
+
+extraction:
+  state: complete
+  covers: |
+    6 alegações — a decisão do 5º estado, os três itens de modelagem (tipo refinado, transição,
+    evento), a invariante RN-CV-03, os CHECKs de persistência e o contrato da borda. As duas alternativas
+    rejeitadas viram a proibição da C2 (optional-as-state) e a razão do evento próprio na C4.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/contracts-module.md']
+    gap: |
+      Destilou o ciclo de vida de cinco estados junto com o `ADR-0023`, que é o agrupamento certo — os
+      dois formam uma máquina de estado só.
+      O que não registrou: os CHECKs bicondicionais são a parte MECANIZADA da decisão, e já valem como
+      `enforced_by`. Uma rule que repita "Cancelled não tem vigência" em prosa duplica o que o banco
+      recusa — cai no Teste B da própria 039 ("já é mecânico?").
+
+claims:
+  - id: ADR-0039-C1
+    text: |
+      O ciclo de vida do `Contract` ganha um 5º estado TERMINAL `Cancelled`, alcançável APENAS a partir de
+      `Pending`. Contratos já efetivados (`Active`/`Expired`/`Terminated`) permanecem IMUTÁVEIS.
+    kind: obligation
+    source_lines: [25, '31-41']
+    applies_to:
+      - 'src/modules/contracts/domain/contract/types.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/domain/contract/types.ts:136 — | CancelledContract fecha a união do agregado'
+        - 'src/modules/contracts/domain/contract/types.ts:154 — docstring das transições: `Pending` → `Cancelled` (via `Contract.cancel` — ADR-0039)'
+        - 'src/modules/contracts/domain/contract/types.ts:159 — `Cancelled` → terminal, sem transição de saída'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:121 — o CHECK de status lista os cinco valores: IN (Pending, Active, Expired, Terminated, Cancelled)'
+      verify: |
+        grep -n "Cancelled" src/modules/contracts/domain/contract/types.ts | head -6
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um contrato `Active`, `Expired`, `Terminated` ou `Cancelled`, quando se tenta cancelar, então
+        MUST falhar. Dado um `Pending`, MUST suceder. E `Cancelled` MUST NÃO ter transição de saída.
+      expected_error: 'ContractNotPending'
+      blocker: null
+      enforced_by: ['src/modules/contracts/adapters/persistence/schemas/mysql.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Estado terminal MUST NOT ter transição de saída. Acrescentar estado à máquina MUST atualizar o
+        CHECK de `status` no schema na mesma mudança.
+      rationale: |
+        A segunda frase é o que o repo faz bem e vale fixar: o CHECK do banco lista os cinco valores, e
+        acrescentar um sexto ao domínio sem tocar o CHECK produz falha de INSERT em runtime, não erro de
+        compilação. É a única camada onde a máquina de estado não é verificada pelo TypeScript.
+
+  - id: ADR-0039-C2
+    text: |
+      Novo tipo refinado `CancelledContract` (`status: 'Cancelled'`): carrega `ContractRegistration` mais
+      `endedAt: Date`. NÃO carrega vigência efetiva (`signedAt`/`currentValue`/`currentPeriod`/
+      `homologatedAmendmentIds`) — nasce de um `PendingContract`, que nunca teve efetividade. Distingue-se
+      de `Expired`/`Terminated` exatamente nisso: aqueles estendem `EffectiveContractCore`, `Cancelled`
+      estende só `ContractRegistration`. REJEITADA a flag `cancelledAt` nullable — reintroduz
+      optional-as-state.
+    kind: obligation
+    source_lines: ['51-55', '104-107']
+    applies_to:
+      - 'src/modules/contracts/domain/contract/types.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - "src/modules/contracts/domain/contract/types.ts:122 — export type CancelledContract = ContractRegistration & Readonly<{ status: 'Cancelled'; endedAt: Date }>"
+        - 'src/modules/contracts/domain/contract/types.ts:117 — docstring: (instante do cancelamento) — NÃO tem vigência efetiva (signedAt/currentValue/…)'
+        - 'src/modules/contracts/domain/contract/types.ts:120 — `Cancelled` estende só `ContractRegistration`, a distinção explícita de Expired/Terminated'
+        - 'ausência: nenhum campo cancelledAt nullable no agregado — a alternativa (A) não foi adotada'
+      verify: |
+        grep -n "CancelledContract" -B 6 src/modules/contracts/domain/contract/types.ts | head -12
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `CancelledContract`, quando ele expuser `signedAt` ou `currentValue`, então o typecheck falha.
+        E MUST NÃO existir campo `cancelledAt` nullable no agregado — estado é tipo, não flag.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Estado do agregado MUST ser tipo refinado na união, nunca campo nulável. MUST NOT haver
+        `<estado>At` nullable cuja presença represente o estado (optional-as-state). O tipo do estado
+        terminal MUST expor apenas os campos que aquele estado realmente tem.
+      rationale: |
+        A terceira frase é a lição própria deste ADR e não estava nas regras: `Cancelled` **não** estende
+        `EffectiveContractCore`, e por isso é impossível ler `signedAt` de um contrato cancelado — o
+        compilador recusa. Sem essa separação, o tipo carregaria quatro campos que são sempre nulos, e
+        cada consumidor precisaria decidir o que fazer com eles. Modelar o estado terminal pelo que ele
+        NÃO tem é mais forte que modelá-lo pelo que ele tem.
+
+  - id: ADR-0039-C3
+    text: |
+      Nova transição `Contract.cancel`: `PendingContract → CancelledContract` (assina `endedAt`). O
+      parâmetro `PendingContract` garante EM COMPILE TIME que só rascunhos são canceláveis (espelha
+      `activate`/`expire`/`terminate`). `Contract.parsePending` é o refinement constructor (espelha
+      `parseActive`).
+    kind: obligation
+    source_lines: ['56-59']
+    applies_to:
+      - 'src/modules/contracts/domain/contract/contract.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/domain/contract/types.ts:154 — a transição é nomeada no docstring da máquina: via `Contract.cancel` — ADR-0039'
+        - 'src/modules/contracts/application/use-cases/cancel-contract.ts — o use case existe e é registrado em adapters/http/composition.ts:324'
+        - 'src/modules/contracts/adapters/http/composition.ts:44 — import { cancelContract } from ../../application/use-cases/cancel-contract.ts'
+        - 'nota: o padrão de refinement constructor é o mesmo do parseActive citado no ADR-0047-C6 (User.parseActive) — é convenção estabelecida no repo, não invenção deste ADR'
+      verify: |
+        grep -rn "parsePending\|cancel" src/modules/contracts/domain/contract/contract.ts | head -5
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `Contract.cancel`, quando invocado com um `Contract` não refinado (a união inteira), então o
+        typecheck falha. A garantia MUST ser de compile time, não runtime — se a assinatura aceitar
+        `Contract` e validar por dentro, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Transição de estado MUST receber o tipo REFINADO do estado de origem, nunca a união do agregado. A
+        checagem MUST ser de compile time; validação de estado dentro do corpo da transição MUST NOT
+        substituí-la.
+      rationale: |
+        É o padrão que dá ao módulo `contracts` a propriedade mais valiosa que o inventário encontrou:
+        transição inválida não compila. Escrever `cancel(c: Contract)` e checar `if (c.status !==
+        'Pending')` por dentro passa em todo teste e move o erro para runtime — a diferença é invisível
+        no comportamento e enorme na garantia. Vale como regra porque a assinatura permissiva é sempre
+        mais fácil de escrever.
+
+  - id: ADR-0039-C4
+    text: |
+      Novo evento `ContractCancelled` (`{ type, contractId, occurredAt }`, EN passado), DISTINTO de
+      `ContractEnded` — um rascunho cancelado não é um contrato vigente que encerrou. REJEITADO reusar
+      `ContractEnded(kind:'Cancelled')`: a timeline mostraria "Encerrado" e todo consumidor precisaria de
+      special-case.
+    kind: obligation
+    source_lines: ['60-62', '109-113']
+    applies_to:
+      - 'src/modules/contracts/domain/contract/events.ts'
+      - 'src/modules/contracts/public-api/events.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - "src/modules/contracts/domain/contract/events.ts:11 — | { type: 'ContractCancelled'; contractId: ContractId; occurredAt: Date }, com a forma exata do ADR"
+        - "src/modules/contracts/public-api/events.ts:48 — 'ContractCancelled' está na lista de eventos expostos pela public-api"
+        - 'nota: é evento próprio e não variante de ContractEnded — a alternativa (B) não foi adotada'
+        - 'nota: o ADR-0046-C3 conta com ContractCancelled no contrato de contagem (subtrai −1), o que confirma que o evento atravessa a fronteira de integração'
+      verify: |
+        grep -rn "ContractCancelled" src/modules/contracts/domain/contract/events.ts src/modules/contracts/public-api/events.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado o cancelamento de um rascunho, quando os eventos são coletados, então MUST conter
+        `ContractCancelled` e MUST NÃO conter `ContractEnded`. Se a timeline exibir "Encerrado" para um
+        cancelado, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Fato de domínio semanticamente distinto MUST ter evento próprio. MUST NOT ser modelado como
+        variante (`kind`) de evento existente quando o consumidor precisaria de special-case para
+        distingui-los.
+      rationale: |
+        O critério de decisão que o ADR usa é o melhor que o inventário viu para essa escolha recorrente:
+        **se todo consumidor precisar de special-case, o evento é outro.** E o custo foi medido — "evento
+        próprio é mais claro pelo custo mecânico de um payload a mais". A previsão se confirmou: o
+        `ADR-0046` consome `ContractCancelled` na contagem sem precisar inspecionar `kind`.
+
+  - id: ADR-0039-C5
+    text: |
+      RN-CV-03 (nova invariante): apenas `PendingContract` é cancelável. Tentar cancelar
+      `Active`/`Expired`/`Terminated`/`Cancelled` → erro de estado (`ContractNotPending` no domínio;
+      409 na borda HTTP). `DELETE /contracts/:id` deixa de ser 405 incondicional:
+      Pending → 200; não-Pending → 409 `contract-not-pending`; inexistente → 404; auth `contract:write`.
+      A rota NÃO apaga a row — faz transição de estado. Exclusão física segue PROIBIDA.
+    kind: obligation
+    source_lines: ['66-67', '76-78']
+    applies_to:
+      - 'src/modules/contracts/adapters/http/plugin.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - "src/modules/contracts/adapters/http/plugin.ts:76 — 'contract-not-pending' na lista de tags mapeadas para 409"
+        - "src/modules/contracts/adapters/http/plugin.ts:82 — 'ContractNotPending' também mapeado"
+        - 'src/modules/contracts/adapters/http/plugin.ts:81 — comentário: ADR-0039: cancelar contrato não-Pendente → 409 (tag do ContractError)'
+        - 'src/modules/contracts/adapters/http/plugin.ts:73 — Conflito de estado/transição/unicidade → 409, a convenção geral da borda'
+        - 'src/modules/contracts/adapters/http/composition.ts:324 — cancelContract({ contractRepo: pools.contractWriterRepo, clock }) — a rota chama o use case, não um delete'
+      verify: |
+        grep -n "contract-not-pending\|ContractNotPending\|ADR-0039" src/modules/contracts/adapters/http/plugin.ts
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado um contrato `Active`, quando `DELETE /contracts/:id`, então MUST responder 409 e a row MUST
+        continuar existindo. Dado um `Pending`, MUST responder 200 e a row MUST persistir com
+        `status='Cancelled'` — não removida.
+      expected_error: 'contract-not-pending'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `DELETE` de recurso imutável MUST executar transição de estado, nunca remoção física. Recurso em
+        estado não-transicionável MUST responder 409 (conflito de estado), não 405.
+      rationale: |
+        A distinção 405 × 409 é o que a decisão realmente muda e é fácil de errar: 405 diz "este método
+        não existe aqui" e 409 diz "existe, mas não neste estado" — e o front reage diferente aos dois
+        (o botão desabilitado do contexto vinha justamente do 405 incondicional). Junto com o
+        `ADR-0035-C2` (nunca DELETE em entidade de domínio), forma a política completa: a rota existe, o
+        verbo é `DELETE`, e o efeito é soft.
+
+  - id: ADR-0039-C6
+    text: |
+      Persistência: os CHECKs do schema são REVISADOS —
+      `status ∈ {Pending,Active,Expired,Terminated,Cancelled}`;
+      `ended_at IS NOT NULL ⟺ status ∈ {Expired,Terminated,Cancelled}`;
+      `(status ∈ {Pending,Cancelled}) ⟺ (signed_at IS NULL AND current_* IS NULL)`.
+    kind: obligation
+    source_lines: ['68-72']
+    applies_to:
+      - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - "src/modules/contracts/adapters/persistence/schemas/mysql.ts:121 — sql`status IN ('Pending','Active','Expired','Terminated','Cancelled')`"
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:132 — sql`(status IN (Pending,Cancelled)) = (signedAt IS NULL AND currentValueCents IS NULL AND currentPeriodKind IS NULL AND currentPeriodStart IS NULL)`'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:147 — sql`(endedAt IS NOT NULL) = (status IN (Expired,Terminated,Cancelled))`'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:127 — comentário: ADR-0023/0039: bicondicional `sem vigência efetiva ⟺ Pending OU Cancelled`'
+        - 'nota: o operador = em MySQL sobre predicados é o bicondicional — a mesma técnica do CHECK de soft-delete do ADR-0035-C2'
+      verify: |
+        grep -n "Cancelled" src/modules/contracts/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um INSERT com `status='Cancelled'` e `signed_at` preenchido, então o banco MUST recusar. Dado
+        `status='Cancelled'` sem `ended_at`, MUST recusar. Os CHECKs são o RED — o teste só precisa
+        tentar gravar o estado impossível.
+      expected_error: null
+      blocker: null
+      enforced_by: ['src/modules/contracts/adapters/persistence/schemas/mysql.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Estado do agregado MUST ter CHECK BICONDICIONAL no schema amarrando estado × campos obrigatórios e
+        nulos. Acrescentar estado MUST revisar os bicondicionais existentes, não só a lista de valores.
+      rationale: |
+        A segunda frase é a que o ADR executou e vale generalizar: acrescentar `Cancelled` exigiu mexer em
+        TRÊS CHECKs, não em um — a lista de status e os dois bicondicionais. Quem só acrescenta o valor à
+        lista deixa o banco aceitando um `Cancelled` com vigência efetiva, que é um estado que o
+        TypeScript prova impossível e o banco passaria a permitir. Terceiro caso no inventário de CHECK
+        bicondicional (com `ADR-0035` e `ADR-0023`) — é técnica estabelecida aqui.
+
+findings:
+  - |
+    **O ADR mais literalmente implementado do inventário na camada de persistência.** As três expressões
+    de CHECK do §Persistência estão no schema com a mesma forma, e o comentário de `mysql.ts:127` cita
+    "ADR-0023/0039". Vale notar a técnica: o operador `=` do MySQL sobre dois predicados é um
+    bicondicional, e o repo o usa em três lugares independentes (`ADR-0023`, `ADR-0035`, este) para
+    amarrar estado × nulidade. É a única invariante de domínio deste acervo que o banco recusa fisicamente.
+  - |
+    **Modelar o estado terminal pelo que ele NÃO tem é o achado transferível.** `CancelledContract` estende
+    `ContractRegistration` e **não** `EffectiveContractCore` — logo é impossível ler `signedAt` de um
+    contrato cancelado, porque o campo não existe no tipo. A alternativa natural (estender o mesmo core e
+    deixar quatro campos sempre nulos) passa em qualquer teste e empurra a decisão para cada consumidor.
+    O ADR chama isso de evitar optional-as-state, e a formulação forte é: o tipo do estado terminal expõe
+    só o que aquele estado tem.
+  - |
+    **O critério "se todo consumidor precisar de special-case, o evento é outro" se confirmou na prática.**
+    O ADR rejeitou `ContractEnded(kind:'Cancelled')` prevendo que "todo consumidor de `ContractEnded`
+    precisaria de special-case não-realmente-encerrado". Oito dias depois, o `ADR-0046` consumiu
+    `ContractCancelled` no contrato de contagem (subtrai −1) sem inspecionar `kind` nenhum. Previsão de
+    consequência que se verificou — raro o suficiente para registrar.
+  - |
+    **O ADR lista "CLI" entre as camadas que toca, dois dias depois de a CLI ser aposentada.** As
+    consequências negativas dizem "Toca o agregado central + persistência (CHECKs/migration) + mappers +
+    public-api + borda + **CLI**", e o `ADR-0037` (2026-06-07) aposentou a CLI embutida — hoje
+    `src/modules/contracts/cli` não existe. Não afeta nada do que foi decidido; é sintoma de ADR escrito
+    a partir do molde mental anterior, dois dias após a decisão que o invalidou. Sinal de que
+    aposentadoria recente não se propaga nem entre ADRs da mesma semana.
+
+provenance:
+  tickets:
+    - CTR-HTTP-CANCEL-PENDING
+  issues: []
+  note: |
+    O ADR cita o ticket `handbook/tickets/done/CTR-HTTP-CANCEL-PENDING.md` (origem, vindo de handoff do
+    front) e menciona atualizar `gestao-contratos.md` e o `CHANGELOG.md` — nenhum dos três lido nesta
+    fase. A autoridade declarada é a P.O. para a regra de negócio.

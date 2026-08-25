@@ -1,0 +1,251 @@
+id: ADR-0027
+title: Zod + zod-openapi como contract-first da borda HTTP
+source: handbook/architecture/adr/0027-zod-openapi-contract-first-http-edge.md
+decided_on: 2026-05-27
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0011, ADR-0023, ADR-0024, ADR-0025, ADR-0028]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Segundo ADR do inventário com veredito `realized`, e o mais bem cumprido de todos. As quatro
+    invariantes normativas conferem:
+    A fronteira do Zod tem **adesão total** — 16 arquivos importam `zod/v4` e todos estão em
+    `adapters/http/` ou `shared/http/`, zero violações. É o candidato #1 a enforcement da spec 039 e
+    segue sem rede mecânica.
+    O OpenAPI é gerado dos schemas, com alvo 3.1.1 declarado no código
+    (`src/shared/http/app.ts:144-149`) e citando o ADR no comentário.
+    As CINCO dependências da borda estão **todas pinadas** (`zod@4.4.3`, `zod-openapi@5.4.6`,
+    `fastify-zod-openapi@5.6.1`, `@fastify/swagger@9.7.0`, `@fastify/swagger-ui@5.2.6`) — contraste
+    direto com `mysql2`, `@aws-sdk/client-s3` e `nodemailer`, que o `ADR-0011-C3` pede pinadas e não
+    estão. Este ADR exigiu o pin explicitamente e foi cumprido.
+    Detalhe de implementação que muda a regra de enforcement: o especificador real é **`zod/v4`**, não
+    `zod`. Um `no-restricted-imports` que só barre `zod` não pega nada.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — as quatro invariantes normativas da §"Invariantes". A divisão de responsabilidade
+    Zod × smart constructor está extraída na terceira.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA + RULE NOVA — originou a .claude/rules/http-edge.md
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Melhor destilação individual da 039. Extraiu quatro aprendizados e marcou o quarto como "o mais
+      valioso do lote": a sobreposição Zod × smart constructor é DELIBERADA, e sem isso numa rule "um
+      refactor limpa a duplicação aparente e derruba a validação de shape na borda". Também registrou
+      o refinamento entre ADRs — o `0027` diz `adapters/http/`, o `0028` estende para `src/shared/http/`,
+      e a rule adota o escopo do mais recente.
+      E identificou o enforcement candidato correto (`no-restricted-imports` por glob). O que faltou é
+      o detalhe que o faz funcionar: o import é `zod/v4`.
+
+claims:
+  - id: ADR-0027-C1
+    text: |
+      Zod vive EXCLUSIVAMENTE em `adapters/http/` (estendido por ADR-0028 para incluir
+      `src/shared/http/`). Domínio e application NUNCA importam Zod.
+    kind: prohibition
+    source_lines: [30, 95]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+      - 'src/shared/http/**/*.ts'
+      - 'src/modules/*/domain/**/*.ts'
+      - 'src/modules/*/application/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - "nota: 16 arquivos importam from 'zod/v4', TODOS em adapters/http/ ou shared/http/ — zero violações"
+        - 'ausência: nenhum import de zod fora dessas duas camadas'
+        - "nota: o especificador é 'zod/v4', não 'zod' — Zod v4 dual-package; uma regra de lint que barre só 'zod' não pega nada"
+      verify: |
+        grep -rlE "from 'zod(/v4)?'" src/ --include='*.ts' | grep -vE "adapters/http/|shared/http/"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/`, quando um arquivo fora de `adapters/http/` ou `shared/http/` importar `zod/v4`,
+        então o teste falha. O RED passa hoje em 100% — protege o futuro sem exigir refactor.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        `zod/v4` MUST ser importado apenas em `src/modules/*/adapters/http/` e `src/shared/http/`.
+        `domain/` e `application/` MUST NOT importar Zod. O padrão de bloqueio MUST cobrir `zod` e
+        `zod/*`.
+      rationale: |
+        Estreitado em dois pontos, ambos vindos da verificação: o escopo inclui `src/shared/http/`
+        (extensão do `ADR-0028`, que o texto original não tem), e o padrão de bloqueio precisa cobrir o
+        subpath — o import real é `zod/v4`. É o candidato #1 a enforcement da 039, com adesão total e
+        zero proteção: mesmo perfil da `ADR-0006-C4` e da `ADR-0025-C1`.
+
+  - id: ADR-0027-C2
+    text: |
+      O documento OpenAPI é GERADO dos schemas Zod, nunca escrito à mão. Alvo 3.1.1 — `zod-openapi`
+      suporta apenas 3.1.0/3.1.1. O `openapi.yaml` legado (3.0.3) deixa de ser alvo e passa a ser
+      referência de migração.
+    kind: obligation
+    source_lines: ['36-40', 96]
+    applies_to:
+      - 'src/shared/http/app.ts'
+      - 'handbook/api_documentations/**'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'src/shared/http/app.ts:2 — buildApp descrito como factory com Zod contract-first e OpenAPI 3.1.1'
+        - 'src/shared/http/app.ts:5 — comentário cita o ADR-0027 nominalmente: Zod exclusivo nesta camada, OpenAPI gerado dos schemas, alvo 3.1.1'
+        - 'src/shared/http/app.ts:144 — bloco OpenAPI 3.1.1 marcado DEV-ONLY'
+        - 'nota: o marcador DEV-ONLY é detalhe não previsto pelo ADR — o documento é gerado, mas não servido em produção'
+      verify: |
+        grep -n "3.1.1\|openapi:" src/shared/http/app.ts | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o shell de borda, quando o documento OpenAPI for lido de arquivo em vez de gerado dos
+        schemas, ou quando a versão declarada sair de 3.1.x, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O OpenAPI MUST ser gerado dos schemas Zod, com versão 3.1.x. MUST NOT ser mantido à mão nem
+        lido de arquivo versionado como contrato vivo.
+      rationale: |
+        Cumprida e com o ADR citado no código, o que torna a verificação um grep. É a regra que impede
+        o retorno do problema que originou o ADR — o `openapi.yaml` 3.0.3 mantido à mão, "fonte
+        garantida de drift entre doc e comportamento real".
+
+  - id: ADR-0027-C3
+    text: |
+      Divisão de responsabilidade, não redundância: Zod valida o ENVELOPE (shape, 400 antes do use
+      case) e serializa a resposta; smart constructors validam INVARIANTE DE NEGÓCIO e retornam
+      `Result`. A sobreposição parcial é DELIBERADA — não é violação de DRY.
+    kind: obligation
+    source_lines: ['31-34', 60, 97]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+      - 'src/modules/*/domain/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, contracts, financial, partners, programs]
+      absent_in: []
+      evidence:
+        - 'nota: os dois níveis coexistem — 16 arquivos de borda com schema Zod, e smart constructors no domínio retornando Result (ex.: auth/domain/authorization/authorize.ts:16)'
+        - 'ausência: nenhum caso encontrado de handler que dispense o smart constructor confiando no Zod'
+        - "nota: o próprio ADR chama a sobreposição de intencional — 'É intencional, não DRY-violation'"
+      verify: |
+        grep -rl "zod/v4" src/modules/*/adapters/http/ --include='*.ts' | wc -l
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado um payload com shape válido e valor que viola regra de negócio, quando enviado, então a
+        resposta MUST ser 4xx vinda do smart constructor — não 200. Se passar, o handler está confiando
+        no Zod para validar regra.
+      expected_error: null
+      blocker: |
+        Exige um caso por rota, e o RED só aparece onde o smart constructor foi omitido. Uma varredura
+        estática não distingue "não precisa de smart constructor" de "esqueceu".
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Zod MUST validar apenas shape e serialização. Regra de negócio MUST ser validada por smart
+        constructor no domínio, retornando `Result`. A sobreposição entre os dois é deliberada e
+        MUST NOT ser "simplificada".
+      rationale: |
+        A 039 marcou este como o aprendizado mais valioso do lote dela, e por razão certa: sem a regra
+        escrita, a sobreposição parece duplicação e um refactor de limpeza derruba a validação de shape
+        na borda. É a única das quatro invariantes cujo valor está em IMPEDIR uma refatoração, não em
+        exigir uma construção.
+
+  - id: ADR-0027-C4
+    text: |
+      As dependências da borda (`zod`, `zod-openapi`, `fastify-zod-openapi`, `@fastify/swagger`,
+      `@fastify/swagger-ui`) entram via pnpm com `approve-builds`, versões PINADAS, auditadas no PR que
+      instala.
+    kind: obligation
+    source_lines: [44, 98]
+    applies_to:
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'package.json:114 — zod em 4.4.3, pinada'
+        - 'package.json:115 — zod-openapi em 5.4.6, pinada'
+        - 'package.json:107 — fastify-zod-openapi em 5.6.1, pinada'
+        - 'package.json:102 — @fastify/swagger em 9.7.0, pinada; :103 — @fastify/swagger-ui em 5.2.6, pinada'
+        - 'nota: cinco de cinco pinadas, contra três deps críticas SEM pin apontadas no ADR-0011-C3'
+      verify: |
+        node -e "const d=require('./package.json').dependencies;for(const k of ['zod','zod-openapi','fastify-zod-openapi','@fastify/swagger','@fastify/swagger-ui'])console.log(k,d[k])"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando dependência da borda carregar `^` ou `~`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é caso particular da regra geral proposta na `ADR-0011-C3` (dep de função
+        crítica MUST ser pinada). Vale como EVIDÊNCIA de que a regra funciona quando o ADR a exige
+        nominalmente — este ADR exigiu, e cinco de cinco foram pinadas.
+
+findings:
+  - |
+    ADR mais bem cumprido do inventário: quatro de quatro invariantes `holds`, e o código CITA o ADR no
+    ponto de aplicação (`src/shared/http/app.ts:5`). Mesmo padrão que fez o `ADR-0050` ser o mais bem
+    implementado — quando a decisão está referenciada onde ela morde, verificar custa um grep.
+  - |
+    Detalhe que muda a regra de enforcement: o especificador real é **`zod/v4`**, não `zod`. Um
+    `no-restricted-imports` que barre apenas `zod` não pegaria nenhum dos 16 arquivos. Meu primeiro grep
+    devolveu "0 arquivos com zod" e era falso-negativo — o mesmo tipo de erro que o `adapters.md` cometeu
+    com `grep createPool`.
+  - |
+    Contraste direto e útil com o `ADR-0011-C3`: as CINCO deps que ESTE ADR mandou pinar estão pinadas;
+    as três deps críticas que o `ADR-0011` mandou pinar sem definir o critério (`mysql2`,
+    `@aws-sdk/client-s3`, `nodemailer`) não estão. A diferença não é disciplina — é que aqui a lista era
+    nominal e lá era "deps críticas".
+  - |
+    O OpenAPI é gerado mas marcado **DEV-ONLY** (`app.ts:144`), decisão que o ADR não previu. Faz
+    sentido (não expor superfície de documentação em produção), mas significa que a "documentação viva
+    da API" que o ADR lista como consequência positiva não está disponível no ambiente onde a API roda.
+    Vale confirmar se é intencional.
+
+provenance:
+  tickets:
+    - CTR-PERIOD-PLAIN-DATE-SCHEMA
+    - FIN-STRICT-RESPONSE-SCHEMAS
+    - HTTP-SEC-HARDENING
+    - HTTP-SWAGGER-GUARD
+  issues: []
+  note: |
+    O acervo tem HTTP-SWAGGER-GUARD, CTR-PERIOD-PLAIN-DATE-SCHEMA, FIN-STRICT-RESPONSE-SCHEMAS e
+    HTTP-SEC-HARDENING — nenhum lido. O `zod-expert` é o agente pareado com o `fastify-server-expert`
+    para revisão dos schemas de borda, conforme o AGENTS.md.

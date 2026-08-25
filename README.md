@@ -4,7 +4,7 @@ Backend do ERP Bem Comum, modelado como **modular monolith**. Vários módulos d
 
 > **Stack:** Node.js 24 LTS · TypeScript 6.0 (roadmap TS 7 / compilador nativo — ADR-0009) · ESM (`"type": "module"`, `NodeNext`) · pnpm 11 · Drizzle ORM 0.45 + mysql2 3.22 (MySQL 8.4 — ADR-0020) · **borda HTTP Fastify 5** com Zod **contract-first** + OpenAPI 3.1 (ADR-0025/0027) · storage S3/MinIO (ADR-0019) · auth próprio com JWT ES256 via `jose` (ADR-0024).
 >
-> **Source of Truth:** [`handbook/`](./handbook/) (`handbook/architecture/adr/` vence tudo). Contexto canônico em [`AGENTS.md`](./AGENTS.md) (o `CLAUDE.md` é stub que o importa). Orquestrador, agentes e skills em [`./.claude/`](./.claude/).
+> **Source of Truth:** [`handbook/`](./handbook/) (`handbook/architecture/adr/` vence tudo). Contexto canônico em [`CLAUDE.md`](./CLAUDE.md). Orquestrador, agentes e skills em [`./.claude/`](./.claude/).
 >
 > **Regras invariantes:** sempre `pnpm`, nunca `npm` (ADR-0012) · borda HTTP é a UX primária; **a CLI embutida foi retirada** (ADR-0037) — validação E2E é feita via Bruno (ADR-0034/0038).
 
@@ -27,7 +27,7 @@ Seis Bounded Contexts sob `src/modules/`, cada um com a mesma anatomia (`domain/
 
 ## 🏗️ Estrutura
 
-Identificadores em **EN** (regra invariante de `AGENTS.md §"Idioma"`). Strings ao humano e mensagens de erro formatadas em PT.
+Identificadores em **EN** (regra invariante de `CLAUDE.md §"Idioma"`). Strings ao humano e mensagens de erro formatadas em PT.
 
 ```
 src/
@@ -66,9 +66,9 @@ src/
     ├── financial/supplier-view-backfill/  backfill do read-model de fornecedor
     └── migrate/                         aplica migrations Drizzle
 
-tests/                                   bdd · e2e · modules · workers · jobs · infra · etl · regression · shared · pipeline …
+tests/                                   modules (mirror de src/) · cleanup (invariantes estruturais) · e2e · etl · infra · workers · jobs …
 db/drizzle/                              configs do drizzle-kit por módulo (contracts, auth, partners, programs, financial, notifications)
-scripts/                                 ci · e2e (Bruno) · etl · pipeline · seed · setup
+scripts/                                 ci · claude · e2e (Bruno) · etl · financial · handbook · seed · setup
 
 handbook/                                Source of Truth — interno ao repo
 ├── architecture/adr/                    48 ADRs aceitos (IMUTÁVEIS)
@@ -78,10 +78,10 @@ handbook/                                Source of Truth — interno ao repo
 
 docs/                                    Doc consolidada IA-friendly (markdown plano) — ver também ./llms.txt
 .claude/
-├── agents/                              14 agentes especialistas (por tecnologia)
-├── skills/                              42 skills (técnicas/disciplinas)
-├── rules/                               Regras path-scoped (domain, application, adapters, testing, contracts-module, api-collections)
-├── .pipeline/                           Tickets W0→W3 (histórico auditável)
+├── agents/                              Especialistas por tecnologia
+├── skills/                              Técnicas e disciplinas aplicadas
+├── rules/                               Regras path-scoped (carregam quando o path casa)
+├── agent-memory/                        Memória entre sessões
 └── hooks/                               pre-commit-typecheck.sh, block-npm.sh, prettier-write.sh, …
 ```
 
@@ -117,7 +117,7 @@ Características da borda:
 - **Hardening** com `@fastify/helmet`, `@fastify/cors`, `@fastify/rate-limit` (limite dedicado para login/refresh).
 - **Auth/RBAC** cross-módulo: `requireAuth` + `authorize`/`hasPermission` exportados pelo `auth` protegem as rotas dos demais módulos.
 - **Read/Write split** (ADR-0026): cada módulo aceita `*_DATABASE_URL` (writer) e `*_READER_URL` (réplica; ausente → reusa o writer).
-- Drivers `memory` | `mysql` por módulo via env (`<MÓDULO>_DRIVER`); ausência de config degrada para in-memory (boot não cai).
+- Drivers `memory` | `mysql` por módulo via env (`<MÓDULO>_DRIVER`), resolvidos por uma única guarda no boot (`src/shared/persistence/module-driver-config.ts`, #456). **Em produção**, driver ausente/inválido ou `mysql` sem `*_DATABASE_URL` **derruba o boot** com exit 78 (`EX_CONFIG`), listando todos os problemas de uma vez — nunca degrada em silêncio (foi o que deixou #374 e #444 mudos). **Fora de produção**, degrada para in-memory com aviso por módulo. `memory` **explícito** é sempre aceito; em produção, avisa.
 
 ---
 
@@ -129,7 +129,7 @@ Características da borda:
 pnpm install                           # respeita pnpm-lock.yaml
 pnpm install --frozen-lockfile         # em CI
 
-# Qualidade (parte do gate W3)
+# Gate de qualidade — os quatro, nesta ordem
 pnpm run typecheck                     # tsc --noEmit (strict completo)
 pnpm run format:check                  # prettier --check .
 pnpm run lint                          # eslint . (flat config, typescript-eslint strict + type-checked)
@@ -155,13 +155,11 @@ pnpm run db:generate                   # contracts  (idem :auth :partners :progr
 # Secrets locais p/ docker-compose
 pnpm run secrets:setup                 # gera ./secrets/*.txt
 
-# Pipeline fail-first (STATE.json canônico)
-pnpm run pipeline:state init <ticket> --size S
-pnpm run pipeline:status               # dashboard de todos os tickets
-pnpm run pipeline:metrics              # agregações
+# Diário de bordo das sessões (quem caiu sem emitir SessionEnd)
+pnpm run logbook                       # idem --dead
 ```
 
-Detalhes completos: [`AGENTS.md §Comandos essenciais`](./AGENTS.md#comandos-essenciais).
+Detalhes completos: [`CLAUDE.md §Comandos não-óbvios`](./CLAUDE.md#comandos-n%C3%A3o-%C3%B3bvios).
 
 ---
 
@@ -173,10 +171,10 @@ Detalhes completos: [`AGENTS.md §Comandos essenciais`](./AGENTS.md#comandos-ess
 
 ## 🌊 Como contribuir
 
-Todo trabalho não-trivial passa pela **pipeline 4-wave fail-first** (W0 RED → W1 GREEN → W2 REVIEW → W3 QUALITY), com um ticket em `.claude/.pipeline/<TICKET-ID>/` e `STATE.json` canônico. Bug fix trivial (1-3 linhas) ou config pode ir direto.
+**Trabalho novo não abre ticket de processo:** faz a mudança, roda o gate (`typecheck` + `format:check` + `lint` + `test`), commita. Decisão nova vira ADR; achado fora de escopo vira issue. Não existe pipeline W0→W3, `STATE.json` nem wave — foram removidos em 2026-08-06.
 
-- [`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) — **ponto de entrada único**: roteia para agente especialista ou skill e orquestra as waves.
-- [`AGENTS.md`](./AGENTS.md) — regras transversais (idioma, hierarquia de fontes, anti-padrões, política de regressão zero).
+- [`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) — **ponto de entrada único**: roteia para o agente especialista ou a skill canônica.
+- [`CLAUDE.md`](./CLAUDE.md) — regras transversais (idioma, hierarquia de fontes, anti-padrões, política de regressão zero).
 - [`handbook/architecture/adr/`](./handbook/architecture/adr/) — ADRs aceitos (IMUTÁVEIS).
 
 Achado fora do escopo do ticket atual? Não conserte na hora (scope-creep): registre via skill [`issue-report`](./.claude/skills/issue-report/SKILL.md) (ADR-0040).
@@ -185,11 +183,11 @@ Achado fora do escopo do ticket atual? Não conserte na hora (scope-creep): regi
 
 ## 🤖 Painel de agentes especialistas
 
-Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/reference/) + ADRs vinculantes, invocado pelo `contratos-orchestrator` (um agente **ou** uma skill por turno).
+Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/reference/) + ADRs vinculantes, invocado pelo `contratos-orchestrator` — um agente **ou** uma skill por turno.
 
 | Agente                                                                         | Tecnologia                          | Status              |
 | ------------------------------------------------------------------------------ | ----------------------------------- | ------------------- |
-| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         | Roteamento + pipeline W0→W3         | ✅ ativo            |
+| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         | Roteamento (agente **ou** skill)    | ✅ ativo            |
 | [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md) | TypeScript 6 / type system          | ✅ ativo            |
 | [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)           | Node 24 / ESM / `node:test`         | ✅ ativo            |
 | [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                 | Drizzle ORM + Drizzle Kit           | ✅ ativo            |
@@ -204,7 +202,7 @@ Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/referen
 | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       | Segurança backend (Node/TS/Fastify) | ✅ ativo            |
 | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     | Segurança frontend (TanStack/React) | ✅ ativo            |
 
-As **42 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-adapters`, `drizzle-schema-author`, `modular-monolith`, `pipeline-maestro`, `code-reviewer`, `ts-quality-checker`, `issue-report`, a família **speckit-\*** (spec-driven), as famílias `database-*`, `tdd-*`, `clean-code-*`, `requirements-*`, `web-security-*`, e os scripters `nodejs-fs-scripter`/`nodejs-process-runner`. Tabela completa em [`AGENTS.md §Roteamento`](./AGENTS.md#roteamento-via-contratos-orchestrator).
+As skills cobrem disciplinas aplicadas — domínio, ports & adapters, schema, testes, revisão, segurança, git local, registro de achado — em [`.claude/skills/`](./.claude/skills/), descobertas nativamente pelo Claude Code, cada uma declarando quando usar. **A lista é o diretório:** nem tabela nem contagem a manter aqui.
 
 ---
 
@@ -219,9 +217,9 @@ As **42 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-a
 - **Erros são string literal unions** EN kebab-case (`'contract-not-active' | 'amendment-pending'`), não classes.
 - **MySQL 8.4 único** em dev/CI/prod via Docker compose (ADR-0020); lista normativa de features SQL permitidas/proibidas.
 - **Isolamento de módulo:** importar de outro módulo **só** via `<module>/public-api/` (nunca `domain/`/`application/` alheios) — ADR-0006.
-- **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`, `.pipeline/`) em **PT**; strings ao humano em **PT**.
+- **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`) em **PT**; strings ao humano em **PT**.
 
-Lista completa em [`AGENTS.md §"Regras invariantes — sintaxe TS"`](./AGENTS.md#regras-invariantes--sintaxe-ts) e nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
+A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` completo, `verbatimModuleSyntax` (exige `import type`), `NodeNext` + `allowImportingTsExtensions` (exige extensão `.ts`). O resto vive nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
 
 ---
 
@@ -236,18 +234,18 @@ Lista completa em [`AGENTS.md §"Regras invariantes — sintaxe TS"`](./AGENTS.m
 - **Eventos cross-módulo** via **Outbox MySQL** (ADR-0015) + **read-models por projeção** idempotente (ADR-0022/0045/0046), processados por **workers dedicados** e **oneshot jobs** (ADR-0041).
 - **Persistência** Drizzle + mysql2 sobre MySQL 8.4 único (ADR-0020), com read/write split (ADR-0026). **Storage** S3 + MinIO via `@aws-sdk/client-s3` (ADR-0019). **E-mail** transacional como evento de domínio (ADR-0047).
 - **E2E HTTP** via **Bruno** (`scripts/e2e/`, ADR-0034/0038); integração via Docker compose `--wait`.
-- **`.claude/` populado:** 14 agentes + 42 skills + tickets W0→W3 em `.pipeline/`; spec-kit em `specs/` (24 features).
+- **`.claude/` populado:** agentes por tecnologia, skills por disciplina, rules path-scoped e hooks — só primitivas nativas do Claude Code.
 
 ### 🟡 Em andamento
 
-- **`024-fin-transactional-outbox`** — outbox transacional do Financeiro (tabela `fin_outbox` espelhando `ctr_outbox`; atomicidade estado+evento na mesma transação, issue #127 / ADR-0015). Ver `specs/024-fin-transactional-outbox/plan.md`.
+- **`024-fin-transactional-outbox`** — outbox transacional do Financeiro (tabela `fin_outbox` espelhando `ctr_outbox`; atomicidade estado+evento na mesma transação, issue #127 / ADR-0015). Ver `handbook/specs/024-fin-transactional-outbox/plan.md`.
 - **ADR-0048 (Proposed)** — Anticorruption Layer legado↔core, gate das Camadas 0–2 (spike #233 / épico #169).
 
 ---
 
 ## 📚 Documentação canônica
 
-- **Contexto do projeto:** [`AGENTS.md`](./AGENTS.md) (fonte única; `CLAUDE.md` é stub que importa) + regras path-scoped em [`.claude/rules/`](./.claude/rules/).
+- **Contexto do projeto:** [`CLAUDE.md`](./CLAUDE.md) (fonte única) + regras path-scoped em [`.claude/rules/`](./.claude/rules/).
 - **Doc consolidada (humanos + IA):** [`docs/`](./docs/) e [`llms.txt`](./llms.txt).
 - **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) (48 ADRs IMUTÁVEIS) + [`handbook/CHANGELOG.md`](./handbook/CHANGELOG.md).
 - **Domínio de negócio:** [`handbook/domain/`](./handbook/domain/) + [`handbook/domain_questions/`](./handbook/domain_questions/).

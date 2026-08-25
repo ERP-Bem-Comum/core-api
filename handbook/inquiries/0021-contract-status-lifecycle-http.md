@@ -1,7 +1,14 @@
+---
+inquiry: 0021
+title: "Ciclo de vida (status) do Contrato — 3 estados do domínio vs. 5 do legado"
+state: decided
+opened: 2026-05-27
+last_reviewed: 2026-08-06
+open_outputs: 2  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0021: Ciclo de vida (status) do Contrato — 3 estados do domínio vs. 5 do legado
 
-- **Status:** Decided (2026-05-27) → [ADR-0023](../architecture/adr/0023-contract-lifecycle-pending-state.md) — **aciona revisão do agregado `Contract`** (regra nova: estado `Pendente`)
-- **Opened:** 2026-05-27
 - **Decided:** 2026-05-27
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** P.O.

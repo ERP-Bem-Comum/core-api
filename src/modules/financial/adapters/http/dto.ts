@@ -9,6 +9,20 @@
 
 import type { Document } from '../../domain/document/types.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
+import type { ParseDocumentOutput } from '../../application/use-cases/parse-document.ts';
+import type { RemittancePreview } from '../../application/use-cases/preview-remittance.ts';
+import type { GenerateRemittanceOutput } from '../../application/use-cases/generate-remittance.ts';
+import type { DiscardRemittanceOutput } from '../../application/use-cases/discard-remittance.ts';
+import type { Remittance } from '../../domain/remittance/types.ts';
+import { documentIdsOf, payableIdsOf } from '../../domain/remittance/remittance.ts';
+import type {
+  ParseDocumentResponseDto,
+  RemittancePreviewResponseDto,
+  GenerateRemittanceResponseDto,
+  DiscardRemittanceResponseDto,
+  RemittanceListResponseDto,
+  RemittanceDetailResponseDto,
+} from './schemas.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -46,10 +60,16 @@ import type {
   ProgramResponseDto,
   DocumentTypeMetadataResponseDto,
   RecentPaymentDto,
+  NoContractSuppliersResponseDto,
   PayableBatchItemDto,
   DocumentBatchItemDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
+import type { SupplierWithoutContractRow } from '../../public-api/suppliers-without-contract-projection.ts';
+import type { DashboardCostCenterRow } from '../../public-api/dashboard-cost-centers-projection.ts';
+import type { DashboardCostCentersResponseDto } from './schemas.ts';
+// #237: motor de variação PURO (M-1 vs M-2). Reusado aqui na borda — a referência é INPUT.
+import { calculateVariation, calculatePercentage } from '../../domain/dashboard/variation.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
@@ -100,6 +120,71 @@ export const recentPaymentsToDto = (views: readonly PayableView[]): RecentPaymen
     valueCents: moneyToCentsString(v.valueCents),
     paidAt: v.paidAt,
   }));
+
+/** Widget "Fornecedores sem Contrato" (DASH-F5 · #242) → DTO envelope `{ suppliers: [...] }`. Top-5
+ * já ordenado/cortado no SQL (reader.listTop). DTO lean `{ supplierRef, name, totalCents }` — descarta
+ * `payableCount` da linha do REP-2 (não pedido pelo widget). `totalCents` em centavos (number). */
+export const noContractSuppliersToDto = (
+  rows: readonly SupplierWithoutContractRow[],
+): NoContractSuppliersResponseDto => ({
+  suppliers: rows.map((r) => ({
+    supplierRef: r.supplierRef,
+    name: r.name,
+    totalCents: r.totalCents,
+  })),
+});
+
+/**
+ * KPI "Despesas por Centro de Custo" (DASH-F1 · #241) — assembler PURO agregado→DTO. Recebe o agregado
+ * bruto por CC (m1/m2 por Centro de Custo) e monta os 4 blocos:
+ *  - totalExpenses = Σ m1 de todos os CCs (base "Despesas Pagas no período" = M-1);
+ *  - variation = calculateVariation(totalM1, totalM2) + calculatePercentage(totalM1, totalM2) (#237);
+ *  - topCostCenter = o CC com maior m1 (null se não houver despesa em M-1);
+ *  - distribution = por CC com m1 > 0, ordenado por totalCents desc (desempate estável por ref), com
+ *    percentage = totalCents*100/totalExpenses (0 quando totalExpenses=0 — guarda divisão por zero).
+ * A união `Percentage` é serializada COMO ESTÁ (a borda não formata "12,5%" — isso é do BFF #352).
+ */
+export const dashboardCostCentersToDto = (
+  rows: readonly DashboardCostCenterRow[],
+): DashboardCostCentersResponseDto => {
+  const totalM1 = rows.reduce((acc, r) => acc + r.m1Cents, 0);
+  const totalM2 = rows.reduce((acc, r) => acc + r.m2Cents, 0);
+  const totalExpenses = totalM1;
+
+  // Só CCs com despesa paga no mês corrente (M-1); a distribuição é de M-1. Ordena por total desc,
+  // desempate estável por ref (null por último) — resultado determinístico sob empate.
+  const withM1 = rows.filter((r) => r.m1Cents > 0);
+  const sorted = [...withM1].sort((a, b) => {
+    if (b.m1Cents !== a.m1Cents) return b.m1Cents - a.m1Cents;
+    if (a.ref === b.ref) return 0;
+    if (a.ref === null) return 1;
+    if (b.ref === null) return -1;
+    return a.ref.localeCompare(b.ref);
+  });
+
+  const distribution = sorted.map((r) => ({
+    ref: r.ref,
+    name: r.name,
+    totalCents: r.m1Cents,
+    // Guarda divisão por zero: totalExpenses=0 nunca ocorre aqui (m1>0 ⇒ totalExpenses>0), mas o 0
+    // explícito documenta o contrato.
+    percentage: totalExpenses === 0 ? 0 : (r.m1Cents * 100) / totalExpenses,
+  }));
+
+  const top = sorted[0];
+  const topCostCenter =
+    top === undefined ? null : { ref: top.ref, name: top.name, totalCents: top.m1Cents };
+
+  return {
+    totalExpenses,
+    variation: {
+      absoluteCents: calculateVariation(totalM1, totalM2).absoluteCents,
+      percentage: calculatePercentage(totalM1, totalM2),
+    },
+    topCostCenter,
+    distribution,
+  };
+};
 
 /** #357: item de POST /financial/payables:batch — resumo de título p/ o match card da Conciliação
  * (#172), sem N+1. `ref` = payableId (o BFF casa a resposta por `ref`, não por posição no array). */
@@ -155,6 +240,20 @@ export const documentToDto = (
           status: p.status,
         }));
 
+  // #62/Feature 2: expõe o anexo (fileName derivado do último segmento da key) — o front mostra o
+  // badge e a área de OCR busca os bytes via `url` (proxy inline). null quando não há comprovante.
+  const ref = document.sourceFileRef;
+  const rawFileName = ref === null ? '' : ref.key.slice(ref.key.lastIndexOf('/') + 1);
+  const attachment =
+    ref === null
+      ? null
+      : {
+          fileName: rawFileName.length > 0 ? rawFileName : 'document',
+          mimeType: ref.mimeType,
+          sizeBytes: ref.sizeBytes,
+          url: `/api/v2/financial/documents/${String(document.id)}/source-file`,
+        };
+
   if (document.status === 'Draft') {
     return {
       id: String(document.id),
@@ -187,6 +286,7 @@ export const documentToDto = (
       payables: payableItems,
       version,
       payeeBank,
+      attachment,
     };
   }
 
@@ -220,6 +320,31 @@ export const documentToDto = (
     payables: payableItems,
     version,
     payeeBank,
+    attachment,
+  };
+};
+
+// #580: serializa a leitura pura (parse-only) → campos p/ o front auto-preencher (sem persistir).
+// Cents e datas viram string (mesma convenção do create); supplierRef = fornecedor CADASTRADO casado.
+export const parseResultToDto = (output: ParseDocumentOutput): ParseDocumentResponseDto => {
+  const r = output.result;
+  return {
+    resolvedVia: output.resolvedVia,
+    supplierRef: output.supplierRef,
+    supplierName: output.supplier?.legalName ?? null,
+    supplierTaxId: output.supplier?.taxId ?? null,
+    type: r?.type ?? null,
+    documentNumber: r?.documentNumber ?? null,
+    competencia: r?.competence != null ? Competencia.toString(r.competence) : null,
+    issueDate: r?.issueDate != null ? r.issueDate.toISOString().slice(0, 10) : null,
+    grossValueCents: r?.grossValue != null ? moneyToCentsString(r.grossValue.cents) : null,
+    description: r?.description ?? null,
+    retentions: (r?.retentions ?? []).map((x) => ({
+      type: x.type,
+      baseCents: moneyToCentsString(x.base.cents),
+      rateBps: x.rateBps,
+      valueCents: moneyToCentsString(x.value.cents),
+    })),
   };
 };
 
@@ -376,6 +501,7 @@ export const accountStatementToDto = (view: StatementView): AccountStatementResp
 export const transactionReconciliationToDto = (
   r: Reconciliation,
   reconciledByName: string | null = null,
+  category: string | null = null,
 ): TransactionReconciliationResponseDto => ({
   id: String(r.id),
   transactionId: String(r.transactionId),
@@ -389,6 +515,7 @@ export const transactionReconciliationToDto = (
     payableId: String(i.payableId),
     reconciledValueCents: String(i.reconciledValueCents),
   })),
+  category,
 });
 
 /**
@@ -420,4 +547,132 @@ export const statementSuggestionsToDto = (
     topBand: i.topBand,
     topScore: i.topScore,
   })),
+});
+
+/**
+ * Serializa o pré-voo da remessa (#720).
+ *
+ * Centavos saem como string, como no resto da borda: o valor é dado, não apresentação, e string de
+ * dígitos atravessa JSON sem o risco de precisão que um `number` grande carrega.
+ */
+/**
+ * Rótulo legível da forma de lançamento (G029), para a tela de confirmação (#804, CA7).
+ *
+ * Vive na BORDA, e não no adapter CNAB, porque é string ao humano — a tabela de idioma do
+ * `CLAUDE.md` põe PT-BR aqui e EN no código. O adapter devolve o código; quem o traduz é esta
+ * camada, exatamente como `error-mapping.ts` faz com os erros de domínio.
+ *
+ * O código cru viaja JUNTO na resposta, e não é redundância: é o que o operador confere contra o
+ * arquivo transmitido. Um rótulo sozinho impede a conferência; um código sozinho não significa nada
+ * na tela.
+ *
+ * Forma desconhecida cai no próprio código em vez de "—": a tela mostrando `43` é honesta sobre não
+ * saber traduzir, enquanto um traço esconderia que o emissor ganhou uma rota que a borda não
+ * acompanhou.
+ */
+const LAUNCH_FORM_LABEL: Readonly<Record<string, string>> = {
+  '01': 'Crédito em conta corrente',
+  '30': 'Boleto do próprio banco',
+  '31': 'Boleto de outro banco',
+  '41': 'TED outra titularidade',
+};
+
+export const remittancePreviewToDto = (
+  preview: RemittancePreview,
+): RemittancePreviewResponseDto => ({
+  lines: preview.lines.map((l) => ({
+    payableId: l.payableId,
+    documentId: l.documentId,
+    status: l.status,
+    route: l.route,
+    missing: [...l.missing],
+    gaps: l.gaps.map((g) => ({ field: g.field, reason: g.reason })),
+    valueCents: String(l.valueCents),
+  })),
+  readyCount: preview.readyCount,
+  blockedCount: preview.blockedCount,
+  outOfVanCount: preview.outOfVanCount,
+  notFoundCount: preview.notFoundCount,
+  notApprovedCount: preview.notApprovedCount,
+  transmittedCount: preview.transmittedCount,
+  readyTotalCents: String(preview.readyTotalCents),
+  blockedTotalCents: String(preview.blockedTotalCents),
+  batches: preview.batches.map((b) => ({
+    launchForm: b.launchForm,
+    launchFormLabel: LAUNCH_FORM_LABEL[b.launchForm] ?? b.launchForm,
+    payeeBankCode: b.payeeBankCode,
+    count: b.count,
+    totalCents: String(b.totalCents),
+  })),
+});
+
+/**
+ * Serializa o resultado da geração (#720).
+ *
+ * O NSA vai no corpo de propósito: é o número que identifica a remessa junto ao banco e o que o
+ * operador cita ao abrir chamado. Sem ele, a única forma de descobri-lo seria abrir o arquivo.
+ */
+export const generatedRemittanceToDto = (
+  out: GenerateRemittanceOutput,
+): GenerateRemittanceResponseDto => ({
+  remittanceId: String(out.remittanceId),
+  fileName: out.fileName,
+  objectKey: out.objectKey,
+  nsa: out.nsa,
+  totalCents: String(out.totalCents),
+  lineCount: out.lineCount,
+});
+
+/**
+ * Serializa o resultado do descarte (#792, ADR-0065 §4).
+ *
+ * `releasedPayableIds` sai no corpo pelo mesmo motivo que o NSA sai no da geração: é o dado com que
+ * o operador continua o trabalho. Descartar não fecha nada — é o passo 3 de cinco (falha → confere o
+ * banco → **devolve o título** → paga no internet banking → baixa manual), e ele precisa saber quais
+ * títulos acabou de liberar para seguir aos dois últimos.
+ */
+export const discardedRemittanceToDto = (
+  out: DiscardRemittanceOutput,
+): DiscardRemittanceResponseDto => ({
+  remittanceId: out.remittanceId,
+  releasedPayableIds: [...out.releasedPayableIds],
+});
+
+/**
+ * Serializa uma remessa para item de lista (#728 — tela de acompanhamento).
+ *
+ * `settledAt`/`detail` são opcionais no agregado (ausentes enquanto não há desfecho): saem como
+ * `null` no contrato, nunca omitidos. `documentCount` = quantidade de documentos presos.
+ *
+ * #728: totalCents/lineCount NÃO são persistidos hoje em `fin_remittances` — exigiriam colunas +
+ * mudança no generate; fora deste PR read-only. Por isso o item carrega apenas `documentCount`.
+ */
+export const remittanceToListItemDto = (
+  r: Remittance,
+): RemittanceListResponseDto['remittances'][number] => ({
+  remittanceId: String(r.id),
+  cedenteAccountId: String(r.cedenteAccountId),
+  nsa: r.nsa,
+  fileName: r.fileName,
+  status: r.status,
+  generatedAt: r.generatedAt,
+  settledAt: r.settledAt ?? null,
+  detail: r.detail ?? null,
+  // Conta TÍTULOS — é a unidade emitida, e uma linha do arquivo por título. Contar notas diria
+  // menos do que o arquivo tem sempre que uma nota sair com o pai e uma retenção juntos.
+  payableCount: r.payables.length,
+});
+
+/**
+ * Serializa uma remessa para o detalhe (#728): o item + a lista de `documentIds` presos.
+ *
+ * A referência de G064 (#752) NÃO é exposta aqui. O contrato do detalhe responde "quais documentos
+ * esta remessa prende", e a referência pertence ao casamento do retorno — expô-la agora publicaria
+ * um campo antes de existir tela que o use, e contrato publicado não se recolhe.
+ */
+export const remittanceToDetailDto = (r: Remittance): RemittanceDetailResponseDto => ({
+  ...remittanceToListItemDto(r),
+  payableIds: [...payableIdsOf(r)],
+  // As notas tocadas, cada uma UMA vez — a remessa pode carregar dois títulos da mesma nota.
+  documentIds: [...documentIdsOf(r)],
 });

@@ -27,13 +27,15 @@ const PROJECT_ROOT = resolve(HERE, '..', '..');
 
 const read = (relPath: string): string => readFileSync(join(PROJECT_ROOT, relPath), 'utf-8');
 
-// ─── CA-1..4 — doc canônica (AGENTS.md) ─────────────────────────────────────
-// CLAUDE.md passou a ser um stub `@AGENTS.md` (commit da2d25d); o conteúdo canônico
-// (stack, ADRs, topologia) vive em AGENTS.md. Estas CAs validam a doc canônica de fato.
-describe('CTR-DOCS-UPDATE — CA-1..4: AGENTS.md (doc canônica; CLAUDE.md é stub @AGENTS.md)', () => {
-  const canonicalDoc = (): string => read('AGENTS.md');
+// ─── CA-1..4 — doc canônica (CLAUDE.md) ─────────────────────────────────────
+// O alvo destas CAs é "a doc canônica", e ele já mudou duas vezes: era o CLAUDE.md, virou
+// `AGENTS.md` quando o CLAUDE.md passou a ser um stub `@AGENTS.md` (commit da2d25d), e voltou
+// ao CLAUDE.md quando o AGENTS.md foi aposentado — o repo suporta um agente só, então o padrão
+// aberto multi-ferramenta deixou de pagar seu custo.
+describe('CTR-DOCS-UPDATE — CA-1..4: CLAUDE.md (doc canônica)', () => {
+  const canonicalDoc = (): string => read('CLAUDE.md');
 
-  it('CA-1: AGENTS.md sem strings operacionais SQLite (flags CLI, scripts, paths)', () => {
+  it('CA-1: CLAUDE.md sem strings operacionais SQLite (flags CLI, scripts, paths)', () => {
     const content = canonicalDoc();
     const offenders: string[] = [];
 
@@ -52,22 +54,25 @@ describe('CTR-DOCS-UPDATE — CA-1..4: AGENTS.md (doc canônica; CLAUDE.md é st
     assert.equal(offenders.length, 0, `CLAUDE.md ainda menciona: ${offenders.join(', ')}`);
   });
 
-  it('CA-2: AGENTS.md cita ADR-0020 entre os ADRs críticos', () => {
-    const content = canonicalDoc();
-    assert.match(
-      content,
-      /\bADR-0020\b/,
-      'AGENTS.md não menciona ADR-0020 — deve estar entre os ADRs críticos vigentes',
-    );
+  // CA-2 e CA-3 asseguravam PRESENÇA DE TEXTO no CLAUDE.md ("cita ADR-0020", "diz mysql2").
+  // Presença de texto quebra em toda reescrita legítima da doc — e quebrou, na poda que tirou
+  // do CLAUDE.md o que a documentação do Claude Code manda derivar do código (stack, listas de
+  // dependência). A propriedade que as duas queriam garantir é "MySQL é o dialeto único, SQLite
+  // saiu", e ela é verificável onde não depende de redação: o manifesto e o ADR. CA-18 já cobre
+  // o lado do `src/`. Ver `.claude/rules/testing.md` § gate assegura propriedade.
+
+  it('CA-2: a decisão MySQL-único está registrada e vigente (ADR-0020 Accepted)', () => {
+    const adr = read('handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md');
+    assert.match(adr, /\*\*Status:\*\*\s*Accepted/i, 'ADR-0020 deixou de estar Accepted');
   });
 
-  it('CA-3: AGENTS.md stack diz mysql2 (sem "better-sqlite3 dev")', () => {
-    const content = canonicalDoc();
-    assert.doesNotMatch(content, /better-sqlite3\s+dev/i, 'stack ainda diz "better-sqlite3 dev"');
-    assert.match(content, /mysql2/, 'stack deve mencionar mysql2');
+  it('CA-3: o manifesto declara mysql2 e não declara better-sqlite3', () => {
+    const pkg = read('package.json');
+    assert.match(pkg, /"mysql2"\s*:/, 'package.json não declara mysql2');
+    assert.doesNotMatch(pkg, /"better-sqlite3"\s*:/, 'package.json ainda declara better-sqlite3');
   });
 
-  it('CA-4: AGENTS.md topologia por driver lista só memory e mysql', () => {
+  it('CA-4: CLAUDE.md topologia por driver lista só memory e mysql', () => {
     const content = canonicalDoc();
     // Procura a tabela "Topologia de execução por driver" (ou similar) e
     // verifica que não há linha "sqlite" como driver vigente.
@@ -82,20 +87,28 @@ describe('CTR-DOCS-UPDATE — CA-1..4: AGENTS.md (doc canônica; CLAUDE.md é st
 
 // ─── CA-5..6 — handbook ────────────────────────────────────────────────────
 describe('CTR-DOCS-UPDATE — CA-5..6: handbook', () => {
-  it('CA-5: handbook/architecture/06-persistence-strategy.md tem banner ADR-0020 e remove refs operacionais SQLite', () => {
-    const content = read('handbook/architecture/06-persistence-strategy.md');
-    // Banner apontando ADR-0020 no topo
-    assert.match(content, /ADR-0020/, 'banner apontando ADR-0020 ausente');
-    // Decisão fonte atualizada (era ADR-0018; deve passar a citar ADR-0020 ou
-    // pelo menos ter banner explícito de superseded).
+  // A supersessão ADR-0018 → ADR-0020 era cobrada exigindo que o documento de estratégia
+  // CITASSE o ADR — vestígio, não propriedade. O fato mora no cabeçalho dos próprios ADRs,
+  // que é onde a decisão é registrada; verificar lá não depende da redação de terceiros.
+  it('CA-5a: a supersessão ADR-0018 → ADR-0020 está declarada nos dois ADRs', () => {
+    const superseded = read('handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md');
     assert.match(
-      content,
-      /Superseded|superseded|MySQL.*único|MySQL.*single/i,
-      'arquivo não sinaliza que o ADR-0018 foi superseded',
+      superseded,
+      /\*\*Status:\*\*\s*Superseded by \[ADR-0020\]/i,
+      'ADR-0018 não declara mais que foi superseded pelo ADR-0020',
     );
-    // Refs operacionais a SQLite específicas (não-históricas) devem sumir:
-    // tabela "Mapeamentos canônicos" tinha coluna SQLite — checar que não há
-    // mais 2 colunas dialect.
+    const superseding = read(
+      'handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md',
+    );
+    assert.match(
+      superseding,
+      /\*\*Supersedes:\*\*\s*\[ADR-0018\]/i,
+      'ADR-0020 não declara mais que supersede o ADR-0018',
+    );
+  });
+
+  it('CA-5b: a estratégia de persistência não descreve SQLite como caminho ativo', () => {
+    const content = read('handbook/architecture/06-persistence-strategy.md');
     assert.doesNotMatch(
       content,
       /better-sqlite3.*:memory:/,

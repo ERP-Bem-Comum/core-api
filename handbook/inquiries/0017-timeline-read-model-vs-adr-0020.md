@@ -1,8 +1,15 @@
+---
+inquiry: 0017
+title: "Timeline (Memória Operacional) — read-model vs. ADR-0020 (sem JSON)"
+state: decided
+opened: 2026-05-25
+decided: 2026-05-26
+last_reviewed: 2026-08-06
+open_outputs: 5  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0017: Timeline (Memória Operacional) — read-model vs. ADR-0020 (sem JSON)
 
-- **Status:** Decided
-- **Opened:** 2026-05-25
-- **Closed/Decided:** 2026-05-26
 - **Opened by:** Gabriel Aderaldo (via orquestrador)
 - **Asked to:** P.O. + análise interna do handbook
 - **Impact:** [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md); desbloqueia ticket `CTR-TIMELINE-READ-MODEL`
@@ -78,7 +85,7 @@ histórico e a Alternativa B fica inviável.
 | :--- | :--- | :--- | :--- |
 | **A. Projeção dedicada `ctr_timeline_events`** (read-model alimentado por handler dos eventos; `metadata` decomposto em colunas tipadas por `tipoEvento`, ou texto estruturado sem tipo JSON) | CQRS limpo; append-only natural; respeita ADR-0020; leitura O(1) por `contratoId` indexado | Novo write-path + projector; duplica dado que já está nos eventos; precisa backfill | ⏳ candidata forte |
 | **B. Derivar on-read do outbox/event-stream** | Zero novo write-path; reusa eventos existentes | Outbox é **canal de entrega**, não store histórico — se poda entradas, perde histórico; acoplა leitura à infra de entrega | ❌ provável (depende da pergunta 3) |
-| **C. Event-store append-only dedicado** (tabela `ctr_domain_events` escrita pelos repos junto do state, separada do outbox) | Fonte de verdade histórica real; desacopla de entrega; base também para AuditLog ([[0018-auditlog-transversal]]) | Maior esforço; decide formato de evento serializado sem JSON nativo | ⏳ candidata (sinergia com Inquiry-0018) |
+| **C. Event-store append-only dedicado** (tabela `ctr_domain_events` escrita pelos repos junto do state, separada do outbox) | Fonte de verdade histórica real; desacopla de entrega; base também para AuditLog ([[inquiry-0018]]) | Maior esforço; decide formato de evento serializado sem JSON nativo | ⏳ candidata (sinergia com Inquiry-0018) |
 | **D. Adiar** | Foca nas frentes prontas | UC-02/UC-08 seguem ausentes | — |
 
 ### Pontos de decomposição do `metadata` (resolve pergunta 2)
@@ -115,7 +122,7 @@ Decidida em conjunto com [Inquiry-0018](./0018-auditlog-transversal-todos-bcs.md
 ## 6. Saídas (outputs concretos)
 
 - [ ] Investigar poda de entradas do outbox (worker + schema) e registrar aqui.
-- [ ] Decidir A (projeção) vs C (event-store) — preferencialmente junto com [[0018-auditlog-transversal]].
+- [ ] Decidir A (projeção) vs C (event-store) — preferencialmente junto com [[inquiry-0018]].
 - [ ] Novo ADR de read-model de Timeline.
 - [ ] Ticket `CTR-TIMELINE-READ-MODEL` (W0→W3) após o ADR.
 - [ ] Revisar UC-02 (`get-contract` passa a devolver contrato + trilha) e UC-08.

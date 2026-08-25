@@ -1,13 +1,21 @@
-# ADR-0050: Leitura de Documento Fiscal em Cascata (nativo-first) — supersedes ADR-0034
+# ADR-0050: Leitura de Documento Fiscal em Cascata (nativo-first) — supersedes ADR-0056
 
 - **Status:** Accepted
 - **Date:** 2026-07-08
 - **Deciders:** Tech Lead (Gabriel — endossado 2026-07-08) + Especialista de Domínio
-- **Supersedes:** [ADR-0034](./0034-ocr-port-adapter.md) (OCR como Port/Adapter Pattern)
+- **Supersedes:** [ADR-0056](./0056-ocr-port-adapter.md) (OCR como Port/Adapter Pattern)
+
+> ⚠️ **Nota de renumeração (2026-07-31).** O ADR superseded por este era originalmente `ADR-0034` e
+> foi renumerado para `ADR-0056`, porque dois arquivos disputavam o número 0034 — o outro é
+> [ADR-0034 — adoção do Bruno](./0034-adopt-bruno-api-client-cli.md), que **permanece vigente**.
+> Antes da correção, resolver "supersedes ADR-0034" pelo índice do README levava à conclusão errada
+> de que o Bruno havia sido superseded. O nome deste arquivo (`…-supersedes-0034.md`) foi preservado
+> de propósito: é artefato histórico, e renomeá-lo quebraria as referências do `CHANGELOG` e da spec
+> 039. Vale o conteúdo, não o nome do arquivo.
 
 ## Contexto
 
-O [ADR-0034](./0034-ocr-port-adapter.md) (Accepted, 2026-06-06) decidiu abstrair OCR como Port/Adapter com um `OcrPort.extract(pdfUrl): Promise<OcrResult>` e adapters `mock → Tesseract → Textract`. Ele assumia, implicitamente, que **OCR de imagem é o caminho de leitura** e que a escolha do engine (open-source vs SaaS cloud) era a decisão central.
+O [ADR-0056](./0056-ocr-port-adapter.md) (Accepted, 2026-06-06) decidiu abstrair OCR como Port/Adapter com um `OcrPort.extract(pdfUrl): Promise<OcrResult>` e adapters `mock → Tesseract → Textract`. Ele assumia, implicitamente, que **OCR de imagem é o caminho de leitura** e que a escolha do engine (open-source vs SaaS cloud) era a decisão central.
 
 Desde então, três evidências novas mudaram o quadro:
 
@@ -18,21 +26,21 @@ Desde então, três evidências novas mudaram o quadro:
 3. **Pesquisa multi-fonte** (web + runtime Node + LGPD + DDD — consolidada em `specs/034-fin-documento-reader/research.md`):
    - **LGPD:** documentos carregam CPF/CNPJ/nome (dado pessoal, Lei 13.709). Cloud OCR estrangeiro é **operação de transferência internacional** (art. 33) — exige DPA anti-treinamento + base legal (art. 7) + RIPD (art. 38), nenhum existente hoje; **free-tier é sempre proibido** (treina com os dados). In-process e self-hosted **não acionam a hipótese de transferência**.
    - **Node/evitar-libs:** `node:zlib` (FlateDecode) e `fetch`/`AbortSignal.timeout` são nativos; **`fast-xml-parser` (MIT) já está no lockfile** (transitivo do `@aws-sdk/client-s3`, ADR-0019). Parser de PDF in-house é viável para o escopo observado; `unpdf` (MIT) é o fallback; **`mupdf.js` é AGPL** (colide com ADR-0011) e o próprio PyMuPDF do estudo é AGPL.
-   - **Segurança:** um port que recebe `pdfUrl: string` (como no 0034) é **vetor de SSRF** e vaza URL assinada a terceiros.
+   - **Segurança:** um port que recebe `pdfUrl: string` (como no 0056) é **vetor de SSRF** e vaza URL assinada a terceiros.
    - **DDD:** o adapter de OCR externo é um **Anti-Corruption Layer** (Evans, *DDD*, p.224); o port com adapters trocáveis é **Ports & Adapters** (Vernon, *IDDD*, p.182).
 
-O 0034 não está *errado* — está *incompleto e mal-ordenado* frente a essas evidências: trata OCR de imagem como principal, ignora o caminho nativo/XML (mais barato, mais fiel, LGPD-safe) e desenha o port com URL (inseguro).
+O 0056 não está *errado* — está *incompleto e mal-ordenado* frente a essas evidências: trata OCR de imagem como principal, ignora o caminho nativo/XML (mais barato, mais fiel, LGPD-safe) e desenha o port com URL (inseguro).
 
 ## Decisão
 
-Substituir o modelo do ADR-0034 por uma **cascata de leitura de documento**, nativo-first:
+Substituir o modelo do ADR-0056 por uma **cascata de leitura de documento**, nativo-first:
 
 1. **Port renomeado e reorientado:** `DocumentReaderPort` como `type Readonly<{ read: (input: DocumentReaderInput) => Promise<Result<DocumentReaderResult, DocumentReaderError>> }>` (conforme `.claude/rules/application.md`). **Recebe bytes** (`Buffer`/`Uint8Array`) — ou uma `StorageKey` resolvida server-side via `DocumentStorage.getContent` —, **nunca uma URL vinda de input do cliente** (elimina SSRF e vazamento de URL assinada).
 
 2. **Cascata de estratégias (ordem):**
    1. **XML estruturado** (NFS-e Nacional/DANFSe, NF-e) — 100% estruturado, melhor fonte. Parsing via **`fast-xml-parser` (MIT, já no lockfile)** ou tokenizer in-house path-aware.
    2. **Parser de texto nativo in-house** (PDF digital) — `node:zlib.inflateSync` (com `maxOutputLength` explícito, anti-decompression-bomb) + tokenizer de operadores de texto + CMap `/ToUnicode`. Cobre a amostra fiscal inteira em CPU, ~R$ 0.
-   3. **OCR self-hosted** (documento escaneado/imagem) — **microserviço externo separado** (Python/ML) atrás do mesmo port, chamado por `fetch` nativo. Modelo default recomendado (2026): **PaddleOCR-VL (Apache-2.0, ~2 GB)** ou **dots.ocr (MIT)** — a validar por POC; **Docling** também válido. **Este degrau é o que o ADR-0034 chamava de "OcrPort" — segue existindo, mas como fallback, self-hosted, adiado.**
+   3. **OCR self-hosted** (documento escaneado/imagem) — **microserviço externo separado** (Python/ML) atrás do mesmo port, chamado por `fetch` nativo. Modelo default recomendado (2026): **PaddleOCR-VL (Apache-2.0, ~2 GB)** ou **dots.ocr (MIT)** — a validar por POC; **Docling** também válido. **Este degrau é o que o ADR-0056 chamava de "OcrPort" — segue existindo, mas como fallback, self-hosted, adiado.**
    4. **Exceção** (cifrado / estrutura não suportada / escaneado ruim) → `Result` de erro explícito → lançamento manual. **Nunca valor errado silencioso** (invariante fiscal).
 
 3. **Adapters trocáveis, domínio blindado (ACL):** o domínio recebe um `DocumentReaderResult` de **campos tipados** (fornecedor/CNPJ, valores, retenções, competência) + `resolvedVia: 'xml' | 'native-text' | 'ocr-external'` — **não texto bruto** (minimização LGPD, art. 6 III; alimenta a trilha de auditoria, invariante cross-BC do ADR-0006). O domínio nunca confirma sozinho: a leitura pré-preenche rascunho, **humano confirma** (#62 CA4).
@@ -58,7 +66,7 @@ Substituir o modelo do ADR-0034 por uma **cascata de leitura de documento**, nat
 
 ## Alternativas Rejeitadas
 
-1. **Manter o ADR-0034 as-is (OCR-engine-first):** rejeitado — trata OCR de imagem como principal, desperdiça o caminho nativo/XML (mais barato/fiel/LGPD-safe) e desenha o port com URL (SSRF).
+1. **Manter o ADR-0056 as-is (OCR-engine-first):** rejeitado — trata OCR de imagem como principal, desperdiça o caminho nativo/XML (mais barato/fiel/LGPD-safe) e desenha o port com URL (SSRF).
 2. **Cloud OCR (Gemini/Document AI/Vision) como caminho:** rejeitado — bloqueado por LGPD sem DPA anti-treinamento + instrumento de transferência internacional (art. 33) + RIPD; free-tier proibido permanentemente.
 3. **`mupdf.js` / PyMuPDF-style:** rejeitado — AGPL (copyleft de rede, colide com ADR-0011).
 4. **`pdf2json`:** rejeitado — histórico de *garbling* silencioso de texto (viola o invariante "0% alucinação" em valor fiscal).

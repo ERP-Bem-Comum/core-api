@@ -9,7 +9,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -37,7 +37,7 @@
         },
         "cnpj": {
           "name": "cnpj",
-          "type": "varchar(14)",
+          "type": "varchar(14) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -296,7 +296,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -317,7 +317,7 @@
         },
         "cpf": {
           "name": "cpf",
-          "type": "varchar(11)",
+          "type": "varchar(11) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -684,7 +684,7 @@
       "columns": {
         "event_id": {
           "name": "event_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -713,7 +713,7 @@
       "columns": {
         "contractor_ref": {
           "name": "contractor_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -743,14 +743,14 @@
       "columns": {
         "event_id": {
           "name": "event_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "aggregate_id": {
           "name": "aggregate_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -853,7 +853,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -881,7 +881,7 @@
         },
         "cnpj": {
           "name": "cnpj",
-          "type": "varchar(14)",
+          "type": "varchar(14) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1019,21 +1019,21 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "collaborator_id": {
           "name": "collaborator_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "token_hash": {
           "name": "token_hash",
-          "type": "varchar(64)",
+          "type": "varchar(64) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1150,14 +1150,14 @@
       "columns": {
         "event_id": {
           "name": "event_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "aggregate_id": {
           "name": "aggregate_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1260,14 +1260,14 @@
       "columns": {
         "event_id": {
           "name": "event_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "aggregate_id": {
           "name": "aggregate_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1419,7 +1419,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1440,7 +1440,7 @@
         },
         "cnpj": {
           "name": "cnpj",
-          "type": "varchar(14)",
+          "type": "varchar(14) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1607,7 +1607,7 @@
       "columns": {
         "user_ref": {
           "name": "user_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1621,7 +1621,7 @@
         },
         "cpf": {
           "name": "cpf",
-          "type": "varchar(11)",
+          "type": "varchar(11) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1642,7 +1642,7 @@
         },
         "collaborator_ref": {
           "name": "collaborator_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

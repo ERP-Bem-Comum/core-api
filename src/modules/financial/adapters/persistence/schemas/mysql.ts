@@ -14,11 +14,11 @@
 //   - Enums       → varchar(N) + CHECK          (mysqlEnum proibido — ADR-0018 §"Features proibidas")
 //   - JSON        → proibido (ADR-0020)
 //
-// ⚠️ CHARSET/COLLATE — Drizzle 0.45.x não expõe charset/collate table-level.
-//    Inserir MANUALMENTE na migration gerada:
-//      - Por tabela: ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-//      - Colunas UUID (id / FKs): COLLATE utf8mb4_bin (comparação binária; mais rápida)
-//    Igual ao procedimento descrito em `contracts/adapters/persistence/schemas/mysql.ts` §"CHARSET/COLLATE".
+// ⚠️ CHARSET table-level — Drizzle 0.45.x não expõe charset/collate table-level; segue MANUAL na
+//    migration gerada: ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci.
+//
+//    A collation das COLUNAS de identificador não é mais manual (#636): vem dos tipos de
+//    `shared/persistence/identifier-columns.ts` (comparação binária; mais rápida).
 //
 // Relacionamento das tabelas (data-model.md §"Visão geral"):
 //   fin_documents (raiz)
@@ -46,7 +46,16 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
+
+import {
+  documentStorageKey,
+  objectStorageKey,
+  opaqueKey,
+  sha256HexKey,
+  uuidKey,
+} from '#src/shared/persistence/identifier-columns.ts';
+import { VAN_STATUS_DETAIL_MAX_LENGTH } from '#src/modules/financial/application/ports/van-status-reader.ts';
 
 // ─── fin_documents ────────────────────────────────────────────────────────────
 //
@@ -64,7 +73,7 @@ export const finDocuments = mysqlTable(
   'fin_documents',
   {
     // PK: UUID v4 gerado pelo domínio (ADR-0020 §"sem AUTO_INCREMENT em PK de domínio").
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
 
     // Número fiscal (input do usuário — ex.: "NFS 1234"). Nullable: Draft pode não tê-lo.
     documentNumber: varchar('document_number', { length: 60 }),
@@ -77,24 +86,24 @@ export const finDocuments = mysqlTable(
     type: varchar('type', { length: 16 }),
 
     // Ref ao favorecido (cross-módulo partners). Sem FK física (ADR-0014 §cross-módulo sem acoplamento direto).
-    supplierRef: varchar('supplier_ref', { length: 36 }),
+    supplierRef: uuidKey('supplier_ref'),
 
     // Tipo do favorecido (#90). Nullable: back-compat com documentos pré-#90 (lidos como 'supplier').
     // CHECK = enum de domínio (4 valores — domain/document/types.ts §PayeeKind; ADR-0020 §"sem ENUM").
     payeeKind: varchar('payee_kind', { length: 16 }),
 
     // Refs cruzadas opcionais (cross-BC — ADR-0014): sem FK física.
-    contractRef: varchar('contract_ref', { length: 36 }),
-    budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
-    categoryRef: varchar('category_ref', { length: 36 }),
+    contractRef: uuidKey('contract_ref'),
+    budgetPlanRef: uuidKey('budget_plan_ref'),
+    categoryRef: uuidKey('category_ref'),
     // Subcategoria = folha da árvore do plano (#502). Soft ref (sem FK — ADR-0014); aditiva/nullable.
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
-    costCenterRef: varchar('cost_center_ref', { length: 36 }),
-    programRef: varchar('program_ref', { length: 36 }),
+    subcategoryRef: uuidKey('subcategory_ref'),
+    costCenterRef: uuidKey('cost_center_ref'),
+    programRef: uuidKey('program_ref'),
 
     // Conta-cedente de débito (D-CEDENTE — de qual conta o pagamento sai). Ref lógica a
     // fin_cedente_accounts; sem FK física (ADR-0014 §cross-acoplamento). Nullable até a remessa atribuir.
-    debitAccountRef: varchar('debit_account_ref', { length: 36 }),
+    debitAccountRef: uuidKey('debit_account_ref'),
 
     // Método de pagamento. CHECK = enum de domínio (8 valores — domain/document/types.ts §PaymentMethod).
     paymentMethod: varchar('payment_method', { length: 24 }),
@@ -113,7 +122,7 @@ export const finDocuments = mysqlTable(
 
     // Status (7 valores — ADR-0005; só Draft/Open/Approved têm transição nesta fatia).
     // varchar + CHECK (mysqlEnum proibido — ADR-0018/0020).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Descrição editável (opcional).
     description: varchar('description', { length: 500 }),
@@ -132,8 +141,8 @@ export const finDocuments = mysqlTable(
 
     // #62: comprovante-fonte (PDF/XML lido) guardado no storage — todas nullable (opcional + back-compat).
     sourceFileBucket: varchar('source_file_bucket', { length: 63 }),
-    sourceFileKey: varchar('source_file_key', { length: 1024 }),
-    sourceFileHashSha256: varchar('source_file_hash_sha256', { length: 64 }),
+    sourceFileKey: documentStorageKey('source_file_key'),
+    sourceFileHashSha256: opaqueKey('source_file_hash_sha256'),
     sourceFileSizeBytes: bigint('source_file_size_bytes', { mode: 'number' }),
     sourceFileMime: varchar('source_file_mime', { length: 127 }),
 
@@ -150,11 +159,11 @@ export const finDocuments = mysqlTable(
     approvedAt: datetime('approved_at', { mode: 'date', fsp: 3 }),
 
     // Ref ao aprovador (cross-BC — sem FK física). Preenchido somente em Approved.
-    approvedBy: varchar('approved_by', { length: 36 }),
+    approvedBy: uuidKey('approved_by'),
 
     // Aprovador PRETENDIDO definido na inclusão (#148) — cross-BC (auth), sem FK física. Nullable
     // (opcional + back-compat). Distinto de approved_by (efetivado na aprovação).
-    approverRef: varchar('approver_ref', { length: 36 }),
+    approverRef: uuidKey('approver_ref'),
 
     // #273: complemento da forma de pagamento (texto livre opaco — linha digitável de boleto,
     // id de cartão corporativo, referência de câmbio). Nullable + sem CHECK (string livre).
@@ -234,10 +243,10 @@ export const finDocuments = mysqlTable(
 export const finPayables = mysqlTable(
   'fin_payables',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
 
     // FK para o documento dono (ON DELETE CASCADE — hard delete de todo o boundary).
-    documentId: varchar('document_id', { length: 36 }).notNull(),
+    documentId: uuidKey('document_id').notNull(),
 
     // Tipo do título (Pai ou Filho).
     kind: varchar('kind', { length: 8 }).notNull(),
@@ -246,7 +255,7 @@ export const finPayables = mysqlTable(
     retentionType: varchar('retention_type', { length: 8 }),
 
     // Status espelha o documento nesta fatia (7 valores — domain/document/types.ts §DocumentStatus).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Valor em centavos (Money — ADR-0018 §"Money cents").
     value: bigint('value', { mode: 'number' }).notNull(),
@@ -254,8 +263,14 @@ export const finPayables = mysqlTable(
     // Data de vencimento do título.
     dueDate: date('due_date', { mode: 'date' }).notNull(),
 
-    // Método de pagamento herdado do documento.
+    // Forma de pagamento DO TÍTULO. Nasce herdada do documento e diverge a partir daí: retenção é
+    // título a pagar, e a guia de recolhimento do imposto não sai pela mesma forma que o líquido.
     paymentMethod: varchar('payment_method', { length: 24 }).notNull(),
+
+    // Complemento da forma DO TÍTULO — código de barras do boleto, da guia. Espelha o comprimento de
+    // `fin_documents.payment_detail` (255) porque guarda a mesma natureza de dado; nullable porque a
+    // maioria das formas não usa complemento, e porque o título antigo nasce sem ele no backfill.
+    paymentDetail: varchar('payment_detail', { length: 255 }),
 
     // #231: data de pagamento (preenchida na baixa manual); null enquanto não pago.
     paidAt: date('paid_at', { mode: 'date' }),
@@ -317,8 +332,8 @@ export const finPayables = mysqlTable(
 export const finRetentions = mysqlTable(
   'fin_retentions',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    documentId: varchar('document_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    documentId: uuidKey('document_id').notNull(),
 
     // Tipo de retenção (4 valores — domain/shared/retention.ts §RetentionType).
     type: varchar('type', { length: 8 }).notNull(),
@@ -359,8 +374,8 @@ export const finRetentions = mysqlTable(
 export const finRegisteredTaxes = mysqlTable(
   'fin_registered_taxes',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    documentId: varchar('document_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    documentId: uuidKey('document_id').notNull(),
 
     // Tipo do imposto (7 valores — domain/shared/registered-tax.ts §RegisteredTaxType).
     // varchar(16) pois 'IBS_Municipal' tem 13 chars.
@@ -418,20 +433,20 @@ export const finDocumentTimeline = mysqlTable(
   'fin_document_timeline',
   {
     // PK: UUID v4 gerado pelo domínio (ADR-0020 §"sem AUTO_INCREMENT em PK de domínio").
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
 
     // Liga ao evento de domínio que originou o marco (idempotência futura).
-    eventId: varchar('event_id', { length: 36 }).notNull(),
+    eventId: uuidKey('event_id').notNull(),
 
     // Agrupa a trilha por documento (mesmo quando target = Payable).
     // FK ON DELETE CASCADE — pertence ao AGGREGATE BOUNDARY do documento.
-    documentId: varchar('document_id', { length: 36 }).notNull(),
+    documentId: uuidKey('document_id').notNull(),
 
     // Discriminador do alvo: 'Document' ou 'Payable'. varchar(8) cobre ambos.
     targetKind: varchar('target_kind', { length: 8 }).notNull(),
 
     // ID do alvo (DocumentId ou PayableId — UUID v4).
-    targetId: varchar('target_id', { length: 36 }).notNull(),
+    targetId: uuidKey('target_id').notNull(),
 
     // Tipo do marco: discriminador EN dos eventos de domínio (domain/document/events.ts).
     // varchar(40): 'DocumentDraftSaved' tem 19 chars; margem para future events.
@@ -442,7 +457,7 @@ export const finDocumentTimeline = mysqlTable(
     occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
 
     // Ref ao autor (cross-BC — sem FK física; ADR-0014). Nullable: FR-005 best-effort.
-    actorRef: varchar('actor_ref', { length: 36 }),
+    actorRef: uuidKey('actor_ref'),
   },
   (t) => [
     // CHECKs de defesa em profundidade (domain valida primeiro):
@@ -490,10 +505,10 @@ export const finDocumentTimeline = mysqlTable(
 export const finTimelineFieldChanges = mysqlTable(
   'fin_timeline_field_changes',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
 
     // FK para a entry que originou este campo alterado (ON DELETE CASCADE).
-    timelineEntryId: varchar('timeline_entry_id', { length: 36 }).notNull(),
+    timelineEntryId: uuidKey('timeline_entry_id').notNull(),
 
     // Nome do campo de domínio (EN): ex. 'grossValue', 'status', 'dueDate'.
     // varchar(60): margem para nomes compostos futuros (ex.: 'paymentMethod').
@@ -529,7 +544,7 @@ export const finTimelineFieldChanges = mysqlTable(
 // `document` = CNPJ alfanumérico (ADR-0044) — texto.
 export const finSupplierView = mysqlTable('fin_supplier_view', {
   // PK = referência do fornecedor no partners (UUID v4). varchar(36), sem AUTO_INCREMENT.
-  supplierRef: varchar('supplier_ref', { length: 36 }).primaryKey().notNull(),
+  supplierRef: uuidKey('supplier_ref').primaryKey().notNull(),
 
   // Snapshot do nome do fornecedor (último evento aplicado).
   name: varchar('name', { length: 255 }).notNull(),
@@ -553,22 +568,27 @@ export const finSupplierView = mysqlTable('fin_supplier_view', {
 export const finPayableView = mysqlTable(
   'fin_payable_view',
   {
-    payableId: varchar('payable_id', { length: 36 }).primaryKey().notNull(),
-    documentId: varchar('document_id', { length: 36 }).notNull(),
+    payableId: uuidKey('payable_id').primaryKey().notNull(),
+    documentId: uuidKey('document_id').notNull(),
     kind: varchar('kind', { length: 10 }).notNull(), // Parent | Child
     retentionType: varchar('retention_type', { length: 10 }),
-    supplierRef: varchar('supplier_ref', { length: 36 }),
-    contractRef: varchar('contract_ref', { length: 36 }),
-    categoryRef: varchar('category_ref', { length: 36 }),
+    supplierRef: uuidKey('supplier_ref'),
+    contractRef: uuidKey('contract_ref'),
+    categoryRef: uuidKey('category_ref'),
+    // #446 (REP-3 / Slice B): Plano Orçamentário carimbado no documento (#502) — habilita o
+    // agrupamento por Plano Orçamentário no REP-3.
+    budgetPlanRef: uuidKey('budget_plan_ref'),
     // Subcategoria = folha da árvore do plano (#502). Projeção espelha a ref do documento (S5).
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
-    costCenterRef: varchar('cost_center_ref', { length: 36 }),
-    programRef: varchar('program_ref', { length: 36 }),
+    subcategoryRef: uuidKey('subcategory_ref'),
+    costCenterRef: uuidKey('cost_center_ref'),
+    programRef: uuidKey('program_ref'),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     dueDate: date('due_date', { mode: 'string' }).notNull(),
-    status: varchar('status', { length: 12 }).notNull(), // Open|Approved|Paid|Cancelled
+    // Open|Approved|Transmitted|Paid|Cancelled — `Transmitted` entrou no ADR-0065 §5 (#792), quando
+    // o read-model deixou de colapsá-lo em `Approved`. `varchar(12)` já comportava os 11 caracteres.
+    status: varchar('status', { length: 12 }).notNull(),
     // #239: conta-débito (de qual conta cedente saiu) + data do pagamento (só quando Paid).
-    debitAccountRef: varchar('debit_account_ref', { length: 36 }),
+    debitAccountRef: uuidKey('debit_account_ref'),
     paidAt: date('paid_at', { mode: 'string' }),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
@@ -576,6 +596,7 @@ export const finPayableView = mysqlTable(
     index('fin_payable_view_status_idx').on(t.status),
     index('fin_payable_view_cost_center_ref_idx').on(t.costCenterRef),
     index('fin_payable_view_category_ref_idx').on(t.categoryRef),
+    index('fin_payable_view_budget_plan_ref_idx').on(t.budgetPlanRef),
     index('fin_payable_view_subcategory_ref_idx').on(t.subcategoryRef),
     index('fin_payable_view_program_ref_idx').on(t.programRef),
     index('fin_payable_view_supplier_ref_idx').on(t.supplierRef),
@@ -586,7 +607,7 @@ export const finPayableView = mysqlTable(
     check('fin_payable_view_kind_chk', sql`${t.kind} IN ('Parent','Child')`),
     check(
       'fin_payable_view_status_chk',
-      sql`${t.status} IN ('Open','Approved','Paid','Cancelled')`,
+      sql`${t.status} IN ('Open','Approved','Transmitted','Paid','Cancelled')`,
     ),
     check(
       'fin_payable_view_retention_type_chk',
@@ -610,7 +631,7 @@ export type NewPayableViewRow = typeof finPayableView.$inferInsert;
 export const finCedenteAccounts = mysqlTable(
   'fin_cedente_accounts',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     bankCode: varchar('bank_code', { length: 8 }).notNull(),
     agency: varchar('agency', { length: 12 }).notNull(),
     accountNumber: varchar('account_number', { length: 20 }).notNull(),
@@ -655,18 +676,18 @@ export const finCedenteAccounts = mysqlTable(
 export const finBankStatements = mysqlTable(
   'fin_bank_statements',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    debitAccountRef: varchar('debit_account_ref', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    debitAccountRef: uuidKey('debit_account_ref').notNull(),
     periodStart: datetime('period_start', { mode: 'date', fsp: 3 }).notNull(),
     periodEnd: datetime('period_end', { mode: 'date', fsp: 3 }).notNull(),
     fileName: varchar('file_name', { length: 255 }).notNull(),
     fileFormat: varchar('file_format', { length: 8 }).notNull(),
-    fileHash: varchar('file_hash', { length: 64 }).notNull(),
+    fileHash: opaqueKey('file_hash').notNull(),
     openingBalanceCents: bigint('opening_balance_cents', { mode: 'number' }).notNull(),
     closingBalanceCents: bigint('closing_balance_cents', { mode: 'number' }).notNull(),
   },
   (t) => [
-    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV')`),
+    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV','PDF')`),
     index('fin_bank_statements_debit_account_ref_idx').on(t.debitAccountRef),
   ],
 );
@@ -680,10 +701,10 @@ export const finBankStatements = mysqlTable(
 export const finStatementTransactions = mysqlTable(
   'fin_statement_transactions',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    statementId: varchar('statement_id', { length: 36 }).notNull(),
-    debitAccountRef: varchar('debit_account_ref', { length: 36 }).notNull(),
-    fitid: varchar('fitid', { length: 64 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    statementId: uuidKey('statement_id').notNull(),
+    debitAccountRef: uuidKey('debit_account_ref').notNull(),
+    fitid: opaqueKey('fitid').notNull(),
     date: datetime('date', { mode: 'date', fsp: 3 }).notNull(),
     movement: varchar('movement', { length: 8 }).notNull(),
     entryType: varchar('entry_type', { length: 16 }).notNull(),
@@ -718,20 +739,21 @@ export const finStatementTransactions = mysqlTable(
 // Raiz do agregado Reconciliation (US2/3/4). `transaction_id`/`payable_id` (nos itens) referenciam
 // outros agregados POR IDENTIDADE (sem FK cross-aggregate — D-AGGREGATES/Evans); só os itens têm FK
 // para a própria raiz (boundary). `difference_*` decompõe o VO Difference (sem JSON — ADR-0020).
-// ⚠️ CHARSET/COLLATE manual na migration: ENGINE=InnoDB ...; id/transaction_id/*_by em utf8mb4_bin.
+// ⚠️ CHARSET table-level manual na migration (ENGINE=InnoDB ...); a collation de
+// id/transaction_id/*_by vem dos tipos de identifier-columns.ts (#636).
 export const finReconciliations = mysqlTable(
   'fin_reconciliations',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    transactionId: varchar('transaction_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    transactionId: uuidKey('transaction_id').notNull(),
     type: varchar('type', { length: 12 }).notNull(),
     status: varchar('status', { length: 8 }).notNull(),
     differenceValueCents: bigint('difference_value_cents', { mode: 'number' }),
     differenceTreatment: varchar('difference_treatment', { length: 10 }),
     reconciledAt: datetime('reconciled_at', { mode: 'date', fsp: 3 }).notNull(),
-    reconciledBy: varchar('reconciled_by', { length: 36 }).notNull(),
+    reconciledBy: uuidKey('reconciled_by').notNull(),
     undoneAt: datetime('undone_at', { mode: 'date', fsp: 3 }),
-    undoneBy: varchar('undone_by', { length: 36 }),
+    undoneBy: uuidKey('undone_by'),
     undoReason: varchar('undo_reason', { length: 500 }),
   },
   (t) => [
@@ -755,8 +777,8 @@ export const finReconciliations = mysqlTable(
 export const finReconciliationItems = mysqlTable(
   'fin_reconciliation_items',
   {
-    reconciliationId: varchar('reconciliation_id', { length: 36 }).notNull(),
-    payableId: varchar('payable_id', { length: 36 }).notNull(),
+    reconciliationId: uuidKey('reconciliation_id').notNull(),
+    payableId: uuidKey('payable_id').notNull(),
     reconciledValueCents: bigint('reconciled_value_cents', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -777,11 +799,11 @@ export const finReconciliationItems = mysqlTable(
 export const finRejectedSuggestions = mysqlTable(
   'fin_rejected_suggestions',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    transactionId: varchar('transaction_id', { length: 36 }).notNull(),
-    payableId: varchar('payable_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    transactionId: uuidKey('transaction_id').notNull(),
+    payableId: uuidKey('payable_id').notNull(),
     rejectedAt: datetime('rejected_at', { mode: 'date', fsp: 3 }).notNull(),
-    rejectedBy: varchar('rejected_by', { length: 36 }).notNull(),
+    rejectedBy: uuidKey('rejected_by').notNull(),
   },
   (t) => [uniqueIndex('fin_rejected_suggestions_tx_payable_uq').on(t.transactionId, t.payableId)],
 );
@@ -791,26 +813,32 @@ export const finRejectedSuggestions = mysqlTable(
 // Lançamento manual (US5): registro contábil de uma conciliação tipo `ManualEntry` (transação sem
 // título — ex.: tarifa). Parte do boundary da Reconciliation → FK ON DELETE CASCADE. `type` enum
 // varchar+CHECK; refs (supplier/category/cost_center/program) opcionais por identidade (sem FK cross-aggregate).
-// ⚠️ CHARSET/COLLATE manual na migration: id/reconciliation_id/*_ref em utf8mb4_bin.
+// ⚠️ CHARSET table-level manual na migration; id/reconciliation_id/*_ref têm utf8mb4_bin pelo tipo.
 export const finManualEntries = mysqlTable(
   'fin_manual_entries',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    reconciliationId: varchar('reconciliation_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    reconciliationId: uuidKey('reconciliation_id').notNull(),
     type: varchar('type', { length: 24 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
-    supplierRef: varchar('supplier_ref', { length: 36 }),
+    supplierRef: uuidKey('supplier_ref'),
     // #502/S2: taxonomia planejável no título manual — plano orçamentário + subcategoria (folha da
     // árvore do plano). Refs opacos por identidade (varchar(36), sem FK — ADR-0014), como os irmãos.
-    budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
-    categoryRef: varchar('category_ref', { length: 36 }),
-    costCenterRef: varchar('cost_center_ref', { length: 36 }),
-    programRef: varchar('program_ref', { length: 36 }),
+    budgetPlanRef: uuidKey('budget_plan_ref'),
+    subcategoryRef: uuidKey('subcategory_ref'),
+    categoryRef: uuidKey('category_ref'),
+    costCenterRef: uuidKey('cost_center_ref'),
+    programRef: uuidKey('program_ref'),
     description: varchar('description', { length: 500 }),
     // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
-    destinationAccountRef: varchar('destination_account_ref', { length: 36 }),
+    destinationAccountRef: uuidKey('destination_account_ref'),
     productLabel: varchar('product_label', { length: 120 }),
+    // #370: campos de documento (rastreabilidade). `document_value_cents` default = valor da transação
+    // (aplicado no domínio); pode divergir. Nullable — lançamentos antigos não têm documento.
+    documentNumber: varchar('document_number', { length: 60 }),
+    documentType: varchar('document_type', { length: 16 }),
+    issueDate: date('issue_date', { mode: 'date' }),
+    documentValueCents: bigint('document_value_cents', { mode: 'number' }),
   },
   (t) => [
     foreignKey({
@@ -831,17 +859,17 @@ export const finManualEntries = mysqlTable(
 //
 // Período de conciliação fechado (US6 — "selo" contábil). UNIQUE `(debit_account_ref, period_start,
 // period_end)` impede fechar o mesmo período 2×. `status` enum varchar+CHECK. Datas date-only.
-// ⚠️ CHARSET/COLLATE manual na migration: id/debit_account_ref/closed_by em utf8mb4_bin.
+// ⚠️ CHARSET table-level manual na migration; id/debit_account_ref/closed_by têm utf8mb4_bin pelo tipo.
 export const finReconciliationPeriods = mysqlTable(
   'fin_reconciliation_periods',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    debitAccountRef: varchar('debit_account_ref', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    debitAccountRef: uuidKey('debit_account_ref').notNull(),
     periodStart: date('period_start', { mode: 'date' }).notNull(),
     periodEnd: date('period_end', { mode: 'date' }).notNull(),
     status: varchar('status', { length: 8 }).notNull(),
     closedAt: datetime('closed_at', { mode: 'date', fsp: 3 }),
-    closedBy: varchar('closed_by', { length: 36 }),
+    closedBy: uuidKey('closed_by'),
   },
   (t) => [
     check('fin_reconciliation_periods_status_chk', sql`${t.status} IN ('Open','Closed')`),
@@ -861,15 +889,15 @@ export const finReconciliationPeriods = mysqlTable(
 // (sem FK cross-aggregate — D-AGGREGATES/Evans). `type`/`movement`/`status` enum varchar+CHECK (ADR-0020);
 // cents = bigint; `expected_date` date-only. Índices: `(destination_account_ref, status)` = fila/seletor
 // de B; `(origin_reconciliation_ref)` = tratamento no undo da origem (US3).
-// ⚠️ CHARSET/COLLATE manual na migration: id/*_ref em utf8mb4_bin.
+// ⚠️ CHARSET table-level manual na migration; id/*_ref têm utf8mb4_bin pelo tipo.
 export const finExpectedCounterpart = mysqlTable(
   'fin_expected_counterpart',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    destinationAccountRef: varchar('destination_account_ref', { length: 36 }).notNull(),
-    originAccountRef: varchar('origin_account_ref', { length: 36 }).notNull(),
-    originReconciliationRef: varchar('origin_reconciliation_ref', { length: 36 }).notNull(),
-    originTransactionRef: varchar('origin_transaction_ref', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    destinationAccountRef: uuidKey('destination_account_ref').notNull(),
+    originAccountRef: uuidKey('origin_account_ref').notNull(),
+    originReconciliationRef: uuidKey('origin_reconciliation_ref').notNull(),
+    originTransactionRef: uuidKey('origin_transaction_ref').notNull(),
     type: varchar('type', { length: 20 }).notNull(),
     // #428: produto da operação (Investment/Redemption); NULL para Transfer. Espelhado na perna B.
     productLabel: varchar('product_label', { length: 120 }),
@@ -877,7 +905,7 @@ export const finExpectedCounterpart = mysqlTable(
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     expectedDate: date('expected_date', { mode: 'date' }).notNull(),
     status: varchar('status', { length: 12 }).notNull(),
-    matchedTransactionRef: varchar('matched_transaction_ref', { length: 36 }),
+    matchedTransactionRef: uuidKey('matched_transaction_ref'),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
@@ -963,17 +991,17 @@ export type NewExpectedCounterpartRow = typeof finExpectedCounterpart.$inferInse
 export const finCategories = mysqlTable(
   'fin_categories',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     name: varchar('name', { length: 120 }).notNull(),
     group: varchar('group', { length: 12 }).notNull(),
     active: boolean('active').notNull().default(true),
     // Hierarquia auto-referente (#147 F3): pai da categoria (subcategoria). Nullable = top-level.
     // Sem FK física (mesma tabela; validação de existência é do seed) — ADR-0014.
-    parentId: varchar('parent_id', { length: 36 }),
+    parentId: uuidKey('parent_id'),
     // #341: nível Centro de Custo → Categoria. Soft ref a fin_cost_centers (sem FK — ADR-0014, igual
     // ao parent_id). Nullable = categoria sem centro (back-compat pré-#341). Cascata no front:
     // costCenterId (top-level) + parentId (subcategoria).
-    costCenterId: varchar('cost_center_id', { length: 36 }),
+    costCenterId: uuidKey('cost_center_id'),
   },
   (t) => [
     check('fin_categories_group_chk', sql`${t.group} IN ('despesa','receita','ajuste')`),
@@ -995,7 +1023,7 @@ export type NewCategoryRow = typeof finCategories.$inferInsert;
 export const finCostCenters = mysqlTable(
   'fin_cost_centers',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     code: varchar('code', { length: 20 }).notNull(),
     name: varchar('name', { length: 120 }).notNull(),
     active: boolean('active').notNull().default(true),
@@ -1015,14 +1043,47 @@ export type NewCostCenterRow = typeof finCostCenters.$inferInsert;
 // gravados na MESMA db.transaction (atomicidade; evento durável SSE estado persistido). Espelha
 // `ctr_outbox` (contracts). UUID v4 como varchar(36) — convenção do módulo (sem char). payload é
 // VARCHAR(8192) serializado — NUNCA JSON nativo (ADR-0020). Idempotência via PK `event_id`.
+
+/**
+ * FONTE ÚNICA dos agregados que podem publicar no outbox do Financeiro.
+ *
+ * Existe porque a lista viver escrita à mão em dois CHECKs custou um CI vermelho: `RemittanceEvent`
+ * entrou na union de eventos, o TypeScript aprovou, e todo `save` de remessa passou a reverter em
+ * runtime contra a constraint. O `Result` do repo devolvia erro de persistência sem dizer que a
+ * causa era um valor não previsto pelo banco.
+ *
+ * Consumida pelos dois CHECKs (tabela e DLQ) e pelo `extractAggregateInfo` do helper, que a usa
+ * como TIPO — então um agregado novo que não esteja aqui **não compila**. O que o compilador não
+ * alcança é "esqueci de rodar `db:generate`"; disso cuida
+ * `tests/cleanup/outbox-aggregate-types-in-check.test.ts`.
+ *
+ * ⚠️ Acrescentar valor aqui EXIGE `pnpm run db:generate:financial` — a constraint vive no banco.
+ */
+export const FIN_OUTBOX_AGGREGATE_TYPES = [
+  'Document',
+  'Reconciliation',
+  'Statement',
+  'ReconciliationPeriod',
+  'ExpectedCounterpart',
+  'Remittance',
+] as const;
+
+export type FinOutboxAggregateType = (typeof FIN_OUTBOX_AGGREGATE_TYPES)[number];
+
+// A DLQ usa a MESMA lista — o comentário dela sempre prometeu "espelha o CHECK da tabela-fonte", e
+// a promessa não se sustentava: `ExpectedCounterpart` existia na fonte e faltava lá desde a 0028,
+// o que faria o INSERT de DLQ falhar justamente quando um evento desse tipo esgotasse os retries.
+const aggregateTypeSqlList = (): SQL =>
+  sql.raw(FIN_OUTBOX_AGGREGATE_TYPES.map((t) => `'${t}'`).join(', '));
 export const finOutbox = mysqlTable(
   'fin_outbox',
   {
     // UUID v4 do evento — gerado pelo domínio antes do INSERT (idempotência via PK).
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    eventId: uuidKey('event_id').primaryKey().notNull(),
     // id do agregado dono (documento / conciliação / extrato / período / contrapartida).
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
-    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' | 'ExpectedCounterpart' — CHECK abaixo.
+    aggregateId: uuidKey('aggregate_id').notNull(),
+    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' | 'ExpectedCounterpart'
+    // | 'Remittance' — CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN: DocumentSaved, PayableReconciled, …
     eventType: varchar('event_type', { length: 64 }).notNull(),
@@ -1042,10 +1103,7 @@ export const finOutbox = mysqlTable(
   (t) => [
     check('fin_outbox_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
     check('fin_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
-    check(
-      'fin_outbox_aggregate_type_chk',
-      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod', 'ExpectedCounterpart')`,
-    ),
+    check('fin_outbox_aggregate_type_chk', sql`${t.aggregateType} IN (${aggregateTypeSqlList()})`),
     // Índice do worker (ADR-0015): processed_at PRIMEIRO → NULLs agrupados → range scan eficiente.
     index('fin_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
     index('fin_outbox_aggregate_id_idx').on(t.aggregateId),
@@ -1060,11 +1118,18 @@ export type NewFinOutboxRow = typeof finOutbox.$inferInsert;
 // #307: DLQ do `fin_outbox` (o financial nunca teve consumidor; esta é a 1ª). Mirror de
 // `ctr_outbox_dead_letter`. O worker move a row pra cá após `maxAttempts` (ou payload corrupto);
 // `failed_at` + `last_error` guardam o contexto da falha. Sem `processed_at` (é terminal).
+//
+// PK composta (`consumer_id`, `event_id`) desde #800/#824: a desistência é de UM consumidor, não
+// do evento. O `fin_outbox` tem um consumidor só hoje (`payable-view-projection`), e é justamente
+// por isso que a PK muda agora — o `par_outbox` também teve um só, até o dia em que não teve, e
+// o desenho estreito não avisou. A row de origem **permanece** no outbox (ADR-0022:27-29).
 export const finOutboxDeadLetter = mysqlTable(
   'fin_outbox_dead_letter',
   {
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // Quem desistiu. Tabela vazia em todos os ambientes medidos (21/08/2026) — sem backfill.
+    consumerId: opaqueKey('consumer_id').notNull(),
+    eventId: uuidKey('event_id').notNull(),
+    aggregateId: uuidKey('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
     schemaVersion: int('schema_version').notNull(),
@@ -1081,11 +1146,225 @@ export const finOutboxDeadLetter = mysqlTable(
     // (ex.: borda admin de DLQ). Espelha o CHECK da tabela-fonte `fin_outbox`.
     check(
       'fin_outbox_dl_aggregate_type_chk',
-      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod')`,
+      sql`${t.aggregateType} IN (${aggregateTypeSqlList()})`,
     ),
+    // PK composta: a desistência é por consumidor, não do evento (#800, #824).
+    primaryKey({ columns: [t.consumerId, t.eventId] }),
     index('fin_outbox_dl_failed_at_idx').on(t.failedAt),
   ],
 );
 
 export type FinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferSelect;
 export type NewFinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferInsert;
+
+// ─── fin_remittances ──────────────────────────────────────────────────────────
+//
+// Lote de comunicação: UM arquivo de remessa por conta-cedente (016). Esta linha é o registro do
+// TRANSPORTE — o que o agente fez com o arquivo —, e o `status` dela responde por isso: `Queued` até
+// o envelope do `status/` chegar, depois `Transmitted` ou `Failed` (ADR-0060/0061). Essa parte não
+// mudou.
+//
+// ⚠️ O que mudou: este comentário afirmava que a tabela existe "porque o documento só vira
+// `Transmitted` quando o `status/` confirma". O ADR-0065 §§2-3 supersedeu essa cláusula para o
+// TÍTULO — ele passa a `Transmitted` na geração, na mesma transação da reserva, em
+// `fin_payables.status`. São dois fatos com o mesmo nome: `fin_remittances.status = 'Transmitted'`
+// diz "o agente transmitiu"; `fin_payables.status = 'Transmitted'` diz "saiu da nossa alçada".
+// Tratá-los como um só era o defeito que a #792 corrigiu. O que esta linha segura continua sendo o
+// VÍNCULO (o hold), não o estado do título.
+//
+// `status` em varchar+CHECK (ADR-0020, sem ENUM nativo). `Failed` NÃO libera os títulos — nem o
+// vínculo, nem o status deles (ADR-0065 §4). Só `Discarded`, que exige decisão humana registrada em
+// `detail`, e que devolve o título a `Approved` por CAS.
+//
+// ⚠️ CHARSET/COLLATE — inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
+//   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; coluna `id` em utf8mb4_bin.
+export const finRemittances = mysqlTable(
+  'fin_remittances',
+  {
+    id: uuidKey('id').primaryKey().notNull(),
+    // Ref lógica a fin_cedente_accounts; sem FK física (ADR-0014 §cross-acoplamento).
+    cedenteAccountId: uuidKey('cedente_account_id').notNull(),
+    nsa: int('nsa').notNull(),
+    fileName: varchar('file_name', { length: 128 }).notNull(),
+    contentHash: varchar('content_hash', { length: 64 }).notNull(),
+    status: varchar('status', { length: 16 }).notNull(),
+    generatedAt: datetime('generated_at', { mode: 'string', fsp: 3 }).notNull(),
+    settledAt: datetime('settled_at', { mode: 'string', fsp: 3 }),
+    // O teto vem do CONTRATO do envelope, não o contrário (#781). Citar a constante em vez de
+    // repetir `512` é o que impede os dois números de divergirem — e a divergência aqui não é
+    // cosmética: um `detalhe` maior que a coluna falha o INSERT com 1406 no MySQL estrito, o que
+    // derrubaria o registro do desfecho por causa de um campo de diagnóstico.
+    detail: varchar('detail', { length: VAN_STATUS_DETAIL_MAX_LENGTH }),
+  },
+  (t) => [
+    check(
+      'fin_remittances_status_chk',
+      sql`${t.status} IN ('Queued','Transmitted','Failed','Discarded')`,
+    ),
+    // O campo do header tem 6 dígitos (VO `Nsa`); o banco recusa o que não couber.
+    check('fin_remittances_nsa_range_chk', sql`${t.nsa} >= 1 AND ${t.nsa} <= 999999`),
+    // NSA é único POR CONTA-CEDENTE, não global: cada conta tem seu contador. Duas remessas com o
+    // mesmo NSA na mesma conta seriam retransmissão aos olhos do banco.
+    uniqueIndex('fin_remittances_account_nsa_uq').on(t.cedenteAccountId, t.nsa),
+    // O nome do arquivo é a chave de idempotência DO AGENTE: nome repetido não é retransmitido.
+    // Repetir aqui produziria uma remessa que o agente descarta em silêncio.
+    uniqueIndex('fin_remittances_file_name_uq').on(t.fileName),
+    index('fin_remittances_status_idx').on(t.status),
+  ],
+);
+
+export type FinRemittanceRow = typeof finRemittances.$inferSelect;
+export type NewFinRemittanceRow = typeof finRemittances.$inferInsert;
+
+// ─── fin_remittance_documents (DEPRECADA — aguardando o `contract`) ───────────
+//
+// ⚠️ Substituída por `fin_remittance_payables`, que vincula por TÍTULO. Não é lida nem escrita por
+// código de produção: existe apenas para que a tabela sobreviva à release que migra os vínculos.
+//
+// É o `expand` do expand/contract. A migration 0050 copia os vínculos daqui para lá com um JOIN que
+// tem predicado (`p.kind = 'Parent'`) — e JOIN com predicado não é total por construção: documento
+// sem título `Parent` simplesmente não casa e fica de fora, em silêncio. Destruir a origem na mesma
+// leva tornaria essa perda irreversível, sem cópia e sem ninguém para notar.
+//
+// O `DROP` acontece numa release POSTERIOR, depois de conferido que a tabela nova está completa.
+// Enquanto as duas coexistem, qualquer linha perdida é recuperável — que é a única coisa que
+// `DROP TABLE` não oferece, por ser DDL: não é transacional e não tem undo.
+export const finRemittanceDocuments = mysqlTable(
+  'fin_remittance_documents',
+  {
+    remittanceId: uuidKey('remittance_id').notNull(),
+    documentId: uuidKey('document_id').notNull(),
+    yourNumber: varchar('your_number', { length: 20 }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.remittanceId, t.documentId] }),
+    index('fin_remittance_documents_document_idx').on(t.documentId),
+    uniqueIndex('fin_remittance_documents_your_number_uk').on(t.yourNumber),
+  ],
+);
+
+export type FinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferSelect;
+export type NewFinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferInsert;
+
+// ─── fin_remittance_payables ──────────────────────────────────────────────────
+//
+// Vínculo remessa → TÍTULOS. É o que a seleção consulta para NÃO incluir de novo um título que já
+// está numa remessa viva (`holdsPayables`). Sem esta tabela, a janela entre gravar e confirmar
+// deixaria o mesmo título ser selecionado duas vezes — pagamento em dobro.
+//
+// ⚠️ O grão é o TÍTULO, e a mudança não é cosmética. Prender por documento fazia duas coisas
+// erradas ao mesmo tempo: recusava a seleção legítima de dois títulos da mesma nota, e — pior —
+// fazia o retorno do banco confirmar UM título e o sistema baixar a nota inteira, porque
+// `your_number` resolvia para um documento. Emissão por título e vínculo por título são a mesma
+// mudança; separá-las abriria exatamente essa janela de baixa errada.
+//
+// PK composta (remittance_id, payable_id): o mesmo título não entra duas vezes na mesma remessa, e
+// o índice por título responde "este título está preso em alguma remessa?" sem varredura.
+export const finRemittancePayables = mysqlTable(
+  'fin_remittance_payables',
+  {
+    remittanceId: uuidKey('remittance_id').notNull(),
+    payableId: uuidKey('payable_id').notNull(),
+    // A NOTA de origem, carimbada na emissão: quem lê o retorno precisa dizer ao operador de qual
+    // nota aquilo veio, e redescobrir exigiria join com `fin_payables` — que pode ter mudado.
+    // Não participa da PK: dois títulos da mesma nota compartilham este valor por desenho.
+    documentId: uuidKey('document_id').notNull(),
+    // G064 "Seu Número" — a referência emitida por ESTE título nesta remessa (#752).
+    //
+    // 20 é a largura do campo no Segmento A (colunas 074-093); hoje a derivação usa 12 (NSA + posição
+    // do pagamento), e a folga é do layout, não desperdício.
+    //
+    // `NOT NULL` sem default: a referência é o que liga o retorno ao título, e uma linha sem ela é um
+    // título preso cuja chave de casamento ninguém sabe qual é. Sem default porque não existe
+    // valor plausível — inventar um reintroduziria, no schema, o mesmo fallback silencioso que a
+    // issue veio remover do emissor.
+    yourNumber: varchar('your_number', { length: 20 }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.remittanceId, t.payableId] }),
+    // ⚠️ As três FKs são `RESTRICT`, e a de `payable_id` é a que importa: ela é o backstop mecânico
+    // do defeito que esta tabela nasceu para impedir. Enquanto o ajuste de documento regenerava os
+    // `PayableId` (hard replace, R8.1), o `DELETE FROM fin_payables` desta nota deixava a linha daqui
+    // apontando para um id que não existe mais — órfã, sem erro, sem CASCADE, sem RESTRICT. Com a
+    // FK, esse mesmo DELETE estoura `ER_ROW_IS_REFERENCED_2` em desenvolvimento, no lugar do defeito,
+    // em vez de virar pagamento em dobro meses depois.
+    //
+    // `RESTRICT` e não `CASCADE` nas três: remessa não é apagada fisicamente neste domínio (descarte
+    // é `status='Discarded'`), e cascatear apagaria justamente o rastro do que foi enviado ao banco —
+    // o oposto do propósito desta tabela.
+    foreignKey({
+      name: 'fin_remittance_payables_remittance_id_fk',
+      columns: [t.remittanceId],
+      foreignColumns: [finRemittances.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'fin_remittance_payables_payable_id_fk',
+      columns: [t.payableId],
+      foreignColumns: [finPayables.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'fin_remittance_payables_document_id_fk',
+      columns: [t.documentId],
+      foreignColumns: [finDocuments.id],
+    }).onDelete('restrict'),
+    index('fin_remittance_payables_payable_idx').on(t.payableId),
+    // Consulta de apoio: "quais títulos desta nota já saíram?" — a pergunta que a tela do documento
+    // faz quando a nota foi paga em parte.
+    index('fin_remittance_payables_document_idx').on(t.documentId),
+    // O caminho de leitura do RETORNO (#690): o banco devolve a referência, e é por ela que se
+    // chega ao título. UNIQUE, e não índice comum, porque referência repetida torna o casamento
+    // ambíguo — o mesmo pagamento apontando para dois títulos. O domínio já recusa duplicata dentro
+    // de um arquivo; este índice é a rede que pega o caso entre arquivos, se o NSA algum dia repetir.
+    uniqueIndex('fin_remittance_payables_your_number_uk').on(t.yourNumber),
+  ],
+);
+
+export type FinRemittancePayableRow = typeof finRemittancePayables.$inferSelect;
+export type NewFinRemittancePayableRow = typeof finRemittancePayables.$inferInsert;
+
+// ─── fin_van_return_quarantine ────────────────────────────────────────────────
+//
+// A quarentena do prefixo de retorno (#753). A caixa da VAN é do CONVÊNIO, não nossa: chegam ali
+// arquivos de operações que nunca passaram por este sistema. Esta tabela é o que responde "o que
+// está preso agora, desde quando e por quê" — a DoD da issue nomeia o anti-padrão que ela existe
+// para impedir: *"quarentena consultável, não apenas uma linha de log"*.
+//
+// A PK é a CHAVE DO OBJETO, e não um UUID nosso: a identidade aqui vem de fora, é atribuída por
+// quem depositou, e a linha existe para falar sobre aquele objeto específico. UUID próprio abriria
+// espaço para duas linhas sobre a mesma chave — que é exatamente o que a idempotência da varredura
+// (roda a cada ciclo, sobre um bucket onde o agente não apaga nada) precisa impedir.
+//
+// ⚠️ NÃO indexar nem casar por nome de arquivo: o nome é do banco e ganha sufixo desempatador em
+// colisão (van-agent, P3). Casar por nome perde objeto justamente quando dois disputam o mesmo.
+export const finVanReturnQuarantine = mysqlTable(
+  'fin_van_return_quarantine',
+  {
+    objectKey: objectStorageKey('object_key').primaryKey().notNull(),
+    reason: varchar('reason', { length: 32 }).notNull(),
+    // O que NÓS calculamos sobre os bytes do objeto.
+    observedSha256: sha256HexKey('observed_sha256').notNull(),
+    // O que o ENVELOPE declarava. Nulo fora de `hash-mismatch` — nos outros motivos não houve
+    // envelope válido para declarar coisa alguma, e string vazia faria a consulta mentir sobre ter
+    // havido uma declaração.
+    expectedSha256: sha256HexKey('expected_sha256'),
+    // Instantes como string ISO, seguindo a tabela irmã `fin_remittances` — o port da quarentena
+    // trafega string, e converter duas vezes só criaria lugar para divergir.
+    firstSeenAt: datetime('first_seen_at', { mode: 'string', fsp: 3 }).notNull(),
+    lastSeenAt: datetime('last_seen_at', { mode: 'string', fsp: 3 }).notNull(),
+    releasedAt: datetime('released_at', { mode: 'string', fsp: 3 }),
+  },
+  (t) => [
+    // Motivo novo exige decisão nossa, e o banco é o lugar que não deixa escapar. Mesma disciplina
+    // do parser do envelope, que recusa `situacao` desconhecida em vez de tratá-la como falha.
+    check(
+      'fin_van_return_quarantine_reason_chk',
+      sql`${t.reason} IN ('missing-provenance','hash-mismatch','origin-not-logged')`,
+    ),
+    // A consulta padrão é "o que está preso" — `released_at IS NULL`. Sem este índice ela varre a
+    // tabela inteira, e a tabela só cresce: o agente nunca apaga do prefixo de retorno.
+    index('fin_van_return_quarantine_released_idx').on(t.releasedAt),
+  ],
+);
+
+export type FinVanReturnQuarantineRow = typeof finVanReturnQuarantine.$inferSelect;
+export type NewFinVanReturnQuarantineRow = typeof finVanReturnQuarantine.$inferInsert;

@@ -40,7 +40,7 @@ describe('ORCHESTRATOR integration — legado → core-api (2 DBs)', { skip: ski
     // Volumes do dump sintético (mesmos do reader.integration.test.ts).
     assert.equal(report.suppliers.read, 2);
     assert.equal(report.financiers.read, 1);
-    assert.equal(report.collaborators.read, 2);
+    assert.equal(report.collaborators.read, 3);
     assert.equal(report.users.read, 1);
 
     // Invariante de reconciliação + contrato da fixture: ela é 100% migrável.

@@ -9,8 +9,13 @@ import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import { DocumentId } from '#src/modules/financial/domain/shared/ids.ts';
 import * as Retention from '#src/modules/financial/domain/shared/retention.ts';
 import * as Document from '#src/modules/financial/domain/document/document.ts';
-import { createInMemoryDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
+import {
+  createInMemoryDocumentRepository,
+  type DocumentStore,
+} from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
+import { createInMemoryPayableRepository } from '#src/modules/financial/adapters/persistence/repos/payable-repository.in-memory.ts';
 import type { DocumentRepository } from '#src/modules/financial/domain/document/repository.ts';
+import type { PayableRepository } from '#src/modules/financial/domain/payable/repository.ts';
 import { registerManualPayment } from '#src/modules/financial/application/use-cases/register-manual-payment.ts';
 import type { DocumentEvent } from '#src/modules/financial/domain/document/events.ts';
 
@@ -53,9 +58,52 @@ const createdNfse = (): Document.CreateDocumentOutput => {
   return r.value;
 };
 
+// Leitura e escrita moram em ports distintos desde a Fatia 1, mas compartilham o MESMO
+// `DocumentStore` — é o que o driver `memory` do composition root faz, e sem isso o teste
+// semearia num store e leria de outro.
+type Repos = Readonly<{
+  repo: DocumentRepository;
+  payableRepo: PayableRepository;
+  // Exposto para os casos do ADR-0065 §6: `Transmitted` não tem operação de domínio que o produza —
+  // a transição vive no CAS do repositório da REMESSA (`save` de criação, §2), e trazer o
+  // `generateRemittance` inteiro para cá só para preparar um estado tornaria este arquivo refém de
+  // um fluxo que ele não mede. Semear pelo store é o caminho honesto.
+  store: DocumentStore;
+}>;
+
+const makeRepos = (): Repos => {
+  const store: DocumentStore = new Map();
+  const repo = createInMemoryDocumentRepository(undefined, undefined, undefined, store);
+  return { repo, payableRepo: createInMemoryPayableRepository(store), store };
+};
+
+// Leva UM título de `Approved` para `Transmitted`, como a geração da remessa faria. Só o título
+// nomeado muda: os irmãos ficam onde estavam, que é o cenário real de uma nota cujo pai foi para a
+// remessa e cuja retenção não.
+const transmitPayable = (store: DocumentStore, documentId: string, payableId: string): void => {
+  const entry = store.get(documentId);
+  if (entry === undefined) throw new Error('setup: documento nao semeado');
+  const payables = entry.aggregate.payables;
+  if (payables === null) throw new Error('setup: documento sem titulos');
+
+  const move = <P extends { id: unknown }>(p: P): P =>
+    String(p.id) === payableId ? { ...p, status: 'Transmitted' as const } : p;
+
+  store.set(documentId, {
+    version: entry.version,
+    aggregate: {
+      document: entry.aggregate.document,
+      payables: {
+        parent: move(payables.parent),
+        children: payables.children.map(move),
+      },
+    },
+  });
+};
+
 const seedApproved = async (
   repo: DocumentRepository,
-): Promise<{ documentId: string; parentId: string }> => {
+): Promise<{ documentId: string; parentId: string; childId: string }> => {
   const c = createdNfse();
   const by = UserRef.rehydrate(USER);
   if (!by.ok) throw new Error('setup: user');
@@ -67,7 +115,13 @@ const seedApproved = async (
   });
   if (!a.ok) throw new Error('setup: approve');
   await repo.save({ document: a.value.document, payables: a.value.payables }, []);
-  return { documentId: String(a.value.document.id), parentId: String(a.value.payables.parent.id) };
+  const child = a.value.payables.children[0];
+  if (child === undefined) throw new Error('setup: NFS-e com retencao deve gerar filho');
+  return {
+    documentId: String(a.value.document.id),
+    parentId: String(a.value.payables.parent.id),
+    childId: String(child.id),
+  };
 };
 const seedOpen = async (repo: DocumentRepository): Promise<string> => {
   const c = createdNfse();
@@ -77,9 +131,9 @@ const seedOpen = async (repo: DocumentRepository): Promise<string> => {
 
 describe('financial/application — registerManualPayment (#223)', () => {
   it('paga o título pai (Aprovado→Pago); repo reflete e os filhos seguem Aprovados', async () => {
-    const repo = createInMemoryDocumentRepository();
+    const { repo, payableRepo } = makeRepos();
     const seed = await seedApproved(repo);
-    const r = await registerManualPayment({ repo, clock: CLOCK })({
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
       documentId: seed.documentId,
       payableId: seed.parentId,
       paidBy: USER,
@@ -94,11 +148,11 @@ describe('financial/application — registerManualPayment (#223)', () => {
   });
 
   it('documento não-Aprovado (Open) → invalid-state-transition', async () => {
-    const repo = createInMemoryDocumentRepository();
+    const { repo, payableRepo } = makeRepos();
     const documentId = await seedOpen(repo);
     const found = await repo.findById(documentId as never);
     const payableId = found.ok ? String(found.value.payables?.parent.id) : '';
-    const r = await registerManualPayment({ repo, clock: CLOCK })({
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
       documentId,
       payableId,
       paidBy: USER,
@@ -109,9 +163,9 @@ describe('financial/application — registerManualPayment (#223)', () => {
   });
 
   it('payableId inexistente → payable-not-found', async () => {
-    const repo = createInMemoryDocumentRepository();
+    const { repo, payableRepo } = makeRepos();
     const seed = await seedApproved(repo);
-    const r = await registerManualPayment({ repo, clock: CLOCK })({
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
       documentId: seed.documentId,
       payableId: '99999999-9999-4999-8999-999999999999',
       paidBy: USER,
@@ -122,28 +176,204 @@ describe('financial/application — registerManualPayment (#223)', () => {
   });
 });
 
+/**
+ * ADR-0065 §6 (#792) — a baixa manual passa a ter DUAS origens.
+ *
+ * `Approved` é o pagamento feito fora da VAN (cheque, caixa, boleto avulso). `Transmitted` é o
+ * pagamento que saiu pela remessa e que o operador conferiu no site do banco — a P.O. decidiu na #59
+ * que `Pago` continua manual, porque o efeito do retorno (#690) não existe e quem afirma que o
+ * dinheiro saiu é a pessoa que olhou o extrato.
+ *
+ * É a MESMA ação humana: mesmo slug de erro, mesmo evento, mesma rota. O que muda é de onde ela
+ * parte — e é justamente por isso que estes casos existem: sem eles, o operador que gerou a remessa
+ * ficaria sem via nenhuma para dar baixa, porque o título deixou de ser `Approved` no instante em que
+ * a remessa foi gerada.
+ */
+describe('financial/application — registerManualPayment com origem VAN (ADR-0065 §6)', () => {
+  it('título Transmitido vira Pago pela mesma rota, sem slug próprio', async () => {
+    const { repo, payableRepo, store } = makeRepos();
+    const seed = await seedApproved(repo);
+    transmitPayable(store, seed.documentId, seed.parentId);
+
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+    });
+
+    assert.equal(isOk(r), true, JSON.stringify(r));
+    const found = await repo.findById(seed.documentId as never);
+    assert.ok(found.ok);
+    assert.equal(found.value.payables?.parent.status, 'Paid');
+  });
+
+  // O irmão que NÃO foi na remessa segue pagável pelo caminho de sempre. É o cenário real de uma nota
+  // cujo pai entrou no arquivo e cuja retenção não — os dois estados convivendo na mesma nota.
+  it('o irmão que ficou Aprovado continua pagável pelo caminho de sempre', async () => {
+    const { repo, payableRepo, store } = makeRepos();
+    const seed = await seedApproved(repo);
+    transmitPayable(store, seed.documentId, seed.parentId);
+
+    const pay = registerManualPayment({ repo, payableRepo, clock: CLOCK });
+    assert.equal(
+      isOk(await pay({ documentId: seed.documentId, payableId: seed.childId, paidBy: USER })),
+      true,
+    );
+
+    const found = await repo.findById(seed.documentId as never);
+    assert.ok(found.ok);
+    assert.equal(found.value.payables?.parent.status, 'Transmitted', 'o pai não foi tocado');
+    assert.equal(found.value.payables?.children[0]?.status, 'Paid');
+  });
+
+  // ⚠️ A barreira que NÃO pode ter sido afrouxada junto: uma nota sem aprovação não vira paga.
+  //
+  // Este caso a exercita no nível do DOCUMENTO — `invalid-state-transition` vem de `requireApproved`
+  // (`document.ts`), que roda antes de o título ser sequer olhado. Vale dizer com precisão porque a
+  // guarda que eu mexi é outra, a de `MANUALLY_PAYABLE_STATUSES` sobre o TÍTULO, e ela não chega a
+  // ser consultada aqui. Quem a exercita é o caso seguinte (segunda baixa): lá o documento está
+  // `Approved` e é o título, já `Paid`, que fica fora da lista. As duas guardas são independentes, e
+  // precisam dos dois testes.
+  it('Draft/Open seguem recusados pela guarda do DOCUMENTO', async () => {
+    const { repo, payableRepo } = makeRepos();
+    const documentId = await seedOpen(repo);
+    const found = await repo.findById(documentId as never);
+    const payableId = found.ok ? String(found.value.payables?.parent.id) : '';
+
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
+      documentId,
+      payableId,
+      paidBy: USER,
+    });
+
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'invalid-state-transition');
+  });
+
+  // Depois de paga, a segunda baixa conflita igual — a origem VAN não cria um caminho que escape do
+  // CAS. `Paid` não está em `MANUALLY_PAYABLE_STATUSES`, e é a lista que decide.
+  it('segunda baixa de um título vindo da VAN conflita igual', async () => {
+    const { repo, payableRepo, store } = makeRepos();
+    const seed = await seedApproved(repo);
+    transmitPayable(store, seed.documentId, seed.parentId);
+    const pay = registerManualPayment({ repo, payableRepo, clock: CLOCK });
+
+    assert.equal(
+      isOk(await pay({ documentId: seed.documentId, payableId: seed.parentId, paidBy: USER })),
+      true,
+    );
+    const segunda = await pay({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+    });
+    assert.equal(isErr(segunda), true, 'pagar duas vezes o mesmo título continua sendo conflito');
+  });
+});
+
+// Fatia 1 — o que muda quando a escrita passa a ser por título. Estes três casos falhariam no
+// caminho antigo (`DocumentRepository.save` com `expectedVersion`), e é por isso que existem.
+describe('financial/application — registerManualPayment por título (Fatia 1)', () => {
+  it('segunda baixa do MESMO título → conflito (CAS por estado)', async () => {
+    const { repo, payableRepo } = makeRepos();
+    const seed = await seedApproved(repo);
+    const pay = registerManualPayment({ repo, payableRepo, clock: CLOCK });
+
+    const first = await pay({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+    });
+    assert.equal(isOk(first), true, JSON.stringify(first));
+
+    // O domínio já barra o segundo com `payable-not-approved` porque relê o estado; o slug do
+    // adapter aparece quando a mudança escapa entre a leitura e a escrita. O que este caso fixa é
+    // que a segunda baixa NÃO passa — por um caminho ou pelo outro.
+    const second = await pay({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+    });
+    assert.equal(isErr(second), true, 'a segunda baixa do mesmo titulo nao pode passar');
+  });
+
+  it('baixar títulos IRMÃOS em sequência: as duas passam (sem conflito de versão)', async () => {
+    const { repo, payableRepo } = makeRepos();
+    const seed = await seedApproved(repo);
+    const pay = registerManualPayment({ repo, payableRepo, clock: CLOCK });
+
+    // No caminho antigo a segunda receberia `document-version-conflict`: a primeira baixa teria
+    // incrementado a versão do documento, e o `expectedVersion` lido pelo cliente ficaria velho —
+    // conflito relatado sobre uma disputa que nunca existiu.
+    const first = await pay({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+      expectedVersion: 0,
+    });
+    const second = await pay({
+      documentId: seed.documentId,
+      payableId: seed.childId,
+      paidBy: USER,
+      expectedVersion: 0,
+    });
+
+    assert.equal(isOk(first), true, JSON.stringify(first));
+    assert.equal(
+      isOk(second),
+      true,
+      `titulos irmaos nao disputam entre si: ${JSON.stringify(second)}`,
+    );
+  });
+
+  it('a baixa não move a version do documento', async () => {
+    const { repo, payableRepo } = makeRepos();
+    const seed = await seedApproved(repo);
+
+    const before = await repo.findById(seed.documentId as never);
+    const versionBefore = before.ok ? before.value.version : -1;
+
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+    });
+    assert.equal(isOk(r), true, JSON.stringify(r));
+
+    const after = await repo.findById(seed.documentId as never);
+    if (after.ok) {
+      assert.equal(
+        after.value.version,
+        versionBefore,
+        'escrever o documento que nao mudou e o defeito que esta fatia remove',
+      );
+    }
+  });
+});
+
 // #232 — a baixa manual deve aceitar `paidAt` (data da saída bancária, retroativa) no command,
 // com fallback `clock.now()` e rejeição de data futura. Ancora o match da conciliação.
 describe('financial/application — registerManualPayment paidAt (#232)', () => {
+  // O evento agora viaja pelo `markPaid` do PayableRepository — o spy acompanhou a mudança de port.
   const captureEvents = (
-    repo: DocumentRepository,
-  ): { repo: DocumentRepository; events: DocumentEvent[] } => {
+    payableRepo: PayableRepository,
+  ): { payableRepo: PayableRepository; events: DocumentEvent[] } => {
     const events: DocumentEvent[] = [];
-    const spy: DocumentRepository = {
-      ...repo,
-      save: (agg, entries, expectedVersion, evs) => {
-        if (evs) events.push(...evs);
-        return repo.save(agg, entries, expectedVersion, evs);
+    const spy: PayableRepository = {
+      ...payableRepo,
+      markPaid: (input) => {
+        events.push(...input.events);
+        return payableRepo.markPaid(input);
       },
     };
-    return { repo: spy, events };
+    return { payableRepo: spy, events };
   };
 
   it('CA1: `paidAt` retroativo do command é gravado no evento PayableManuallyPaid', async () => {
-    const base = createInMemoryDocumentRepository();
-    const seed = await seedApproved(base);
-    const { repo, events } = captureEvents(base);
-    const r = await registerManualPayment({ repo, clock: CLOCK })({
+    const { repo, payableRepo: base } = makeRepos();
+    const seed = await seedApproved(repo);
+    const { payableRepo, events } = captureEvents(base);
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
       documentId: seed.documentId,
       payableId: seed.parentId,
       paidBy: USER,
@@ -159,10 +389,10 @@ describe('financial/application — registerManualPayment paidAt (#232)', () => 
   });
 
   it('CA2: sem `paidAt` → fallback clock.now()', async () => {
-    const base = createInMemoryDocumentRepository();
-    const seed = await seedApproved(base);
-    const { repo, events } = captureEvents(base);
-    const r = await registerManualPayment({ repo, clock: CLOCK })({
+    const { repo, payableRepo: base } = makeRepos();
+    const seed = await seedApproved(repo);
+    const { payableRepo, events } = captureEvents(base);
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
       documentId: seed.documentId,
       payableId: seed.parentId,
       paidBy: USER,
@@ -176,9 +406,9 @@ describe('financial/application — registerManualPayment paidAt (#232)', () => 
   });
 
   it('CA3: `paidAt` futura → paid-at-in-future', async () => {
-    const repo = createInMemoryDocumentRepository();
+    const { repo, payableRepo } = makeRepos();
     const seed = await seedApproved(repo);
-    const r = await registerManualPayment({ repo, clock: CLOCK })({
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
       documentId: seed.documentId,
       payableId: seed.parentId,
       paidBy: USER,

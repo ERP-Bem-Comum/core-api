@@ -1,0 +1,2 @@
+ALTER TABLE `fin_remittance_documents` ADD `your_number` varchar(20) NOT NULL;--> statement-breakpoint
+ALTER TABLE `fin_remittance_documents` ADD CONSTRAINT `fin_remittance_documents_your_number_uk` UNIQUE(`your_number`);

@@ -24,8 +24,17 @@ type Deps = Readonly<{ store: PayableViewStore }>;
 
 // Eventos que só transicionam o status de um título já projetado. `PayableManuallyPaid` NÃO está
 // aqui: além do status, grava `paid_at` (via `markPaid`) — #239.
+//
+// `PayableTransmitted` (#792, ADR-0065 §2) entra como transição simples: o marco "em qual remessa o
+// título foi" — NSA e nome do arquivo — viaja no evento, mas o read-model não tem colunas para ele e
+// não vai ganhar aqui. É a trilha do documento que exibe esse detalhe (#823); o `fin_payable_view`
+// só precisa do balde certo para o grid e os contadores (§5).
+//
+// `parsePayableIds` já cobre o payload deste evento: ele carrega `payableId` no singular, que é o
+// segundo ramo daquela função.
 const STATUS_BY_EVENT: Readonly<Record<string, PayableViewStatus>> = {
   PayableApproved: 'Approved',
+  PayableTransmitted: 'Transmitted',
   DocumentCancelled: 'Cancelled',
   ApprovalUndone: 'Open',
 };
@@ -78,6 +87,8 @@ const parseSnapshotRow = (
     supplierRef: asString(refs.supplierRef),
     contractRef: asString(refs.contractRef),
     categoryRef: asString(refs.categoryRef),
+    // #446 (REP-3 / Slice B): Plano Orçamentário (top-level ref do documento) projetado no read-model.
+    budgetPlanRef: asString(refs.budgetPlanRef),
     costCenterRef: asString(refs.costCenterRef),
     programRef: asString(refs.programRef),
     valueCents: Number(valueCentsStr),

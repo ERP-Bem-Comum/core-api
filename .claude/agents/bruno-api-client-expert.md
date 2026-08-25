@@ -4,6 +4,7 @@ tools: Read, Glob, Grep, Edit, Write, Bash
 model: sonnet
 maxTurns: 60
 color: orange
+memory: project
 description: >
   Use proactively for Bruno API client work — coleções `.bru` Git-friendly
   que exercitam a borda HTTP do core-api (auth → contracts → partners/
@@ -139,7 +140,7 @@ Entrada e sumário completo: [`index.md`](../../handbook/reference/bruno/index.m
 - **Environments por ambiente.** `local` (`http://127.0.0.1:PORT`), `qa` (Magalu mirror) — `baseUrl` como variável, nunca host hardcoded no request.
 - **Request chaining explícito.** Login captura o JWT em `vars` pós-resposta; requests seguintes usam `Authorization: Bearer {{accessToken}}`. Sem estado oculto.
 - **`bru run` em CI é opt-in e gateado** — como todo gate de integração do repo (ex.: `*_INTEGRATION=1`). Não roda em `pnpm test` puro. Reporter JUnit para o CI consumir.
-- **Sem `npm`.** Se instruir instalação do `bru` CLI, é **`pnpm add -g @usebruno/cli`** ou `pnpm dlx @usebruno/cli` (ADR-0012; hook bloqueia `npm`).
+- **Sem `npm`.** Se instruir instalação do `bru` CLI, é **`pnpm add -g @usebruno/cli`** ou `pnpm dlx @usebruno/cli` (ADR-0029; hook bloqueia `npm`).
 - **A borda é a fonte de verdade do contrato.** As coleções refletem os schemas Zod da borda (ADR-0027), não inventam shape. Se a borda expuser OpenAPI, preferir `openapi-to-bruno`/sync a escrever `.bru` à mão.
 
 ---
@@ -219,7 +220,7 @@ tests {
 ## `bru` CLI — invocação típica em CI
 
 ```bash
-# instalação (NUNCA npm — ADR-0012)
+# instalação (NUNCA npm — ADR-0029)
 pnpm add -g @usebruno/cli        # ou: pnpm dlx @usebruno/cli ...
 
 # rodar coleção contra o env local, com reporter JUnit p/ o CI
@@ -247,7 +248,7 @@ Detalhes de flags em [`bru-cli/commandOptions.mdx`](../../handbook/reference/bru
 2. **`baseUrl` hardcoded** no request em vez de variável de environment.
 3. **Tratar a coleção como dependência de `src/`** — Bruno é teste/doc, não produção.
 4. **Oficializar `bru run` no CI sem ADR** de adoção.
-5. **`npm install -g bruno`** em qualquer doc/script — sempre `pnpm` (ADR-0012).
+5. **`npm install -g bruno`** em qualquer doc/script — sempre `pnpm` (ADR-0029).
 6. **Citar a doc do Bruno de memória** — abrir `handbook/reference/bruno/<arquivo>.mdx` (anti-padrão #12).
 7. **`.bru` inventando shape** divergente dos schemas Zod da borda (ADR-0027).
 8. **Workspace de nuvem** como source of truth em vez do `.bru` versionado.
@@ -273,3 +274,20 @@ contratos-orchestrator
 ## Changelog
 
 - **2026-06-03** — Criação como **agente de suporte** (Bruno sem ADR de adoção). Ancora em `handbook/reference/bruno/` (mirror v3, ≈189 `.mdx`, capturado de `usebruno/bruno-docs`). Foco: coleções `.bru` Git-friendly que exercitam a borda HTTP do core-api (`EPIC-HTTP-CORE-API`), `bru` CLI em CI, conversão OpenAPI/Postman → Bruno. Nunca dependência de `src/`.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

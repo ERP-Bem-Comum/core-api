@@ -44,7 +44,9 @@ export const financierDetailSchema = z.object({
   name: z.string(),
   corporateName: z.string(),
   legalRepresentative: z.string(),
-  cnpj: z.string().meta({ description: 'CNPJ (14 dígitos)' }),
+  cnpj: z
+    .string()
+    .meta({ description: 'CNPJ — 14 caracteres sem máscara, alfanumérico (ADR-0044)' }),
   telephone: z.string(),
   address: z.string(),
   bankAccount: bankAccountSchema.nullable(),
@@ -85,7 +87,9 @@ export const createFinancierBodySchema = z.object({
   name: z.string().min(1),
   corporateName: z.string().min(1),
   legalRepresentative: z.string().min(1),
-  cnpj: z.string().length(14).meta({ description: 'CNPJ — 14 dígitos (DV validado no domínio)' }),
+  cnpj: z.string().length(14).meta({
+    description: 'CNPJ — 14 caracteres sem máscara, alfanumérico; DV validado no domínio',
+  }),
   telephone: z.string().min(1),
   address: z.string().min(1),
   bankAccount: bankAccountSchema.nullable().default(null),

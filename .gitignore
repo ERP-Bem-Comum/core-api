@@ -9,6 +9,9 @@ dist/
 .idea/
 coverage/
 .tsbuildinfo
+# Cache do ESLint (~1 MB). Derivado do fonte e da config — nunca versionado.
+# No CI ele é restaurado por actions/cache, não pelo repositório (Inquiry-0029).
+.eslintcache
 
 # Dados brutos temporários (ex.: dump IBGE baixado por scripts/data/fetch-*)
 .tmp/
@@ -33,8 +36,6 @@ coverage/
 
 # Memória local de sub-agentes — notas geradas por agents durante a sessão
 # (efêmero, específico da máquina; não é fonte de verdade do projeto)
-.claude/agent-memory/
-.agents/agent-memory/
 
 # Guidelines locais — material de referência com copyright/restrição de terceiros
 # (PDFs do Bradesco, guias internos não-distribuíveis). Visível para IAs CLI via

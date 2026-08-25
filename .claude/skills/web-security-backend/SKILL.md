@@ -65,7 +65,7 @@ Varre o escopo e escreve **`security_backend_report.md`** (ou onde o usuário pe
 - **IDs opacos (UUID v4):** nunca auto-incremento exposto (IDOR/enumeração).
 - **Zod só na borda, regra nos smart constructors (ADR-0006/0027).**
 - **MySQL parametrizado, sem UPSERT nativo (ADR-0020).**
-- **`pnpm` sempre, `npm` nunca (ADR-0012); `approve-builds` + lockfile congelado (ADR-0011).**
+- **`pnpm` sempre, `npm` nunca (ADR-0029); `approve-builds` + lockfile congelado (ADR-0011).**
 
 ---
 
@@ -96,7 +96,7 @@ Varre o escopo e escreve **`security_backend_report.md`** (ou onde o usuário pe
 - Um finding por vez; comentário curto explicando o "porquê" da prática (não o quê).
 - Sem regressão: rodar `pnpm test` (+ `typecheck`/`lint`) após cada fix.
 - Seguir o fluxo de commit do projeto (PT-BR, escopo de módulo); não agrupar findings não-relacionadas.
-- Mudança não-trivial em `src/` → abrir ticket de pipeline (W0→W3) como manda o `CLAUDE.md`.
+- Mudança não-trivial em `src/` → rodar o gate de qualidade como manda o `CLAUDE.md`.
 
 ---
 

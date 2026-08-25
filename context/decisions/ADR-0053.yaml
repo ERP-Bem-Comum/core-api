@@ -1,0 +1,335 @@
+id: ADR-0053
+title: Carve-out de confidencialidade ao `AUTH_RBAC_MODE=bypass` — dado sensível continua exigindo permissão
+source: handbook/architecture/adr/0053-sensitive-data-carve-out-rbac-bypass.md
+decided_on: 2026-07-16
+
+declared:
+  status: '**Rejected** (2026-07-20 — decisão da P.O.; ver §Desfecho)'
+  status_normalized: rejected
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0049, ADR-0052]
+  note_on_status: |
+    ÚNICO `Rejected` dos 55 ADRs. O documento foi mantido íntegro, com o argumento completo, e ganhou uma
+    seção §Desfecho registrando a decisão da P.O., a justificativa em quatro pontos, as consequências
+    aceitas e dois gatilhos de reavaliação. A rejeição é datada quatro dias depois da proposta e tem
+    autoria nominal.
+
+assessment:
+  verdict: unrealized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Rejeitado, e o código está coerente com a rejeição — com uma sobra que vale registrar.
+    O mecanismo NÃO existe: não há classe de "permissão sensível", nem lista no
+    `permission-catalog.ts`, nem consulta a essa classe antes de aplicar o bypass. O banner do `ADR-0052`
+    segue dizendo "A autenticação segue ativa; só a permissão por rota caiu"
+    (`rbac-mode.ts`), sem a ressalva "exceto as sensíveis" que o §Consequências deste ADR previa ter de
+    acrescentar — corretamente, porque o carve-out não entrou.
+    A sobra: a permissão `collaborator:read-sensitive` **existe** no catálogo
+    (`permission-catalog.ts:33`). Ela foi criada para ser o primeiro membro da classe que o ADR propunha, a
+    classe foi rejeitada, e a permissão ficou. Sob `bypass` ela é liberada como qualquer outra — que é
+    exatamente o estado descrito na alternativa "aceitar que o bypass derrube o dado sensível", registrada
+    no próprio ADR como "a decisão default se este ADR for rejeitado". Coerente, portanto. Mas o NOME
+    sugere proteção que não há, e a mitigação que o ADR previa para o custo cognitivo — "teste que prende a
+    lista (uma permissão `*-sensitive` fora da lista falha o gate)" — foi rejeitada junto com o resto.
+    O que substitui este ADR, segundo o §Desfecho, é o redesenho completo do RBAC, ainda a fazer.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — a classe de permissão sensível e seu ponto de aplicação, o que não muda em relação ao
+    0052, o precedente interno de raciocínio, e as duas alegações do §Desfecho (a decisão vigente e seus
+    gatilhos de reavaliação). As alternativas descartadas são fundamentação; uma delas é o estado atual.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: INELEGÍVEL (status Rejected)
+    applied_to: []
+    gap: |
+      Descarte correto para produção de regra: um ADR rejeitado não gera norma, por definição.
+      Mas há material de rule aqui que sobrevive à rejeição — a `C4` (o §Desfecho decidiu operar em bypass
+      total durante a aceitação, com gatilhos) e a sobra de `collaborator:read-sensitive` no catálogo. Um
+      ADR rejeitado pode deixar artefato no código, e este deixou.
+
+claims:
+  - id: ADR-0053-C1
+    text: |
+      Introduzir a noção de PERMISSÃO SENSÍVEL — uma classe de permissão que o `bypass` NÃO libera.
+      `collaborator:read-sensitive` é o primeiro membro. Em `bypass`, permissão comum libera (0052
+      inalterado); permissão sensível CONTINUA EXIGINDO a permissão.
+    kind: obligation
+    source_lines: ['32-38']
+    applies_to:
+      - 'src/modules/auth/domain/authorization/permission-catalog.ts'
+      - 'src/modules/auth/adapters/http/composition.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - "src/modules/auth/domain/authorization/permission-catalog.ts:33 — 'collaborator:read-sensitive' EXISTE no catálogo"
+        - "src/modules/partners/public-api/permissions.ts:14 — readSensitive: 'collaborator:read-sensitive' — exportada pela public-api do módulo dono"
+        - 'ausência: não existe lista nem classe de permissões sensíveis em src/modules/auth/domain/authorization/ — a CLASSE que o ADR propunha não entrou'
+        - 'ausência: nenhum ponto do wrapper de authorize/hasPermission consulta classe de permissão antes de aplicar o bypass'
+        - 'ausência: a permissão não é usada como gate em NENHUMA rota — grep read-sensitive devolve só catálogo, public-api e um docstring'
+        - 'src/modules/reports/adapters/http/plugin.ts:203 — a rota de demografia usa authorize(COLLABORATOR_PERMISSION.read), não readSensitive'
+        - 'src/modules/reports/adapters/http/plugin.ts:197 — comentário: Mesmo gate da tabela (`collaborator:read`), NAO o `readSensitive`'
+        - 'src/modules/reports/adapters/http/plugin.ts:193 — comentário CONTRADITÓRIO quatro linhas acima: "Gate dedicado: dado sensível LGPD (Art. 5º II) — collaborator:read sozinho não abre (CA7)" — STALE'
+        - 'src/modules/reports/application/ports/team-demographics-read.ts:8 — a PORTA também segue documentando "sob a permissao dedicada collaborator:read-sensitive" — stale'
+        - '.claude/.pipeline/REPORTS-DEMOGRAPHICS-GATE-ALIGN/000-request.md:1 — closed-green: "o gate dos gráficos desce para collaborator:read"'
+        - 'nota: a permissão NÃO nasceu órfã — foi criada, LIGADA como gate em /reports/team/demographics, e depois REBAIXADA por ticket; o estado atual é de gate removido, não de gate nunca aplicado'
+      verify: |
+        grep -rn "read-sensitive" src/ --include='*.ts'; grep -n "Gate dedicado\|Mesmo gate da tabela\|COLLABORATOR_PERMISSION.read" src/modules/reports/adapters/http/plugin.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado `bypass` e um usuário sem `collaborator:read-sensitive`, quando pede o dado sensível, então —
+        sob a decisão VIGENTE — MUST receber 200. Um teste que espere 403 estaria codificando o ADR
+        rejeitado, não a decisão em vigor.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: o carve-out foi REJEITADO pela P.O. em 2026-07-20 e não é norma. Propor a regra aqui
+        contrariaria uma decisão vigente do dono do produto — exatamente o que o §3 do SCHEMA proíbe. O que
+        vale extrair é a sobra observada, que virou a `C5`.
+
+  - id: ADR-0053-C2
+    text: |
+      A lista de permissões sensíveis viveria junto do catálogo (`domain/authorization/permission-catalog.ts`)
+      — DADO DO DOMÍNIO, não config de ambiente: NÃO é env var, não se desliga sem deploy. Env var separada
+      (`AUTH_SENSITIVE_MODE`) foi descartada — recria o problema num segundo interruptor.
+    kind: obligation
+    source_lines: ['42-44', 95]
+    applies_to:
+      - 'src/modules/auth/domain/authorization/permission-catalog.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: não existe lista de permissões sensíveis no catálogo — o carve-out não entrou'
+        - 'ausência: nenhuma env AUTH_SENSITIVE_MODE em src/ — a alternativa descartada também não entrou, o que é coerente'
+        - 'src/modules/auth/domain/authorization/permission-catalog.ts:97 — o catálogo existe e é código de domínio (export const all: readonly Permission.Permission[])'
+      verify: |
+        grep -rn "AUTH_SENSITIVE_MODE\|SENSITIVE" src/ --include='*.ts' | head
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Nada a testar: o mecanismo cujo local esta alegação normatizaria não existe.
+      expected_error: null
+      blocker: 'A decisão foi rejeitada; a alegação não tem sujeito no código.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Classificação que decide o alcance de um modo degradado MUST ser dado de domínio versionado, não
+        configuração de ambiente. MUST NOT ser governada por uma segunda env var.
+      rationale: |
+        A única parte deste ADR rejeitado que vale como regra geral, porque não depende do carve-out: o
+        argumento contra `AUTH_SENSITIVE_MODE` — "recria o problema num segundo interruptor" — é transferível
+        a qualquer flag futura. Dois interruptores multiplicam os estados possíveis de segurança e nenhum
+        deles fica visível no boot. Adotável hoje sem contrariar a rejeição, porque normatiza a FORMA de uma
+        classificação futura, não a existência da classe rejeitada.
+
+  - id: ADR-0053-C3
+    text: |
+      PRECEDENTE INTERNO: o `ADR-0052` já abre exceção ao bypass (`cannot-self-lockout`). A mesma estrutura
+      de raciocínio aplicada a um segundo eixo — o que sobrevive ao bypass é o que o bypass NÃO PODE
+      DESFAZER depois: integridade sobrevive porque o estado persiste; confidencialidade sobreviveria porque
+      o VAZAMENTO persiste. Dano de ação indevida é reversível; vazamento de dado sensível é irreversível.
+    kind: obligation
+    source_lines: ['25-28', '60-63']
+    applies_to: []
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'nota: o critério do ADR-0052-C4 (o que sobrevive é o que não se desfaz) segue aplicado a INTEGRIDADE — cannot-self-lockout existe em revoke-role.ts:43'
+        - 'ausência: a extensão do critério a CONFIDENCIALIDADE não entrou — não há permissão que sobreviva ao bypass'
+        - 'nota: a assimetria que o ADR descreve permanece verdadeira como observação; o que a P.O. rejeitou foi a conclusão operacional, não a análise'
+      verify: |
+        grep -n "cannot-self-lockout" src/modules/auth/application/use-cases/revoke-role.ts
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        É argumento, não invariante. O que era testável era o mecanismo da `C1`, rejeitado.
+      expected_error: null
+      blocker: 'Raciocínio de fundamentação; não gera obrigação verificável.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como regra: o critério já está proposto na `ADR-0052-C4`, aplicado a integridade — que é o
+        alcance que a decisão vigente lhe dá. Estender a confidencialidade seria reverter a rejeição. Vale
+        registrar que a ANÁLISE não foi contestada: a P.O. rejeitou a conclusão operacional por razões de
+        fase do produto, não por discordar de que vazamento é irreversível.
+
+  - id: ADR-0053-C4
+    text: |
+      §DESFECHO (decisão VIGENTE, P.O., 2026-07-20): o carve-out NÃO será implementado. Durante a fase de
+      ACEITAÇÃO do sistema recém-entregue, o acesso fica LIBERADO para todos os usuários autenticados
+      (`AUTH_RBAC_MODE=bypass`, SEM EXCEÇÕES) — inclui os gráficos demográficos e o restante do dado de
+      colaborador. Justificativa: paridade com o legado (que já operava assim), necessidade da aceitação
+      (RBAC parcial produziria falsos negativos — incidente do módulo financeiro oculto de 17/07 a 20/07), o
+      RBAC será refeito por inteiro, e o cliente está ciente.
+    kind: permission
+    source_lines: ['103-131']
+    applies_to:
+      - 'src/modules/auth/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma exceção ao bypass em src/modules/auth/ além da proteção de integridade do ADR-0052-C4 — "sem exceções" é o estado do código'
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:19 — o banner anuncia o modo sem ressalva de dado sensível, coerente com a decisão'
+        - "src/modules/auth/domain/authorization/permission-catalog.ts:33 — 'collaborator:read-sensitive' está no catálogo e, sem classe de sensíveis, é liberada pelo bypass como qualquer outra"
+        - 'nota: o §Desfecho registra que enquanto durar o bypass qualquer autenticado vê dado sensível via telas e via GET /api/v1/collaborators (issue #482)'
+        - 'nota: a decisão é declarada janela TEMPORÁRIA atrelada à aceitação, com "não é o estado-alvo" explícito'
+      verify: |
+        grep -rn "sensitive" src/modules/auth/adapters/http/*.ts; grep -n "read-sensitive" src/modules/auth/domain/authorization/permission-catalog.ts
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado `bypass`, quando um autenticado qualquer pede dado de colaborador, então MUST receber 200 — é a
+        decisão vigente. O teste que importa é o do FIM da janela: ao desligar o `bypass`, o acesso ao dado
+        sensível MUST passar a exigir permissão, e isso é o redesenho do RBAC.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Exposição de dado sensível decidida como janela temporária MUST ter registro datado com autoria,
+        gatilho de encerramento e ciência do titular do risco. MUST NOT depender apenas de configuração de
+        ambiente sem esse registro.
+      rationale: |
+        É a regra que a própria rejeição executa, e o valor está no que ela evita: o §Desfecho existe
+        explicitamente "para que a exposição de dado sensível no período seja rastreável como escolha
+        informada, não como descuido". Sem esse registro, o estado (bypass total, dado sensível aberto)
+        seria indistinguível de um esquecimento — e é a mesma distinção decisão × omissão que a
+        `ADR-0048-C8` propõe para rota sem `authorize`.
+
+  - id: ADR-0053-C5
+    text: |
+      §DESFECHO — QUANDO RE-AVALIAR: ao DESLIGAR o `bypass` (fim da aceitação), o redesenho do RBAC assume.
+      SE A JANELA SE ESTENDER além do previsto, ou se o cliente admitir usuários EXTERNOS ao time atual:
+      reabrir, porque a premissa de paridade com o legado (público conhecido) deixa de valer.
+    kind: obligation
+    source_lines: ['144-149']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        Não verificável no repositório: depende de saber se o `bypass` ainda está ativo em ambiente e há
+        quanto tempo, e se o conjunto de usuários mudou. Conferir a env do ambiente e a data de início da
+        janela.
+    testability:
+      verdict: testable-with-work
+      layer: e2e
+      red: |
+        Dada a janela de bypass, quando ela exceder o prazo previsto, então a discussão MUST ser reaberta. É
+        testável só com um prazo declarado — o §Desfecho diz "além do previsto" sem fixar data.
+      expected_error: null
+      blocker: 'O gatilho é relativo ("além do previsto") e o prazo não está declarado; o estado da env é de ambiente.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Janela temporária de exposição de dado sensível MUST ter DATA-LIMITE declarada, não gatilho
+        relativo. Ao vencer, MUST haver reavaliação registrada — prorrogar MUST ser ato explícito.
+      rationale: |
+        Estreitado pelo padrão que este inventário confirmou três vezes: gatilho sem mecanismo não é cobrado
+        (`ADR-0017` prazo sem critério, `ADR-0044` consequência com gatilho vencido, `ADR-0047` §5
+        recomendação). Aqui o gatilho é "se a janela se estender além do previsto", e o previsto não está
+        escrito — logo não há como saber se venceu. Dos três casos anteriores, este é o de maior
+        consequência, porque o que a janela mantém aberto é dado pessoal sensível.
+
+findings:
+  - |
+    **Único `Rejected` dos 55, e a rejeição é exemplar como artefato.** O documento não foi apagado nem
+    esvaziado: manteve o argumento completo — inclusive a análise de que vazamento é irreversível — e ganhou
+    um §Desfecho com data, autoria nominal, justificativa em quatro pontos, consequências aceitas e dois
+    gatilhos de reavaliação. E declara o propósito do registro em voz alta: "para que a exposição de dado
+    sensível no período seja rastreável como **escolha informada, não como descuido**". É o melhor exemplo
+    do acervo de como registrar uma decisão contrária a uma proposta técnica.
+  - |
+    **CORREÇÃO (cruzamento com a `.pipeline/`): a permissão não ficou órfã — ela foi LIGADA como gate e
+    depois REBAIXADA, por um argumento correto.** Meu registro anterior dizia que
+    `collaborator:read-sensitive` "foi criada para ser o primeiro membro da classe (…) e a permissão ficou",
+    como se nunca tivesse sido usada. O ticket `REPORTS-DEMOGRAPHICS-GATE-ALIGN` (closed-green) mostra a
+    história real: ela **era** o gate de `GET /reports/team/demographics`, e o gate "desceu para
+    `collaborator:read`" porque os três gráficos "não apareciam em nenhum ambiente (localhost nem
+    produção)".
+    E o argumento do rebaixamento é o melhor achado de segurança deste inventário, porque inverte a
+    intuição: `GET /reports/team` (a TABELA) mostra "linha por pessoa, **com nome**, raça, gênero, idade" e
+    exige apenas `collaborator:read`; `GET /reports/team/demographics` (os GRÁFICOS) mostra "só contagens —
+    **ninguém identificável**" e exigia `collaborator:read-sensitive`. Nas palavras do ticket: **"A tabela
+    mostra mais e exige menos."** O gate dedicado protegia o dado MENOS sensível dos dois.
+  - |
+    **Contradição dentro de um único arquivo, quatro linhas de distância — e a stale afirma proteção LGPD
+    que o código não aplica.** Em `reports/adapters/http/plugin.ts`:
+    a linha 193 diz "Gate dedicado: dado sensível LGPD (Art. 5º II) — `collaborator:read` sozinho não abre
+    (CA7)"; a linha 197 diz "Mesmo gate da tabela (`collaborator:read`), NAO o `readSensitive`"; e a 203
+    executa `authorize(COLLABORATOR_PERMISSION.read)`. A porta também segue desatualizada
+    (`team-demographics-read.ts:8` — "sob a permissao dedicada `collaborator:read-sensitive`").
+    É a MESMA classe de defeito do `ADR-0041-C4`: comentário obsoleto que afirma garantia mais forte do que
+    o código dá. Ali afirmava ausência onde havia implementação; aqui afirma proteção de categoria especial
+    onde o gate é o genérico. Duas ocorrências independentes no mesmo repositório fazem disto padrão, não
+    acidente — e é candidato direto a regra: **comentário que afirma um gate MUST citar o identificador de
+    permissão que a rota realmente usa.**
+  - |
+    A permissão hoje existe em três lugares e é gate em nenhum: catálogo
+    (`permission-catalog.ts:33`), export da public-api do módulo dono (`partners/public-api/permissions.ts:14`)
+    e um docstring de porta. O risco é de LEITURA — quem a encontrar assumirá que protege algo. E a
+    mitigação que o ADR previa para esse custo cognitivo ("teste que prende a lista — uma permissão
+    `*-sensitive` fora da lista falha o gate") foi rejeitada junto com o carve-out.
+  - |
+    **O ADR rejeitado antecipou o próprio cenário de rejeição e o registrou como alternativa.** Entre as
+    descartadas: "Aceitar que o bypass derrube o dado sensível — coerente com o 0052 como está e **é a
+    decisão default se este ADR for rejeitado**. (…) Registrado aqui para que, se escolhida, seja escolha e
+    não descuido." Foi escolhida. Escrever a própria derrota como alternativa nomeada é o que fez a
+    rejeição virar decisão rastreável em vez de silêncio — e é técnica de redação reproduzível.
+  - |
+    **O gatilho de reavaliação é relativo e por isso inauditável.** "Se a janela se estender além do
+    previsto" — e o previsto não está escrito. É o quarto caso do inventário do mesmo padrão (`ADR-0017`
+    prazo sem critério, `ADR-0044` consequência com gatilho já vencido, `ADR-0047` §5 recomendação), e o de
+    maior consequência: o que a janela mantém aberto é dado pessoal sensível, e o segundo gatilho
+    ("cliente admitir usuários externos ao time atual") é justamente o que invalida a premissa de paridade
+    com o legado.
+  - |
+    A justificativa nº 2 da P.O. é tecnicamente precisa e vale registrar como argumento: um RBAC parcial
+    durante testes de aceitação "produziria falsos negativos — 'não aparece' confundido com 'não funciona'",
+    e cita o incidente real (módulo financeiro oculto de 17/07 a 20/07). É o mesmo modo de falha do "403
+    mudo" que motivou o `ADR-0052`, agora aplicado a por que não fazer o carve-out no meio da aceitação.
+
+provenance:
+  tickets:
+    - REPORTS-TEAM-ABC
+    - REPORTS-TEAM-DEMOGRAPHICS
+  issues: []
+  note: |
+    O ADR cita `REPORTS-TEAM-DEMOGRAPHICS`, `REPORTS-TEAM-ABC`/#238 e a issue #482
+    (`GET /api/v1/collaborators` servindo dado sensível sob permissão genérica, a ser endereçada no
+    redesenho) — nenhum lido nesta fase. O §Desfecho registra insumos do redesenho: catálogo real de 44
+    permissões, papéis como dado no banco, e um questionário de elicitação. O redesenho completo do RBAC,
+    que substitui este ADR, ainda não existe.

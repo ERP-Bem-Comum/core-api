@@ -1,10 +1,12 @@
 /**
- * Integração (REP-3 · #114) — openPayablesAnalysisReader (financial public-api).
- * Agrega `fin_payable_view` por categoria × centro-de-custo × mês (DATE_FORMAT due_date), filtrando
- * período half-open [dueStart, dueEnd) e excluindo Cancelled. Valida contra MySQL real (x99).
+ * Integração (REP-3 · #114/#446 Slice C) — openPayablesAnalysisReader (financial public-api).
+ * Agrega `fin_payable_view` por **Plano Orçamentário × centro-de-custo × mês** (DATE_FORMAT
+ * due_date), filtrando período half-open [dueStart, dueEnd) e excluindo Cancelled. Valida contra
+ * MySQL real (x99). #446: a raiz é o `budget_plan_ref` (carimbado no Slice B); a CATEGORIA saiu do
+ * grão. Nome da folha (CC) via LEFT JOIN `fin_cost_centers`; o rótulo do plano é costurado no
+ * reports (sem JOIN cross-módulo aqui).
  *
  * GATE: só roda com MYSQL_INTEGRATION=1 (suíte `financial`).
- * W0 RED: `openPayablesAnalysisReader` ainda não existe.
  */
 
 import { describe, it, before, after, beforeEach } from 'node:test';
@@ -15,14 +17,15 @@ import { inArray } from 'drizzle-orm';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { openPayablesAnalysisReader } from '#src/modules/financial/public-api/payables-analysis-projection.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const connectionString =
   process.env['FINANCIAL_DATABASE_URL'] ??
   process.env['CONTRACTS_DATABASE_URL'] ??
-  'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  mysqlTestConnectionString();
 
-const CAT_A = 'aa000000-0000-4000-8000-0000000000a1';
-const CAT_B = 'bb000000-0000-4000-8000-0000000000b1';
+const PLAN_A = 'aa000000-0000-4000-8000-0000000000a1';
+const PLAN_B = 'bb000000-0000-4000-8000-0000000000b1';
 const CC_1 = 'cc000000-0000-4000-8000-0000000000c1';
 const NOW = new Date('2026-07-01T12:00:00.000Z');
 
@@ -31,7 +34,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     '[financial:payables-analysis] MYSQL_INTEGRATION não definido — pulando integração.\n',
   );
 } else {
-  describe('openPayablesAnalysisReader — Drizzle + MySQL (REP-3 · #114)', () => {
+  describe('openPayablesAnalysisReader — Drizzle + MySQL (REP-3 · #446 — raiz = Plano)', () => {
     let handle: FinancialMysqlHandle;
 
     before(async () => {
@@ -48,11 +51,8 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // `fin_payable_view` é read-model sem seed de migration e a asserção de contagem exige
       // exclusividade → o teste é dono da tabela inteira.
       await handle.db.delete(handle.schema.finPayableView);
-      // `fin_categories`/`fin_cost_centers` TÊM seed (migrations 0012/0035) do qual outros testes da
-      // suíte dependem — limpar só os ids deste teste, nunca a tabela.
-      await handle.db
-        .delete(handle.schema.finCategories)
-        .where(inArray(handle.schema.finCategories.id, [CAT_A, CAT_B]));
+      // `fin_cost_centers` TEM seed (migration 0035) do qual outros testes da suíte dependem —
+      // limpar só os ids deste teste, nunca a tabela.
       await handle.db
         .delete(handle.schema.finCostCenters)
         .where(inArray(handle.schema.finCostCenters.id, [CC_1]));
@@ -60,39 +60,43 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
     const payable = (over: {
       payableId: string;
-      categoryRef: string | null;
+      budgetPlanRef: string | null;
       costCenterRef: string | null;
       valueCents: number;
       status: string;
       dueDate: string;
+      categoryRef?: string | null;
+      subcategoryRef?: string | null;
+      programRef?: string | null;
+      debitAccountRef?: string | null;
     }) => ({
       payableId: over.payableId,
       documentId: 'dc000000-0000-4000-8000-00000000d001',
       kind: 'Parent',
       supplierRef: null,
       contractRef: null,
-      categoryRef: over.categoryRef,
+      categoryRef: over.categoryRef ?? null,
+      subcategoryRef: over.subcategoryRef ?? null,
+      budgetPlanRef: over.budgetPlanRef,
       costCenterRef: over.costCenterRef,
+      programRef: over.programRef ?? null,
+      debitAccountRef: over.debitAccountRef ?? null,
       valueCents: over.valueCents,
       dueDate: over.dueDate,
       status: over.status,
       updatedAt: NOW,
     });
 
-    it('CA4: agrega por categoria×CC×mês; período [start,end); Cancelled fora; nomes via JOIN', async () => {
-      await handle.db.insert(handle.schema.finCategories).values([
-        { id: CAT_A, name: 'Aluguel', group: 'despesa', active: true },
-        { id: CAT_B, name: 'Energia', group: 'despesa', active: true },
-      ]);
+    it('CA4: agrega por plano×CC×mês; período [start,end); Cancelled fora; nome do CC via JOIN', async () => {
       await handle.db
         .insert(handle.schema.finCostCenters)
         .values({ id: CC_1, code: 'CC-001', name: 'Administrativo', active: true });
 
       await handle.db.insert(handle.schema.finPayableView).values([
-        // dentro do período (jul + ago 2026)
+        // dentro do período (jul + ago 2026) — Plano A no CC_1
         payable({
           payableId: '11000000-0000-4000-8000-000000000011',
-          categoryRef: CAT_A,
+          budgetPlanRef: PLAN_A,
           costCenterRef: CC_1,
           valueCents: 100000,
           status: 'Open',
@@ -100,15 +104,16 @@ if (!process.env['MYSQL_INTEGRATION']) {
         }),
         payable({
           payableId: '21000000-0000-4000-8000-000000000021',
-          categoryRef: CAT_A,
+          budgetPlanRef: PLAN_A,
           costCenterRef: CC_1,
           valueCents: 50000,
           status: 'Approved',
           dueDate: '2026-08-10',
         }),
+        // Plano B, sem CC → grupo folha id null
         payable({
           payableId: '31000000-0000-4000-8000-000000000031',
-          categoryRef: CAT_B,
+          budgetPlanRef: PLAN_B,
           costCenterRef: null,
           valueCents: 30000,
           status: 'Paid',
@@ -117,7 +122,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         // antes do período (< dueStart) → fora
         payable({
           payableId: '41000000-0000-4000-8000-000000000041',
-          categoryRef: CAT_A,
+          budgetPlanRef: PLAN_A,
           costCenterRef: CC_1,
           valueCents: 999,
           status: 'Open',
@@ -126,7 +131,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         // >= dueEnd (half-open) → fora
         payable({
           payableId: '51000000-0000-4000-8000-000000000051',
-          categoryRef: CAT_A,
+          budgetPlanRef: PLAN_A,
           costCenterRef: CC_1,
           valueCents: 888,
           status: 'Open',
@@ -135,7 +140,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         // Cancelled → fora
         payable({
           payableId: '61000000-0000-4000-8000-000000000061',
-          categoryRef: CAT_A,
+          budgetPlanRef: PLAN_A,
           costCenterRef: CC_1,
           valueCents: 777,
           status: 'Cancelled',
@@ -155,24 +160,87 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // 3 grupos: (A,CC1,jul) (A,CC1,ago) (B,null,jul)
       assert.equal(r.value.length, 3, JSON.stringify(r.value));
       const key = (x: {
-        categoryRef: string | null;
+        budgetPlanRef: string | null;
         costCenterRef: string | null;
         monthYear: string;
-      }) => `${x.categoryRef ?? 'null'}|${x.costCenterRef ?? 'null'}|${x.monthYear}`;
+      }) => `${x.budgetPlanRef ?? 'null'}|${x.costCenterRef ?? 'null'}|${x.monthYear}`;
       const byKey = new Map(r.value.map((x) => [key(x), x]));
 
-      const jul = byKey.get(`${CAT_A}|${CC_1}|2026-07`)!;
+      const jul = byKey.get(`${PLAN_A}|${CC_1}|2026-07`)!;
       assert.equal(jul.totalCents, 100000);
-      assert.equal(jul.categoryName, 'Aluguel');
       assert.equal(jul.costCenterName, 'Administrativo');
 
-      const ago = byKey.get(`${CAT_A}|${CC_1}|2026-08`)!;
+      const ago = byKey.get(`${PLAN_A}|${CC_1}|2026-08`)!;
       assert.equal(ago.totalCents, 50000);
 
-      const bJul = byKey.get(`${CAT_B}|null|2026-07`)!;
+      const bJul = byKey.get(`${PLAN_B}|null|2026-07`)!;
       assert.equal(bJul.totalCents, 30000);
-      assert.equal(bJul.categoryName, 'Energia');
       assert.equal(bJul.costCenterName, null);
+    });
+
+    it('#682: filtros de servidor estreitam o TOTAL sem mudar o grão (plano×CC×mês)', async () => {
+      const CAT_X = 'c1000000-0000-4000-8000-000000000001';
+      const CAT_Y = 'c2000000-0000-4000-8000-000000000002';
+      const PROG_1 = 'a1000000-0000-4000-8000-000000000001';
+      const PROG_2 = 'a2000000-0000-4000-8000-000000000002';
+      const ACC_1 = 'd1000000-0000-4000-8000-000000000001';
+      const SUB_2 = 'b2000000-0000-4000-8000-000000000002';
+
+      await handle.db
+        .insert(handle.schema.finCostCenters)
+        .values({ id: CC_1, code: 'CC-001', name: 'Administrativo', active: true });
+
+      // Duas linhas no MESMO grão (Plano A × CC_1 × jul) — só diferem nos refs de recorte.
+      await handle.db.insert(handle.schema.finPayableView).values([
+        payable({
+          payableId: '12000000-0000-4000-8000-000000000012',
+          budgetPlanRef: PLAN_A,
+          costCenterRef: CC_1,
+          categoryRef: CAT_X,
+          programRef: PROG_1,
+          debitAccountRef: ACC_1,
+          valueCents: 100000,
+          status: 'Open',
+          dueDate: '2026-07-15',
+        }),
+        payable({
+          payableId: '22000000-0000-4000-8000-000000000022',
+          budgetPlanRef: PLAN_A,
+          costCenterRef: CC_1,
+          categoryRef: CAT_Y,
+          programRef: PROG_2,
+          subcategoryRef: SUB_2,
+          valueCents: 40000,
+          status: 'Open',
+          dueDate: '2026-07-20',
+        }),
+      ]);
+
+      const readerR = await openPayablesAnalysisReader({ connectionString });
+      assert.equal(readerR.ok, true, JSON.stringify(readerR));
+      if (!readerR.ok) return;
+      const reader = readerR.value;
+      const period = { dueStart: '2026-07-01', dueEnd: '2026-09-01' } as const;
+      const totalOf = async (
+        extra: Record<string, string>,
+      ): Promise<{ groups: number; total: number }> => {
+        const r = await reader.list({ ...period, ...extra });
+        assert.equal(r.ok, true, JSON.stringify(r));
+        if (!r.ok) return { groups: 0, total: 0 };
+        return {
+          groups: r.value.length,
+          total: r.value.reduce((s, x) => s + x.totalCents, 0),
+        };
+      };
+
+      // Sem filtro: 1 grupo (A×CC1×jul), soma das duas linhas.
+      assert.deepEqual(await totalOf({}), { groups: 1, total: 140000 });
+      // Cada recorte mantém 1 grupo (grão intocado) e estreita o total.
+      assert.deepEqual(await totalOf({ categoryRef: CAT_X }), { groups: 1, total: 100000 });
+      assert.deepEqual(await totalOf({ subcategoryRef: SUB_2 }), { groups: 1, total: 40000 });
+      assert.deepEqual(await totalOf({ programRef: PROG_2 }), { groups: 1, total: 40000 });
+      assert.deepEqual(await totalOf({ debitAccountRef: ACC_1 }), { groups: 1, total: 100000 });
+      await reader.close();
     });
   });
 }

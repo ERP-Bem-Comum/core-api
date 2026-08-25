@@ -1,0 +1,534 @@
+id: ADR-0038
+title: Coleções Bruno obrigatoriamente executadas via CLI + diretrizes de autoria `.bru`
+source: handbook/architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md
+decided_on: 2026-06-08
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0034, ADR-0037]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Décimo primeiro `realized`, e o único do acervo cuja diretriz de autoria pode ser conferida em 266
+    arquivos de uma vez: **nenhum dos 266 `.bru` começa com `#`**. A regra que existe porque o parser do
+    Bruno rejeita o comentário no topo tem aderência de 100%.
+    O runner único existe e faz o que o ADR exige: `package.json:69` mapeia
+    `test:integration:all` para `scripts/e2e/bruno-all.sh`, cuja linha 95 roda
+    `bru run "${MAIN_FOLDERS[@]}" --env local` — TODAS as pastas principais num único processo, que é o
+    requisito para o token de `0-auth` persistir. A pasta de expected-fail está isolada
+    (`api-collections/core-api/z-pending-fixes`) e o `--reporter-json` está disponível sob
+    `E2E_JSON_REPORT=1` (`:93`), como o §3 pede quando o body importa.
+    Uma inconsistência dentro do próprio runner: o cabeçalho (`:8`) diz que `z-pending-fixes` é
+    "EXPECTED-FAIL (…) roda à parte, NÃO bloqueia", e a linha 99 diz "os 5 tickets foram implementados →
+    DEVE passar". As duas coisas não podem ser verdade ao mesmo tempo. Os fixes entraram e a pasta virou
+    suíte de regressão; o comentário de cima ficou.
+
+extraction:
+  state: complete
+  covers: |
+    11 alegações — as quatro decisões numeradas mais as sete diretrizes normativas de autoria. As
+    consequências (incluindo a dívida de paginação) são registro, não norma.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA — originou a .claude/rules/api-collections.md
+    applied_to: ['.claude/rules/api-collections.md']
+    gap: |
+      A rule é path-scoped e está no lugar exato — carrega quando o agente toca `api-collections/`, que é o
+      único momento em que essas diretrizes importam. Melhor escopo entre as seis rules que a 039 criou.
+      O que não registrou: a aderência medida. Saber que 266 de 266 `.bru` respeitam a diretriz do `#`
+      muda a leitura da rule — ela documenta prática estabelecida, não corrige desvio corrente.
+
+claims:
+  - id: ADR-0038-C1
+    text: |
+      Toda coleção `.bru` DEVE ter um RUNNER CLI que a executa contra o servidor real (`bru run`). Coleção
+      SEM runner é PROIBIDA. O runner canônico da borda inteira é `pnpm run test:integration:all`;
+      coleções/subconjuntos por módulo são atalhos para o mesmo conjunto.
+    kind: obligation
+    source_lines: ['28-30']
+    applies_to:
+      - 'api-collections/**'
+      - 'package.json'
+      - 'scripts/e2e/*.sh'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'package.json:69 — "test:integration:all": "bash scripts/e2e/bruno-all.sh"'
+        - 'scripts/e2e/bruno-all.sh:95 — ( cd api-collections/core-api && bru run "${MAIN_FOLDERS[@]}" --env local -r … )'
+        - 'scripts/e2e/bruno-all.sh:11 — comentário: Token compartilhado: o `bru run` recebe TODAS as pastas principais num único processo'
+        - 'scripts/e2e/bruno-all.sh:25 — o script aborta com mensagem clara se o bru CLI não estiver no PATH'
+        - 'nota: existe UMA coleção (api-collections/core-api/) e um runner que a cobre — a relação coleção↔runner é 1:1, satisfazendo a proibição por construção'
+        - 'nota: o ADR-0034 prescrevia api-collections/<área>/; a consolidação numa coleção só é o que torna o token compartilhado possível'
+      verify: |
+        grep -n "test:integration:all" package.json; grep -n "bru run" scripts/e2e/bruno-all.sh
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `api-collections/`, quando existir coleção (diretório com `bruno.json` ou `.bru`) que nenhum
+        script de runner referencie, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.claude/rules/api-collections.md']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Coleção `.bru` MUST ser referenciada por um runner que a execute via `bru run`. MUST NOT existir
+        coleção sem runner.
+      rationale: |
+        O ADR mostra o custo com número: ao rodar o runner único pela primeira vez, **24 de 26 falhas eram
+        `.bru` desalinhados** — e `api-collections/contracts` "nunca teve runner Bruno". Coleção sem runner
+        não é teste fraco, é teste **inexistente com aparência de existente**, e a única forma de
+        descobrir é rodar. Regra com custo de adoção zero e retorno medido.
+
+  - id: ADR-0038-C2
+    text: |
+      Um `.bru` só é considerado PRONTO após ser EXECUTADO via `bru run` contra o server real e PASSAR — ou
+      REPROVAR CONSCIENTEMENTE (expected-fail isolado em pasta própria que não bloqueia o gate principal).
+      Escrever `.bru` sem rodar o CLI é PROIBIDO; não conta como cobertura. Vale para criação E alteração.
+    kind: prohibition
+    source_lines: ['32-34']
+    applies_to:
+      - 'api-collections/**/*.bru'
+    reality:
+      verdict: partial
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: o diretório api-collections/core-api/z-pending-fixes existe — a pasta de expected-fail isolada que o ADR prescreve'
+        - 'scripts/e2e/bruno-all.sh:8 — comentário: z-pending-fixes: EXPECTED-FAIL (regressão de fix + feature pendente) — roda à parte, NÃO bloqueia'
+        - 'scripts/e2e/bruno-all.sh:99 — echo do runner: === Suíte REGRESSÃO (z-pending-fixes — deve PASSAR após os 5 fixes) ==='
+        - 'scripts/e2e/bruno-all.sh:100 — a pasta é executada num bru run próprio, junto de 0-auth'
+        - 'nota: as linhas 8 e 99 se contradizem — "NÃO bloqueia" versus "deve PASSAR"; a pasta mudou de natureza quando os 5 fixes entraram e o cabeçalho não acompanhou'
+        - 'nota: se um .bru foi executado antes de ser commitado é fato de processo, não observável no repo — o que se verifica é a estrutura que permite cobrar'
+      verify: |
+        ls -d api-collections/core-api/z-pending-fixes; grep -n "z-pending" scripts/e2e/bruno-all.sh
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Não há artefato que prove que um `.bru` foi executado antes do commit. O ADR resolve por REVIEW
+        (§4), não por teste — e review não é falseável por gate.
+      expected_error: null
+      blocker: 'Execução prévia é fato de processo; o repositório não guarda evidência dela.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Pasta de expected-fail MUST declarar, no runner, se bloqueia ou não o gate. Quando os fixes que a
+        motivaram entrarem, ela MUST ser promovida a suíte bloqueante ou removida — MUST NOT permanecer
+        rotulada como expected-fail depois de passar a passar.
+      rationale: |
+        SUBSTITUÍDO, não estreitado: a alegação original é inauditável e nenhum recorte a torna testável.
+        Em lugar dela, a obrigação vizinha que deixa rastro. "Rodou antes de commitar" é processo e não
+        deixa artefato nenhum no repositório; o que deixa é o estado da pasta de expected-fail — e ela já está inconsistente
+        (`bruno-all.sh:8` × `:99`). O risco concreto: uma suíte que "não bloqueia" e na verdade deveria
+        passar é uma suíte cujo vermelho ninguém trata, o que colide com a política de regressão zero do
+        `AGENTS.md`.
+
+  - id: ADR-0038-C3
+    text: |
+      O RESULTADO DO CLI é a fonte de verdade, não a leitura do `.bru`. Asserções devem refletir o
+      comportamento REAL observado do servidor (verificado com `--reporter-json` quando o body importar),
+      não o presumido.
+    kind: obligation
+    source_lines: ['36-39']
+    applies_to:
+      - 'api-collections/**/*.bru'
+      - 'scripts/e2e/*.sh'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'scripts/e2e/bruno-all.sh:93 — JSON_MAIN=(); [ "${E2E_JSON_REPORT:-0}" = "1" ] && { mkdir -p …/test-results; JSON_MAIN=(--reporter-json …/main.json); }'
+        - 'scripts/e2e/bruno-all.sh:100 — o mesmo mecanismo para a suíte de regressão, gravando pending.json'
+        - 'nota: o --reporter-json é opt-in por env (E2E_JSON_REPORT=1), coerente com "quando o body importar"'
+      verify: |
+        grep -n "reporter-json\|E2E_JSON_REPORT" scripts/e2e/bruno-all.sh
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma asserção de `.bru` que descreve comportamento não observado, quando o runner roda, então
+        ela falha. O mecanismo é o próprio `bru run` — é o RED que já existe.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/e2e/bruno-all.sh']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Asserção de coleção MUST descrever comportamento observado, verificado com `--reporter-json`
+        quando o corpo da resposta importar. MUST NOT ser derivada de leitura do schema ou do código.
+      rationale: |
+        É a inversão de autoridade que dá nome ao ADR, e o inventário tem um caso paralelo que a reforça:
+        o `ADR-0026`, onde a regra descrevia um read/write split que o código nunca implementou porque
+        ninguém confrontou o `src/`. Aqui o mesmo erro foi cometido em 24 de 26 `.bru` e detectado ao
+        executar. Presumir comportamento é o modo de falha padrão de todo artefato de teste escrito a
+        partir da especificação.
+
+  - id: ADR-0038-C4
+    text: |
+      CI: o gate de integração roda o runner único; um PR que adiciona/altera `.bru` SEM evidência de
+      execução verde (ou expected-fail justificado) é REPROVADO no review.
+    kind: obligation
+    source_lines: ['41-42']
+    applies_to:
+      - '.github/workflows/*.yml'
+    reality:
+      verdict: partial
+      holds_in: [repo]
+      absent_in: [repo]
+      evidence:
+        - '.github/workflows/ci.yml:9 — comentário: Integração continua via `pnpm run test:integration:*` (precisa de Docker)'
+        - 'ausência: nenhum job de CI invoca bru run — a execução é local/manual, coerente com o ADR-0034 §5 (opt-in, não gate obrigatório)'
+        - 'nota: a exigência recai sobre o REVIEW humano ("é reprovado no review"), não sobre um gate mecânico — logo não é observável no repo'
+      verify: |
+        grep -rn "bru\|integration" .github/workflows/ci.yml | head -5
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Não há gate a exercitar: a norma delega ao julgamento do revisor. Só seria falseável se o `bru run`
+        virasse job de CI — que o `ADR-0034` §5 deliberadamente adiou para "ADR/ticket futuro".
+      expected_error: null
+      blocker: 'A norma é de review humano; o ADR-0034 §5 adiou o gate mecânico.'
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: |
+        Fica `pending` porque as duas decisões do repo se cruzam aqui: este ADR quer o gate de integração
+        cobrando `.bru`, e o `ADR-0034` §5 diz que tornar `bru run` gate obrigatório "fica para um
+        ADR/ticket futuro" — que não existe. Propor regra agora seria escolher entre dois ADRs aceitos sem
+        mandato. É uma decisão para o dono do repo: ou o `bru run` entra no CI (e a regra passa a ter
+        sujeito), ou se assume que a cobrança é de review e a norma sai do texto.
+
+  - id: ADR-0038-C5
+    text: |
+      Diretriz de autoria: SEM comentário `#` no topo do arquivo — o parser do Bruno rejeita
+      (`Expected end of input`). O arquivo começa com `meta {`. Notas vão em `meta { docs: ... }`, em
+      `folder.bru`, ou em comentário `//` DENTRO de um bloco `script:*`.
+    kind: prohibition
+    source_lines: ['46-48']
+    applies_to:
+      - 'api-collections/**/*.bru'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum dos 266 arquivos .bru de api-collections/ começa com # — aderência de 100%'
+        - 'nota: é a única diretriz do acervo verificável por uma varredura de uma linha em todos os arquivos afetados'
+      verify: |
+        for f in $(find api-collections -name '*.bru'); do head -1 "$f" | grep -q '^#' && echo "VIOLA: $f"; done; find api-collections -name '*.bru' | wc -l
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado qualquer `.bru`, quando a primeira linha começar com `#`, então o teste falha. Um teste de
+        seis linhas cobre os 266 arquivos.
+      expected_error: 'Expected end of input'
+      blocker: null
+      enforced_by: ['.claude/rules/api-collections.md']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `.bru` MUST começar com `meta {`. MUST NOT haver comentário `#` antes do primeiro bloco.
+      rationale: |
+        Candidata a mecanizar imediatamente: aderência já é 100%, o teste é trivial, e a falha atual é um
+        erro de parser (`Expected end of input`) que não diz qual arquivo nem por quê. É o melhor
+        custo-benefício de enforcement que o inventário encontrou — regra que já é seguida, violação
+        barata de detectar, e mensagem de erro ruim no caminho alternativo.
+
+  - id: ADR-0038-C6
+    text: |
+      Diretriz: BODY ALINHADO AO SCHEMA REAL. Antes de escrever o body, LER o schema Zod da rota. Atenção
+      a `z.discriminatedUnion` (exige o campo discriminador, ex. `mode`/`kind`), campos `min(1)` e nomes
+      exatos — não presumir.
+    kind: obligation
+    source_lines: ['49-51']
+    applies_to:
+      - 'api-collections/**/*.bru'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rln "mode\|kind" api-collections/core-api/**/*.bru 2>/dev/null | head; grep -rn "discriminatedUnion" src/modules/*/adapters/http/*.ts | head -3
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um `.bru` cujo body não traz o campo discriminador, quando executado, então a rota responde
+        400 e o teste falha. É o RED que o ADR descreve tendo acontecido de verdade — o `create-contract`
+        não enviava `mode` depois de o schema virar `z.discriminatedUnion('mode')`.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/e2e/bruno-all.sh']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é a `C3` (o resultado do CLI é a fonte de verdade) aplicada ao body. A
+        execução real cobre isso melhor do que qualquer regra de leitura — e o próprio ADR nasceu de
+        descobrir por execução o que a leitura não pegou. Manter como diretriz de autoria na rule
+        path-scoped, não como norma independente.
+
+  - id: ADR-0038-C7
+    text: |
+      Diretriz: DADOS VÁLIDOS. CPF/CNPJ gerados por módulo 11 (ver `scripts/seed-partners.ts`); UUID v4
+      real — o nil UUID `0000…0000` reprova `isUuidV4` e devolve 400, não 404; usar `…-4000-a000-…` para
+      "ausente".
+    kind: obligation
+    source_lines: ['52-53']
+    applies_to:
+      - 'api-collections/**/*.bru'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rn "00000000-0000" api-collections/ 2>/dev/null | head -3; ls scripts/seed-partners.ts 2>&1 | head -1
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um `.bru`, quando contiver o nil UUID (`00000000-0000-...`), então o teste falha — o caso
+        "ausente" MUST usar UUID v4 válido e inexistente, para exercitar 404 em vez de 400.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Fixture de "recurso ausente" MUST usar identificador VÁLIDO e inexistente. MUST NOT usar valor
+        malformado (nil UUID, CPF `12345678901`) para testar ausência — malformado exercita a validação,
+        não o caminho de não-encontrado.
+      rationale: |
+        Estreitado para a confusão específica, que é sutil e custa caro: o nil UUID parece o valor natural
+        para "não existe" e devolve **400 em vez de 404**, então o teste passa a validar a borda achando
+        que valida o repositório. O caminho de 404 fica sem cobertura e ninguém nota, porque há um teste
+        verde com o nome certo.
+
+  - id: ADR-0038-C8
+    text: |
+      Diretriz: ASSERÇÕES TOLERANTES ao código de borda real, com invariante claro. Validação de
+      querystring pode ser 400 (Zod) e não 422 — aceitar o real
+      (`expect([400,422,200]).to.include(status)`) e manter o invariante forte: NUNCA 500, sem vazar
+      stack.
+    kind: obligation
+    source_lines: ['54-56']
+    applies_to:
+      - 'api-collections/**/*.bru'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rn "to.include(status)\|res.status" api-collections/core-api --include='*.bru' 2>/dev/null | head -5
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada qualquer rota exercitada com input inválido, quando responder 500 ou vazar stack no corpo,
+        então o teste falha. É o invariante que MUST valer em todas as coleções, independente do código
+        exato de erro.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Coleção MUST assertar o invariante forte (nunca 500, nunca stack no corpo) e MUST tolerar variação
+        no código exato de erro de validação (400 vs 422). MUST NOT fixar o código quando ele não é parte
+        do contrato publicado.
+      rationale: |
+        É a diretriz mais transferível do conjunto, e a que evita o teste frágil-e-fraco ao mesmo tempo:
+        fixar 422 quebra quando a borda responde 400 por decisão de framework (Zod), enquanto "nunca 500,
+        sem vazar stack" é o que realmente importa e vale para toda rota. Asserção forte no invariante,
+        tolerante no acidente.
+
+  - id: ADR-0038-C9
+    text: |
+      Diretriz: AUTENTICAÇÃO COMPARTILHADA. Um único login por perfil (pasta `0-auth/`), token via
+      `bru.setVar` reusado por todos os módulos. Respeitar o rate-limit sensível de login (em E2E,
+      `AUTH_LOGIN_RATE_LIMIT_MAX` relaxa). NÃO duplicar login por módulo.
+    kind: prohibition
+    source_lines: ['57-59']
+    applies_to:
+      - 'api-collections/**'
+      - 'scripts/e2e/*.sh'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'scripts/e2e/bruno-all.sh:11 — comentário: Token compartilhado: o `bru run` recebe TODAS as pastas principais num único processo (o token…)'
+        - 'scripts/e2e/bruno-all.sh:95 — a execução única com MAIN_FOLDERS é o mecanismo que faz o token persistir'
+        - 'scripts/e2e/bruno-all.sh:100 — a suíte de regressão roda 0-auth junto, ou seja reautentica em vez de duplicar login por módulo'
+        - 'nota: a pasta 0-auth é referenciada pelo nome no runner, confirmando a convenção de perfil único'
+      verify: |
+        grep -n "0-auth\|Token compartilhado" scripts/e2e/bruno-all.sh
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada a execução completa da coleção, quando houver mais de um login por perfil, então o teste
+        falha — o rate-limit de login é o sintoma, e ele aparece como falha intermitente e confusa.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/e2e/bruno-all.sh']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Coleção MUST autenticar uma vez por perfil, em pasta dedicada, e compartilhar o token. MUST NOT
+        duplicar login por módulo — o rate-limit de login é sensível e a falha resultante é intermitente.
+      rationale: |
+        A razão registrada é operacional e vale a regra: login duplicado por módulo esbarra no rate-limit
+        e produz falha **intermitente**, que é a mais cara de diagnosticar — parece flakiness de rede.
+        E o mecanismo tem uma amarra não óbvia que a regra precisa carregar: o token só persiste se todas
+        as pastas rodarem num único `bru run`; pasta-a-pasta perde o estado.
+
+  - id: ADR-0038-C10
+    text: |
+      Diretriz: ENCADEAMENTO por `seq` + `setVar`. Casos que dependem de estado (criar→ler→editar) capturam
+      o id no `script:post-response` e respeitam a ordem (`meta { seq }`); rodar tudo num único `bru run`
+      — pasta-a-pasta perde o estado.
+    kind: obligation
+    source_lines: ['60-62']
+    applies_to:
+      - 'api-collections/**/*.bru'
+      - 'scripts/e2e/*.sh'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'scripts/e2e/bruno-all.sh:91 — cabeçalho de seção: PRINCIPAL: pastas em UM unico `bru run` (token de 0-auth persiste)'
+        - 'scripts/e2e/bruno-all.sh:95 — a invocação passa o array de pastas de uma vez, não em laço'
+      verify: |
+        grep -n "UM unico\|MAIN_FOLDERS" scripts/e2e/bruno-all.sh | head -4
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada a coleção executada pasta-a-pasta em processos separados, então os casos encadeados falham por
+        variável ausente. É o RED que prova a necessidade do processo único.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/e2e/bruno-all.sh']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como regra própria: é o mesmo mecanismo da `C9` (processo único para o estado persistir),
+        e a `C9` já carrega a amarra na sua redação. Duas regras para um mecanismo convidam a cumprir uma
+        e esquecer a outra. Manter o detalhe do `seq` como diretriz de autoria na rule path-scoped.
+
+  - id: ADR-0038-C11
+    text: |
+      Diretriz: EXPECTED-FAIL ISOLADO. Testes de regressão de fix ou de feature pendente que reprovam por
+      design vivem em pasta própria (ex. `z-pending-fixes/`), rodados à parte; NÃO entram no gate verde
+      principal.
+    kind: obligation
+    source_lines: ['63-64']
+    applies_to:
+      - 'api-collections/**'
+      - 'scripts/e2e/*.sh'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: a pasta api-collections/core-api/z-pending-fixes existe, com o nome exato que o ADR sugere'
+        - 'scripts/e2e/bruno-all.sh:8 — z-pending-fixes: EXPECTED-FAIL (regressão de fix + feature pendente) — roda à parte, NÃO bloqueia'
+        - 'scripts/e2e/bruno-all.sh:99 — === Suíte REGRESSÃO (z-pending-fixes — deve PASSAR após os 5 fixes) ==='
+        - 'nota: o mesmo arquivo afirma que a pasta não bloqueia (:8) e que ela deve passar (:99) — os 5 fixes entraram, a pasta mudou de natureza e o cabeçalho não acompanhou'
+        - 'scripts/e2e/bruno-all.sh:100 — a pasta É executada pelo runner, junto de 0-auth'
+      verify: |
+        grep -n "z-pending" scripts/e2e/bruno-all.sh
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada a pasta de expected-fail, quando TODOS os seus casos passarem, então o teste falha — sinal de
+        que ela cumpriu o propósito e MUST ser promovida ao gate principal ou removida.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: narrow
+      text: |
+        Pasta de expected-fail MUST ter um dono e uma condição de saída declarada. Quando todos os seus
+        casos passarem, ela MUST ser promovida ao gate bloqueante ou removida — MUST NOT seguir rotulada
+        como não-bloqueante.
+      rationale: |
+        É a única alegação `contradicted` deste ADR, e a contradição está dentro de um único arquivo
+        (`bruno-all.sh:8` × `:99`). O padrão é o mesmo do `Proposed` sem critério de saída (`ADR-0017`):
+        um estado transitório sem condição de término declarada não termina. Aqui a consequência é
+        concreta — uma suíte que "não bloqueia" e deveria passar é uma suíte cujo vermelho ninguém trata,
+        o que colide de frente com a política de regressão zero do `AGENTS.md`.
+
+findings:
+  - |
+    **Aderência de 100% em 266 arquivos, e nenhum mecanismo a garante.** Nenhum `.bru` começa com `#` — a
+    diretriz que existe porque o parser do Bruno rejeita está cumprida em todos. É o melhor
+    custo-benefício de enforcement do inventário: o teste tem seis linhas, a aderência já é total, e a
+    falha no caminho alternativo é um `Expected end of input` que não diz qual arquivo. Mecanizar aqui
+    não corrige nada hoje e protege de graça.
+  - |
+    **Contradição dentro de um único arquivo.** `scripts/e2e/bruno-all.sh:8` diz que `z-pending-fixes` é
+    "EXPECTED-FAIL (…) roda à parte, NÃO bloqueia"; a linha 99 do mesmo script diz "os 5 tickets foram
+    implementados → DEVE passar". Os fixes entraram, a pasta virou suíte de regressão e o cabeçalho ficou.
+    É o `ADR-0017` em miniatura: estado transitório sem condição de saída declarada não termina — e aqui
+    o resultado é uma suíte cujo vermelho, por rótulo, ninguém precisa tratar.
+  - |
+    **O ADR nasceu de uma medição, e a medição é o argumento.** "24 de 26 falhas eram `.bru` desalinhados
+    com o servidor real", e `api-collections/contracts` "nunca teve runner Bruno" — o `e2e-contracts.sh`
+    rodava um `node:test`, não a coleção. Junto com o `ADR-0051` (que decide por contraexemplo medido em
+    QA), são as duas decisões do acervo cujo peso vem de dado e não de princípio. Ambas produziram regras
+    difíceis de reabrir por engano.
+  - |
+    **Duas alegações deste ADR são `unfalsifiable`, e as duas são de PROCESSO.** "`.bru` executado antes do
+    commit" (`C2`) e "PR reprovado no review" (`C4`) não deixam rastro no repositório. É a maior
+    concentração de inauditável de um ADR único no inventário — e faz sentido: este é um ADR sobre
+    disciplina de autoria, não sobre estrutura de código. Vale como aviso para a fase de regras: norma de
+    processo precisa de artefato, ou fica dependendo de quem lembra.
+  - |
+    A `C7` esconde a armadilha mais sutil do conjunto: o nil UUID (`0000…0000`) parece o valor natural
+    para "não existe" e devolve **400 em vez de 404**, porque reprova `isUuidV4` antes de chegar ao
+    repositório. O teste fica verde, com o nome certo, validando a borda em vez do caminho de
+    não-encontrado — que segue sem cobertura. Mesma família do CPF `12345678901`, que reprova módulo 11.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita `handbook/specs/007-integration-test-suite/` (spec, runner e `safety-net/runner-findings.md`) e a
+    rule `.claude/rules/api-collections.md` — a rule foi confirmada existente, a spec não foi lida. A
+    dívida de paginação registrada nas consequências (`total`/`totalItems`/`itemCount` divergindo entre
+    módulos) menciona "ticket próprio", não verificado nesta fase.

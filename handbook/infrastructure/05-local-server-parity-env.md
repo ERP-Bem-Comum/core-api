@@ -9,7 +9,7 @@
 > Em caso de divergência, **o código vence**.
 >
 > Este guia foca no **`.env` e no e-mail**. Para o passo-a-passo de MySQL/MinIO/RBAC já existe o
-> runbook [`.claude/runbooks/local-stack-setup.md`](../../.claude/runbooks/local-stack-setup.md) —
+> runbook [`context/runbooks/local-stack-setup.md`](../../context/runbooks/local-stack-setup.md) —
 > aqui a gente fecha o que falta (e-mail, JWT estável) e entrega um `.env` completo copia-e-cola.
 
 ---
@@ -321,7 +321,7 @@ docker compose -f compose.yaml -f compose.override.yaml down -v    # ⚠️ apag
 | S3 docs+fotos | `S3_ENDPOINT` `S3_REGION` `S3_BUCKET` `S3_ACCESS_KEY_ID` `S3_SECRET_ACCESS_KEY` `S3_FORCE_PATH_STYLE` | **sim** se `CONTRACTS_DRIVER=mysql` | `contracts/adapters/storage/s3-config-aws.ts` · `auth/.../composition.ts` |
 | S3 logo | `PROGRAMS_LOGO_S3_*` (5) | tudo-ou-nada | `src/server.ts` (`readProgramsLogoConfig`) |
 | E-mail | `SMTP_HOST` `SMTP_PORT` `SMTP_SECURE` `SMTP_USER` `SMTP_PASS` + `AUTH_RESET_FROM` (`AUTH_INVITE_FROM` opc.) | p/ enviar | `notifications/.../nodemailer-config.ts` · `auth/.../composition.ts` |
-| JWT | `AUTH_JWT_PRIVATE_KEY` `AUTH_JWT_PUBLIC_KEY` (PEM ES256) | opc. (efêmero) | `auth/.../composition.ts` (`loadOrGenerateKeys`) |
+| JWT | `AUTH_JWT_PRIVATE_KEY` `AUTH_JWT_PUBLIC_KEY` (PEM ES256) | **prod: sim** · dev: opc. (efêmero, com aviso) | `src/server.ts` → `auth/.../jwt-key-config.ts` (`readAuthJwtKeys`) |
 | Reset link | `AUTH_RESET_BASE_URL` | recomendada | `src/server.ts` |
 | RBAC seed | `CORE_API_E2E=1` + `AUTH_SEED_JSON` | dev/homolog | `auth/adapters/http/e2e-seed.ts` |
 | Magalu (prod) | `MAGALU_REGION` `MAGALU_BUCKET` `MAGALU_ACCESS_KEY_ID` `MAGALU_SECRET_ACCESS_KEY` | só prod (alt. ao S3_*) | `contracts/.../magalu-cloud-config.ts` |

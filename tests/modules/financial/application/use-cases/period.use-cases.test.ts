@@ -116,6 +116,7 @@ describe('financial/application/use-cases/export-reconciliation', () => {
       statements: repo,
       exporter: reconciliationExporter,
     })({
+      by: 'period',
       periodId: String(closed.value.periodId),
       format: 'csv',
     });
@@ -132,7 +133,7 @@ describe('financial/application/use-cases/export-reconciliation', () => {
       periodStore: createInMemoryReconciliationPeriodStore(),
       statements: repo,
       exporter: reconciliationExporter,
-    })({ periodId: '22222222-2222-4222-8222-222222222222', format: 'csv' });
+    })({ by: 'period', periodId: '22222222-2222-4222-8222-222222222222', format: 'csv' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'reconciliation-period-not-found');
   });
@@ -294,11 +295,15 @@ describe('financial — guard period-closed (CA4)', () => {
         undo: () => Promise.resolve(ok(undefined)),
         findActiveByTransaction: () => Promise.resolve(ok(null)),
         undoCounterpartOrigin: () => Promise.resolve(ok(undefined)),
+        undoCounterpartDestination: () => Promise.resolve(ok(undefined)),
       },
       statements: repo,
       periods: periodStore,
       clock: ClockReal(),
-      expectedCounterpartStore: { findByOriginReconciliation: () => Promise.resolve(ok(null)) },
+      expectedCounterpartStore: {
+        findByOriginReconciliation: () => Promise.resolve(ok(null)),
+        findByMatchedTransaction: () => Promise.resolve(ok(null)),
+      },
     })({ reconciliationId: String(recon.id), undoneBy: 'u2' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'period-closed');

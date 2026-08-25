@@ -1,0 +1,210 @@
+id: ADR-0005
+title: BFF Gateway Burro (Apenas Roteamento)
+source: handbook/architecture/adr/0005-thin-bff-gateway.md
+decided_on: 2026-04-27
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0024, ADR-0025, ADR-0032, ADR-0033, ADR-0055]
+
+assessment:
+  verdict: unverified
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O sujeito deste ADR — o `bff-gateway` — vive em outro repositório (`web-app`). Nenhuma das
+    restrições dele é verificável a partir do `core-api`, e é honesto dizer isso em vez de inferir.
+    O que É verificável daqui é indireto e favorável: a proibição de composição no BFF resistiu à
+    pressão. Quando a necessidade de compor resposta apareceu, o ADR-0032 a colocou no adapter HTTP do
+    **core-api**, com marcação de transitoriedade e header `Sunset` — não no BFF. A tentação que este
+    ADR nomeia ("só colocar essa coisinha aqui no BFF") foi resolvida do lado certo.
+    Três outros ADRs dependem desta fronteira e a citam nominalmente: o ADR-0024 (BFF valida, nunca
+    emite), o ADR-0055 (o MySQL está fora como store de sessão porque `ADR-0005:60` proíbe o BFF de
+    acessar banco) e o ADR-0032. A fronteira é carregada por citação, não por mecanismo.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — roteamento por prefixo, cross-cutting, a lista de sete proibições, e o tamanho-alvo.
+    As alternativas rejeitadas (front escolhe URL, BFF inteligente, service mesh) são fundamentação.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: COBERTO — "BFF é burro, zero regra de negócio" já entrou na http-edge.md via ADR-0025
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Correto, e é a única forma possível de cobrir: como o BFF é outro repositório, o que a rule pode
+      fazer é instruir quem edita a borda do `core-api` a não duplicar o BFF. O que a 039 não
+      registrou é que a fronteira NÃO tem mecanismo em lado algum — nem cá, nem lá — e é sustentada
+      por três ADRs que a citam.
+
+claims:
+  - id: ADR-0005-C1
+    text: |
+      Roteamento por prefixo: `/api/v1/*` para o `legacy-api`, `/api/v2/*` para o `core-api`.
+    kind: obligation
+    source_lines: [25]
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'O bff-gateway vive no repositório web-app. Verificar de lá. Atenção: o ADR-0033 versiona POR RECURSO e o core-api serve /api/v1 espelhando o legado — o mapeamento prefixo→serviço deste ADR pode não valer mais.'
+    testability:
+      verdict: testable-with-work
+      layer: e2e
+      red: |
+        Dada uma requisição a `/api/v1/<recurso>`, quando o recurso já foi migrado, então a resposta
+        MUST vir do serviço correto conforme o ADR-0033 — não necessariamente do legado.
+      expected_error: null
+      blocker: |
+        Exige os dois repositórios e os dois serviços de pé. E exige antes resolver a tensão com o
+        ADR-0033, que versiona por recurso: se o `core-api` serve `/api/v1` espelhando o legado, o
+        mapeamento "v1 = legado" deixou de ser verdade.
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: null
+
+  - id: ADR-0005-C2
+    text: |
+      O BFF faz cross-cutting: autenticação, rate limit, request-id e log estruturado.
+    kind: permission
+    source_lines: [26, 39]
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Responsabilidade do web-app. Verificar de lá.'
+    testability:
+      verdict: testable-with-work
+      layer: e2e
+      red: |
+        Dada uma requisição sem credencial, quando chega ao BFF, então MUST ser recusada antes de
+        alcançar qualquer backend.
+      expected_error: null
+      blocker: |
+        Exige o BFF, que é outro código-base. O `core-api` tem `requireAuth` próprio — a validação é
+        redundante por desenho, não delegada.
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: null
+
+  - id: ADR-0005-C3
+    text: |
+      Zero regra de negócio, zero composição de respostas, zero cache de domínio. O BFF NÃO conhece
+      schema de domínio, NÃO acessa banco de dados, NÃO compõe respostas de múltiplos backends, NÃO
+      traduz formatos entre v1 e v2, e NÃO valida payload além de "é JSON válido".
+    kind: prohibition
+    source_lines: [27, '55-67']
+    applies_to: []
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - '.claude/rules/http-edge.md:54 — a composição de leitura foi para o adapter HTTP do CORE-API pelo ADR-0032, não para o BFF; a proibição resistiu à pressão'
+        - 'handbook/architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md:146 — o ADR-0055 exclui o MySQL como store de sessão do BFF citando ADR-0005:60 ("o BFF não acessa banco") como a razão arquitetural correta'
+        - 'nota: a proibição de acessar banco é citada nominalmente por dois ADRs posteriores para vetar caminhos — funciona como fronteira viva, mas por citação, não por mecanismo'
+      verify: |
+        grep -rn "0005" handbook/architecture/adr/0032-*.md handbook/architecture/adr/0055-*.md | head
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado o código-base do BFF, quando existir import de driver de banco, ORM, ou schema de
+        domínio, então o teste falha. É um teste estático simples — só precisa rodar no repositório
+        certo.
+      expected_error: null
+      blocker: |
+        O teste é trivial e não pode ser escrito aqui: precisa viver no `web-app`. É o caso mais claro
+        do inventário de invariante cujo enforcement está do outro lado de uma fronteira de repositório.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O BFF MUST NOT conhecer schema de domínio, acessar banco, compor resposta de múltiplos
+        backends, traduzir formato entre versões, nem validar payload além de JSON bem-formado.
+        Necessidade de composição MUST ser resolvida no serviço de domínio, com marcação de
+        transitoriedade (ADR-0032).
+      rationale: |
+        Adotar como está, com o acréscimo de para ONDE a composição vai — que é o que salvou a
+        invariante quando a pressão apareceu. Dois ADRs posteriores já usam esta proibição para vetar
+        decisões, o que a torna fronteira em uso ativo, não texto morto.
+
+  - id: ADR-0005-C4
+    text: |
+      Tamanho-alvo inicial de 200-300 linhas. Stack: Node 20 mais framework leve (Hono ou Fastify).
+    kind: aspiration
+    source_lines: [29]
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Métrica do web-app. Nota: a versão "Node 20" está superseded pelo ADR-0009 (Node 24), e o web-app real usa TanStack Start — não Hono nem Fastify.'
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum útil. Contagem de linhas como invariante arquitetural é proxy fraco: 300 linhas de
+        composição violam o ADR e 800 de roteamento declarativo não. O que importa é a lista de
+        proibições da C3, que é verificável por import.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar. A intenção ("BFF pequeno é BFF que não esconde regra") já está integralmente
+        coberta pela C3, que é verificável. E os dois detalhes técnicos envelheceram: Node 20 foi
+        superseded pelo ADR-0009, e a stack do front é TanStack Start, não Hono nem Fastify.
+
+findings:
+  - |
+    Caso mais claro do inventário de invariante cujo ENFORCEMENT está do outro lado de uma fronteira de
+    repositório. O teste da C3 é trivial — varredura de imports procurando driver de banco ou schema de
+    domínio — e não pode ser escrito aqui, porque o BFF é o `web-app`. A fronteira mais citada do
+    acervo é a que este repositório menos consegue proteger.
+  - |
+    A proibição de composição resistiu à pressão, e resistiu do lado certo. Quando a necessidade
+    apareceu, o ADR-0032 colocou a rota composta no adapter HTTP do `core-api`, com header `Sunset` e
+    marcação de transitoriedade — exatamente o que este ADR manda ("se uma feature pede algo da lista,
+    a implementação vai no core-api ou legacy-api"). Contraexemplo útil aos achados de drift: aqui a
+    doutrina foi seguida sob pressão.
+  - |
+    Tensão a resolver no lote 7: este ADR mapeia `/api/v1` para o legado, e o ADR-0033 versiona POR
+    RECURSO, com o `core-api` servindo `/api/v1` para espelhar o legado. Se ambos valem, "v1 = legado"
+    deixou de ser verdade e o roteamento do BFF é mais complexo que um prefixo. Marcado na `C1` como
+    `unverified` em vez de assumido.
+  - |
+    Três alegações em `rule.status: pending` — as duas primeiras deste registro são as únicas do
+    inventário onde nem a extração se arrisca a sugerir, porque propor norma para código que não se
+    pode ler seria exatamente o tipo de alegação plausível-e-não-verificada que este formato existe
+    para impedir.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Inquiry-0012 (BFF — AWS API Gateway managed vs. Fastify burro próprio) discute possível supersessão
+    deste ADR e está registrada como bloqueadora do skeleton do `bff-gateway` — não lida. O ADR-0049
+    (fronteira core-api ↔ BFF, `Proposed`) é o estado-alvo e entra no lote 8.

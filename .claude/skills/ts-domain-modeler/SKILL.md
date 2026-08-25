@@ -49,7 +49,6 @@ Tabela de orientação rápida:
 | Roadmap TS 7 (tsgo / Go-based compiler) | [`ADR-0009`](../../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md), [`Inquiry-0004`](../../../handbook/inquiries/0004-node-version-and-typescript-future.md) |
 | Modular monolith + ports/adapters (fronteira de quem você é) | [`ADR-0006`](../../../handbook/architecture/adr/0006-modular-monolith-core-api.md) |
 | Domínio formal do módulo Contratos (RNs, RNFs, BCs) | [`handbook/domain_questions/contratos/`](../../../handbook/domain_questions/contratos/) |
-| Exemplos vivos do padrão (tickets já entregues) | `.claude/.pipeline/CTR-VO-MONEY/`, `CTR-VO-PERIOD/`, `CTR-VO-IDS/`, `CTR-AGG-CONTRACT/`, `CTR-AGG-AMENDMENT/`, `CTR-STORAGE-PORT/` |
 | Código de produção que materializa este padrão (ler antes de modelar algo novo) | `src/modules/contracts/domain/shared/{money,period,ids,bucket-name,storage-key,storage-ref}.ts`, `src/modules/contracts/domain/contract/`, `src/modules/contracts/domain/amendment/` |
 
 ---
@@ -1705,7 +1704,7 @@ Os blocos abaixo **ainda não tiveram ticket CTR-SKILL-REFRESH-* concluído**. A
 | :--- | :--- | :--- | :--- |
 | **E1** — Eventos de Domínio | Shape canônico (`{ type: 'PascalCasePassado'; payload; occurredAt: Date }`), onde vivem (`events.ts`), quando publicar (após persist), diferença de evento interno vs externo | Pendente | CTR-SKILL-REFRESH-E1 |
 | **E2** — EventBus Port | Port em `application/ports/event-bus.ts`, InMemory adapter para testes, padrão de subscrição, erro de publicação como `Result` | Pendente | CTR-SKILL-REFRESH-E2 |
-| **E3** — Outbox Pattern (transversal) | Garantia de entrega (at-least-once), tabela `outbox` MySQL, idempotência no consumidor | Parcialmente documentado em `.claude/.planning/OUTBOX-MYSQL.md` | CTR-OUTBOX-MYSQL (planejamento pausado) |
+| **E3** — Outbox Pattern (transversal) | Garantia de entrega (at-least-once), tabela `outbox` MySQL, idempotência no consumidor | Parcialmente documentado em `context/planning/OUTBOX-MYSQL.md` | CTR-OUTBOX-MYSQL (planejamento pausado) |
 | **F** — Use Cases: Query Side | `getContract`, `listContracts` — pattern de query, projections, paginação, filtros como tipos | Pendente | CTR-SKILL-REFRESH-F |
 | **G** — Clock Port | Port `Clock` em `application/ports/clock.ts`, `FakeClock` para testes de regras de data, usos canônicos | Pendente | CTR-SKILL-REFRESH-G |
 | **J** — CLI Adapters | Wiring CLI → use cases → InMemory vs MySQL, parseFlags, formatters PT-BR, tratamento de `Result` na saída | Pendente | CTR-SKILL-REFRESH-J |

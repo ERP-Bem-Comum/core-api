@@ -30,6 +30,10 @@ import { buildEmailDispatchDelivery } from '#src/workers/email-dispatch/delivery
 
 const AT = new Date('2026-06-18T12:00:00.000Z');
 const clock = ClockFixed(AT);
+// `buildEmailDispatchDelivery` liga ao `EventDelivery` real do notifications, cujo `consumerId`
+// e fixo em producao (`email-event-delivery.ts:33`) — usamos o mesmo aqui em vez de um id de
+// teste arbitrario, ja que e ele quem o `runOnce` generico repassa ao claim (#800/#824).
+const CONSUMER_ID = 'notifications-email-dispatch';
 
 const identityRow: RowToProcessed<OutboxRow> = (r) => ({ ok: true, value: r });
 
@@ -68,7 +72,7 @@ describe('email-dispatch worker (CA1/CA3/CA6)', () => {
     assert.equal(isOk(stats), true);
     if (stats.ok) assert.equal(stats.value.delivered, 1);
     assert.equal(sender.getSent().length, 1);
-    assert.equal(outbox.pending().length, 0);
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 0);
   });
 
   it('falha transitoria: markFailed, segue pendente (attempts incrementado)', async () => {
@@ -87,7 +91,7 @@ describe('email-dispatch worker (CA1/CA3/CA6)', () => {
     // Assert
     assert.equal(isOk(stats), true);
     if (stats.ok) assert.equal(stats.value.failed, 1);
-    const pending = outbox.pending();
+    const pending = outbox.pendingFor(CONSUMER_ID);
     assert.equal(pending.length, 1);
     assert.equal(pending[0]?.attempts, 1);
   });
@@ -96,7 +100,7 @@ describe('email-dispatch worker (CA1/CA3/CA6)', () => {
     // Arrange: a row ja vem com attempts = maxAttempts-1; a proxima falha estoura o limite.
     const outbox = InMemoryAuthOutbox();
     await outbox.port.append([resetMessage('evt-1')]);
-    outbox.setAttempts('evt-1', 2);
+    outbox.setAttempts(CONSUMER_ID, 'evt-1', 2);
     const failing: EmailSender = {
       send: () => Promise.resolve(err({ tag: 'transport-failed', reason: 'smtp-down' })),
     };
@@ -109,6 +113,6 @@ describe('email-dispatch worker (CA1/CA3/CA6)', () => {
     // Assert
     assert.equal(isOk(stats), true);
     if (stats.ok) assert.equal(stats.value.movedToDeadLetter, 1);
-    assert.equal(outbox.pending().length, 0);
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 0);
   });
 });

@@ -1,6 +1,6 @@
 // Adapter Drizzle do PayableReconciliationView (read-only sobre fin_payables). Boundary: try/catch → Result.
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, ne, or } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -13,7 +13,7 @@ import type {
   PayableReconciliationViewError,
 } from '#src/modules/financial/application/ports/payable-reconciliation-view.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import { finPayables } from '../schemas/mysql.ts';
+import { finDocuments, finPayables } from '../schemas/mysql.ts';
 
 const DOC_STATUSES: ReadonlySet<string> = new Set([
   'Draft',
@@ -76,7 +76,17 @@ export const createDrizzlePayableReconciliationView = (
             paymentMethod: finPayables.paymentMethod,
           })
           .from(finPayables)
-          .where(eq(finPayables.status, 'Paid'));
+          // #323 (regressão): "todo título pago aparece na conciliação". O grid Contas a Pagar deriva
+          // o PAGO do DOCUMENTO, então as retenções (IRRF/CSRF ainda Open/Approved) de um doc pago
+          // precisam aparecer — paridade com o grid. O OR cobre também o título individualmente Paid
+          // (líquido, ou a borda de doc não-Pago). Salvaguarda: não reofertar os já `Reconciled`.
+          .leftJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))
+          .where(
+            and(
+              or(eq(finDocuments.status, 'Paid'), eq(finPayables.status, 'Paid')),
+              ne(finPayables.status, 'Reconciled'),
+            ),
+          );
         return ok(
           rows.map((r) => ({
             id: r.id,

@@ -1,0 +1,66 @@
+id: ADR-0003
+title: Banco Compartilhado com Schemas Isolados (PostgreSQL)
+source: handbook/architecture/adr/0003-shared-db-isolated-schemas.md
+decided_on: 2026-04-27
+
+declared:
+  status: Superseded by ADR-0014 em 2026-04-28
+  status_normalized: superseded
+  supersedes: []
+  superseded_by: [ADR-0014]
+  related: [ADR-0001, ADR-0004, ADR-0013]
+
+assessment:
+  verdict: obsolete
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Morto como norma, e o próprio arquivo avisa: partiu da premissa incorreta de que o engine era
+    PostgreSQL. O engine é MySQL 8 (ADR-0013) e a estratégia foi readaptada no ADR-0014 — "schema"
+    do Postgres virou "database" do MySQL.
+    Mas NÃO é descartável: este arquivo é hoje a única fonte das ALTERNATIVAS REJEITADAS (tabelas
+    compartilhadas; bancos fisicamente separados) e dos GATILHOS DE REAVALIAÇÃO da decisão de
+    isolamento. O ADR-0014, que o supersede e está vigente, não tem seção de consequências, nem de
+    alternativas, nem de "quando re-avaliar". Superseded aqui significa "não é mais a norma", não
+    "não serve mais para nada".
+
+extraction:
+  state: complete
+  covers: |
+    Zero alegações, deliberadamente. A norma vigente vive integralmente no ADR-0014, e duplicar as
+    alegações aqui criaria duas fontes para a mesma regra — exatamente o que este formato existe para
+    evitar. O valor deste registro é o `findings`: o que a supersessão perdeu pelo caminho.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: Inelegível na triagem por status — não gera regra
+    applied_to: []
+    gap: |
+      A 039 classificou como "não gera — norma vive no sucessor", o que está correto para o propósito
+      dela (gerar linhas de rule). O que essa classificação não captura: o sucessor não herdou o
+      raciocínio. As alternativas rejeitadas e os gatilhos de revisão só existem aqui.
+
+claims: []
+
+findings:
+  - |
+    O ADR-0014, vigente, NÃO tem seção "Quando Re-avaliar". Este ADR superseded tem três gatilhos
+    explícitos: necessidade de escalar `core` independentemente do `legacy` (ex.: tenant isolation
+    regional), impacto operacional da manutenção compartilhada virar gargalo, e volume de dados
+    ultrapassar os limites práticos de uma instância. Hoje ninguém sabe quando revisitar o
+    isolamento, porque o gatilho ficou no documento morto.
+  - |
+    As duas alternativas rejeitadas — tabelas compartilhadas (database integration) e bancos
+    fisicamente separados — também só existem aqui, com as razões. O ADR-0014 lista "tabelas
+    compartilhadas" apenas como anti-padrão, sem o porquê. Quem quiser reabrir a discussão de bancos
+    separados não encontra, no ADR vigente, o argumento de custo 2x que a rejeitou.
+  - |
+    O aviso no topo do arquivo é um bom padrão e vale replicar: banner explícito dizendo qual
+    premissa estava errada, qual ADR corrige, e que o conteúdo permanece com validade conceitual.
+    Compare com o `ADR-0056`, que ficou dois meses declarando `Accepted` sem nenhum aviso.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Decisão de infraestrutura anterior à existência do código atual. Sem ticket associado no acervo.

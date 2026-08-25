@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # Claude Code hook — PreToolUse(Bash) — bloqueia comandos `npm`.
 #
-# Razão: o projeto usa pnpm canonicamente (ADR-0012). `npm install`/`npm run`
-# corrompem o pnpm-lock.yaml e violam a política de supply-chain (ADR-0011).
+# Razão: o projeto usa pnpm canonicamente (ADR-0029, que supersedes o ADR-0012).
+# `npm install`/`npm run` corrompem o pnpm-lock.yaml e violam a política de
+# supply-chain (ADR-0011).
 #
 # Stdin: JSON com `tool_name=Bash` + `tool_input.command=<string>`
 # Stdout: JSON com hookSpecificOutput.permissionDecision (allow|deny)
 #
-# IMPORTANTE: a doc do Claude Code (hooks.md §304) diz que o `if: "Bash(npm *)"`
-# em settings.json **sempre dispara quando o comando é complexo demais para
-# parsear** (multilinha, loops, heredocs). Por isso este script TEM que validar
-# o comando de novo internamente — não pode confiar que o `if` filtrou.
+# IMPORTANTE: o `if: "Bash(npm *)"` do settings.json é best-effort. A doc oficial
+# (https://code.claude.com/docs/en/hooks, §"Common fields") diz literalmente:
+#   "The filter also fails open, running your hook regardless of pattern, when the
+#    Bash command can't be parsed."
+# — e, na sequência: "Because the `if` filter is best-effort, use the permission
+# system rather than a hook to enforce a hard allow or deny."
+# Por isso este script revalida o comando internamente, e o bloqueio DURO de `npm`
+# mora em `permissions.deny` do settings.json. O hook é a mensagem pedagógica.
 #
 # Estratégia de detecção:
 #   1. Lê command da stdin.
@@ -44,8 +49,9 @@ if echo "$COMMAND" | grep -qE '(^|[;&|()[:space:]])npm([[:space:]]|$)'; then
 Use `pnpm` em vez de `npm` neste projeto.
 
 Razão canônica:
-  • ADR-0012 (handbook/architecture/adr/0012-pnpm-package-manager.md) define
-    pnpm como package manager único do core-api.
+  • ADR-0029 (handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md)
+    define pnpm 11 como package manager único do core-api. Ele supersedes o
+    ADR-0012, que era a referência antiga desta mensagem.
   • ADR-0011 (supply-chain hardening) exige --frozen-lockfile + approve-builds,
     workflow que só funciona com pnpm.
   • `npm install` regrava package-lock.json em paralelo, criando drift

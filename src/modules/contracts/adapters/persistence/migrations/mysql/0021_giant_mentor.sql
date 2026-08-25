@@ -1,0 +1,15 @@
+-- Índice do SELECT de candidatos do sweeper de outbox (ADR-0064 §3).
+--
+-- Sem ele, o otimizador lidera por `eventos_processados` (`range` sobre a PK) e monta temporária
+-- + filesort sobre a tabela INTEIRA antes de o `LIMIT` do lote cortar. O trabalho por lote vira
+-- função do tamanho dessa tabela, que cresce N× mais rápido que o outbox — uma linha por
+-- consumidor por evento. Com o índice o plano inverte, passa a liderar pelo outbox filtrado por
+-- `processed_at IS NULL`, e o custo acompanha o BACKLOG em vez de tudo que já foi processado.
+--
+-- Medido em MySQL 8.4.11 com ~100k linhas: 611ms → 286ms, `Using temporary` eliminado.
+-- Custo de aplicar, também medido: ALGORITHM=INPLACE, LOCK=NONE aceito; 2.758ms; 56 leituras
+-- concorrentes durante o ALTER, nenhuma bloqueada; +9,5 MB (35,3 → 44,8 MB).
+--
+-- Sem hint de ALGORITHM, como as demais migrations desta série: `ALGORITHM=INSTANT` devolve 1845
+-- para CREATE INDEX nesta versão, e sem cláusula o servidor escolhe INPLACE sozinho.
+CREATE INDEX `eventos_processados_event_consumer_idx` ON `eventos_processados` (`event_id`,`consumer_id`,`processed_at`,`dead_lettered_at`);

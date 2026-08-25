@@ -1,0 +1,321 @@
+id: ADR-0034
+title: Adoção do Bruno (`@usebruno/cli`) como ferramenta de teste da borda HTTP
+source: handbook/architecture/adr/0034-adopt-bruno-api-client-cli.md
+decided_on: 2026-06-04
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0011, ADR-0025, ADR-0027, ADR-0029, ADR-0037, ADR-0038]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    As cinco regras da decisão conferem, e a exceção de supply-chain está exatamente na forma prescrita:
+    `pnpm-workspace.yaml:54` abre `trustPolicyExclude` e a linha 60 documenta "Transitivas de
+    @usebruno/cli (devDep de teste, ADR-0034) via @babel/* → jscodeshift" — o ADR citado no ponto da
+    exceção, com o selector combinado que o próprio ADR descobriu ser a única forma que funciona.
+    `@usebruno/cli` está em `devDependencies` na versão `3.4.2` **exata** (sem `^`), ausente de
+    `dependencies`. `protobufjs: false` segue em `pnpm-workspace.yaml:10`. E o `bru run` é opt-in:
+    `.github/workflows/ci.yml:9` registra que "Integração continua via `pnpm run test:integration:*`
+    (precisa de Docker)" — não é gate obrigatório, como o §5 previu.
+    Uma divergência de estrutura: o ADR prescreve coleções em `api-collections/<área>/` e cita
+    `api-collections/partners/`. Hoje existe **uma** coleção, `api-collections/core-api/`, com 266
+    arquivos `.bru`. A consolidação veio da spec 007 (ADR-0038) e é melhor do que o previsto — mas o
+    `<área>` do ADR não descreve mais o disco.
+
+extraction:
+  state: complete
+  covers: |
+    6 alegações — as cinco regras numeradas mais a proibição de `trustPolicyIgnoreAfter`, que é decisão
+    própria e não detalhe da regra 2. A seção de evidência (registry/sandbox) é fundamentação.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA — originou a .claude/rules/api-collections.md
+    applied_to: ['.claude/rules/api-collections.md']
+    gap: |
+      A rule existe e está no lugar certo (path-scoped em `api-collections/`).
+      O que a destilação não verificou: a exceção de `trustPolicyExclude` — que é a parte da decisão com
+      consequência de SEGURANÇA e a única que precisa de revisão periódica. O ADR lista dois gatilhos de
+      reavaliação ligados a ela ("`semver` 6.3.1/5.7.2 deixarem a árvore", "novo incidente de
+      supply-chain"), e nada no repo os observa.
+
+claims:
+  - id: ADR-0034-C1
+    text: |
+      `@usebruno/cli` é instalado como `devDependency` PINADA — NUNCA `dependencies`. Bruno é ferramenta
+      de teste/doc; JAMAIS dependência de produção em `src/` (o domínio não conhece Bruno).
+    kind: prohibition
+    source_lines: ['45-46']
+    applies_to:
+      - 'package.json'
+      - 'src/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'package.json:87 — "@usebruno/cli": "3.4.2" — versão exata, sem ^ nem ~'
+        - 'nota: a entrada está em devDependencies; dependencies não tem @usebruno/cli'
+        - 'ausência: nenhum import de @usebruno em src/ — o domínio não conhece Bruno'
+      verify: |
+        node -e "const p=require('./package.json');console.log(p.devDependencies?.['@usebruno/cli'], p.dependencies?.['@usebruno/cli'])"; grep -rn "usebruno" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando `@usebruno/cli` aparecer em `dependencies`, ou com range em vez de
+        versão exata, então o teste falha. E `src/` MUST NÃO importar nada de `@usebruno`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Ferramenta de teste MUST estar em `devDependencies` com versão exata. MUST NOT aparecer em
+        `dependencies` nem ser importada de `src/`.
+      rationale: |
+        O pino exato é o que importa aqui e o ADR não separa: a exceção de `trustPolicyExclude` foi
+        avaliada para a árvore de UMA versão do Bruno. Com range, um bump de patch pode trazer outra
+        transitiva sem provenance e a exceção — escrita para `semver@5.7.2 || 6.3.1` — passa a cobrir
+        menos do que a árvore precisa, ou a exigir ampliação sem nova avaliação.
+
+  - id: ADR-0034-C2
+    text: |
+      EXCEÇÃO CIRÚRGICA POR-VERSÃO em `pnpm-workspace.yaml#trustPolicyExclude`, no espírito do
+      `undici-types@6.21.0` — fixada na versão, sem afrouxar a política globalmente:
+      `'semver@5.7.2 || 6.3.1'` (transitivas de `@babel/*` via `@usebruno/cli`). O selector combinado com
+      `||` é obrigatório: duas entradas separadas do mesmo pacote NÃO casam.
+    kind: obligation
+    source_lines: ['47-54']
+    applies_to:
+      - 'pnpm-workspace.yaml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'pnpm-workspace.yaml:54 — trustPolicyExclude:'
+        - "pnpm-workspace.yaml:59 — - 'undici-types@6.21.0', a exceção precedente que o ADR usa como espírito"
+        - 'pnpm-workspace.yaml:60 — comentário: Transitivas de @usebruno/cli (devDep de teste, ADR-0034) via @babel/* → jscodeshift'
+        - 'pnpm-workspace.yaml:55 — o bloco de comentário da exceção anterior registra que "O downgrade sinalizado é de evidência de provenance, não takeover" e "Exceção fixada na versão para não afrouxar a política globalmente"'
+        - 'nota: as duas exceções do repo são as duas do ADR — a política não foi afrouxada além disso'
+      verify: |
+        grep -n "trustPolicyExclude" -A 10 pnpm-workspace.yaml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `pnpm-workspace.yaml`, quando `trustPolicyExclude` tiver entrada sem versão fixada (só nome
+        de pacote), então o teste falha. Cada entrada MUST vir com comentário que nomeie a origem e a
+        razão.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Toda entrada de `trustPolicyExclude` MUST fixar a versão e MUST vir acompanhada de comentário com
+        a origem (qual dependência a arrasta), a razão (downgrade de provenance vs. takeover) e a decisão
+        que a autorizou. MUST NOT haver entrada por nome de pacote sem versão.
+      rationale: |
+        É a regra de supply-chain com o melhor precedente do repo: as duas exceções existentes já seguem
+        o formato, com comentário nomeando pacote, origem, natureza e ADR. Vale escrever porque a próxima
+        exceção é sempre urgente — alguém precisa instalar algo hoje — e o caminho barato (nome sem
+        versão) desliga o guard para todas as versões futuras daquele pacote, silenciosamente.
+
+  - id: ADR-0034-C3
+    text: |
+      `trustPolicyIgnoreAfter` (isentar tudo publicado há mais de N minutos) foi REJEITADO por afrouxar a
+      política globalmente — contraria a filosofia de exceção cirúrgica dos ADR-0011/0029.
+    kind: prohibition
+    source_lines: ['55-56']
+    applies_to:
+      - 'pnpm-workspace.yaml'
+      - '.npmrc'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum trustPolicyIgnoreAfter em pnpm-workspace.yaml nem .npmrc'
+      verify: |
+        grep -rn "trustPolicyIgnoreAfter" pnpm-workspace.yaml .npmrc package.json 2>/dev/null
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o config do pnpm, quando `trustPolicyIgnoreAfter` aparecer, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST NOT usar `trustPolicyIgnoreAfter`. Exceção de trust MUST ser por pacote e versão.
+      rationale: |
+        Proibição nominal e trivial de checar, e o modo de falha é o pior possível: `trustPolicyIgnoreAfter`
+        resolve QUALQUER erro de trust de uma vez, é uma linha, e parece razoável ("pacote antigo já foi
+        auditado pela comunidade"). Quem estiver bloqueado numa instalação vai encontrá-la antes de
+        encontrar o selector `||`. Regra explícita é mais barata que a discussão.
+
+  - id: ADR-0034-C4
+    text: |
+      `protobufjs` PERMANECE com build ignorado (`allowBuilds.protobufjs: false`, explícito e auditável) —
+      protobuf serve a gRPC; as coleções são REST e o `bru run` roda sem ele.
+    kind: obligation
+    source_lines: ['57-58']
+    applies_to:
+      - 'pnpm-workspace.yaml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'pnpm-workspace.yaml:10 — protobufjs: false dentro do bloco de allowBuilds'
+      verify: |
+        grep -n "protobufjs" -B 3 pnpm-workspace.yaml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `pnpm-workspace.yaml`, quando `protobufjs` ganhar `true` em `allowBuilds`, então o teste
+        falha — nada no projeto usa gRPC.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é aplicação do `ADR-0011`/`ADR-0029` (`allowBuilds` explícito e auditável), já
+        propostos com escopo geral. Registrar como evidência de que a lista de builds permitidos foi
+        mantida negativa por decisão, não por esquecimento — o comentário do ADR explica por quê, e é o
+        tipo de "false" que alguém remove tentando consertar um warning de instalação.
+
+  - id: ADR-0034-C5
+    text: |
+      Coleções `.bru` VERSIONADAS em `api-collections/<área>/`, refletindo os schemas Zod da borda
+      (ADR-0027) — NUNCA inventam shape. Secrets FORA do repo (`{{process.env.*}}`/environment).
+    kind: obligation
+    source_lines: ['59-60']
+    applies_to:
+      - 'api-collections/**/*.bru'
+    reality:
+      verdict: partial
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: o diretório api-collections/ existe e é versionado, com 266 arquivos .bru'
+        - 'nota: existe UMA coleção — api-collections/core-api/ — e não uma por área; o ADR prescreve <área>/ e cita api-collections/partners/'
+        - 'nota: a consolidação numa coleção única veio da spec 007 (ADR-0038), que precisa do token compartilhado num único bru run — é melhoria, não drift'
+        - '.claude/rules/api-collections.md:1 — existe rule path-scoped para o diretório'
+      verify: |
+        ls api-collections/; find api-collections -name '*.bru' | wc -l
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado um `.bru`, quando o body divergir do schema Zod da rota, então o teste falha. Verificar isso
+        estaticamente exige derivar o shape esperado do Zod e comparar — daí o `testable-with-work`; o
+        `ADR-0038` resolve por execução real, que é mais barato e mais forte.
+      expected_error: null
+      blocker: 'Comparar .bru × schema Zod estaticamente exige extrair o shape do Zod; o ADR-0038 troca isso por execução real.'
+      enforced_by: ['.claude/rules/api-collections.md']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        `.bru` MUST NOT conter secret literal — credencial vem de environment ou `{{process.env.*}}`. O
+        body MUST refletir o schema Zod da rota, e a conformidade é provada por EXECUÇÃO (ADR-0038), não
+        por leitura.
+      rationale: |
+        Estreitado em dois pontos. O `<área>/` saiu porque a realidade convergiu para uma coleção única
+        por razão técnica boa (token compartilhado num único `bru run`) — manter o `<área>` na regra
+        criaria conflito com o `ADR-0038`. E "reflete o schema" ganhou o "provado por execução", que é a
+        contribuição do `0038`: sem isso a regra é inauditável, e foi exatamente assim que 24 de 26
+        falhas passaram desapercebidas.
+
+  - id: ADR-0034-C6
+    text: |
+      `bru run` em CI é OPT-IN e GATEADO — como os demais `test:e2e:*` (exigem Docker, fora de
+      `pnpm test`). Tornar o `bru run` um gate OBRIGATÓRIO de CI fica para um ADR/ticket futuro.
+    kind: permission
+    source_lines: ['61-62']
+    applies_to:
+      - '.github/workflows/*.yml'
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - '.github/workflows/ci.yml:9 — comentário: Integração continua via `pnpm run test:integration:*` (precisa de Docker)'
+        - 'package.json:69 — "test:integration:all": "bash scripts/e2e/bruno-all.sh" — invocação explícita, fora de pnpm test'
+        - 'scripts/e2e/bruno-all.sh:10 — Uso: pnpm run test:integration:all (exige Docker + bru CLI; NÃO faz parte de `pnpm test`)'
+        - 'scripts/e2e/bruno-all.sh:25 — o script falha cedo se o bru CLI não estiver no PATH'
+        - 'ausência: nenhum job de CI invoca bru run — segue não sendo gate obrigatório, como o ADR previu'
+      verify: |
+        grep -n "test:integration:all" package.json; grep -rn "bru" .github/workflows/*.yml | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `pnpm test`, quando ele passar a exigir Docker ou invocar `bru run`, então o teste falha — a
+        suíte default MUST rodar sem infraestrutura.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Teste que exige infraestrutura (Docker, MySQL, MinIO, `bru`) MUST estar atrás de script próprio e
+        MUST NOT entrar em `pnpm test`. O script MUST falhar cedo com mensagem clara quando a dependência
+        de ambiente faltar.
+      rationale: |
+        A segunda frase é o detalhe que o repo já faz bem e vale fixar: `bruno-all.sh:25` verifica o `bru`
+        no PATH e explica que ele vem do `pnpm`. Sem isso, teste de integração falha com erro de
+        "comando não encontrado" e vira "erro ambiental" — que a política de regressão zero do `AGENTS.md`
+        proíbe usar como desculpa, mas que só é distinguível de bug real se a mensagem disser qual é.
+
+findings:
+  - |
+    **A exceção de supply-chain está no formato ideal e nada observa os gatilhos de saída.** As duas
+    entradas de `trustPolicyExclude` trazem pacote, versão, origem, natureza do risco (provenance vs.
+    takeover) e a decisão que as autorizou — é o melhor comentário de configuração do repositório. Mas o
+    ADR lista dois gatilhos de reavaliação ("`semver` 6.3.1/5.7.2 deixarem a árvore do `@usebruno/cli`",
+    "novo incidente de supply-chain na árvore do Bruno") e nenhum tem mecanismo. Uma exceção que sobrevive
+    à própria necessidade é exatamente o afrouxamento que o ADR queria evitar — e a única forma de
+    descobrir é conferir manualmente.
+  - |
+    **A estrutura de coleções convergiu para melhor do que o ADR previu, e o ADR não acompanhou.** Ele
+    prescreve `api-collections/<área>/` e cita `api-collections/partners/`; hoje há uma coleção única,
+    `api-collections/core-api/`, com 266 `.bru`. A razão é técnica e boa — o `ADR-0038` exige um único
+    `bru run` para o token de `0-auth` persistir entre pastas, e pasta-a-pasta perde o estado. Segundo
+    caso no inventário de ADR descrevendo estrutura que a implementação melhorou (o primeiro foi o Mapa A
+    do `ADR-0048`).
+  - |
+    O custo que o ADR aceitou explicitamente — "+1 devDependency pesada (~383 pacotes transitivos (…) dos
+    quais só o runtime de `bru run` é usado)" — segue pago e sem revisão. O gatilho de saída ("Bruno
+    publicar um pacote de runtime enxuto") é do mesmo tipo dos outros: legítimo, verificável e sem
+    observador. Terceiro ADR do inventário cujos gatilhos de reavaliação dependem de alguém lembrar.
+
+provenance:
+  tickets:
+    - BRUNO-CLI-ADOPT
+  issues: []
+  note: |
+    O ADR cita o ticket `.claude/.pipeline/BRUNO-CLI-ADOPT/` e o agente
+    `.claude/agents/bruno-api-client-expert.md` (com nota de "§Status atualizado: SUPORTE → ADOTADO").
+    Nenhum dos dois lido nesta fase — vale conferir se o agente foi de fato atualizado, já que o
+    `AGENTS.md` do repo ainda descreve o Bruno como "suporte, sem ADR".

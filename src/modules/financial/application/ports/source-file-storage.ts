@@ -13,11 +13,16 @@ export type SourceFileUploadInput = Readonly<{
   fileName: string;
 }>;
 
-export type SourceFileStorageError = 'source-file-upload-failed';
+export type SourceFileStorageError = 'source-file-upload-failed' | 'source-file-download-failed';
+
+// Bytes + mimeType do comprovante, para servir INLINE na área de OCR da edição (nunca URL: ADR-0050).
+export type SourceFileDownload = Readonly<{ bytes: Uint8Array; mimeType: string }>;
 
 export type SourceFileStoragePort = Readonly<{
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types -- bytes: Uint8Array sem variant readonly no TS 6
   upload: (input: SourceFileUploadInput) => Promise<Result<SourceFileRef, SourceFileStorageError>>;
   // Compensação (F4): remove um comprovante já gravado quando o rascunho falha depois (best-effort).
   remove: (ref: SourceFileRef) => Promise<Result<void, SourceFileStorageError>>;
+  // Lê os bytes de volta (proxy — o arquivo continua privado no storage; o backend os repassa).
+  download: (ref: SourceFileRef) => Promise<Result<SourceFileDownload, SourceFileStorageError>>;
 }>;

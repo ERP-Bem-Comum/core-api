@@ -13,7 +13,13 @@ import type { PayableViewRow } from '#src/modules/financial/adapters/persistence
 export type PayableViewMapperError = 'payable-view-row-invalid';
 
 const KINDS: readonly PayableView['kind'][] = ['Parent', 'Child'];
-const STATUSES: readonly PayableViewStatus[] = ['Open', 'Approved', 'Paid', 'Cancelled'];
+const STATUSES: readonly PayableViewStatus[] = [
+  'Open',
+  'Approved',
+  'Transmitted',
+  'Paid',
+  'Cancelled',
+];
 
 const isKind = (v: string): v is PayableView['kind'] => (KINDS as readonly string[]).includes(v);
 const isStatus = (v: string): v is PayableViewStatus => (STATUSES as readonly string[]).includes(v);
@@ -31,6 +37,7 @@ export const rowToPayableView = (
     supplierRef: row.supplierRef,
     contractRef: row.contractRef,
     categoryRef: row.categoryRef,
+    budgetPlanRef: row.budgetPlanRef,
     costCenterRef: row.costCenterRef,
     programRef: row.programRef,
     valueCents: row.valueCents,

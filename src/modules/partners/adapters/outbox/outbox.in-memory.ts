@@ -13,8 +13,10 @@ import type {
   OutboxRow,
   OutboxQueryError,
   OutboxBatchOps,
+  OutboxFailure,
 } from '#src/modules/partners/application/ports/outbox.ts';
 import { outboxAppendDuplicateEventId } from '#src/modules/partners/application/ports/outbox.ts';
+import { createInMemoryProgressStore } from '#src/shared/outbox/in-memory-progress.ts';
 import type { OutboxDeadLetterRow } from '../persistence/schemas/mysql.ts';
 
 const OUTBOX_SCHEMA_VERSION = 1;
@@ -44,29 +46,42 @@ export const InMemoryOutbox = (): {
   port: OutboxPort;
   // ── helpers de inspeção (síncronos) ──────────────────────────────────────
   all: () => readonly OutboxRow[];
-  pending: () => readonly OutboxRow[];
+  /**
+   * Pendentes DE UM CONSUMIDOR. Substitui o antigo `pending()` sem argumento, que perguntava
+   * "está pendente?" sem dizer para quem — a própria pergunta que o defeito #800/#824 tornou
+   * ambígua. Agora não há como formulá-la errado.
+   */
+  pendingFor: (consumerId: string) => readonly OutboxRow[];
   deadLetter: () => readonly OutboxDeadLetterRow[];
   // ── helpers do worker (mesma interface que o adapter Drizzle) ────────────
   withPendingBatch: <R>(
+    consumerId: string,
     limit: number,
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ) => Promise<Result<R, OutboxQueryError>>;
-  findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
-  markProcessed: (eventId: string, now?: Date) => Promise<Result<void, OutboxQueryError>>;
-  markFailed: (
+  findPendingForUpdate: (
+    consumerId: string,
+    limit: number,
+  ) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
+  markProcessed: (
+    consumerId: string,
     eventId: string,
-    now: Date,
-    errorTag: string,
-    attempt: number,
+    now?: Date,
+  ) => Promise<Result<void, OutboxQueryError>>;
+  markFailed: (
+    consumerId: string,
+    eventId: string,
+    failure: OutboxFailure,
   ) => Promise<Result<void, OutboxQueryError>>;
   moveToDeadLetter: (
+    consumerId: string,
     eventId: string,
     now: Date,
     errorMessage: string,
   ) => Promise<Result<void, OutboxQueryError>>;
   // ── helpers exclusivos de teste ──────────────────────────────────────────
-  /** Força o campo `attempts` de uma row. */
-  setAttempts: (eventId: string, attempts: number) => void;
+  /** Força as tentativas de um consumidor sobre um evento. */
+  setAttempts: (consumerId: string, eventId: string, attempts: number) => void;
   /** Reseta o estado interno — útil para isolar eventos do teste. */
   clear: () => void;
 } => {
@@ -74,6 +89,8 @@ export const InMemoryOutbox = (): {
   const rows: OutboxRow[] = [];
   const dlqRows: OutboxDeadLetterRow[] = [];
   const seenIds = new Set<string>();
+  // Espelho em memória de `eventos_processados`: a pendência é POR CONSUMIDOR, não da linha.
+  const progress = createInMemoryProgressStore();
 
   // ── port.append ─────────────────────────────────────────────────────────
 
@@ -102,61 +119,64 @@ export const InMemoryOutbox = (): {
 
   // ── findPendingForUpdate ──────────────────────────────────────────────────
 
+  /** Pendentes DESTE consumidor, com `attempts` vindos do progresso dele. */
+  const pendingRowsFor = (consumerId: string, limit: number): readonly OutboxRow[] =>
+    rows
+      .filter((r) => progress.isPending(consumerId, r.eventId))
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
+      .slice(0, limit)
+      .map((r) => ({ ...r, attempts: progress.attempts(consumerId, r.eventId) }));
+
   const findPendingForUpdate = async (
+    consumerId: string,
     limit: number,
   ): Promise<Result<readonly OutboxRow[], OutboxQueryError>> => {
-    const pending = rows
-      .filter((r) => r.processedAt === null)
-      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
-      .slice(0, limit);
-    return ok(pending as readonly OutboxRow[]);
+    return ok(pendingRowsFor(consumerId, limit));
   };
 
   // ── markProcessed ─────────────────────────────────────────────────────────
 
   const markProcessed = async (
+    consumerId: string,
     eventId: string,
     now: Date = new Date(),
   ): Promise<Result<void, OutboxQueryError>> => {
-    const row = rows.find((r) => r.eventId === eventId);
-    if (row?.processedAt === null) {
-      (row as { processedAt: Date | null }).processedAt = now;
-    }
-    // Idempotente: se já foi processado, no-op = ok.
+    // Marca o progresso DESTE consumidor. A linha do outbox não é tocada: marcá-la resolveria o
+    // evento para todos, que é o defeito de #800/#824.
+    progress.markProcessed(consumerId, eventId, now);
+    // Idempotente: remarcar apenas reescreve o carimbo.
     return ok(undefined);
   };
 
   // ── markFailed ────────────────────────────────────────────────────────────
 
   const markFailed = async (
+    consumerId: string,
     eventId: string,
-    _now: Date,
-    _errorTag: string,
-    attempt: number,
+    { errorTag, attempt }: OutboxFailure,
   ): Promise<Result<void, OutboxQueryError>> => {
-    const row = rows.find((r) => r.eventId === eventId);
-    if (row !== undefined) {
-      (row as { attempts: number }).attempts = attempt;
-    }
+    // Orçamento de retry por consumidor — antes era a coluna global da linha, e a falha de um
+    // gastava as tentativas do outro.
+    progress.markFailed(consumerId, eventId, errorTag, attempt);
     return ok(undefined);
   };
 
   // ── moveToDeadLetter ──────────────────────────────────────────────────────
 
   const moveToDeadLetter = async (
+    consumerId: string,
     eventId: string,
     now: Date,
     errorMessage: string,
   ): Promise<Result<void, OutboxQueryError>> => {
-    const idx = rows.findIndex((r) => r.eventId === eventId);
-    if (idx === -1) {
+    const row = rows.find((r) => r.eventId === eventId);
+    if (row === undefined) {
       // Semântica análoga ao Drizzle: not-found é no-op (idempotente).
       return ok(undefined);
     }
-    const row = rows[idx];
-    if (row === undefined) return ok(undefined);
 
     const dlqRow: OutboxDeadLetterRow = {
+      consumerId,
       eventId: row.eventId,
       aggregateId: row.aggregateId,
       aggregateType: row.aggregateType,
@@ -165,13 +185,17 @@ export const InMemoryOutbox = (): {
       occurredAt: row.occurredAt,
       enqueuedAt: row.enqueuedAt,
       failedAt: now,
-      attempts: row.attempts,
+      attempts: progress.attempts(consumerId, eventId),
       lastError: errorMessage,
       payload: row.payload,
     };
 
     dlqRows.push(dlqRow);
-    rows.splice(idx, 1);
+    // A desistência é DESTE consumidor: o evento sai da fila dele, não da tabela.
+    progress.markDeadLettered(consumerId, eventId, now, errorMessage);
+    // ⚠️ Sem `rows.splice` — o `splice` que existia aqui espelhava o `DELETE` do Drizzle e tirava
+    // o evento dos DEMAIS consumidores. Também contrariava o ADR-0022:27-29 ("o outbox retém as
+    // entradas… não deleta"), de que depende a reconstrução prometida em 0022:40.
     return ok(undefined);
   };
 
@@ -179,37 +203,39 @@ export const InMemoryOutbox = (): {
   // Single-threaded: não há concorrência real, o "lock" é implícito.
 
   const withPendingBatch = async <R>(
+    consumerId: string,
     limit: number,
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ): Promise<Result<R, OutboxQueryError>> => {
-    const pending = rows
-      .filter((r) => r.processedAt === null)
-      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
-      .slice(0, limit) as readonly OutboxRow[];
-    const ops: OutboxBatchOps = { markProcessed, markFailed, moveToDeadLetter };
+    const pending = pendingRowsFor(consumerId, limit);
+    // As ops nascem ligadas ao consumidor deste batch — como no Drizzle, onde ficam ligadas à tx.
+    const ops: OutboxBatchOps = {
+      markProcessed: async (eventId, now) => markProcessed(consumerId, eventId, now),
+      markFailed: async (eventId, failure) => markFailed(consumerId, eventId, failure),
+      moveToDeadLetter: async (eventId, now, errorMessage) =>
+        moveToDeadLetter(consumerId, eventId, now, errorMessage),
+    };
     const result = await handler(pending, ops);
     return ok(result);
   };
 
   // ── helpers exclusivos de teste ──────────────────────────────────────────
 
-  const setAttempts = (eventId: string, attempts: number): void => {
-    const row = rows.find((r) => r.eventId === eventId);
-    if (row !== undefined) {
-      (row as { attempts: number }).attempts = attempts;
-    }
+  const setAttempts = (consumerId: string, eventId: string, attempts: number): void => {
+    progress.markFailed(consumerId, eventId, 'test-seeded', attempts);
   };
 
   const clear = (): void => {
     rows.length = 0;
     dlqRows.length = 0;
     seenIds.clear();
+    progress.clear();
   };
 
   return {
     port,
     all: () => rows as readonly OutboxRow[],
-    pending: () => rows.filter((r) => r.processedAt === null) as readonly OutboxRow[],
+    pendingFor: (consumerId: string) => pendingRowsFor(consumerId, rows.length),
     deadLetter: () => dlqRows as readonly OutboxDeadLetterRow[],
     withPendingBatch,
     findPendingForUpdate,

@@ -1,8 +1,15 @@
+---
+inquiry: 0013
+title: "Simulador local da cloud (offline) + integração CI/CD"
+state: decided
+opened: 2026-05-13
+decided: 2026-05-13
+last_reviewed: 2026-08-06
+open_outputs: 13  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0013: Simulador local da cloud (offline) + integração CI/CD
 
-- **Status:** Decided (implementação pendente)
-- **Opened:** 2026-05-13
-- **Closed/Decided:** 2026-05-13
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** IA externa (Claude Code)
 - **Impact:** decisão operacional (DevEx) + base para futuro ADR de pipeline CI/CD

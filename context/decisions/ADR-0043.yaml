@@ -1,0 +1,236 @@
+id: ADR-0043
+title: Contrato de eventos de integração partners → financial (SupplierRegistered / SupplierEdited)
+source: handbook/architecture/adr/0043-partners-supplier-integration-events.md
+decided_on: 2026-06-16
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0015, ADR-0020, ADR-0022, ADR-0031, ADR-0044, ADR-0045, ADR-0046]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Oitavo `realized`, e o mais bem construído dos contratos de integração. As quatro alegações conferem,
+    e duas delas com mecanismo melhor do que o ADR pediu.
+    A filtragem do contrato é TIPADA e está na camada certa:
+    `supplier-outbox.mapper.ts:20` declara `type PublishableEventType = 'SupplierRegistered' |
+    'SupplierEdited'`, e o comentário na linha 7 registra o critério — "só `SupplierRegistered` e
+    `SupplierEdited` viram mensagem; demais (Deactivated/Reactivated) ficam fora". O domínio EMITE os
+    quatro eventos; apenas dois atravessam a fronteira de integração. Separar "evento de domínio" de
+    "mensagem de contrato" no adapter, com o tipo cobrando, é exatamente o desenho que a Opção A do ADR
+    propõe — e é o que permitiu ao `ADR-0046` acrescentar campo depois sem tocar o domínio.
+    O payload é montado do SNAPSHOT do agregado (`:44` — `supplierRef: String(supplier.id)`), serializado
+    com `JSON.stringify` em `varchar(8192)` (`schemas/mysql.ts:535`, com o ADR-0020 citado na linha 510),
+    e o `schema_version` "inicia em 1" (`:524`) sem nunca ter sofrido bump.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — o conjunto de eventos publicáveis, a origem do payload, o formato de serialização e a
+    regra de evolução do wire-format. A tabela de eventos e o exemplo de payload são detalhamento das
+    duas primeiras.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA (agrupado com o ADR-0046)
+    applied_to: ['.claude/rules/adapters.md', '.claude/rules/partners-module.md']
+    gap: |
+      Destilação precisa e com a ênfase certa: "Payload de integração é montado **no adapter de
+      persistência a partir do snapshot do agregado**, nunca do evento de domínio (o domínio não muda).
+      `JSON.stringify` em `varchar` — sem JSON nativo. **Campo aditivo NUNCA quebra o v1**: não faz bump
+      de `schema_version`". As três partes corretas.
+      O que não registrou: a filtragem é TIPADA (`PublishableEventType`), o que transforma "publica só
+      dois" de convenção em invariante que o compilador cobra. É o detalhe que faz a regra funcionar.
+
+claims:
+  - id: ADR-0043-C1
+    text: |
+      O `partners` publica SOMENTE `SupplierRegistered` e `SupplierEdited`. `SupplierDeactivated` e
+      `SupplierReactivated` ficam FORA do contrato — não mudam nome nem CNPJ, que é o que o read-model
+      consome.
+    kind: prohibition
+    source_lines: ['25-36']
+    applies_to:
+      - 'src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - "src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts:20 — type PublishableEventType = 'SupplierRegistered' | 'SupplierEdited'"
+        - 'src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts:7 — comentário: filtra, só os dois viram mensagem; demais (Deactivated/Reactivated) ficam fora'
+        - 'nota: o domínio EMITE os quatro — SupplierRegistered, SupplierEdited, SupplierDeactivated e SupplierReactivated existem em src/modules/partners/'
+        - 'nota: a distinção entre evento de domínio e mensagem de contrato está no adapter, cobrada pelo tipo'
+      verify: |
+        grep -n "PublishableEventType" src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts; grep -rhoE "'Supplier(Registered|Edited|Deactivated|Reactivated)'" src/modules/partners/ --include='*.ts' | sort -u
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um evento de domínio fora do conjunto publicável, quando passado ao mapper, então MUST NÃO
+        gerar mensagem de outbox. Se gerar, o teste falha — e hoje o tipo já impede em compilação.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O conjunto de eventos que atravessa a fronteira de integração MUST ser declarado como TIPO no
+        adapter (união literal), separado do conjunto de eventos de domínio. Evento novo no domínio
+        MUST NOT entrar no contrato por omissão.
+      rationale: |
+        É a alegação mais bem implementada dos contratos de integração, e o mérito é a forma: um tipo
+        `PublishableEventType` faz o compilador cobrar o que seria convenção. Sem ele, acrescentar evento
+        de domínio o publicaria por acidente — e consumidor externo receberia mensagem que ninguém
+        contratou. Padrão a replicar em todo contrato cross-módulo.
+
+  - id: ADR-0043-C2
+    text: |
+      O payload é AUTOCONTIDO e montado NO ADAPTER DE PERSISTÊNCIA a partir do SNAPSHOT do agregado
+      (`supplier-outbox.mapper.ts`), não do evento de domínio — Opção A, que não toca o domínio.
+    kind: obligation
+    source_lines: [40]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/mappers/*outbox*.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners, contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts:44 — supplierRef: String(supplier.id), lido do agregado'
+        - 'src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts:9 — comentário descreve o payload autocontido { supplierRef, name, document, occurredAt }'
+        - 'src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts:55 — o snapshot é o recém-cadastrado em Registered e o pós-edição em Edited'
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:363 — o mesmo padrão em contracts: "tem o snapshot em escopo e passa contract.contractor"'
+      verify: |
+        grep -n "supplierRef\|snapshot" src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts | head
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um evento de domínio sem os campos do wire-format, quando o mapper monta a mensagem, então
+        ela MUST conter os campos vindos do agregado. Se o mapper depender do payload do evento de
+        domínio, o teste falha — e o domínio teria de mudar para cada campo novo de integração.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Payload de integração MUST ser montado no adapter de persistência a partir do snapshot do
+        agregado. O evento de DOMÍNIO MUST NOT carregar campo que existe só para o consumidor externo.
+      rationale: |
+        É a decisão que barateou tudo depois: o `ADR-0046` acrescentou `contractorRef` ao wire-format sem
+        tocar um evento de domínio, porque o ponto de montagem é o adapter. Sem essa separação, cada
+        necessidade de consumidor externo vazaria para o núcleo — que é exatamente o que o `ADR-0032`
+        combate na leitura e este combate na escrita.
+
+  - id: ADR-0043-C3
+    text: |
+      Serialização por `JSON.stringify` em `varchar(8192)` — sem JSON nativo (ADR-0020).
+    kind: obligation
+    source_lines: [40]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, budget-plans, contracts, financial, partners, programs]
+      absent_in: []
+      evidence:
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:535 — payload: varchar(payload, { length: 8192 }).notNull()'
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:510 — comentário: VARCHAR(8192) serializado, sem JSON nativo, citando ADR-0020'
+        - 'nota: o mesmo formato nos sete outboxes do repo — ver ADR-0015-C2, onde a proibição de JSON nativo do ADR-0015 foi descartada em favor do ADR-0020'
+      verify: |
+        grep -rn "payload: varchar" src/modules/*/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Já coberto pela rule semgrep `mysql-json-forbidden` — declarar `payload` como JSON nativo falha o
+        gate de CI.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.semgrep/rules.yml']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é a proibição do `ADR-0020-C3`, já enforçada por AST, e o `ADR-0015-C2` já
+        registra que o formato `varchar` venceu a especificação original de JSON nativo. Terceira fonte
+        não acrescenta — e o mecanismo já existe.
+
+  - id: ADR-0043-C4
+    text: |
+      `schema_version = 1` no wire-format. Adicionar campo NUNCA quebra o v1 — consumidores existentes
+      ignoram campo novo e não há bump de `schema_version`.
+    kind: obligation
+    source_lines: [38, 40]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/mappers/*outbox*.ts'
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners, contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:524 — comentário: versão do contrato do payload (inicia em 1)'
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:389 — JSON.stringify({ ...base, contractorRef }) — o campo novo é acrescentado por spread sobre o payload base, sem bump'
+        - 'src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts:360 — a seção é rotulada "enriquecimento ADITIVO com contractorRef (ADR-0046, Opção A)"'
+        - 'nota: o ADR-0046 é a prova de que a regra funcionou — acrescentou campo ao v1 sem quebrar consumidor nem versionar'
+      verify: |
+        grep -n "schema_version\|schemaVersion" src/modules/partners/adapters/persistence/schemas/mysql.ts | head -3; grep -n "aditivo\|contractorRef }" src/modules/contracts/adapters/persistence/mappers/outbox.mapper.ts | head
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um decoder de wire-format v1, quando receber payload com campo desconhecido, então MUST
+        decodificar sem erro. Se rejeitar, o contrato não é aditivo e todo enriquecimento exigiria bump.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O decoder do wire-format MUST tolerar campo desconhecido. Acrescentar campo MUST NOT bumpar
+        `schema_version`; remover ou renomear campo MUST bumpar.
+      rationale: |
+        O ADR só diz a metade ("adicionar nunca quebra"). A regra proposta acrescenta a simétrica — remover
+        ou renomear EXIGE bump — porque é a que protege de fato: sem ela, "não bumpar" pode ser lido como
+        "nunca bumpar", e aí uma remoção silenciosa quebra consumidor sem aviso de versão.
+
+findings:
+  - |
+    Melhor mecanismo de contrato do acervo: a filtragem dos eventos publicáveis é um TIPO
+    (`PublishableEventType`, `supplier-outbox.mapper.ts:20`), não uma convenção. O domínio emite quatro
+    eventos de supplier e só dois atravessam a fronteira — e acrescentar um quinto ao domínio não o
+    publica por acidente, porque o compilador cobra. Padrão a replicar em todo contrato cross-módulo.
+  - |
+    A separação "monta no adapter a partir do snapshot" é o que barateou o `ADR-0046`: ele acrescentou
+    `contractorRef` ao wire-format **sem tocar um evento de domínio**, porque o ponto de montagem é o
+    adapter. É a versão de escrita do que o `ADR-0032` faz na leitura — manter o núcleo limpo pondo a
+    tradução na borda.
+  - |
+    A prova de que a regra de evolução funciona é observável: `outbox.mapper.ts:389` faz
+    `JSON.stringify({ ...base, contractorRef })` — spread aditivo sobre o payload base, sem bump de
+    `schema_version`. O contrato v1 evoluiu uma vez, aditivamente, exatamente como projetado.
+  - |
+    O ADR enuncia só metade da regra de versionamento ("adicionar nunca quebra o v1") e não diz o que
+    EXIGE bump. A regra proposta fecha a simétrica, porque a leitura por omissão — "nunca bumpar" — torna
+    uma remoção de campo indistinguível de uma adição para o consumidor.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Vínculo confirmado por nome contra `.claude/.pipeline/` em 2026-07-31; conteúdo dos tickets não lido.
+    CORREÇÃO: a versão anterior desta nota citava também "PARTNERS-SUPPLIER-OUTBOX (spec 013)", que **não
+    existe** no acervo — foi nome inferido, não verificado. Os três acima existem. O consumidor deste
+    contrato é o read-model do ADR-0045 (`fin_supplier_view`).

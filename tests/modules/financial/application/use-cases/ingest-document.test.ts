@@ -64,6 +64,7 @@ const storageSpy = (behavior: Result<SourceFileRef.SourceFileRef, 'source-file-u
       removeCalls.push(ref);
       return Promise.resolve(ok(undefined));
     },
+    download: (ref) => Promise.resolve(ok({ bytes: new Uint8Array(), mimeType: ref.mimeType })),
   };
   return { calls, removeCalls, port };
 };
@@ -86,8 +87,8 @@ const INPUT = {
 };
 
 describe('financial/application/document-reader-to-draft (mapper)', () => {
-  it('CA4: mapeia DocumentReaderResult → rascunho (Money→cents, Competencia→string, retenções, supplier→description)', () => {
-    const draft = readerResultToDraft(SEED);
+  it('CA4: mapeia DocumentReaderResult → rascunho (Money→cents, Competencia→string, retenções; #566)', () => {
+    const draft = readerResultToDraft({ ...SEED, description: 'Serviço de consultoria' });
     assert.equal(draft.type, 'NFS-e');
     assert.equal(draft.documentNumber, '2024-0537');
     assert.equal(draft.competencia, '2026-04');
@@ -95,9 +96,15 @@ describe('financial/application/document-reader-to-draft (mapper)', () => {
     assert.deepEqual(draft.retentions, [
       { type: 'ISS', baseCents: 100000, rateBps: 500, valueCents: 5000 },
     ]);
-    assert.match(String(draft.description), /RAZAO SOCIAL LTDA/);
-    assert.match(String(draft.description), /12345678000199/);
-    assert.equal('supplierRef' in draft, false); // humano seleciona
+    // #566: description reflete a descrição do serviço da nota — NÃO o fornecedor ("Fornecedor lido").
+    assert.equal(draft.description, 'Serviço de consultoria');
+    assert.doesNotMatch(draft.description ?? '', /Fornecedor lido|RAZAO SOCIAL/);
+    assert.equal('supplierRef' in draft, false); // resolvido no ingest via #560, não no mapper
+  });
+
+  it('CA4b: sem descrição no reader → não polui `description` (#566)', () => {
+    const draft = readerResultToDraft(SEED); // SEED tem supplier, mas nenhuma description
+    assert.equal('description' in draft, false);
   });
 });
 
@@ -193,5 +200,59 @@ describe('financial/application/use-cases/ingest-document', () => {
     assert.equal(r.ok, false);
     assert.equal(storage.calls.length, 1); // guardou
     assert.equal(storage.removeCalls.length, 1); // e removeu o órfão
+  });
+});
+
+// #FIN-OCR-AUTOFILL-SUPPLIER — resolve o CNPJ do emitente (SupplierIdentity.taxId) para um fornecedor
+// cadastrado e pré-preenche o `supplierRef` no rascunho (hoje o humano seleciona manualmente).
+describe('financial/application/use-cases/ingest-document — auto-preenche fornecedor por CNPJ', () => {
+  it('CNPJ do emitente casa um fornecedor cadastrado → rascunho leva supplierRef', async () => {
+    const storage = storageSpy(ok(STORED));
+    const save = saveDraftSpy();
+    const SUP = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const resolvedTaxIds: string[] = [];
+    const ingest = ingestDocument({
+      reader: createMockDocumentReader({ result: SEED }), // supplier.taxId = 12345678000199
+      storage: storage.port,
+      saveDraft: save.fn,
+      idGen: DocumentId.generate,
+      resolveSupplierByCnpj: (taxId: string) => {
+        resolvedTaxIds.push(taxId);
+        return Promise.resolve(ok(taxId === '12345678000199' ? SUP : null));
+      },
+    });
+    const r = await ingest(INPUT);
+    assert.equal(r.ok, true);
+    assert.deepEqual(resolvedTaxIds, ['12345678000199']);
+    assert.equal(save.commands[0]?.supplierRef, SUP);
+  });
+
+  it('CNPJ do emitente NÃO casa → sem supplierRef (humano seleciona — back-compat)', async () => {
+    const storage = storageSpy(ok(STORED));
+    const save = saveDraftSpy();
+    const ingest = ingestDocument({
+      reader: createMockDocumentReader({ result: SEED }),
+      storage: storage.port,
+      saveDraft: save.fn,
+      idGen: DocumentId.generate,
+      resolveSupplierByCnpj: () => Promise.resolve(ok(null)),
+    });
+    const r = await ingest(INPUT);
+    assert.equal(r.ok, true);
+    assert.equal(save.commands[0]?.supplierRef, undefined);
+  });
+
+  it('sem o resolver (dep ausente) → sem supplierRef (comportamento atual intacto)', async () => {
+    const storage = storageSpy(ok(STORED));
+    const save = saveDraftSpy();
+    const ingest = ingestDocument({
+      reader: createMockDocumentReader({ result: SEED }),
+      storage: storage.port,
+      saveDraft: save.fn,
+      idGen: DocumentId.generate,
+    });
+    const r = await ingest(INPUT);
+    assert.equal(r.ok, true);
+    assert.equal(save.commands[0]?.supplierRef, undefined);
   });
 });

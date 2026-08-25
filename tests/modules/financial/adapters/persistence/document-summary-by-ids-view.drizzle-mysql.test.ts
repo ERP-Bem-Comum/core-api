@@ -22,6 +22,7 @@ import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapte
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write(
@@ -31,7 +32,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('DocumentSummaryByIdsView — Drizzle + MySQL (integração) (#358)', () => {
     let handle: FinancialMysqlHandle;

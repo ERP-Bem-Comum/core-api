@@ -1,0 +1,431 @@
+id: ADR-0015
+title: MySQL Outbox Pattern
+source: handbook/architecture/adr/0015-mysql-outbox-pattern.md
+decided_on: 2026-04-28
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0004]
+  superseded_by: []
+  related: [ADR-0013, ADR-0014]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O núcleo do pattern está implementado e correto: o INSERT na outbox ocorre dentro da MESMA
+    transação da mudança de domínio (`contract-repository.drizzle.ts:319-324` via
+    `appendOutboxInTx`), o índice tem `processed_at` PRIMEIRO como o ADR exige, o claim usa
+    `FOR UPDATE SKIP LOCKED`, e o worker faz polling em 500 ms — dentro da faixa prevista.
+    Duas alegações estão CONTRADITAS pelo código, e nas duas o código está certo e o ADR envelheceu:
+    (1) `payload JSON` nativo — o ADR-0020, quinze dias mais novo, proíbe coluna JSON, e todos os
+    sete outboxes usam `varchar(8192)` citando essa proibição em comentário;
+    (2) as convenções de nomeação de evento em PORTUGUÊS (`DocumentoSelado`, `TituloAprovado`) — o
+    código usa EN no passado (`AmendmentHomologated`, `ActRegistered`), conforme a tabela de idioma
+    do `AGENTS.md`.
+    Duas ficaram parciais: dead-letter existe em 3 dos 7 outboxes, e a tabela genérica de
+    idempotência do ADR não existe — há uma por projeção.
+
+extraction:
+  state: sample
+  covers: |
+    9 alegações. Ficaram fora: o catálogo inicial de eventos cross-fronteira (linhas 138-148, todo em
+    PT e referente ao par legacy↔core que ainda não opera por eventos) e os gatilhos de reavaliação
+    (linhas 167-176), que são condições de futuro e não regra de edição.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md', '.claude/rules/application.md']
+    gap: |
+      A 039 capturou bem a nuance mais importante: registrou que o `application.md` dizia "eventos só
+      após o save ter sucesso" e que isso NÃO é a mesma coisa que "o INSERT na outbox ocorre dentro
+      da transação" — a regra antiga permitia implementação não-atômica que satisfazia a letra e
+      violava o ADR.
+      O que ela não viu: as duas contradições frontais deste ADR. O `payload JSON` nativo colide com
+      a proibição do ADR-0020 (posterior), e a tabela de nomeação de eventos em PT colide com a
+      tabela de idioma do `AGENTS.md`. Nos dois casos o código já seguia o certo, e o ADR seguiu
+      dizendo o errado.
+
+claims:
+  - id: ADR-0015-C1
+    text: |
+      O INSERT na outbox ocorre DENTRO da mesma transação da mudança de domínio — o evento existe se
+      e somente se o estado foi persistido.
+    kind: obligation
+    source_lines: ['44-56', 51]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/repos/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts:15 — importa appendOutboxInTx'
+        - 'src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts:319 — comentário CA-3: save(contract, events) abre UMA transação que persiste state + outbox atomicamente'
+        - 'src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts:324 — db.transaction envolvendo estado e outbox'
+        - 'nota: verificado em contracts; os outros 6 módulos com outbox não foram auditados nesta fase'
+      verify: |
+        grep -rn "appendOutboxInTx\|db.transaction" src/modules/*/adapters/persistence/repos/*.ts | head -20
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um `save(aggregate, events)` que falha DEPOIS de gravar o estado, quando a transação
+        sofre rollback, então nem o estado nem o evento devem existir. Se a outbox tiver a linha e o
+        agregado não, o teste falha — e vice-versa.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O INSERT na outbox MUST ocorrer dentro da mesma transação da mudança de domínio.
+        MUST NOT publicar evento após o commit, nem em transação separada.
+      rationale: |
+        É a invariante que define o pattern — sem ela, o outbox não garante nada. A 039 já havia
+        detectado que a redação antiga do `application.md` ("eventos só após o save") permitia
+        violar isso satisfazendo a letra.
+
+  - id: ADR-0015-C2
+    text: |
+      A coluna `payload` da outbox é do tipo JSON nativo do MySQL.
+    kind: obligation
+    source_lines: [33, 65]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:345 — payload é varchar(8192)'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:321 — comentário: sem JSON nativo, ADR-0020 §proibido'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:386 — varchar(8192)'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:1050 — varchar(8192)'
+        - 'nota: o ADR-0020 (2026-05-15) proíbe coluna JSON nativa e é 15 dias mais novo que este ADR'
+      verify: |
+        grep -rn "payload:" src/modules/*/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de uma outbox, quando `payload` for declarado como JSON nativo, então o teste
+        falha. Já coberto pela rule semgrep `mysql-json-forbidden`.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.semgrep/rules.yml']
+    rule:
+      status: accepted
+      disposition: drop
+      text: null
+      rationale: |
+        Contradiz frontalmente o ADR-0020, que é posterior, tem razão própria declarada ("schema é
+        tipo") e já é enforçado por AST. O código nunca seguiu esta alegação e cita a proibição em
+        comentário. Descartar; a norma vigente é `varchar` com `JSON.stringify`.
+
+  - id: ADR-0015-C3
+    text: |
+      O índice de linhas não processadas é composto com `processed_at` PRIMEIRO — assim
+      `WHERE processed_at IS NULL` usa o índice, porque os NULL ficam agrupados.
+    kind: obligation
+    source_lines: [38, 67, '72-82']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:361 — index(ctr_outbox_processed_at_occurred_at_idx).on(t.processedAt, t.occurredAt)'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:359 — comentário reproduz a justificativa do ADR: processed_at PRIMEIRO, NULLs agrupados'
+        - 'nota: os sete outboxes têm índice com o mesmo padrão de nome *_processed_at_occurred_at_idx'
+      verify: |
+        grep -rhoE "'[a-z_]+_processed_at_occurred_at_idx'" src/modules/*/adapters/persistence/schemas/mysql.ts | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de uma outbox, quando o índice de não-processados não tiver `processed_at` como
+        primeira coluna, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O índice de varredura da outbox MUST ter `processed_at` como primeira coluna.
+        MUST NOT inverter para `(occurred_at, processed_at)`.
+      rationale: |
+        Detalhe de performance que parece arbitrário e não é — invertido, o worker faz full scan. O
+        código acertou nos sete e documentou o porquê; a regra impede que alguém "arrume" a ordem.
+
+  - id: ADR-0015-C4
+    text: |
+      O consumidor reivindica lote com `FOR UPDATE SKIP LOCKED` — essencial para múltiplos workers
+      consumirem sem race condition.
+    kind: obligation
+    source_lines: [70, '84-86']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/repos/*outbox*.ts'
+      - 'src/shared/outbox/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial]
+      absent_in: []
+      evidence:
+        - 'src/shared/outbox/outbox-worker.ts:6 — claim com FOR UPDATE SKIP LOCKED via withPendingBatch'
+        - 'src/modules/financial/adapters/persistence/repos/fin-outbox-reader.drizzle.ts:50 — .for(update, { skipLocked: true })'
+        - 'src/jobs/contracts/sweeper/sweeper.ts:19 — o adapter usa LIMIT + FOR UPDATE SKIP LOCKED'
+      verify: |
+        grep -rn "skipLocked\|SKIP LOCKED" src/ --include='*.ts'
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dados dois workers concorrentes sobre a mesma outbox, quando ambos reivindicam lote, então
+        nenhum evento é entregue duas vezes. Sem SKIP LOCKED, um bloqueia o outro ou duplica.
+      expected_error: null
+      blocker: |
+        Exige MySQL real e dois workers em paralelo no mesmo teste. O ticket
+        CTR-OUTBOX-SKIPLOCKED-DUP existe no acervo e provavelmente cobre isto — não lido.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O claim de lote da outbox MUST usar `FOR UPDATE SKIP LOCKED`.
+        MUST NOT reivindicar por `UPDATE ... WHERE processed_at IS NULL` sem lock.
+      rationale: |
+        É a diferença entre um worker e vários. Já implementado no worker compartilhado, o que torna
+        a regra uma proteção contra regressão, não um pedido de trabalho.
+
+  - id: ADR-0015-C5
+    text: |
+      MySQL não tem LISTEN/NOTIFY: a estratégia de leitura é polling APENAS, com intervalo na faixa
+      de 500 ms a 1 s.
+    kind: obligation
+    source_lines: ['68-69', 110]
+    applies_to:
+      - 'src/shared/outbox/**/*.ts'
+      - 'src/workers/runner/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - 'src/workers/runner/specs.ts:78 — PROJECTION_LOOP com pollIntervalMs 500 e idleSleepMs 1000'
+        - 'src/shared/outbox/outbox-worker.ts:158 — sleep(config.pollIntervalMs) no laço'
+        - 'src/shared/outbox/outbox-worker.ts:173 — usa idleSleepMs quando o lote veio vazio'
+        - 'src/shared/outbox/types.ts:120 — pollIntervalMs é campo obrigatório da config'
+      verify: |
+        grep -rn "pollIntervalMs\|idleSleepMs" src/shared/outbox/ src/workers/runner/specs.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dada a config de um worker, quando `pollIntervalMs` estiver fora da faixa 500-1000 ms, ou
+        quando existir dependência de notificação push do banco, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A leitura da outbox MUST ser por polling com intervalo configurável.
+        MUST NOT depender de notificação push do banco (não existe em MySQL).
+      rationale: |
+        Implementado exatamente como previsto, incluindo o refinamento de `idleSleepMs` maior quando
+        não há trabalho — que o ADR não pediu e é melhoria legítima.
+
+  - id: ADR-0015-C6
+    text: |
+      Idempotência no consumidor via tabela de eventos processados: verificar se o `event_id` existe;
+      se não, processar e inserir na mesma transação.
+    kind: obligation
+    source_lines: ['90-103']
+    applies_to:
+      - 'src/workers/**/*.ts'
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: não existe a tabela genérica eventos_processados do ADR; existe uma por projeção'
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:334 — par_contract_count_processed, idempotência por projeção'
+        - 'nota: o ADR-0045 (via 039) registra idempotência por ON DUPLICATE KEY UPDATE + guard de recência por occurred_at, que é mecanismo diferente do proposto aqui'
+      verify: |
+        grep -rhoE "'[a-z_]*(processed|consumed)[a-z_]*'" src/ --include='*.ts' | sort -u
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um evento já processado, quando ele é entregue de novo (at-least-once), então o efeito
+        no read-model MUST ser idêntico ao da primeira entrega. Se duplicar, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Todo consumidor MUST ser idempotente por `event_id`. O mecanismo MAY ser tabela de
+        processados por projeção OU upsert com guard de recência por `occurred_at` (ADR-0045) — mas
+        MUST estar declarado no adapter.
+      rationale: |
+        A exigência (idempotência) vale; o mecanismo único proposto pelo ADR não é o que se usa. O
+        ADR-0045 introduziu a alternativa por guard de recência, e ela é melhor onde há read-model.
+        Substituir para admitir os dois, exigindo que o escolhido seja explícito.
+
+  - id: ADR-0015-C7
+    text: |
+      Retentativas contadas em `attempts` na própria linha; após N falhas, o evento move para
+      `outbox_dead_letter`.
+    kind: obligation
+    source_lines: ['151-162']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+      - 'src/shared/outbox/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [contracts, financial, partners]
+      absent_in: [auth, budget-plans, programs, notifications]
+      evidence:
+        - 'nota: dead-letter existe em três dos sete outboxes — ctr_outbox_dead_letter, fin_outbox_dead_letter, par_outbox_dead_letter'
+        - 'nota: auth_outbox, bgp_outbox, prg_outbox e par_email_outbox têm attempts e last_error, mas nenhuma tabela de dead-letter'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:400 — ctr_outbox_dlq_failed_at_idx'
+      verify: |
+        grep -rhoE "'[a-z_]+_dead_letter'" src/ --include='*.ts' | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um módulo com outbox, quando não existir tabela de dead-letter correspondente, então o
+        teste falha. Hoje falha em quatro módulos — é o RED legítimo desta regra.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Toda outbox MUST ter tabela de dead-letter correspondente. Evento que exceda `maxAttempts`
+        MUST ser movido para lá, nunca descartado nem retentado indefinidamente.
+      rationale: |
+        Quatro dos sete outboxes contam tentativas e não têm para onde mandar o que falhou de vez —
+        o evento fica retentando ou é perdido de vista. É a lacuna mais concreta deste ADR, e o RED
+        do teste já aponta exatamente os quatro.
+
+  - id: ADR-0015-C8
+    text: |
+      Nomes de evento em tempo passado, com verbo de domínio, PascalCase — exemplificados em
+      português: `DocumentoSelado`, `TituloAprovado`, `RetornoCnabProcessado`.
+    kind: obligation
+    source_lines: ['124-134']
+    applies_to:
+      - 'src/modules/*/domain/**/*.ts'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: os eventos do código são EN no passado — AmendmentHomologated, AmendmentCreated, ActRegistered, ActDeactivated, BankStatementImported, ApproverEscalated'
+        - 'nota: a tabela de idioma do AGENTS.md fixa eventos de domínio em EN passado, e classifica material PT do handbook como legado a migrar'
+      verify: |
+        grep -rhoE "'[A-Z][a-zA-Z]+(ed|Created|Registered|Imported)'" src/modules/*/domain/**/*.ts | sort -u | head -20
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um nome de evento de domínio, quando não estiver em EN no passado e PascalCase, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: drop
+      text: null
+      rationale: |
+        A forma (passado, verbo de domínio, PascalCase) vale e já está na tabela de idioma do
+        `CLAUDE.md`, que é a fonte única. Os exemplos em PORTUGUÊS deste ADR contradizem essa tabela
+        e o código. Descartar a alegação daqui em vez de duplicar — quem legisla idioma é o
+        `CLAUDE.md`.
+
+        PROMOVIDA em 2026-08-05. A menção ao `AGENTS.md` foi corrigida para `CLAUDE.md` porque este
+        texto afirma no PRESENTE onde a norma vive, e o `AGENTS.md` não existe mais (ADR-0057). Não é
+        reescrita de registro histórico — a proibição do `ADR-0057-C6` vale para EVIDÊNCIA ANCORADA
+        (`AGENTS.md:65`), cuja numeração de linha morreria com o arquivo. Aqui não há âncora.
+
+  - id: ADR-0015-C9
+    text: |
+      `event_id` é a chave primária da outbox, tipo `CHAR(36)` (ou `BINARY(16)`; recomendado
+      `CHAR(36)` por simplicidade).
+    kind: obligation
+    source_lines: [28, 64]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rn -A3 "_outbox'" src/modules/contracts/adapters/persistence/schemas/mysql.ts | grep -iE "eventId|char|varchar"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de uma outbox, quando `event_id` não for PK de 36 caracteres, então falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `event_id` MUST ser a PK da outbox, com 36 caracteres (UUID v4 textual), coerente com o
+        mapeamento canônico de IDs do ADR-0020.
+      rationale: |
+        Alinha com `VARCHAR(36)` em PK do ADR-0020. Não verificado nesta fase — o veredito de
+        realidade fica `unverified` até a Fase 2, mas a norma proposta não depende disso.
+
+findings:
+  - |
+    Contradição frontal entre dois ADRs Accepted: este exige `payload JSON` nativo (linha 33) e o
+    ADR-0020 (2026-05-15) proíbe coluna JSON com razão própria. O código segue o 0020 e cita a
+    proibição em comentário. O 0015 nunca foi atualizado, e nada no repo sinaliza que essa parte
+    dele está morta.
+  - |
+    Segunda contradição: a tabela de nomeação de eventos deste ADR está em PORTUGUÊS
+    (`DocumentoSelado`, `TituloAprovado`) e a tabela de idioma do `AGENTS.md` fixa eventos em EN
+    passado. O código segue o `AGENTS.md`. Duas fontes normativas discordando sobre identificador é
+    o tipo de conflito que um agente resolve arbitrariamente.
+  - |
+    Dead-letter existe em 3 dos 7 outboxes. Os outros quatro (`auth`, `budget-plans`, `programs`,
+    `par_email`) têm `attempts` e `last_error` mas nenhum destino para o evento que esgota as
+    tentativas. É a lacuna de implementação mais concreta encontrada no lote.
+  - |
+    O worker implementa `idleSleepMs` separado de `pollIntervalMs` — dorme mais quando o lote vem
+    vazio. Refinamento acima do que o ADR pediu, e que vale registrar antes que alguém "unifique".
+
+provenance:
+  tickets:
+    - CORE-OUTBOX-WORKER-GENERIC
+    - CTR-OUTBOX-INTEGRATION-IN-REPOS
+    - CTR-OUTBOX-SCHEMA
+    - CTR-OUTBOX-SKIPLOCKED-DUP
+    - FIN-OUTBOX-ATOMIC
+    - PAR-OUTBOX-INFRA
+  issues: []
+  note: |
+    Tickets diretamente relevantes existem no acervo e NÃO foram lidos: CTR-OUTBOX-SCHEMA,
+    CTR-OUTBOX-SKIPLOCKED-DUP (provável cobertura do C4), CTR-OUTBOX-INTEGRATION-IN-REPOS (provável
+    cobertura do C1), FIN-OUTBOX-ATOMIC, PAR-OUTBOX-INFRA, CORE-OUTBOX-WORKER-GENERIC. Preencher na
+    Fase 3 por leitura, não por nome.

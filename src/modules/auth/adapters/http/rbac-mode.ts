@@ -1,8 +1,17 @@
-// Modo de operação do RBAC na borda (ADR-0052). Função pura, fail-secure.
+// Modo de operação do RBAC na borda (ADR-0052). Função pura, e FAIL-SECURE.
 //
-// `bypass` liga SÓ com a palavra exata. Ausente, 'enforced' ou qualquer outro valor → 'enforced':
-// um typo de env (ou um `=1`/`=true` copiado de outro lugar) NUNCA abre a autorização. É o oposto do
-// fallback silencioso que os #456/#462/#474 combatem — aqui o default e o desconhecido são o SEGURO.
+// O default e o valor desconhecido caem no lado SEGURO: só a literal exata `bypass` desliga a
+// autorização. Um typo de env — `BYPASS`, `true`, `1`, ` bypass` — resolve para `enforced` e nunca
+// abre a autorização por acidente. É o que `rbac-mode.test.ts` prova em 11 casos (CA1/CA2/CA3).
+//
+// ⚠️ ESTA FUNÇÃO NÃO É O LUGAR DE FIXAR O MODO. Ela já foi, por um dia: para destravar a
+// homologação, `resolveRbacMode` passou a devolver `'bypass'` incondicionalmente. O efeito colateral
+// não estava no financeiro — estava aqui: os 11 casos acima passaram a falhar, porque a propriedade
+// que eles protegem é justamente a que o hardcode apagou. Uma decisão operacional ("ligue o bypass
+// agora") virou uma mudança de propriedade de segurança ("não existe mais lado seguro").
+//
+// Onde a decisão operacional mora é no composition root (`src/server.ts`), que é onde se escolhe
+// COMO o sistema roda — enquanto esta função continua respondendo o que a configuração DIZ.
 
 import type { RbacMode } from '../../domain/authorization/rbac-mode.ts';
 

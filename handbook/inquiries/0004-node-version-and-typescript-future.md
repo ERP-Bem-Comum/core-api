@@ -1,8 +1,15 @@
+---
+inquiry: 0004
+title: "Versão Node.js e estratégia TypeScript 7.0"
+state: decided
+opened: 2026-04-28
+decided: 2026-04-28
+last_reviewed: 2026-08-06
+open_outputs: 2  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0004: Versão Node.js e estratégia TypeScript 7.0
 
-- **Status:** Decided
-- **Opened:** 2026-04-28
-- **Closed/Decided:** 2026-04-28
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Pesquisa em fontes oficiais (nodejs.org, typescriptlang.org, devblogs.microsoft.com)
 - **Impact:** [ADR-0009](../architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) (supersedes parte do ADR-0002)

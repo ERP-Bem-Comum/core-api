@@ -24,6 +24,10 @@ import { InMemoryAuthOutbox } from '#src/modules/auth/adapters/outbox/auth-outbo
 import type { OutboxMessage } from '#src/modules/auth/application/ports/outbox.ts';
 
 const AT = new Date('2026-06-18T12:00:00.000Z');
+// Pendência é por consumidor desde #800/#824 — id fixo de teste, sem semântica de fanout aqui
+// (o comportamento com múltiplos consumidores é coberto em
+// `tests/shared/outbox/fanout-two-consumers.test.ts`).
+const CONSUMER_ID = 'auth-outbox-worker-ops-test';
 
 const mkMessage = (over: Partial<OutboxMessage> = {}): OutboxMessage => ({
   eventId: over.eventId ?? 'evt-1',
@@ -43,7 +47,7 @@ describe('auth_outbox InMemory — helpers do worker (CA1)', () => {
       mkMessage({ eventId: 'evt-1', occurredAt: new Date('2026-06-18T12:00:01.000Z') }),
     ]);
     // Act
-    const pending = await outbox.findPendingForUpdate(10);
+    const pending = await outbox.findPendingForUpdate(CONSUMER_ID, 10);
     // Assert
     assert.equal(isOk(pending), true);
     if (pending.ok) {
@@ -57,12 +61,12 @@ describe('auth_outbox InMemory — helpers do worker (CA1)', () => {
     const outbox = InMemoryAuthOutbox();
     await outbox.port.append([mkMessage({ eventId: 'evt-1' })]);
     // Act
-    const r1 = await outbox.markProcessed('evt-1', AT);
-    const r2 = await outbox.markProcessed('evt-1', AT); // idempotente
+    const r1 = await outbox.markProcessed(CONSUMER_ID, 'evt-1', AT);
+    const r2 = await outbox.markProcessed(CONSUMER_ID, 'evt-1', AT); // idempotente
     // Assert
     assert.equal(isOk(r1), true);
     assert.equal(isOk(r2), true);
-    assert.equal(outbox.pending().length, 0);
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 0);
     assert.equal(outbox.all().length, 1); // row preservada (audit)
   });
 
@@ -71,10 +75,14 @@ describe('auth_outbox InMemory — helpers do worker (CA1)', () => {
     const outbox = InMemoryAuthOutbox();
     await outbox.port.append([mkMessage({ eventId: 'evt-1' })]);
     // Act
-    const r = await outbox.markFailed('evt-1', AT, 'DeliveryUnavailable', 1);
+    const r = await outbox.markFailed(CONSUMER_ID, 'evt-1', {
+      now: AT,
+      errorTag: 'DeliveryUnavailable',
+      attempt: 1,
+    });
     // Assert
     assert.equal(isOk(r), true);
-    const pending = outbox.pending();
+    const pending = outbox.pendingFor(CONSUMER_ID);
     assert.equal(pending.length, 1);
     assert.equal(pending[0]?.attempts, 1);
   });
@@ -84,10 +92,15 @@ describe('auth_outbox InMemory — helpers do worker (CA1)', () => {
     const outbox = InMemoryAuthOutbox();
     await outbox.port.append([mkMessage({ eventId: 'evt-1' })]);
     // Act
-    const r = await outbox.moveToDeadLetter('evt-1', AT, 'delivery-error: DeliveryUnavailable');
+    const r = await outbox.moveToDeadLetter(
+      CONSUMER_ID,
+      'evt-1',
+      AT,
+      'delivery-error: DeliveryUnavailable',
+    );
     // Assert
     assert.equal(isOk(r), true);
-    assert.equal(outbox.pending().length, 0);
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 0);
   });
 
   it('withPendingBatch entrega rows + ops na mesma sessao; markProcessed remove do pending', async () => {
@@ -95,13 +108,13 @@ describe('auth_outbox InMemory — helpers do worker (CA1)', () => {
     const outbox = InMemoryAuthOutbox();
     await outbox.port.append([mkMessage({ eventId: 'evt-1' }), mkMessage({ eventId: 'evt-2' })]);
     // Act
-    const r = await outbox.withPendingBatch(10, async (rows, ops) => {
+    const r = await outbox.withPendingBatch(CONSUMER_ID, 10, async (rows, ops) => {
       for (const row of rows) await ops.markProcessed(row.eventId, AT);
       return rows.length;
     });
     // Assert
     assert.equal(isOk(r), true);
     if (r.ok) assert.equal(r.value, 2);
-    assert.equal(outbox.pending().length, 0);
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 0);
   });
 });

@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import * as Cnpj from '#src/shared/kernel/cnpj.ts';
 import type {
   ContractorReadPort,
   ContractorReadError,
@@ -127,5 +128,31 @@ export const createDrizzleContractorReadStore = (
     }
   };
 
-  return { getSupplierView, getFinancierView, getCollaboratorView, getActView };
+  // #FIN-OCR-AUTOFILL-SUPPLIER: normaliza o CNPJ (VO) e resolve pelo índice único `par_suppliers_cnpj_idx`.
+  // CNPJ inválido → ok(null) (não é erro de infra). Sem match → ok(null).
+  const findSupplierIdByCnpj = async (
+    cnpj: string,
+  ): Promise<Result<string | null, ContractorReadError>> => {
+    const parsed = Cnpj.parse(cnpj);
+    if (!parsed.ok) return ok(null);
+    try {
+      const rows = await db
+        .select({ id: schema.parSuppliers.id })
+        .from(schema.parSuppliers)
+        .where(eq(schema.parSuppliers.cnpj, parsed.value as unknown as string))
+        .limit(1);
+      return ok(rows[0]?.id ?? null);
+    } catch (cause) {
+      logRead('findSupplierIdByCnpj', cause);
+      return err('contractor-read-unavailable');
+    }
+  };
+
+  return {
+    getSupplierView,
+    getFinancierView,
+    getCollaboratorView,
+    getActView,
+    findSupplierIdByCnpj,
+  };
 };

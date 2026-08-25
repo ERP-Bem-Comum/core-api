@@ -4,6 +4,233 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-24 — 🏦 ADR-0065 (Accepted): a responsabilidade pela remessa termina no bucket — `Transmitted` do título na geração; download em produção sob permissão + rastro
+
+**Uma decisão de produto que era, na verdade, uma decisão de fronteira.** A [#792](https://github.com/ERP-Bem-Comum/core-api/issues/792) registrava que, depois de gerar e transmitir, o título continuava "Aprovado" — `Transmitted` existia no enum e nada o atribuía. A P.O. decidiu em 24/08, num menu de trade-offs com o tech lead: o título vira **Transmitido na geração**, porque a partir do bucket a responsabilidade é da VAN e do banco (ACL — Vernon, p. 142), acompanhada pelo site da instituição.
+
+Isso **revoga** a leitura de 11/08 ("só ao ler o `status/`") e a cláusula do [ADR-0060](./architecture/adr/0060-van-transport-via-s3-bucket-supersedes-0008-relay.md) `:78-79` **quando aplicada ao título** — daí um ADR que `supersedes` em vez de edição. O [ADR-0065](./architecture/adr/0065-remittance-responsibility-boundary-supersedes-0060-0061-transmitted.md) separa os dois fatos que os ADRs anteriores tratavam como um: "saiu da nossa alçada" (título, transacional com a reserva, CAS do [ADR-0063](./architecture/adr/0063-payable-is-the-write-aggregate-cas-by-precondition.md)) e "o agente transmitiu" (remessa, pelo `status/`). `Failed` não devolve o título; `discard` devolve. `Pago` segue manual ([#59](https://github.com/ERP-Bem-Comum/core-api/issues/59)).
+
+No mesmo ADR, a [#822](https://github.com/ERP-Bem-Comum/core-api/issues/822): o arquivo da remessa passa a ser baixável em produção — permissão dedicada `remittance:download`, 403 nomeado, log estruturado de cada acesso, bytes pela API com `contentHash`; URL assinada rejeitada pelo motivo do [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md). O teste que fixava o 404 em produção é invertido conscientemente.
+
+Rascunhado `Proposed` e **aceito no mesmo dia** pelo Tech Lead, no PR #840 — a P.O. e ele tomaram a decisão juntos, e o texto foi revisado antes do merge. A implementação (transição no `save` de criação, evento, pré-voo, read-model, `discard`, rota e permissão) nasce como PRs próprios a partir daqui.
+
+---
+
+## 2026-08-07 — 🏷️ Higienização (3 e 4/4): `interviews/` fica intacta, e `api_documentations/` passa a dizer que é do LEGADO
+
+**Duas frentes, dois vereditos de "não mexer" — e o segundo por muito pouco.**
+
+**`interviews/`** tem propósito declarado no próprio README e é material **vivo**: a skill [`ts-domain-modeler`](../.claude/skills/ts-domain-modeler/SKILL.md) cita a entrevista 0001 como **canônica** em dois blocos. Os 80 dias de silêncio são o comportamento correto de uma entrevista fechada — ela não muda porque o código mudou. Nada foi tocado.
+
+**`api_documentations/` quase perdeu o contrato do legado.** A triagem classificou o `doc.yaml` como documentação obsoleta do core-api: contradizia o [ADR-0027](./architecture/adr/0027-zod-openapi-contract-first-http-edge.md), que manda gerar o OpenAPI dos schemas Zod, e cobria "13 de 159 rotas".
+
+**A comparação era sem sentido.** O `servers:` do arquivo aponta para `localhost:3003 — Backend NestJS local`, e este CHANGELOG já o descrevia duas vezes como *"contrato REST do legado NestJS"*. As 13 rotas são do **legado**; as 159 são do **core-api**. São APIs de sistemas diferentes — `/contracts/aditive` contra `/contracts/:id/amendments`.
+
+Os dois YAML ficam, e ambos têm função: o `doc.yaml` foi o insumo que originou o design do módulo de **auth**, e o `contracts/openapi.yaml` é **referência de migração/ACL** por declaração explícita do ADR-0027 §39.
+
+**O defeito nunca foi o conteúdo — foi o nome.** `api_documentations/` promete "documentação de API" sem dizer de qual sistema, e o diretório não tinha README. Agora tem, e ele começa dizendo o que importa: *nada aqui documenta a API deste repositório*. O contrato vivo do core-api é gerado e servido em `/docs`, em OpenAPI 3.1.1.
+
+Com isto, as quatro decisões abertas em [`reviews/0004`](./reviews/0004-inventario-handbook-e-claude.md) estão fechadas — e em **três das quatro** a leitura impediu a limpeza que a métrica sugeria.
+
+## 2026-08-07 — 📚 Higienização (1/4): `research/` volta a ser só material autoral
+
+**A primeira aplicação do inventário quase enterrou material vivo, e a leitura salvou.** `handbook/research` aparecia com 8 arquivos, 8 órfãos e **zero citadores** — perfil de resíduo. É a **fonte canônica declarada de quatro specs entregues**: a [spec 008](./specs/008-gestao-programas/spec.md) escreve que os dois arquivos de `gestao_programas/` "são a fonte canônica desta spec", a 036 cita linha específica como evidência, a 005 declara a pasta como insumo, e os quatro módulos correspondentes existem em `src/` com 43 a 205 arquivos.
+
+O número estava errado por defeito da métrica — corrigido antes desta mudança, com errata em [`reviews/0004`](./reviews/0004-inventario-handbook-e-claude.md).
+
+**O que de fato saiu foram os 3 cookbooks da Anthropic** (memória de agente, context engineering, workflows multi-LLM): 4.256 linhas, **62% do diretório**, e material de **terceiro**. Foram para [`reference/ia-tooling/`](./reference/ia-tooling/), que é o cache declarado de documentação externa — `research/` é para trabalho autoral. Entrada em `redirects.json`, linha no índice do `reference/`.
+
+`handbook/research` passou de 8 arquivos com 3 órfãos para **5 arquivos com zero órfãos**: tudo o que resta é autoral e referenciado por alguém.
+
+## 2026-08-07 — 🧹 Débito dos gates pago, e o inventário que precede a higienização
+
+**Os três gates escritos hoje passaram a perguntar ao git.** `redirects`, `handbook-refs` e `handbook-links` ainda decidiam existência com `existsSync` — passavam, mas repetiam o padrão que o CI derrubou duas vezes. A lógica saiu de dentro do `scanHandbook`, onde estava inline, e virou `repoPaths()`: `isTracked` · `isIgnored` · `exists`. Uma fonte, quatro consumidores.
+
+A prova do ganho é a mutação que **passa**: um redirect apontando para `handbook/guidelines` (gitignored) agora é aceito como `local-only`. Com `existsSync` isso passava aqui e falhava no runner — o defeito nasceria de novo, silencioso.
+
+**`pnpm run docs:inventory`** mede `handbook/` e `.claude/` por diretório: arquivos, linhas, órfãos, alcance (quem cita de fora) e silêncio (dias desde o último commit). O retrato datado e sua leitura estão em [`reviews/0004`](./reviews/0004-inventario-handbook-e-claude.md) — os números **gerados**, a interpretação escrita, porque foi escrever número à mão que deixou o `PERGUNTAS-EM-ABERTO.md` três meses divergente.
+
+O que o retrato mostrou: **`handbook/reference` é 85% das linhas** e é espelho de terceiro — o material autoral são ~730 arquivos, não 1.417. `architecture` (zero órfãos, citado por 85) e `inquiries` (zero órfãos, citado por 28) são o centro vivo. E três diretórios estão quietos há mais de 50 dias com alcance quase nulo: `research`, `tickets` e `interviews`.
+
+⚠️ **O documento dedica uma seção a como NÃO ler os números**, e ela nasceu de erro real: `.claude/rules` aparece com 12 de 16 "órfãs" — falso positivo, porque rule carrega por `paths:` e não precisa ser citada. `api_documentations` aparece com 0 arquivos — o inventário conta só `.md`, e lá vivem 2 YAML. Métrica sem leitura condena documento vivo.
+
+## 2026-08-07 — 🆔 Plano 041 (Fases 6 e 5): frescor vira sinal, e a referência deixa de ser um caminho
+
+**Fase 6 — `last_reviewed` deixa de ser decoração.** As 29 inquiries preenchiam o campo e **nada o lia**. Agora inquiry `open` ou `blocked` que passe **90 dias** sem revisão falha o gate. A janela é generosa de propósito: inquiry bloqueada em terceiro não anda por vontade própria, e alarme mensal vira ruído que se aprende a silenciar. As [0011](./inquiries/0011-auditoria-fiscal-cross-periodo.md) e [0012](./inquiries/0012-bff-managed-api-gateway-vs-fastify.md) esperam a **mesma banca desde maio**, e ninguém tinha percebido — em novembro elas acendem sozinhas.
+
+Revisar não é carimbar a data, e o gate diz isso na mensagem de erro: releia e responda se o bloqueio ainda é o mesmo. Uma segunda asserção fecha o atalho óbvio — **`last_reviewed` no futuro** ganharia meses de silêncio com um toque, e revisão que ainda não aconteceu não conta como revisão.
+
+**Fase 5 — o identificador passa a ser a referência.** As fases anteriores *contiveram* o link morto; nenhuma atacou a causa, que é o caminho do arquivo ser a identidade do documento. `scripts/handbook/refs.ts` registra **124 identificadores** (`adr-NNNN`, `inquiry-NNNN`, `spec-NNN`) derivados do prefixo numérico que o `handbook-numbering` já garante único, e `tests/cleanup/handbook-refs.test.ts` cobra que todo `[[id]]` resolva.
+
+**A prova do ganho foi feita por mutação:** renomear o arquivo `0018-auditlog-transversal-todos-bcs.md` **não quebrou** nenhuma citação `[[inquiry-0018]]` — o gate seguiu verde. Com citação por caminho, o mesmo rename produziria três links mortos, dois deles em documento que não se pode editar.
+
+**A forma antiga de `[[…]]` era o pior dos dois mundos.** O repositório já usava `[[0018-auditlog-transversal-todos-bcs]]` — o nome do arquivo —, que **não é clicável no GitHub nem sobrevive a rename**. Normalizada para `[[inquiry-0018]]`, que ao menos entrega a segunda coisa.
+
+**A sintaxe colide, e o padrão é restritivo por causa disso.** `[[` … `]]` aparece no repositório em teste de bash (`[[ "$x" == y ]]`) e em array aninhado de exemplo. O regex exige `tipo-numero` em minúsculas, sem espaço nem aspas — e há teste para cada uma dessas colisões, porque descobri as duas varrendo o repo, não imaginando.
+
+⚠️ **Limitação declarada, não resolvida:** `[[id]]` não é clicável no GitHub. O ganho é sobreviver a rename; o custo é um clique. A convenção registrada no [README das inquiries](./inquiries/README.md) recomenda **identificador onde o alvo é volátil** (inquiry, spec, ADR citado de longe) e **caminho onde é estável e a navegação importa**. Expandir `[[id]]` para link markdown no disco resolveria os dois lados, mas criaria mais um derivado a manter em dia — fica em aberto.
+
+## 2026-08-07 — 🚦 Plano 041 (Fase 4): o gate de referência do handbook liga, com **zero** links não endereçados
+
+`tests/cleanup/handbook-links.test.ts` entra no `pnpm test`: link do handbook sem destino, sem redirect e sem lápide **falha o gate**. O passivo que abriu o plano — 137 — está em **0**.
+
+**Este gate só pôde nascer agora, e a ordem não foi preferência.** Ligá-lo junto com o scanner, três fases atrás, obrigaria a violar o [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5 para ficar verde: 46 dos 137 apontam para o aparato expurgado pelas specs 038/039, cujas referências aquele ADR declara invariantes. Gate que só se satisfaz com a quebra de um invariante não é gate, é armadilha.
+
+Os 46 passaram a ser **declarados**, não consertados: oito prefixos em `HISTORICAL_PREFIXES`, cada um com a razão de existir, **pinados por `deepEqual`** no molde do `KNOWN_COLLISIONS` do `handbook-numbering`. Acrescentar prefixo ali afrouxa o gate e por isso tem de aparecer em diff de PR, com justificativa.
+
+Duas asserções cuidam de a allowlist não virar desculpa. **Todo prefixo protegido precisa estar mesmo ausente do disco** — o ADR-0057 §5 protege referência a coisa que não existe mais; se `.specify/` ressuscitar, a entrada deixa de proteger e passa a esconder um link que teria destino real. E **nenhum prefixo pode ser largo demais**: a lista nomeia `.claude/skills/pipeline-maestro/` e `.claude/skills/speckit-` justamente porque `.claude/skills/` cobriria as skills em uso.
+
+**Quatro saídas, e "consertar o link" é só a primeira.** Corrigir o texto quando o documento é editável; redirect quando mudou de lugar; lápide quando morreu; allowlist quando é registro histórico protegido. Editar ADR aceito continua não sendo saída.
+
+Verificado por mutação, com backup e restauração: documento novo com link morto, allowlist alargada para `.claude/skills/`, redirect apontando para destino inexistente e entrada sem motivo legível — os quatro ficam vermelhos, e o baseline volta verde.
+
+**Correção de rota, achada pelo CI e não pela máquina de quem escreveu.** O gate media existência com `existsSync`, e `handbook/guidelines/` está no `.gitignore` (PDFs Bradesco, restrição de redistribuição): **existe para quem tem os arquivos e não existe no runner**, o que fazia o mesmo link ser vivo aqui e morto lá. Gate cuja resposta depende de qual máquina o executa não verifica nada. A existência passou a ser **"está no repositório"** — `git ls-files` mais `git check-ignore` em lote —, exatamente o que o `claude-md-links.test.ts` já fazia desde a #641, e a quinta saída `local-only` nomeia os 46 links que apontam para material deliberadamente ausente. Escolher `existsSync` foi não ter olhado o gate irmão que já resolvera o mesmo problema.
+
+## 2026-08-07 — ↪️ Plano 041 (Fase 3): 91 links mortos endereçados sem editar um único documento histórico
+
+`handbook/redirects.json` — o "301 do repositório". **44 entradas**, cada uma com destino, motivo e data. O passivo de referência caiu de **137 para 46**: 71 links passaram a resolver por redirect e 20 viraram lápide declarada. Os 46 restantes são exatamente a classe protegida pelo [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5, que a Fase 4 declara em allowlist.
+
+**Nenhum documento foi editado para isso** — nem os 7 links quebrados que vivem dentro de ADR aceito, nem `specs/`, `reviews/` ou `po-feedback/`, todos registro datado. Era exatamente o ponto do desenho: endereçar sem reescrever história.
+
+**A reorganização `domain/` → `domain_questions/` não foi um rename, e o mapa mostra por quê.** A raiz de `domain/` era o módulo **financeiro** (contratos vivia em `domain/contratos/`), e os BCs perderam o prefixo numérico ao virar `bounded-contexts/*.md`. Duas correspondências saíram do texto de quem cita, não do nome do arquivo: o `DOCUMENTO_MESTRE.md` da raiz é a Especificação Mestra do Financeiro — quem o cita descreve "modelo centrado em **Fato Gerador** (documento fiscal soberano)" —, e `06-event-line-context.md` é a matriz de eventos do financeiro, porque quem cita a chama assim.
+
+**Cinco documentos ganharam lápide em vez de destino**, e a razão é a mesma nos cinco: redirect que aponta para documento diferente engana com aparência de sucesso, o que é pior que link morto — este ao menos avisa. O mais caro é o `domain/10-mapeamento-legado-schema.md`, mapeamento das 32 tabelas do dump legado, citado 11 vezes e **inexistente no repositório**: a [inquiry 0014](./inquiries/0014-schema-legado-vs-modelo-alvo.md) recebeu o aviso de que retomá-la exige refazer o mapeamento a partir de `database/.dump/schema-only.sql`.
+
+**A lápide passou a contar como endereçada, e isso foi uma decisão da fase.** A Fase 0 a classificava como passivo, com o comentário "até a Fase 3 decidir". Decidiu-se que sim: o link segue quebrado para quem clica, mas alguém decidiu, escreveu por quê e datou — é tudo o que um gate pode exigir. Proibir que documento morra seria outra política. A classe `tombstoned` existe separada de `redirected` para que o custo continue visível.
+
+Três achados que só o `git log` deu: `PAR-ACT-ACORDO.md` não morreu, **mudou de `tickets/todo/` para `tickets/done/`**; dois cards de grid foram **consolidados** num sucessor que declara absorvê-los; e a entrevista `Pergunta_H2` existe com outro sufixo de skill — foi conduzida com `ports-and-adapters`, não `ts-domain-modeler`. Nenhum dos três era lápide, e supor teria enterrado documento vivo.
+
+## 2026-08-07 — 🪦 Plano 041 (Fase 2): apagar documento citado deixa de ser silencioso
+
+`handbook/domain/` deixou de existir num commit levando **59 referências** junto, e nada acusou — três meses depois o custo caiu sobre quem foi seguir os links, e metade deles não pode nem ser consertada, porque vive em ADR imutável. Esta é a única fase do plano que ataca a **causa** e não o estoque.
+
+O `.githooks/pre-commit` passou a encadear [`pre-commit-tombstone.sh`](../.claude/hooks/pre-commit-tombstone.sh) antes do gate de qualidade: `.md` deletado ou renomeado que outro documento ainda cita **recusa o commit**, até haver declaração em `handbook/redirects.json` — destino novo, ou lápide (`to: null` + motivo).
+
+**A lápide passa de propósito.** O gate não decide se um documento pode morrer; decide que a morte precisa ser declarada. Quem escreve "morreu, sem substituto, por isto" deixou rastro; quem apaga em silêncio transfere o custo para o próximo leitor.
+
+**Por que não vive dentro do `pre-commit-typecheck.sh`:** aquele gate sai cedo quando não há `.ts` staged — e o commit que apaga só documentação é exatamente o que ele nunca inspecionaria. O filtro barato mora no shell: só invoca o node quando o diff staged tem `.md` removido, então commit comum não paga nada além de um `git diff --cached`.
+
+Os backlinks são construídos com o mesmo extrator do `link-scan`, e por isso herdam a regra de menção × uso: documento que só **exibe** a sintaxe de um link, dentro de crase, não impede a remoção do alvo.
+
+## 2026-08-07 — 🔗 Plano 041 (Fases 0 e 1): o handbook ganha medição de referência, e o índice das inquiries passa a ser gerado de fato
+
+**O `INDEX.md` das inquiries dizia "Gerado a partir do disco. Não editar à mão" e o `inquiry-hygiene.test.ts` mandava "regere com o script do README" — esse script nunca existiu.** O índice era mantido à mão fingindo ser derivado, e o teste era a muleta que segurava a ficção. `scripts/handbook/inquiry-index.ts` é o script que faltava: gera o `INDEX.md` inteiro e a região marcada do [`PERGUNTAS-EM-ABERTO.md`](./inquiries/PERGUNTAS-EM-ABERTO.md) a partir do frontmatter, com `pnpm run docs:index`. A prova de que o gerador está certo é o diff da adoção: **três linhas** — ele reproduziu o arquivo mantido à mão quase byte a byte.
+
+**O derivado não carrega data de geração, e isso é decisão.** O índice trazia "Última geração: 2026-08-06"; carimbar a data de hoje num arquivo gerado faz o `--check` acender amanhã sem ninguém ter tocado em nada, e gate que acende sozinho é gate que se aprende a ignorar. Quem data o índice é o `git log`.
+
+**Antes disso, a medição.** `scripts/handbook/link-scan.ts` (`pnpm run docs:links`) classifica todo link relativo do handbook em `escapes-repo` · `mirror` · `live` · `redirected` · `historical` · `unaddressed`. O passivo autoral é de **137 links não endereçados** — e o número foi reconciliado, não estimado: a contagem manual dizia 138, e a diferença são **duas menções** que um extrator ingênuo lia como uso. Daí a regra que o scanner implementa: remover blocos cercados **e código inline** antes de procurar link, porque todo documento que **documenta** a convenção cita a forma quebrada. O `plan.md` da spec 041 foi o primeiro a ser acusado por explicar o próprio defeito.
+
+**Nenhum gate de link foi ligado**, e é deliberado: 46 dos 137 apontam para o aparato expurgado pelas specs 038/039, que o [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5 proíbe reescrever. Gate que nasce vermelho obriga a violar um ADR aceito para ficar verde. A Fase 4 o liga, depois que redirects e allowlist histórica endereçarem o estoque — plano completo em [`specs/041-handbook-reference-integrity/plan.md`](./specs/041-handbook-reference-integrity/plan.md).
+
+**O `README` das inquiries deixou de mentir em dois pontos:** mandava atualizar o índice à mão, e listava sete status em prosa livre (`Pending Response`, `Under Analysis`, `Closed`, `Cancelled`) que o gate nunca aceitou — o conjunto fechado é `open` · `blocked` · `decided` · `deferred` · `superseded`.
+
+## 2026-08-06 — ⚠️ Errata nos `ADR-0024` e `ADR-0055`: o port `Authenticator` nunca foi construído, e a premissa já tinha se propagado
+
+O [ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md) afirma, em quatro pontos (`:34`, `:84`, `:103`, `:117`), que a fonte de autenticação está abstraída por um port `Authenticator`, plugável por um `OidcAuthenticator` "sem refactor de domínio". **Esse port nunca existiu** — zero ocorrências do nome em `src/` e `tests/`. O que existe de preparo real para identidade externa é uma coisa só, e é verdadeira: `password_hash` nullable (`:68`).
+
+**Não é decisão errada — é decisão não executada.** A errata registra isso sem tocar o texto original, no molde do [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §4.
+
+**A premissa já tinha se propagado.** O [ADR-0055](./architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md) §2 justifica o nome da coluna `external_subject` dizendo que "o ADR-0024 desenhou um port `Authenticator` abstrato" e que `cognito_sub` "desfaria essa abstração". Não há abstração a desfazer. **A decisão permanece correta pela outra razão que o próprio parágrafo já dava** — o precedente de `legacy_id`, coluna neutra ao fornecedor —, e é essa que se sustenta sozinha: nome que carrega fornecedor obriga migration quando o fornecedor muda, argumento que independe de port algum. A errata existe para que o argumento falso não seja reutilizado numa terceira decisão.
+
+**O `Status` do ADR-0024 passou a declarar o supersede parcial.** O índice de ADRs já registrava `Accepted (authN superseded por 0055)` desde a entrada do 0055; **o arquivo do ADR não**. Quem abrisse o 0024 direto — sem passar pelo índice — leria como norma corrente a fonte de identidade, a emissão de token e o refresh opaco, todos superseded. O campo agora aponta o 0055 e delimita o que caiu, preservando explicitamente o RBAC, o catálogo e a autorização pura, que seguem **vigentes e inalterados**.
+
+**Por que só apareceu agora:** o inventário da spec 040 confronta ADR com `src/`, e foi assim que a ausência do port saltou ao reconstruir a `.claude/rules/auth-module.md`. A rule passou a cobrar o fato mecanicamente (`verify:` com `pattern: Authenticator`, `expect: []`) e a apontar o 0055 como norma vigente de authN — ela citava só o 0024. Um segundo `verify:` acende quando `external_subject` chegar ao schema, forçando a revisão da rule no momento em que o ADR-0055 for implementado. Registrado pela issue [#642](https://github.com/ERP-Bem-Comum/core-api/issues/642).
+
+## 2026-08-05 — 📄 `ADR-0059` (Accepted) + ratificação do `ADR-0048` e do `ADR-0049`: a fronteira com o BFF fica descrita como ela é
+
+Três movimentos do **gate humano da Fase 1** da spec 040, todos disparados por uma coisa só: levar as alegações do inventário ao dono do repo em vez de inferi-las do código.
+
+**Ratificação do [ADR-0048](./architecture/adr/0048-legacy-categorization-installments-mapping.md).** O [ADR-0051](./architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md), `Accepted` desde 2026-07-14, declarava vigente o §D1 do 0048 — que seguia `Proposed`, com o texto "aguardando ratificação", **três semanas depois**. Cadeia de decisão apoiada em documento não sancionado. Ratificar não fere a imutabilidade: o `README` dos ADRs prevê `Proposed → Accepted` como ciclo normal. O que impede a reincidência é mecânico: `tests/cleanup/adr-status-chain.test.ts` (novo) barra ADR `Accepted` que declare `Complementa:`/`Conformidade com:` apontando para `Proposed`, e a **guarda 7** do `SCHEMA.md` faz o mesmo uma camada abaixo, entre o ADR e a alegação extraída dele.
+
+**Ratificação do [ADR-0049](./architecture/adr/0049-core-api-bff-boundary.md), com duas cláusulas CORRIGIDAS antes.** A verificação com o dono do repo mostrou que a topologia tinha mudado: o core-api permanece público **em definitivo**, não "até o go-live" — servir a API não deve depender de tudo estar numa rede só. Isso **endurece** a decisão: os guardrails de authz e multi-tenant deixam de ser ponte até uma Fase 2 de rede e viram defesa final. A regra de ouro também foi estreitada — a proibição é de **client-side** falar com o core, não de exclusividade de consumo. Corrigir enquanto o ADR ainda era `Proposed` é legítimo; ratificar antes teria sancionado um `MUST` que a decisão nova já contradizia.
+
+**Novo [ADR-0059](./architecture/adr/0059-bff-aggregates-without-business-rules.md)**, supersedendo **parcialmente** o [ADR-0005](./architecture/adr/0005-thin-bff-gateway.md). O 0005 enumerou três opções — front escolhe URL, BFF burro, BFF inteligente — e escolheu a segunda, decidindo "**Zero regra de negócio. Zero composição de respostas**", alvo de 200-300 linhas. **O BFF real ficou entre a 2 e a 3, e o ADR não previa esse ponto:** ele agrega chamadas e entrega view-model pronto, mas não valida regra de negócio. Agregar É composição; não É regra de negócio. O 0005 tratou as duas como pacote, e elas não são. Caem "Zero composição" e o alvo numérico; permanecem "zero regra de negócio", roteamento por prefixo, cross-cutting e "zero cache de domínio".
+
+**Por que isso nunca apareceu no inventário:** ele confronta ADRs com `src/`, e o BFF **não vive neste repositório**. O `ADR-0005` jamais foi verificado contra o BFF real — a contradição só emergiu quando a alegação `ADR-0049-C6` foi levada à verificação humana. É o limite estrutural do método, e está declarado no ADR-0059 §Negativas: nenhuma cláusula dele é verificável daqui.
+
+**O alvo de 200-300 linhas sai pelo mesmo motivo que o [ADR-0058](./architecture/adr/0058-runtime-tracks-recommended-lts.md) tirou a versão do ADR:** proxy numérico envelhece sozinho. Um BFF que agrega dez telas passa disso sem ganhar uma linha de regra de negócio. A régua que substitui é verificável por leitura, não por contagem.
+
+`.claude/rules/http-edge.md` foi atualizada junto — ela enumerava "roteia, valida JWT, aplica rate limit", descrição da opção 2 que o BFF deixou de ser. Duas fontes divergindo sobre a mesma norma é a fábrica de drift que este acervo passou a semana desfazendo.
+
+## 2026-08-05 — 📄 `ADR-0058` (Accepted): o runtime acompanha o LTS recomendado — critério em vez de versão fixa
+
+Novo [ADR-0058](./architecture/adr/0058-runtime-tracks-recommended-lts.md) (**Accepted**), supersedendo **parcialmente** o [0002](./architecture/adr/0002-keep-nodejs-runtime.md) e o [0009](./architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) — apenas a **forma de fixar versão**, não a escolha de Node como runtime nem de TypeScript como linguagem, que permanecem integralmente vigentes.
+
+**A decisão nasceu de uma medição, não de uma intuição.** O inventário de decisões (spec 040) encontrou 21 alegações com veredito `contradicted`, e duas delas — `ADR-0002-C2` ("a versão do runtime é Node.js 20 LTS") e `ADR-0009-C5` ("espera-se troca de comando e **ajustes mínimos**") — contradizem o código **pela mesma causa**. Nenhuma foi erro de julgamento: em abril/2026 o Node 20 **era** o LTS, e "ajustes mínimos" era estimativa razoável. O defeito é de forma — um ADR que fixa versão, ou que estima esforço futuro, produz afirmação que **envelhece sozinha**, sem ninguém errar e sem nada acontecer. Como ADR é imutável, a afirmação envelhecida fica lá e quem lê o documento isolado age sobre ela.
+
+**O que muda.** O runtime passa a acompanhar o **LTS recomendado** por atualização **gradual** (subida deliberada, verificável em diff, gate verde antes e depois — nunca salto arrastado por dependência). A versão corrente **não vive mais em ADR**: vive em `engines.node` (o piso), no `Dockerfile` (o que roda em produção, pinado por digest) e nos workflows (o que testa). E trocar runtime, linguagem ou compilador passa a exigir **inquiry que MEÇA** a alternativa — o precedente é a [Inquiry-0023](./inquiries/0023-typescript-7-native-spike.md), que mediu Node 24/26, Deno, Bun e `tsgo` num harness executável e **refutou** uma premissa que estava num ADR aceito.
+
+**O ADR não escreve a versão-alvo, e isso é deliberado.** Escrever "Node 24.19" no texto repetiria exatamente o defeito que ele corrige: em 12 meses `ADR-0058-C2` estaria no inventário como `contradicted`, ao lado das duas que o originaram. Foi a alternativa mais tentadora e está registrada como rejeitada, junto com "fixar cadência" (reintroduz número que o repositório não controla — a cadência de release do Node não é decisão nossa).
+
+**O que impede a reincidência:** `tests/cleanup/node-version-single-source.test.ts` (novo), irmão do gate que já faz o mesmo para o pnpm. Cobra que `engines.node`, o `FROM node:` do Dockerfile e o `node-version` dos workflows concordem no **major** — não no patch, e a distinção é deliberada: patch diverge por motivo legítimo, major divergente significa que produção roda um runtime que ninguém testou. Provado que discrimina antes de ser aceito: Dockerfile num major antigo e workflow em outro major reprovam, um por asserção.
+
+**Limite declarado, não escondido:** o gate cobra a concordância **interna**, não a aderência ao LTS **externo** — isso exigiria rede, e o gate local é offline e determinístico por desenho (mesma razão pela qual `pnpm audit` vive no CI). Um repositório inteiro coerente numa versão EOL passa em todos os gates. A mitigação seria CI agendado e **ela ainda não existe**; o ADR registra isso em vez de fingir cobertura, e é o primeiro item do gatilho de reavaliação.
+
+## 2026-08-03 — 📄 `ADR-0057` (Accepted): o `CLAUDE.md` volta a ser a doc canônica de agente; o `AGENTS.md` é aposentado e deletado
+
+Novo [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) (**Accepted**). O `AGENTS.md` existia para ser **padrão aberto multi-ferramenta**, com o `CLAUDE.md` reduzido a um stub de 14 linhas contendo `@AGENTS.md`. A premissa caiu em **2026-07-31**, quando o dono do repo decidiu que o Claude Code é o único agente suportado (decisão já materializada na remoção de `.zed/` e `.agents/`, commit `722b0371`). Sem uma segunda ferramenta, a indireção passou a custar sem pagar.
+
+**256 linhas (242 + 14 de stub) passam a 110, sem perda de norma.** O corte é de duplicação, e cada item foi verificado antes de sair: as **tabelas de roteamento** de agentes e skills (o Claude Code já descobre `.claude/agents/` e `.claude/skills/` nativamente, com descrição de uso em cada um — e a tabela já divergia, listando **25 skills contra 44** em disco); a seção **"Regras invariantes — sintaxe TS"** (`verbatimModuleSyntax`, `allowImportingTsExtensions`, `NodeNext`, `strict` e mais cinco flags estão ligados no `tsconfig.json`, e o `tsc` barra cada regra que o texto pedia); e **"não rode `npm`"** (hook `block-npm.sh`). Permanece o anti-padrão de **escrever** `npm` em doc ou PR — isso o hook não pega.
+
+**Três afirmações falsas morreram junto:** "Fase 1 entrega apenas o módulo Contratos" (são **8** em `src/modules/`), "CLI como UX primária, nenhum servidor HTTP ainda" (contradizia o próprio documento cinco linhas abaixo, que lista o Fastify como ativo) e o `ADR-0012` no topo da seção `IMPORTANTE`, superseded pelo [ADR-0029](./architecture/adr/0029-pnpm-11-supply-chain-defaults.md). Também saíram `.claude/output-styles/erp-contracts.md` e `handbook/domain/`, que não existem.
+
+**Errata, e por que ela é necessária:** três ADRs **aceitos** — [0037](./architecture/adr/0037-http-first-retire-embedded-cli.md), [0040](./architecture/adr/0040-agent-findings-as-github-issues.md) e [0054](./architecture/adr/0054-ai-assisted-contribution-policy.md) — citam o `AGENTS.md` pelo nome. ADR aceito é imutável, então **nenhum foi editado**; a §4 do ADR-0057 é a errata canônica. Atenção ao caso do **0040**, que cita `§Anti-padrões #15`: na lista nova esse item é o **#7**, porque a numeração encolheu ao perder os anti-padrões que viraram mecanismo. **O conteúdo normativo dos três permanece integralmente vigente** — mudou o endereço, não a norma.
+
+**Registro histórico preservado de propósito:** as ~70 referências ao `AGENTS.md` em `.claude/.pipeline/`, `specs/` e `handbook/` **não** foram atualizadas, nem as **evidências ancoradas** de `context/decisions/` no formato `AGENTS.md:209` — reescrevê-las para `CLAUDE.md:209` produziria âncora falsa, porque a numeração de linha mudou. Só os **ponteiros vivos** (`prior_art.applied_to` e `enforced_by` do ADR-0040 e do ADR-0054) foram redirecionados, e o gate `decision-records` foi quem os acusou. Preservado também `handbook/reference/mysql2/AGENTS.md`, documentação vendored do driver e arquivo distinto.
+
+**O que impede a reincidência:** dois gates. `tests/cleanup/claude-md-links.test.ts` (novo) exige que todo caminho relativo citado na doc canônica exista — a **proposta** que serviu de base à substituição nasceu com três caminhos mortos, e sem esse gate a troca apenas reiniciaria o relógio do apodrecimento. E `tests/cleanup/docs-update.test.ts` passou a ler o `CLAUDE.md`, tendo pego de imediato que os links dos ADRs estavam escritos como `[0020](…)` quando a asserção exige `ADR-0020` literal.
+
+## 2026-07-31 — 🔢 Colisão do `ADR-0034` resolvida: o ADR de OCR renumerado para `0056`, com `Status` corrigido
+
+Dois arquivos reivindicavam o número `0034` desde 2026-06-08: [`0034-adopt-bruno-api-client-cli.md`](./architecture/adr/0034-adopt-bruno-api-client-cli.md) (adoção do Bruno, no índice) e o de OCR Port/Adapter (fora do índice). A colisão entrou pela importação do baseline `FIN-DOCUMENTO-INGESTAO` (commit `0b88bade`), que trouxe o arquivo de uma árvore de docs com numeração independente.
+
+**Por que não era cosmético:** o [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) declara *"Supersedes ADR-0034"* e supersede o de **OCR**. Como o índice registrava apenas o do **Bruno** sob esse número, resolver a referência pela via natural concluía que **o Bruno havia sido superseded** — falso: o [ADR-0038](./architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md) tornou o Bruno CLI obrigatório e existe agente dedicado a ele.
+
+**Correções:** (1) o ADR de OCR passa a ser [ADR-0056](./architecture/adr/0056-ocr-port-adapter.md), com nota de renumeração explicando a origem; (2) seu `Status` sai de `Accepted` para **`Superseded by ADR-0050`** — o campo nunca havia sido atualizado, e uma triagem por status o classificaria como vigente e destilaria norma morta (mesma classe do `ADR-0012`, registrada na spec 039); (3) o `ADR-0050` cita `ADR-0056` no corpo, com nota de que o **nome do arquivo** (`…-supersedes-0034.md`) foi preservado de propósito, para não quebrar as referências do CHANGELOG e da spec 039 — vale o conteúdo, não o nome; (4) o índice de ADRs ganhou seção **"Notas de numeração"**.
+
+**Registrado no mesmo passo:** o **`ADR-0016` não existe e é reservado de propósito** para a estratégia de implementação dos módulos (prefixos `ctr_*`/`fin_*`, outbox in-process), conforme reserva de 2026-04-28. A consequência prática ficou explícita no índice: enquanto não for escrito, **não existe lista canônica de prefixo de tabela por módulo** — `auth`, `partners`, `programs`, `budget-plans` e `notifications` operam por convenção tácita.
+
+Achados originados do inventário de decisões em `context/decisions/`, que verifica cada alegação de ADR contra `src/`.
+
+## 2026-07-29 — 🔐 ADR-0055 (Accepted): Amazon Cognito como autoridade de autenticação — supersede parcial do ADR-0024 (authN); autorização permanece no `core-api`
+
+Novo [ADR-0055](./architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md) (**Accepted**), registrando a **decisão de diretoria** de adotar o Amazon Cognito como autoridade única de autenticação (identidade nativa, MFA/TOTP obrigatório, Threat Protection). Supersede **parcialmente** o [ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md): caem a "fonte de identidade", a emissão de token e o refresh opaco server-side; **permanecem vigentes e inalterados** o RBAC, o catálogo de permissões, a autorização pura e o schema de papéis. O próprio 0024 previa este gatilho (`:117`) e já deixara `password_hash` nullable para isso (`:68`).
+
+**Decisão:** (1) **nenhuma claim de autorização no token** — `cognito:groups` não é fonte de authZ, toda permissão segue resolvida contra o banco a cada request; (2) vínculo por coluna **neutra ao fornecedor** `external_subject` (não `cognito_sub`), com find-or-link JIT que resolve primeiro por subject, só então por e-mail, nunca sobrescreve e **nunca cria usuário**; (3) transição com **dois verificadores completamente isolados** (ES256 legado × RS256 Cognito), roteados por `iss` decodificado, com allowlist de algoritmo por verificador e flags fail-secure no molde do `rbac-mode.ts`; (4) o desligamento do legado cobre **três superfícies** (login, renovação, verificação) com revogação em massa no mesmo passo; (5) estado do PKCE (`state`/`code_verifier`/`nonce`) em **cookie selado `SameSite=Lax`**, não em store — resolvendo multi-instância por construção, sem infraestrutura nova.
+
+**Registrado como negativo honesto:** recuperação de dispositivo TOTP perdido deixa de ser nossa (não existe API para remover o segredo; sem 2º método de MFA a saída é excluir e recriar a conta — limitação que o sistema atual **não** tem); revogação deixa de ser imediata do lado do IdP, mitigada pelo padrão BFF com tokens server-side; e o login passa a depender de serviço externo no caminho crítico.
+
+**Dependências bloqueantes:** issue #515 (inicialização silenciosa com chave efêmera) trava a fase de corte; criação de contas restrita a administradores trava a fase 1; segundo método de MFA trava a fase 2. Briefing de implementação em #603. A análise prévia (`inquiries/0024-cognito-vs-identidade-propria-seguranca.md`) recomendava o contrário e permanece no handbook como registro de due diligence — sem reabrir a decisão.
+
+Correção de índice no mesmo commit: o **ADR-0054** não constava da tabela de `architecture/adr/README.md`.
+
+## 2026-07-26 — 🏭 Nova seção `process/`: o fluxo de engenharia documentado ponta a ponta
+
+Novo [`process/00-fluxo-pipeline-sdd-agentes.md`](./process/00-fluxo-pipeline-sdd-agentes.md) — doc de
+onboarding que descreve, num único lugar, **como se trabalha neste repositório**: os dois motores de
+processo e como se encaixam (o **SDD `core-api-sdd`** na escala de feature; a **pipeline fail-first
+W0→W3** na escala de ticket), o `STATE.json` como fonte canônica e as invariantes que o
+`state-cli.ts` impõe mecanicamente (exit 2), os **18 steps** do workflow SDD com os 6 pontos de
+citação obrigatória do princípio IX, o **modelo de orquestração in-session** (por que `specify
+workflow run` não é o executor — gate TTY-only e `claude -p` headless sem MCP) e o **protocolo de
+gate em texto puro**, os 13 templates de fase, e a anatomia de **como agentes e skills foram
+construídos** (14 agentes ancorados em `reference/<tech>/`, 42 skills com fronteira declarada).
+Documentação **descritiva e derivada** — não legisla; a hierarquia de fontes segue sendo ADR →
+handbook → `AGENTS.md`/`.claude/rules/`. Inclui apêndice de **drifts conhecidos** (registry em 2.0.0
+vs yml em 2.1.0; `_METRICS.md` defasado; contagens antigas no `.claude/README.md`).
+
+---
+
+## 2026-07-23 — 🤖 ADR-0054 (Accepted): política de contribuição assistida por IA — trailer `Assisted-by`, DCO humano, dono humano de cada linha
+
+Novo [ADR-0054](./architecture/adr/0054-ai-assisted-contribution-policy.md) (**Accepted**), que adota — no precedente do Linux kernel ([`coding-assistants.rst`](https://docs.kernel.org/process/coding-assistants.html), 2025-12-23) — a política de contribuição assistida por IA para este repo, que é desenvolvido com uso intensivo de agentes.
+
+**Decisão:** (1) todo commit gerado/materialmente modificado por IA carrega o trailer **`Assisted-by: AGENT_NAME:MODEL_VERSION [ferramenta]`** (utilitários triviais omitidos); (2) **a IA nunca adiciona `Signed-off-by`** — só um humano certifica o DCO; (3) **o humano é o dono de cada linha** — revisa o código-IA, garante licença e assume responsabilidade integral por bugs/falhas; (4) **mesmo processo, sem trilha paralela** — código-IA passa pela mesma Pipeline W0→W3 e pelos mesmos gates required (`integração (gate)` + `typecheck + format + lint + test`) tornados obrigatórios na Fase 2 do #523. Registrado em `AGENTS.md` (§"Contribuição assistida por IA" + linha de commit da tabela Idioma).
+
+Não impõe (guardas, follow-ups additive): **DCO obrigatório** (`git commit -s` + check de CI) e **verificação mecânica do `Assisted-by`** ficam como decisões de enforcement separadas — a adoção aqui é de convenção, aplicada por review (W2).
+
+---
+
 ## 2026-07-16 — 🔓 ADR-0052 (Accepted): modo `AUTH_RBAC_MODE=bypass` — desligar a autorização por permissão, mantendo a autenticação
 
 Decisão do dono do sistema: introduzir o modo `bypass`, em que **todo usuário autenticado é
@@ -30,7 +257,7 @@ Encerra a _"divergência aceita por ora"_ que o [`07-categorization-taxonomy.md`
 
 ## 2026-07-08 — 🔀 ADR-0050 (Accepted): leitura de documento fiscal em cascata (nativo-first) — supersedes ADR-0034
 
-Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0034-ocr-port-adapter.md) (OCR como Port/Adapter). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
+Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0056-ocr-port-adapter.md) (OCR como Port/Adapter — renumerado para `ADR-0056` em 2026-07-31; o link aponta para o destino atual). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
 
 ---
 
@@ -52,7 +279,7 @@ Três decisões, todas via **Anticorruption Layer** (Evans cap.14 — translatio
 **(D1)** reusar a **020**, não portar a hierarquia legada `CostCenter→Category→SubCategory`+`releaseType` (achatar 3 níveis → 2 dimensões + hierarquia opcional de `Category`);
 **(D2)** mapear `installments→payables` — `Payable`(legado)→`Document`, `Installment`→`Payable`, e a fórmula-chave `SUM(Installment.value WHERE 'PAGO')` → `SUM(Payable.value WHERE 'Paid')`; **sem parcelamento temporal no core** (lacuna R-1 para migração de histórico);
 **(D3)** dashboard **fatiado** (1 endpoint por widget). RBAC de Dashboard/Reports = **só autenticação** (ratificado pela P.O. em #233).
-Destrava `DASH-F1`, `DASH-F5`, `REP-3`, `REP-4`. Relatório de pesquisa completo em [`.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
+Destrava `DASH-F1`, `DASH-F5`, `REP-3`, `REP-4`. Relatório de pesquisa completo em [`context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
 
 ---
 
@@ -90,14 +317,14 @@ via worker dedicado (molde da feature 014), idempotente por `eventId` (Vernon, _
 
 Novo [ADR-0045](./architecture/adr/0045-financial-supplier-read-model.md) (**Accepted**), **estende**
 [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md)/[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)/[ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md).
-Feature [`014-financial-supplier-readmodel`](../specs/014-financial-supplier-readmodel/) (issue #47 US2).
+Feature [`014-financial-supplier-readmodel`](./specs/014-financial-supplier-readmodel/) (issue #47 US2).
 
 - O `financial` mantém `fin_supplier_view` (read-model local) alimentado **só** por eventos do `partners`
   via `par_outbox` — o grid resolve nome+CNPJ sem chamada cross-módulo em runtime (LEFT JOIN intra-`financial`).
 - **Consumer** em worker dedicado (composition root `src/workers/supplier-view-projection/`) sobre o worker
   de outbox genérico (`src/shared/outbox`); nenhum módulo importa o outro. Upsert idempotente com guard de
   `occurred_at` (at-least-once + fora de ordem). **Backfill** one-shot dos fornecedores legados.
-- Decisão de manter outbox-MySQL (sem broker/Go) registrada em `.claude/.planning/ASYNC-MESSAGING-STRATEGY.md`.
+- Decisão de manter outbox-MySQL (sem broker/Go) registrada em `context/planning/ASYNC-MESSAGING-STRATEGY.md`.
 
 ## 2026-06-16 — 🔤 ADR-0044: CNPJ alfanumérico (Serpro/Receita 2026) no VO `Cnpj` do kernel
 
@@ -115,7 +342,7 @@ módulo 11 com `valor(c) = ASCII(c) − 48`. **Retrocompatível** (numérico val
 
 Novo [ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md) (**Accepted**), **estende**
 [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md) (outbox) e [ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md)
-(comunicação cross-módulo por eventos). Feature [`013-partners-supplier-outbox`](../specs/013-partners-supplier-outbox/) ·
+(comunicação cross-módulo por eventos). Feature [`013-partners-supplier-outbox`](./specs/013-partners-supplier-outbox/) ·
 issue [#92](https://github.com/ERP-Bem-Comum/core-api/issues/92) (pré-requisito da US2 da #47, read-model de fornecedor no `financial`).
 
 - O `partners` passa a **publicar** `SupplierRegistered` e `SupplierEdited` no outbox `par_outbox` (ticket `PAR-SUPPLIER-EVENTS`).
@@ -145,7 +372,7 @@ Feature `specs/010-fin-listagem-timeline/` (FR-009/ADR-0002 da feature). O token
 ser **devolvido em toda resposta de documento** (`POST`/`PATCH`/`approve`/`undo-approval`, `GET /:id`, e em cada item de
 `GET /documents`), permitindo ao **frontend** participar do controle de concorrência.
 
-- **Contrato de consumo (frontend):** [`specs/010-fin-listagem-timeline/frontend-optimistic-lock.md`](../specs/010-fin-listagem-timeline/frontend-optimistic-lock.md)
+- **Contrato de consumo (frontend):** [`specs/010-fin-listagem-timeline/frontend-optimistic-lock.md`](./specs/010-fin-listagem-timeline/frontend-optimistic-lock.md)
   — ler o `version` da resposta → reenviar no `PATCH`/`approve`/`undo-approval` → em `409 document-version-conflict`,
   re-buscar (`GET /:id`) e repetir. Mapa de status + exemplos de request/response.
 - **Por quê (canônico):** Vernon, _Implementing DDD_ (`ddd--vernon-livro-vermelho.md:8869`) — a checagem compara a versão
@@ -235,7 +462,7 @@ inversão de prioridade **CLI → HTTP** já consumada pelos ADRs 0025/0027/0028
 
 ## 2026-06-06 — 🔎 Épico `003-partners-aggregator-export` — agregador `/partners` + paridade de export CSV (`/api/v1`)
 
-Épico [`specs/003-partners-aggregator-export/`](../specs/003-partners-aggregator-export/), originado dos
+Épico [`specs/003-partners-aggregator-export/`](./specs/003-partners-aggregator-export/), originado dos
 **ITENs 3 e 4** do retorno do front (gaps restantes de `partners` `/api/v1`, fora do escopo da spec `001`).
 Entregue via pipeline `core-api-sdd` (2 tickets W0→W3 closed-green). **Sem schema/migration** — leitura e
 serialização na borda; cross-BC inexistente (só o módulo `partners`).
@@ -251,7 +478,7 @@ Fecha gaps da família partners `/api/v1` do `web-app/specs/008-partners/api-rea
 
 ## 2026-06-06 — 🔗 Épico `002-contracts-http-gaps` — vínculo de contratado + PATCH de metadados (`/api/v2`)
 
-Épico [`specs/002-contracts-http-gaps/`](../specs/002-contracts-http-gaps/) (PR #18 → `dev`), originado do
+Épico [`specs/002-contracts-http-gaps/`](./specs/002-contracts-http-gaps/) (PR #18 → `dev`), originado do
 [`po-feedback/0001`](./po-feedback/0001-gap-api-v2-contracts.md) + [ADR-0032](./architecture/adr/0032-transient-http-composition-read-until-bff.md).
 Fecha os ITENs 1 e 2 do retorno do front (Bucket B/D). Entregue via pipeline `core-api-sdd` (5 tickets W0→W3).
 
@@ -320,12 +547,12 @@ Borda HTTP de Fornecedores sob `/api/v1/suppliers` (módulo `partners`), espelha
 (`SupplierReader`, `GET /suppliers` paginado + filtros search/active/categories, `GET /:id`); **S2**
 cadastro (`POST` 201+Location, invariante de payment target → 422); **S3** lifecycle (`POST`
 deactivate/reactivate, sem `disableBy`). Permissões `supplier:read`/`supplier:write`. Design em
-`.claude/.planning/EPIC-SUPPLIERS-HTTP-V1.md`. Pendentes: S-EDIT (`PUT` — exige `Supplier.edit`, gap de
+`context/planning/EPIC-SUPPLIERS-HTTP-V1.md`. Pendentes: S-EDIT (`PUT` — exige `Supplier.edit`, gap de
 domínio) e extras (`/options`,`/csv`,`/nameOrCNPJ`). Suite: 2048 testes verdes.
 
 ## 2026-06-03 — 🔢 ADR-0033 (versionamento de API: `/api/v1` espelha o legado) + EPIC-COLLABORATORS-HTTP-V1
 
-> Borda HTTP de Colaboradores. Design do épico em `.claude/.planning/EPIC-COLLABORATORS-HTTP-V1.md`.
+> Borda HTTP de Colaboradores. Design do épico em `context/planning/EPIC-COLLABORATORS-HTTP-V1.md`.
 
 ### EPIC-COLLABORATORS-HTTP-V1 — CRUD de Colaboradores no `/api/v1` (6 fatias closed-green)
 
@@ -401,7 +628,7 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Planejamento
 
-- **Design consolidado** em `.claude/.planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
+- **Design consolidado** em `context/planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
 
 ### Manutenção
 
@@ -411,7 +638,7 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Decisões (ADR)
 
-- **ADR-0030 proposto** — store compartilhado (**Valkey** via `ioredis`) para rate-limit/cache **adiado** enquanto o core-api for single-instance (YAGNI); direção fixada para quando escalar horizontalmente. Discussão em `.claude/.planning/REDIS-RATE-LIMIT-STORE.md`.
+- **ADR-0030 proposto** — store compartilhado (**Valkey** via `ioredis`) para rate-limit/cache **adiado** enquanto o core-api for single-instance (YAGNI); direção fixada para quando escalar horizontalmente. Discussão em `context/planning/REDIS-RATE-LIMIT-STORE.md`.
 
 ### Segurança (módulo auth — spec 003)
 
@@ -464,8 +691,8 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Planejamento (sem código de produção)
 
-- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `.claude/templates/spec.md` + runbook `.claude/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
-- **Épico `EPIC-HTTP-CORE-API`** especificado (`.claude/.planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
+- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `context/templates/spec.md` + runbook `context/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
+- **Épico `EPIC-HTTP-CORE-API`** especificado (`context/planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
 - **Tickets fechados** `closed-green`: `AUTH-DB-REPO-SESSION` (W2/W3 reconciliados) e `AUTH-TEST-INTEGRATION-SCRIPT` (runner `pnpm run test:integration:auth` — fecha o gap de integração auth fora do gate padrão).
 
 ---

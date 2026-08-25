@@ -1,0 +1,244 @@
+id: ADR-0035
+title: Parceria territorial (estados/municípios) — Entity persistida com soft-delete
+source: handbook/architecture/adr/0035-partner-territory-soft-delete.md
+decided_on: 2026-06-06
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0014, ADR-0020, ADR-0031, ADR-0033, ADR-0036]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Sétimo `realized` do inventário. O padrão de soft-delete que este ADR padroniza está aplicado em
+    SEIS tabelas de `par_*`, cada uma com o CHECK de coerência exato que ele prescreve —
+    `(active = FALSE) = (deactivated_at IS NOT NULL)` — visível em
+    `partners/adapters/persistence/schemas/mysql.ts:67`.
+    `par_states` e `par_municipalities` existem como Entity, e o catálogo geográfico permanece separado,
+    exatamente como o ADR desenha ao fechar a D9 do `ADR-0031`.
+    Um detalhe de padronização incompleta: cinco CHECKs seguem o nome `*_active_consistency_chk` e o de
+    collaborators se chama `par_collaborators_soft_delete_chk`. O constraint existe em todas; a
+    convenção de nome, não.
+    Nota de método: minha primeira varredura procurou só por `_active_consistency_chk` e concluiu que
+    `par_collaborators` não tinha soft-delete. Tinha — com outro nome. Peguei antes de registrar.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — as quatro decisões numeradas. A seção "Por que soft-delete" e as alternativas são
+    fundamentação.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/partners-module.md']
+    gap: |
+      Destilou com precisão cirúrgica: "**Soft-delete padronizado em todo `par_*`**: `active` +
+      `deactivated_at` + CHECK `(active=FALSE)=(deactivated_at IS NOT NULL)`. **Nunca hard delete.**
+      Desmarcar = inativar, idempotente" — inclusive a expressão exata do CHECK.
+      Não verificou a cobertura (seis tabelas, seis CHECKs) nem a divergência de nome do constraint de
+      collaborators. Nenhuma das duas invalida a rule; a segunda é candidata a padronização barata.
+
+claims:
+  - id: ADR-0035-C1
+    text: |
+      A parceria territorial é uma ENTITY persistida — `PartnerState` (identidade `uf`) e
+      `PartnerMunicipality` (identidade `ibge_code`, mais `uf` para listagem cross-state) — NÃO Value
+      Object, porque o soft-delete lhe dá ciclo de vida (Active ↔ Inactive) e continuidade identificável.
+    kind: obligation
+    source_lines: ['28-30']
+    applies_to:
+      - 'src/modules/partners/domain/geography/**'
+      - 'src/modules/partners/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: as tabelas par_states e par_municipalities existem no schema de partners'
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:381 — active boolean NOT NULL DEFAULT true numa das duas tabelas territoriais'
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:410 — active na outra'
+        - 'nota: existem os CHECKs par_states_active_consistency_chk e par_municipalities_active_consistency_chk, o que confirma o ciclo de vida persistido'
+      verify: |
+        grep -rhoE "'par_(states|municipalities)[a-z_]*'" src/modules/partners/adapters/persistence/schemas/mysql.ts | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema, quando a parceria territorial não tiver colunas de ciclo de vida, então o teste
+        falha — sem elas ela é catálogo, não Entity.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Marcação de parceria MUST ser Entity persistida com ciclo de vida próprio, identificada por chave
+        natural (`uf`, `ibge_code`). MUST NOT ser modelada como Value Object de referência.
+      rationale: |
+        Converge com a decisão de identidade natural que o `budget-plans` usa para Rede (chave natural
+        UF/IBGE, nunca UUID). É a segunda vez no repo que uma entidade territorial é identificada pela
+        chave oficial em vez de por surrogate — vale como padrão, não como caso isolado.
+
+  - id: ADR-0035-C2
+    text: |
+      Soft-delete PADRONIZADO: `active boolean NOT NULL DEFAULT true` mais
+      `deactivated_at datetime(3) NULL` mais CHECK `(active = FALSE) = (deactivated_at IS NOT NULL)` —
+      idêntico ao padrão dos demais agregados `par_*`. Desmarcar = inativar; marcar = criar/reativar
+      (idempotente). NÃO hard delete.
+    kind: obligation
+    source_lines: ['31-33', '39-45']
+    applies_to:
+      - 'src/modules/partners/adapters/persistence/schemas/mysql.ts'
+      - 'src/modules/partners/adapters/persistence/repos/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:64 — comentário: CHECK active=false ⟺ deactivated_at preenchido (coerência do soft-delete)'
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:67 — a expressão literal (active = FALSE) = (deactivated_at IS NOT NULL)'
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:56 — deactivatedAt: datetime(deactivated_at, { mode: date, fsp: 3 })'
+        - 'nota: SEIS tabelas têm a coluna active (linhas 54, 105, 218, 381, 410, 467) e SEIS têm CHECK de coerência — par_acts, par_collaborators, par_financiers, par_municipalities, par_states, par_suppliers'
+        - 'nota: o CHECK de collaborators se chama par_collaborators_soft_delete_chk; os outros cinco usam *_active_consistency_chk — o constraint existe em todas, a convenção de nome não'
+        - 'ausência: nenhum hard delete de entidade de domínio em par_*; os dois DELETE existentes atingem par_outbox, que é mecanismo de entrega, não agregado'
+      verify: |
+        grep -rhoE "'par_[a-z_]+_(active_consistency|soft_delete)_chk'" src/modules/partners/adapters/persistence/schemas/mysql.ts | sort -u; grep -rn "\.delete(" src/modules/partners/adapters/persistence/repos/*.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de `par_*`, quando uma tabela de agregado tiver `active` sem o CHECK de coerência,
+        ou quando um repo emitir DELETE sobre entidade de domínio, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Entidade de domínio soft-deletável MUST ter `active` mais `deactivated_at` mais CHECK
+        `(active = FALSE) = (deactivated_at IS NOT NULL)`. O CHECK MUST seguir o nome
+        `<tabela>_active_consistency_chk`. MUST NOT haver DELETE sobre entidade de domínio; DELETE é
+        permitido apenas em tabela de mecanismo (outbox, dead-letter).
+      rationale: |
+        Estreitado em dois pontos vindos da verificação: a convenção de NOME do constraint (para fechar a
+        divergência do collaborators) e a exceção explícita do outbox — sem ela, um teste de "nunca
+        DELETE" reprovaria os dois deletes legítimos do `outbox-repository.drizzle.ts`. Regra que reprova
+        o certo é regra que se desliga.
+
+  - id: ADR-0035-C3
+    text: |
+      Novas tabelas `par_states` e `par_municipalities` com prefixo `par_*`, migrations geradas por
+      Drizzle Kit. O catálogo geográfico permanece read-only imutável; a parceria o REFERENCIA.
+    kind: obligation
+    source_lines: [35]
+    applies_to:
+      - 'src/modules/partners/adapters/persistence/schemas/mysql.ts'
+      - 'src/modules/partners/domain/geography/**'
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: par_states e par_municipalities usam o prefixo do módulo, conforme ADR-0014'
+        - 'nota: o diretório src/modules/partners/domain/geography/ existe e é separado das tabelas de parceria'
+        - 'nota: a separação catálogo × parceria é o que resolve a tensão com o §3 do ADR-0031 — ver ADR-0031-C3'
+      verify: |
+        ls src/modules/partners/domain/geography/; grep -rhoE "'par_(states|municipalities)'" src/modules/partners/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o catálogo geográfico, quando ele ganhar coluna mutável de parceria, então o teste falha —
+        catálogo e parceria MUST permanecer tabelas distintas.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: o prefixo já é normatizado pela `ADR-0020-C9`/`ADR-0006-C6` e a separação
+        catálogo × parceria já está na `ADR-0031-C3` com o texto de substituição. Terceira fonte não
+        acrescenta.
+
+  - id: ADR-0035-C4
+    text: |
+      Borda HTTP sob `/api/v1`: `GET/POST/DELETE /partner-states` e `/partner-municipalities`, RBAC
+      `geography:read`/`geography:write`, envelope de erro `{ error: { code, message, requestId } }`.
+    kind: obligation
+    source_lines: [37]
+    applies_to:
+      - 'src/modules/partners/adapters/http/**/*.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'src/server.ts:339 — partnerGeographyHttpPlugin registrado sob prefix /api/v1, conforme o ADR'
+        - 'nota: o RBAC geography:read/write e o envelope de erro não foram verificados nesta fase'
+      verify: |
+        grep -n "partnerGeographyHttpPlugin" -A 5 src/server.ts | head; grep -rn "geography:read\|geography:write" src/ --include='*.ts' | head -3
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada a rota de parceria territorial, quando responder sem exigir a permissão registrada, ou com
+        envelope de erro divergente, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar daqui: o prefixo é regido pela `ADR-0033-C1` (versionamento por recurso, com lista
+        canônica) e o envelope de erro pela borda HTTP. Registrar rota por rota num ADR de agregado
+        multiplicaria fontes — a informação útil (este recurso vive em `/api/v1`) pertence à lista
+        canônica que a `ADR-0033-C1` exige.
+
+findings:
+  - |
+    Padrão de soft-delete com cobertura completa: SEIS tabelas com `active` mais `deactivated_at` e SEIS
+    CHECKs de coerência, com a expressão exata do ADR em `mysql.ts:67`. É o padrão mais bem propagado do
+    acervo — e o único caso em que uma decisão de um agregado (territorial) foi escrita como
+    padronização do MÓDULO inteiro e de fato padronizou.
+  - |
+    Divergência pequena e barata: cinco CHECKs se chamam `*_active_consistency_chk` e o de collaborators
+    se chama `par_collaborators_soft_delete_chk`. O constraint existe em todas as seis; só o nome varia.
+    Vale padronizar porque é exatamente o tipo de inconsistência que faz varredura por nome dar
+    falso-negativo — foi o que aconteceu comigo.
+  - |
+    Registro de método: minha primeira varredura buscou apenas `_active_consistency_chk` e concluiu que
+    `par_collaborators` estava fora do padrão. Estava dentro, com outro nome. Quarta quase-falha de grep
+    da sessão, e a primeira que peguei ANTES de escrever o registro — as outras três (`createPool`,
+    `zod`, `mysqlTable` multilinha) só apareceram depois.
+  - |
+    Os dois únicos `DELETE` em repos de `partners` atingem `par_outbox` (`outbox-repository.drizzle.ts:246`
+    e `:334`) — mecanismo de entrega, não agregado. A regra proposta explicita essa exceção, porque
+    "nunca hard delete" sem ela reprovaria código correto, e regra que reprova o certo é regra que
+    alguém desliga.
+
+provenance:
+  tickets:
+    - PAR-GEO-ADDED-MUNICIPALITIES
+    - PARTNERS-MUNICIPALITY-LOOKUP
+    - PARTNERS-STATE-LOOKUP
+    - PARTNERS-TERRITORY
+    - PARTNERS-TERRITORY-TOGGLE-DTO
+  issues: []
+  note: |
+    Origem declarada: épico `handbook/specs/001-partners-http-gaps/` e o ticket PARTNERS-TERRITORY; promove o ADR
+    de feature `handbook/specs/001-partners-http-gaps/adr/0001-territorial-partnership-soft-delete.md` — nenhum
+    lido. O acervo tem PARTNERS-TERRITORY, PARTNERS-TERRITORY-TOGGLE-DTO, PARTNERS-STATE-LOOKUP,
+    PARTNERS-MUNICIPALITY-LOOKUP e PAR-GEO-ADDED-MUNICIPALITIES.

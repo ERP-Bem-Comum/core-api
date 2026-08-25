@@ -17,6 +17,11 @@ export type Payable = Readonly<{
   value: Money;
   dueDate: Date;
   paymentMethod: PaymentMethod;
+  // Forma e complemento são do TÍTULO, não da nota. Retenção é título a pagar como qualquer outro:
+  // o pai pode sair em boleto e o filho de ISS em guia, cada um com o SEU código de barras. Um
+  // `paymentDetail` por documento (#273) não comporta os dois — nasce herdado da nota e diverge a
+  // partir daí, como já acontece com `dueDate` (#270).
+  paymentDetail: string | null;
   paidAt: Date | null; // #231: data de pagamento (preenchida na baixa); null enquanto não pago
 }>;
 

@@ -18,6 +18,7 @@ const record = (payableId: string, status: PayableView['status'] = 'Open'): Paya
   supplierRef: '11111111-1111-4111-8111-111111111111',
   contractRef: null,
   categoryRef: null,
+  budgetPlanRef: null,
   costCenterRef: null,
   programRef: null,
   valueCents: 77500,

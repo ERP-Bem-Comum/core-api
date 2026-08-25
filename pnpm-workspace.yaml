@@ -16,16 +16,45 @@ allowBuilds:
 # Seguro: drizzle-kit@0.31.10 depende de esbuild@0.25.12 diretamente (compatível).
 # Referência: handbook/reference/pnpm/settings.md:29-98 (section overrides).
 #
-# - GHSA-4c8g-83qw-93j6: fast-uri <3.1.3 — host confusion via IDN malformado
-# - GHSA-v2hh-gcrm-f6hx: fast-uri <=3.1.3 — host confusion via '\' como delimitador de authority
+# ⚠️ fast-uri e brace-expansion já reincidiram DUAS vezes cada um. O piso fixado para a advisory do
+# dia vira o teto quando sai a próxima, e o override passa a SEGURAR a versão vulnerável em vez de
+# excluí-la — foi exatamente o que aconteceu aqui: `>=3.1.4` e `>=5.0.7` seguravam 3.1.4 e 5.0.7
+# depois que o patch virou 3.1.5 e 5.0.9. Ao mexer nestes dois, conferir a advisory VIGENTE, nunca a
+# que está escrita acima. O histórico fica para mostrar a reincidência, não como estado atual.
+#
+# - GHSA-4c8g-83qw-93j6: fast-uri <3.1.3 — host confusion via IDN malformado (1ª rodada)
+# - GHSA-v2hh-gcrm-f6hx: fast-uri <=3.1.3 — host confusion via '\' como delimitador (2ª)
+# - GHSA-7p8r-x3mc-p8w7: fast-uri <3.1.5 — host confusion via '\', CVSS 7.5 (3ª, VIGENTE)
 #   Transitiva de runtime por 23 caminhos, todos sob fastify (ajv-compiler) e @fastify/swagger
 #   (json-schema-resolver). Nenhum dep direto declara fast-uri: só override resolve.
-# - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial
+#   Exposição real BAIXA: o exploit exige usar fast-uri para validar host de URL do atacante antes
+#   de um fetch; aqui ele só resolve $id/$ref de schema que nós mesmos escrevemos.
+# - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial (1ª/2ª rodada)
+# - GHSA-rgw5-rvv9-x895: brace-expansion <5.0.9 — DoS por arrays intermediários sem limite,
+#   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª, VIGENTE)
 #   Transitiva de runtime via @fastify/swagger-ui → @fastify/static → glob → minimatch.
+#   Exposição real BAIXA: exige o atacante controlar o input do expand(); aqui o glob serve os
+#   assets do /docs, com padrões internos.
+#
+#   Os dois chegam SÓ por @fastify/swagger e @fastify/swagger-ui, que `src/shared/http/app.ts:147`
+#   registra apenas quando NODE_ENV !== 'production'. Em produção nenhum dos dois caminhos existe.
+#   O audit acusa mesmo assim, e corretamente: ambos são `dependencies`, e ele lê a árvore, não o
+#   NODE_ENV. Corrigir é barato e mantém o gate honesto — não relaxar o audit por causa do gate.
+#
+# - GHSA-c96f-x56v-gq3h: find-my-way <=9.6.0 — DDoS via HTTP2. Transitiva de runtime via fastify
+#   (router). fastify@5.8.5 pede `^9.0.0`; não existe 9.6.1, o patch está em 9.7.0. Override seguro
+#   dentro do major 9.
+# - GHSA-83w8-p2f5-377r: @fastify/static <=10.1.0 — route guard bypass. Transitiva via
+#   @fastify/swagger-ui → @fastify/static (serve os assets do /docs). O patch é 10.1.1+, mas NENHUM
+#   @fastify/swagger-ui (nem o latest 6.1.0) declara `@fastify/static ^10` — todos pedem `^9.1.2`.
+#   Forçar o major 10 mesmo assim; a API de `register(root/prefix)` que o swagger-ui usa é estável
+#   entre 9 e 10, validado por boot + fastify.inject do /docs (ver ticket #573).
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
-  fast-uri: '>=3.1.4 <4'
-  brace-expansion: '>=5.0.7 <6'
+  fast-uri: '>=3.1.5 <4'
+  brace-expansion: '>=5.0.9 <6'
+  find-my-way: '^9.7.0'
+  '@fastify/static': '^10.1.2'
 
 # Supply-chain hardening explícito (ADR-0011 / ADR-0029). Mantemos os valores
 # explícitos mesmo quando coincidem com o default do pnpm 11 — explícito é auditável.

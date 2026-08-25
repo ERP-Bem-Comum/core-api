@@ -28,7 +28,7 @@ describe('READER integration — fixture (mysql2) → read → decode', { skip: 
 
     assert.equal(data.financiers.rows.length, 1);
     assert.equal(data.suppliers.rows.length, 2);
-    assert.equal(data.collaborators.rows.length, 2);
+    assert.equal(data.collaborators.rows.length, 3);
     assert.equal(data.users.rows.length, 1);
 
     // `password` jamais decodificado (D6 + segurança).

@@ -24,4 +24,8 @@ export type ContractorReadPort = Readonly<{
     id: string,
   ) => Promise<Result<CollaboratorView | null, ContractorReadError>>;
   getActView: (id: string) => Promise<Result<ActView | null, ContractorReadError>>;
+  // #FIN-OCR-AUTOFILL-SUPPLIER: resolve um CNPJ (com ou sem máscara) → id do fornecedor CADASTRADO, ou
+  // null se o CNPJ é inválido ou não há fornecedor com ele (o financial usa p/ pré-selecionar no OCR).
+  // OPCIONAL (aditivo, precedente do AuthUserReadPort): o adapter real provê; doubles de teste podem omitir.
+  findSupplierIdByCnpj?: (cnpj: string) => Promise<Result<string | null, ContractorReadError>>;
 }>;

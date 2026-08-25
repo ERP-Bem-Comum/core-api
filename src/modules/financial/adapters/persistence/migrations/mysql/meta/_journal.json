@@ -274,6 +274,118 @@
       "when": 1784672123205,
       "tag": "0038_huge_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1784835318324,
+      "tag": "0039_huge_firelord",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1784848909591,
+      "tag": "0040_foamy_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1784865577308,
+      "tag": "0041_abnormal_salo",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "5",
+      "when": 1785161770553,
+      "tag": "0042_outgoing_rattler",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1785969689153,
+      "tag": "0043_concerned_prodigy",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "5",
+      "when": 1786469838458,
+      "tag": "0044_public_amazoness",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1786646846465,
+      "tag": "0045_military_eddie_brock",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1786647052305,
+      "tag": "0046_familiar_mimic",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1787135068042,
+      "tag": "0047_powerful_veda",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1787176006605,
+      "tag": "0048_ordinary_sauron",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "5",
+      "when": 1787253937325,
+      "tag": "0049_bored_old_lace",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1787258343390,
+      "tag": "0050_same_jack_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "5",
+      "when": 1787282487731,
+      "tag": "0051_charming_scream",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "5",
+      "when": 1787363797529,
+      "tag": "0052_curvy_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1787544630028,
+      "tag": "0053_safe_grim_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "5",
+      "when": 1787605087783,
+      "tag": "0054_nosy_hiroim",
+      "breakpoints": true
     }
   ]
 }

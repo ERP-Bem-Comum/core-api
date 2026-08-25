@@ -69,7 +69,6 @@ Quando o aluno disser "quero ver TDD de verdade aqui", aponte para:
 | Runner usado no projeto: `node:test` nativo + `--experimental-strip-types` (sem Jest, sem Vitest) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
 | Comandos do dia-a-dia (`npm test`, single-test com `--test-name-pattern`) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Comandos" |
 | Estrutura: `tests/` espelha `src/`, sufixo `.test.ts` é descoberto, `.contract.ts`/`.suite.ts` são suites parametrizadas reutilizáveis | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Convenções de testes" |
-| Exemplos vivos de testes RED-first (W0 antes de W1) | `.claude/.pipeline/CTR-VO-MONEY/`, `CTR-AGG-CONTRACT/`, `CTR-STORAGE-PORT/` — em cada um, o `git log` mostra os `.test.ts` chegando antes dos arquivos de produção |
 | Exemplos vivos de testes na base | `tests/modules/contracts/domain/shared/money.test.ts`, `period.test.ts`, `bucket-name.test.ts`, `storage-key.test.ts` |
 | Suite de contrato reutilizável (mesmo cenário roda contra adapter InMemory e contra adapter real) | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts`, `tests/modules/contracts/application/ports/document-storage.contract.ts` |
 | Tests de regressão dedicados a bugs passados | `tests/regression/reports-2026-05-15.test.ts` |

@@ -35,10 +35,11 @@ import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 // ── Helpers de domínio para fixtures ─────────────────────────────────────────
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import type { ContractsModuleEvent } from '#src/modules/contracts/application/ports/event-bus.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const FIXED_NOW = new Date('2026-05-21T10:00:00.000Z');
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
@@ -126,8 +127,9 @@ if (integrationEnabled()) {
         'InMemoryEventDelivery deve ter 5 eventos',
       );
 
-      // Verificar no banco que todos estão com processed_at preenchido
-      const pendingAfter = await repo.findPendingForUpdate(10);
+      // Verificar que nada resta pendente PARA ESTE consumidor (#800/#824: `findPendingForUpdate`
+      // agora recebe `consumerId` — a pendência não é mais global).
+      const pendingAfter = await repo.findPendingForUpdate('consumer-i1', 10);
       assert.ok(pendingAfter.ok);
       assert.equal(pendingAfter.value.length, 0, 'não deve restar eventos pendentes no banco');
     });
@@ -178,8 +180,8 @@ if (integrationEnabled()) {
           assert.ok(!ids2.has(id), `evento ${id} não deve ser entregue por ambos workers`);
         }
 
-        // Verificar que não restam pendentes
-        const pendingAfter = await repo1.findPendingForUpdate(20);
+        // Verificar que não restam pendentes para o consumidor do worker 1 (#800/#824).
+        const pendingAfter = await repo1.findPendingForUpdate('worker-1', 20);
         assert.ok(pendingAfter.ok);
         assert.equal(pendingAfter.value.length, 0, 'não deve restar eventos pendentes');
       } finally {
@@ -229,10 +231,11 @@ if (integrationEnabled()) {
       assert.equal(round2.value.movedToDeadLetter, 1, 'round 2: deve mover para DLQ');
       assert.equal(round2.value.failed, 0, 'round 2: não conta como failed (foi para DLQ)');
 
-      // Assert: evento não está mais na outbox
-      const pendingAfter = await repo.findPendingForUpdate(10);
+      // Assert: nada mais pendente para este consumidor (a row de origem PERMANECE no outbox —
+      // ADR-0022:27-29 —, mas o progresso deste consumidor virou dead-lettered).
+      const pendingAfter = await repo.findPendingForUpdate('failing-consumer-i3', 10);
       assert.ok(pendingAfter.ok);
-      assert.equal(pendingAfter.value.length, 0, 'evento deve ter saído da outbox');
+      assert.equal(pendingAfter.value.length, 0, 'evento deve ter saído da fila deste consumidor');
 
       // Verificar via query direta na DLQ que o evento chegou lá
       const dlqRows = await handle.db.select().from(handle.schema.ctrOutboxDeadLetter);

@@ -157,6 +157,10 @@ describe('PermissionCatalog.all', () => {
       'reconciliation:import',
       'reconciliation:read',
       'reconciliation:write',
+      // remittance:* — modulo financial (remessa bancaria pela VAN, #720). Separadas de
+      // payable:approve: aprovar titulo e mandar dinheiro ao banco sao alcadas distintas.
+      'remittance:generate',
+      'remittance:read',
       'role:assign',
       'role:create',
       'role:read',

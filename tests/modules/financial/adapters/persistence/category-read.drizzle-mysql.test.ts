@@ -11,6 +11,7 @@ import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persi
 import { createDrizzleCategoryReadStore } from '#src/modules/financial/adapters/persistence/repos/category-read.drizzle.ts';
 import { finCategories } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const GROUPS = ['despesa', 'receita', 'ajuste'] as const;
 const GROUP_RANK: Record<(typeof GROUPS)[number], number> = { ajuste: 0, despesa: 1, receita: 2 };
@@ -23,7 +24,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('CategoryReadPort — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

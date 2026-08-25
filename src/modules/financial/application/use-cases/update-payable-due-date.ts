@@ -8,27 +8,39 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
+import type { PayableRepository, PayableRepositoryError } from '../../domain/payable/repository.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 // #270: altera o vencimento de UM título isolado (PATCH /documents/:id/payables/:payableId). Sem
 // propagação pai↔filhos — contrasta com `adjustDocument` (caminho editMetadata #165), que leva o
 // dueDate a todos os payables. Vale em Open E Approved; grava `DocumentSaved` + trilha na mesma tx.
+//
+// Fatia 1 (Fatia 2 da cascata): lê pelo `repo`, ESCREVE pelo `payableRepo` — o documento não muda,
+// e escrevê-lo custava gap lock (#803) e conflito de versão entre operadores em títulos irmãos.
 export type UpdatePayableDueDateDeps = Readonly<{
   repo: DocumentRepository;
+  payableRepo: PayableRepository;
   clock: Clock;
 }>;
 
 export type UpdatePayableDueDateCommand = Readonly<{
   documentId: string;
   payableId: string;
-  // Optimistic lock (FR-009): versão lida pelo cliente; repassada ao `repo.save`.
-  expectedVersion: number;
+  // ⚠️ ACEITO E NÃO USADO — a versão do DOCUMENTO não protege uma escrita que não o altera. Segue
+  // no tipo porque o contrato HTTP exige `version` no body. Ver `register-manual-payment.ts`.
+  expectedVersion?: number;
   dueDate: Date;
+  // Pré-condição do CAS: o vencimento que o CLIENTE tinha na tela. Diferente do `markPaid`, aqui
+  // não existe estado nomeado que sirva de guarda — reagendar duas vezes é legítimo —, então o que
+  // se compara é o valor anterior. Ancorá-lo no que o use case acabou de ler protegeria só os
+  // milissegundos até o UPDATE; ancorá-lo no que o cliente viu cobre a janela toda.
+  expectedDueDate: Date;
 }>;
 
 export type UpdatePayableDueDateError =
   | DocumentError
   | DocumentRepositoryError
+  | PayableRepositoryError
   | DocumentId.DocumentIdError
   | PayableId.PayableIdError;
 
@@ -72,12 +84,15 @@ export const updatePayableDueDate =
       actor: null,
     });
 
-    const saved = await deps.repo.save(
-      { document: updated.value.document, payables: updated.value.payables },
-      entries,
-      cmd.expectedVersion,
-      updated.value.events,
-    );
+    // Escreve UMA linha, por PK, com o vencimento anterior no `WHERE`. `payable-reschedule-conflict`
+    // volta daqui quando outro operador reagendou o mesmo título antes desta gravação.
+    const saved = await deps.payableRepo.reschedule({
+      payableId: payableId.value,
+      dueDate: cmd.dueDate,
+      expectedDueDate: cmd.expectedDueDate,
+      timelineEntries: entries,
+      events: updated.value.events,
+    });
     if (!saved.ok) return err(saved.error);
 
     return ok(undefined);

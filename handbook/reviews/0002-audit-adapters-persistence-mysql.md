@@ -42,7 +42,7 @@
 - Camada HTTP / API REST ou GraphQL.
 - Frontend / UI.
 - Adapter S3 ou MinIO para `DocumentStorage` (port existe, anexar documento real depende disso).
-- Outbox MySQL para eventos cross-módulo (ADR-0015) — planning pausado, ver `.claude/.planning/OUTBOX-MYSQL.md`.
+- Outbox MySQL para eventos cross-módulo (ADR-0015) — planning pausado, ver `context/planning/OUTBOX-MYSQL.md`.
 - Módulo Financeiro (Fase 2).
 - Autenticação / autorização / RBAC.
 - Observabilidade estruturada além de `process.stderr.write` defensivo.

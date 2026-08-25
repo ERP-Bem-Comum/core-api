@@ -55,6 +55,7 @@ import {
   finManualEntries,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ── Assinatura pinada pelo W0 (o W1 implementa EXATAMENTE isto) ──────────────────────────────────
 //   RealizedProvisionedRow = Readonly<{
@@ -76,7 +77,7 @@ import { newUuid } from '#src/shared/utils/id.ts';
 const connectionString =
   process.env['FINANCIAL_DATABASE_URL'] ??
   process.env['CONTRACTS_DATABASE_URL'] ??
-  'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  mysqlTestConnectionString();
 
 const MALFORMED_CONN = 'not-a-mysql-url';
 

@@ -1,8 +1,14 @@
+---
+inquiry: 0019
+title: "`TentativaDeExclusaoDetectada` — tripwire sem superfície de ataque"
+state: blocked
+opened: 2026-05-25
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0019: `TentativaDeExclusaoDetectada` — tripwire sem superfície de ataque
 
-- **Status:** Open
-- **Closed/Decided:** —
-- **Opened:** 2026-05-25
 - **Opened by:** Gabriel Aderaldo (via orquestrador)
 - **Asked to:** P.O. + análise interna do handbook + inspeção de `src/`
 - **Impact:** decide se/como implementar o evento de segurança do gap #5; cruza com identidade/RBAC e com o canal SIEM (ainda inexistente)
@@ -54,7 +60,7 @@ Implementar agora exigiria três fabricações especulativas, todas contra os pr
 1. **Inventar um método `hardDelete` no port só para recusá-lo** — generalidade especulativa
    (DDD interview, bloco "AVOID"; YAGNI). Adiciona um caminho que nenhum caller usa.
 2. **Criar um sink "Segurança/SIEM"** ainda não desenhado — o outbox não é esse canal.
-3. **Atribuir o "Quem"** da violação sem identidade/RBAC (mesmo bloqueador da [[0018-auditlog-transversal-todos-bcs]]).
+3. **Atribuir o "Quem"** da violação sem identidade/RBAC (mesmo bloqueador da [[inquiry-0018]]).
 
 ---
 
@@ -90,7 +96,7 @@ Reavaliar quando existir (a) superfície real de deleção física, (b) canal de
 ## 6. Saídas (outputs concretos)
 
 - [ ] Decidir prevenção por privilégio MySQL (`REVOKE DELETE` do app user) — decisão de infra.
-- [ ] Acoplar "tentativa/violação" ao audit log do banco junto de [[0018-auditlog-transversal-todos-bcs]].
+- [ ] Acoplar "tentativa/violação" ao audit log do banco junto de [[inquiry-0018]].
 - [ ] Reabrir como ticket só se/quando surgir comando de deleção física no produto.
 
 ---

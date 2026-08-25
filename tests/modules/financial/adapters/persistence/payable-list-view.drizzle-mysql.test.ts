@@ -15,6 +15,7 @@ import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters
 import { createDrizzlePayableListView } from '#src/modules/financial/adapters/persistence/repos/payable-list-view.drizzle.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[financial:payable-list-view] MYSQL_INTEGRATION nao definido — pulando.\n');
@@ -22,7 +23,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('#221 — PayableListView (Drizzle + MySQL · JOIN payable⋈documento)', () => {
     let handle: FinancialMysqlHandle;

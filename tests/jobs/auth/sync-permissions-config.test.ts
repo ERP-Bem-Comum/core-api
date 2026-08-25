@@ -8,8 +8,9 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { readSyncPermissionsConfig } from '#src/jobs/auth/sync-permissions/config.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID = 'mysql://user:pw@127.0.0.1:3306/core';
+const VALID = mysqlTestConnectionString({ user: 'user', password: 'pw' });
 
 describe('readSyncPermissionsConfig — AUTH-SYNC-PERMISSIONS-JOB W0 (CA4)', () => {
   it('CA4a: env sem AUTH_DATABASE_URL → err', () => {

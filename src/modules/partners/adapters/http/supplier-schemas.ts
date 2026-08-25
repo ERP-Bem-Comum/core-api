@@ -67,7 +67,9 @@ export const supplierDetailSchema = z.object({
   legacyId: z.number().int().nullable(),
   name: z.string(),
   email: z.string(),
-  cnpj: z.string().meta({ description: 'CNPJ (14 dígitos)' }),
+  cnpj: z
+    .string()
+    .meta({ description: 'CNPJ — 14 caracteres sem máscara, alfanumérico (ADR-0044)' }),
   corporateName: z.string(),
   fantasyName: z.string(),
   serviceCategory: z.string(),
@@ -126,7 +128,9 @@ const pixKeyInputSchema = z.object({
 export const createSupplierBodySchema = z.object({
   name: z.string().min(1),
   email: z.string().min(1),
-  cnpj: z.string().length(14).meta({ description: 'CNPJ — 14 dígitos (DV validado no domínio)' }),
+  cnpj: z.string().length(14).meta({
+    description: 'CNPJ — 14 caracteres sem máscara, alfanumérico; DV validado no domínio',
+  }),
   corporateName: z.string().min(1),
   fantasyName: z.string().min(1),
   serviceCategory: z.string().min(1),

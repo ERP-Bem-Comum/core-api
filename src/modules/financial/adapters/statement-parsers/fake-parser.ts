@@ -26,5 +26,5 @@ const CANNED: ParsedStatement = {
 };
 
 export const makeFakeParser = (statement: ParsedStatement = CANNED): BankStatementParser => ({
-  parse: (): Result<ParsedStatement, ParseError> => ok(statement),
+  parse: async (): Promise<Result<ParsedStatement, ParseError>> => Promise.resolve(ok(statement)),
 });

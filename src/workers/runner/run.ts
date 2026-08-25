@@ -8,6 +8,10 @@
 import process from 'node:process';
 
 import { createPoolRegistry } from '#src/shared/persistence/pool-registry.ts';
+import {
+  installLastResortHandlers,
+  processLastResortDeps,
+} from '#src/shared/runtime/last-resort.ts';
 import { runWorkerGroup, type WorkerSpec } from './group.ts';
 import { GROUPS } from './specs.ts';
 
@@ -16,13 +20,13 @@ const EX_CONFIG = 78; // sysexits.h — erro de configuração.
 type GroupName = keyof typeof GROUPS;
 
 const isGroupName = (g: string | undefined): g is GroupName =>
-  g === 'outbox' || g === 'projections' || g === 'email';
+  g === 'outbox' || g === 'projections' || g === 'email' || g === 'van';
 
 const main = async (): Promise<number> => {
   const group = process.env['WORKER_GROUP'];
   if (!isGroupName(group)) {
     process.stderr.write(
-      `[worker-runner] WORKER_GROUP inválido: ${String(group)} — use outbox|projections|email\n`,
+      `[worker-runner] WORKER_GROUP inválido: ${String(group)} — use outbox|projections|email|van\n`,
     );
     return EX_CONFIG;
   }
@@ -46,8 +50,16 @@ const main = async (): Promise<number> => {
   const shutdown = (): void => {
     controller.abort();
   };
+  // Drena de verdade: aborta os loops E fecha os pools. É o que o `finally` faz no caminho normal
+  // e o que precisa rodar quando NÃO há caminho normal — em `uncaughtException` o `finally` nunca
+  // executa, e o pool ficaria pendurado até o `wait_timeout` (Incident-0001).
+  const drain = async (): Promise<void> => {
+    controller.abort();
+    await registry.closeAll();
+  };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
+  installLastResortHandlers(drain, processLastResortDeps());
 
   process.stderr.write(
     `[worker-runner:${group}] iniciando ${specs.length} worker(s): ${specs.map((s) => s.name).join(', ')}\n`,

@@ -131,13 +131,13 @@ export type {
   ContractCountByContractor,
 } from './read.ts';
 
-// #437 — REPORTS-SUPPLIERS-NO-ACTIVE-CONTRACT: public-api de leitura dos contratantes com contrato
-// Active (consumida pelo relatório "Fornecedores sem Contrato" do reports, ADR-0006).
-export { buildContractsActiveContractorReadPort } from './read.ts';
+// REP-6 (#442 · Slice D) — public-api de leitura do NÚMERO do contrato (`sequential_number`) a partir
+// da ref/UUID, consumida pelo "Relatório Geral" do reports para costurar a coluna Número do Contrato.
+export { buildContractsContractNumberReadPort, makeInMemoryContractNumberRead } from './read.ts';
 export type {
-  ContractsActiveContractorReadPort,
-  BuildContractsActiveContractorReadPortOptions,
-  BuildContractsActiveContractorReadPortError,
-  ActiveContractorReadPort,
-  ActiveContractorReadError,
+  ContractsContractNumberReadPort,
+  BuildContractsContractNumberReadPortOptions,
+  BuildContractsContractNumberReadPortError,
+  ContractNumberReadPort,
+  ContractNumberReadError,
 } from './read.ts';

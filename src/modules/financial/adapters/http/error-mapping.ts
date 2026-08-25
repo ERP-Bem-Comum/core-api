@@ -16,16 +16,54 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'payable-not-found',
   // Período (US6).
   'reconciliation-period-not-found',
+  // #62/Feature 2: documento sem comprovante-fonte (ou bytes ausentes no storage).
+  'source-file-not-found',
+  // Acompanhamento de remessa (#728): GET /financial/remittances/:id com id que não existe.
+  'remittance-not-found',
+  // Download (homologação): a remessa existe no banco, o objeto não está em nenhum prefixo do
+  // agente. É 404 e não 500 porque não há defeito nosso — o objeto pode ser de antes do bucket
+  // atual, ou ter sido movido para fora do combinado.
+  'remittance-file-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'invalid-state-transition',
   'document-version-conflict',
+  // O CAS por título não casou — outra escrita alcançou o título primeiro. É conflito de ESTADO,
+  // como `document-version-conflict`, e não erro de dado: o mesmo pedido volta a valer se o título
+  // retornar à pré-condição esperada.
+  //
+  // ⚠️ São DOIS slugs porque são duas mensagens ao operador, com ações diferentes — ver
+  // `domain/payable/repository.ts`. Colapsá-los de volta num só reintroduz a frase que fala de
+  // "baixa" para quem tentou reagendar.
+  'payable-payment-conflict',
+  'payable-reschedule-conflict',
+  // #785 — o bucket contradiz o contrato de prefixos. É 409 e não 404 de propósito: 404 significa
+  // "não existe, nada a fazer", e aqui há o que fazer. E não é 5xx porque o envelope esconde o
+  // código em 5xx, e este é justamente o código que precisa chegar a quem pediu.
+  'remittance-file-prefix-drift',
+  // Descarte da remessa (#792, ADR-0065 §4). Os dois são conflito de ESTADO, não dado inválido:
+  //
+  //  - `requires-failure` — a remessa não está num estado descartável. Cobre a `Transmitted` (o
+  //    agente entregou; não há o que devolver) e a `Queued` COM arquivo no bucket — esta última é a
+  //    guarda que importa, porque o objeto em `saida/` é um pagamento que o agente ainda pode
+  //    transmitir, e devolver o título ali o liberaria para entrar noutra remessa enquanto a
+  //    primeira caminha para o banco.
+  //  - `requires-reason` — descartar sem motivo registrado. É 409 e não 422 porque o pedido está
+  //    bem-formado (o Zod já exigiu a string); o que falta é conteúdo de DECISÃO, e a operação
+  //    inteira existe para deixar rastro de quem liberou valor para nova transmissão.
+  'remittance-discard-requires-failure',
+  'remittance-discard-requires-reason',
+  // A remessa que o agente JÁ transmitiu não é descartável nem rebaixável — o desfecho positivo é o
+  // mais caro de perder, e a ordem de chegada dos objetos de status não é garantida.
+  'remittance-already-transmitted',
   // Conciliação: pré-condições de estado.
   'transaction-already-reconciled',
   'reconciliation-already-undone',
   'account-closed',
   'period-closed',
+  // Exclusão de extrato: guarda — extrato com transação conciliada não pode ser excluído (desfaça antes).
+  'statement-has-reconciled-transactions',
   // Reabertura (#203): reabrir período não-fechado é conflito de estado.
   'period-not-closed',
   // Contrapartida de transferência (#269/US2): casar uma contrapartida não-pendente é conflito de estado.
@@ -34,6 +72,15 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'cedente-account-already-closed',
   'cedente-account-duplicate',
   'cedente-account-bank-data-locked',
+  // #722: convênio preenche uma vez. Trocar é conflito com o estado — ele identifica o contrato no
+  // banco e viaja no nome de toda remessa já transmitida.
+  'cedente-convenio-already-set',
+  // Remessa (#720): documento já preso em remessa viva. Incluí-lo de novo pagaria duas vezes — é
+  // conflito com o estado atual, não dado inválido.
+  'remittance-payables-already-held',
+  // Remessa (#736): título não-`Approved` na seleção. É conflito com o estado do documento (ainda
+  // não aprovado), não dado malformado — 409, como o contrato original previa.
+  'document-not-approved',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -56,6 +103,8 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   // #62 ingestão: magic-bytes mentido / entrada vazia.
   'document-magic-bytes-mismatch',
   'empty-input',
+  // Acompanhamento de remessa (#728): id malformado no GET /financial/remittances/:id.
+  'remittance-id-invalid',
 ]);
 
 // #62 ingestão: entrada grande demais / bomba de descompressão → 413 Payload Too Large.
@@ -94,6 +143,35 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'approver-authority-unavailable',
   // Resolução em lote (#357): falha ao ler o JOIN fin_payables × fin_documents × fin_supplier_view.
   'payable-summary-by-ids-view-failure',
+  // Remessa (#720): infraestrutura que não respondeu. Nenhum deles é culpa do operador — tentar de
+  // novo é a ação certa, e mandá-lo procurar cadastro seria mandá-lo ao lugar errado.
+  'remittance-preview-unavailable',
+  'remittance-nsa-unavailable',
+  'remittance-persist-failed',
+  'remittance-upload-failed',
+  // Defeito NOSSO de montagem do arquivo: o operador não tem o que corrigir. Fica como 503 e não
+  // como 422 justamente para não sugerir que ele conserte algum dado.
+  'remittance-file-name-failed',
+  'remittance-build-failed',
+  'remittance-malformed-file',
+  // Download (homologação): o objeto existe mas não é o arquivo emitido. Fica no balde de 503, e não
+  // em 404, porque o arquivo ESTÁ lá — o que falhou é a identidade dele, e isso é anomalia do
+  // armazenamento, não pedido inválido do operador. Repetir também é a ação certa: se o objeto
+  // estava sendo escrito, a próxima leitura confere.
+  'remittance-file-corrupted',
+  // Acompanhamento de remessa (#728): repositório de leitura indisponível → 503 (tentar de novo é a
+  // ação certa; não é culpa do operador).
+  'remittance-repository-unavailable',
+  // #634/#792: a geração recusa enquanto o RBAC estiver em bypass. 503 e não 403 porque não é o
+  // requisitante que está proibido — é o servidor que não deve oferecer esta operação nesta
+  // configuração. Entra aqui, e não num `reply.send` próprio na guarda, para que o envelope seja o
+  // mesmo de todo 5xx do módulo: `code: 'internal'`, mensagem genérica, `requestId` presente, slug
+  // real só no log. Era a única exceção a essa política no `financial`.
+  'remittance-disabled-under-rbac-bypass',
+  // Quarentena do retorno (#753): a tabela não respondeu. Sem esta linha o erro cairia no default
+  // 422 — "regra de negócio inválida" —, mandando o operador procurar defeito num dado que está
+  // certo, enquanto o problema é o banco.
+  'van-quarantine-unavailable',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
@@ -136,14 +214,70 @@ const PUBLIC_FALLBACK: Record<PublicErrorCode, string> = {
 };
 
 const SLUG_MESSAGES: Record<string, string> = {
+  // Remessa (#720). As duas primeiras dizem ao operador o que fazer, e são diferentes de propósito:
+  // uma pede correção de cadastro, a outra avisa que o arquivo ainda não emite aquela forma — e não
+  // há cadastro que resolva a segunda.
+  'remittance-payments-unavailable':
+    'Há títulos sem os dados necessários para a remessa. Confira o pré-voo do lote antes de gerar.',
+  'remittance-launch-form-unsupported':
+    'A remessa inclui título cuja forma de pagamento ainda não é emitida no arquivo. Retire-o da seleção.',
+  'remittance-mixed-payment-dates':
+    'A seleção mistura vencimentos diferentes. Uma remessa é de um único dia — gere por vencimento.',
+  'remittance-payables-already-held':
+    'Há título já incluído em outra remessa. Atualize a lista e refaça a seleção.',
+  // #736: só título Aprovado entra em remessa. A mensagem diz o que fazer (aprovar), não "erro
+  // interno" — e o pré-voo aponta QUAIS títulos estão pendentes.
+  'document-not-approved':
+    'Há título não aprovado na seleção. Só títulos aprovados podem entrar em remessa — confira o pré-voo.',
+  // Acompanhamento de remessa (#728).
+  'remittance-not-found': 'Remessa não encontrada.',
+  // Descarte (#792, ADR-0065 §4). As mensagens dizem O QUE FAZER, porque o operador tem ação em
+  // ambos os casos — e a primeira precisa explicar por que o sistema está recusando algo que parece
+  // razoável ("quero cancelar esta remessa que ainda não saiu").
+  'remittance-discard-requires-failure':
+    'Esta remessa não pode ser descartada agora. O arquivo ainda está no armazenamento da VAN e pode ser transmitido a qualquer momento — descartar liberaria os títulos para outra remessa enquanto o pagamento segue para o banco. Aguarde o desfecho do transporte.',
+  'remittance-discard-requires-reason':
+    'Informe o motivo do descarte. Descartar devolve os títulos para a fila, e o motivo é o que permite auditar depois por que um pagamento foi refeito.',
+  'remittance-already-transmitted':
+    'O agente já transmitiu esta remessa — ela não pode ser descartada. Confira o pagamento no site da instituição e, se algum título precisar sair da VAN, use a baixa manual.',
+  'remittance-file-not-found':
+    'O arquivo desta remessa não está no armazenamento da VAN — provavelmente é uma remessa antiga, já expurgada.',
+  'remittance-file-prefix-drift':
+    'O arquivo não está nos prefixos do contrato, e o armazenamento tem prefixo fora do combinado com o agente de transporte. A fronteira mudou: consulte o log do servidor, que nomeia o prefixo inesperado.',
+  // Mensagem deliberadamente alarmante: hash divergente significa que o objeto NÃO é o que foi
+  // enviado ao banco. Servir assim mesmo entregaria evidência falsa numa conferência de pagamento.
+  'remittance-file-corrupted':
+    'O arquivo encontrado não confere com a remessa emitida (hash divergente). Nada foi entregue — não use este objeto como evidência do que foi enviado.',
+  'remittance-id-invalid': 'Identificador de remessa inválido.',
+  // #722: campo do CADASTRO da conta, não do título — por isso a mensagem diz onde corrigir. Sem
+  // ela, o operador recebia "erro interno" para um dado que ele mesmo preenche.
+  'cedente-convenio-missing':
+    'A conta bancária selecionada está sem o convênio. Informe-o no cadastro da conta para gerar remessas.',
+  'cedente-convenio-malformed':
+    'O convênio da conta bancária selecionada não é numérico. Corrija-o no cadastro da conta.',
+  // #804. A mensagem diz o limite E o motivo de propósito: acima de 6 posições o banco não recusa
+  // o arquivo — ele descarta o excedente e processa a remessa sob outro contrato. Sem essa frase, o
+  // operador tende a achar que o sistema é que está sendo restritivo, e procura contornar.
+  'cedente-convenio-too-long':
+    'O convênio da conta bancária selecionada tem mais de 6 dígitos. O banco lê apenas os 6 primeiros e descartaria o restante, processando a remessa sob outro convênio. Confirme o número junto ao banco e corrija-o no cadastro da conta.',
+  'cedente-convenio-already-set':
+    'Esta conta já tem convênio. Ele identifica o contrato junto ao banco e não pode ser trocado.',
   'document-not-found': 'Documento não encontrado.',
   'timeline-document-not-found': 'Documento não encontrado.',
   'document-version-conflict':
     'O documento foi modificado por outra operação. Atualize e tente novamente.',
+  // As duas frases abaixo existem separadas de propósito: elas terminam em AÇÕES diferentes, e é a
+  // ação que o operador precisa ler. Uma mensagem única que servisse às duas não diria o que fazer
+  // em nenhuma — foi o que aconteceu enquanto o slug era um só, e quem reagendava lia sobre baixa.
+  'payable-payment-conflict':
+    'Este título já não estava aprovado quando a baixa foi gravada — outra operação o alterou antes. Atualize e confira se a baixa já foi registrada.',
+  'payable-reschedule-conflict':
+    'O vencimento deste título foi alterado por outra operação depois que esta tela foi carregada. Atualize e confira o vencimento atual antes de reagendar.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',
   'document-id-invalid': 'Identificador de documento inválido.',
+  'source-file-not-found': 'Documento sem arquivo anexado.',
   'document-incomplete':
     'Dados insuficientes: a data de vencimento é obrigatória para documentos em aberto.',
   'net-value-not-positive': 'O valor líquido do documento deve ser positivo.',
@@ -206,6 +340,8 @@ const SLUG_MESSAGES: Record<string, string> = {
   'counterpart-same-account': 'A conta de destino não pode ser igual à de origem.',
   // Lançamento manual / lote (US5).
   'manual-entry-value-not-positive': 'O valor do lançamento manual deve ser positivo.',
+  'manual-entry-classification-required':
+    'Informe categoria e centro de custo para conciliar (obrigatório, exceto em transferência, aplicação e resgate).',
   'empty-batch': 'Informe ao menos uma transação para o lote.',
   // Período (US6).
   'period-has-pending-transactions':

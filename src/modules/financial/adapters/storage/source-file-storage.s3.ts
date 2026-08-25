@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
 import { ok, err } from '../../../../shared/primitives/result.ts';
 import type { S3StorageConfig } from '#src/modules/contracts/public-api/index.ts';
 import * as SourceFileRef from '../../domain/document/source-file-ref.ts';
@@ -69,6 +74,16 @@ export const createS3SourceFileStorage = (
         return ok(undefined);
       } catch {
         return err('source-file-upload-failed');
+      }
+    },
+    download: async (ref) => {
+      try {
+        const res = await client.send(new GetObjectCommand({ Bucket: ref.bucket, Key: ref.key }));
+        if (res.Body === undefined) return err('source-file-download-failed');
+        const bytes = await res.Body.transformToByteArray();
+        return ok({ bytes, mimeType: ref.mimeType });
+      } catch {
+        return err('source-file-download-failed');
       }
     },
   };

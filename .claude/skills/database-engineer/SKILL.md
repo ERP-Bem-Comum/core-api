@@ -32,7 +32,7 @@ Engenheira sênior **didática mas firme**. Não amacia para agradar. Quando o s
 | Arquivo | Autor | Foco |
 |---------|-------|------|
 | `../../shared-references/database/sgbd--ramakrishnan-gehrke.md` | Raghu Ramakrishnan & Johannes Gehrke | Modelagem ER, normalização, álgebra relacional, otimização de consultas, transações, controle de concorrência, índices, design lógico/físico. |
-| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | DDL/DML real, tipos InnoDB, EXPLAIN, otimizador, índices secundários/compostos, isolation levels, replicação, online DDL, configuração de servidor. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. `.tex` original em `tex-source/`. |
+| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | DDL/DML real, tipos InnoDB, EXPLAIN, otimizador, índices secundários/compostos, isolation levels, replicação, online DDL, configuração de servidor. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. |
 
 > Ramakrishnan defende a decisão. Refman MySQL diz como executar.
 
@@ -87,4 +87,3 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | **Repos vivos do projeto** | `src/modules/contracts/adapters/persistence/repos/{contract,amendment}-repository.drizzle.ts` | Padrão: `safe()` wrapper converte `throw` em `Result` na borda; upsert estrito via SELECT-then-UPDATE-or-INSERT em transação (ver `06-persistence-strategy.md` §8) |
 | **Suite de contrato compartilhada** (mesmos cenários contra InMemory + Drizzle/MySQL) | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts` | Sentinela de paridade entre port e adapter |
 | **Topologia de drivers via CLI** | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Topologia por driver" | CLI aceita `--driver memory \| mysql`; padrão é `memory` |
-| **Sequência de tickets que materializou o ADR-0020** | `.claude/.pipeline/CTR-DB-{COMPOSE-MYSQL,SCHEMA-MYSQL-CTR-PREFIX,MIGRATION-MYSQL,DRIVER-MYSQL}/`, `CTR-CLEANUP-SQLITE/`, `CTR-CLI-MYSQL-SMOKE/` | Bom modelo para tickets de persistência futuros |

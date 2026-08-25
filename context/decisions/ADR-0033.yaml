@@ -1,0 +1,228 @@
+id: ADR-0033
+title: Versionamento de API — /api/v1 espelha o legado, /api/v2 é o modelo novo
+source: handbook/architecture/adr/0033-api-versioning-v1-legacy-mirror.md
+decided_on: 2026-06-03
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0006, ADR-0025, ADR-0027, ADR-0028, ADR-0031, ADR-0032]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O MECANISMO está implementado: `buildApp` deixou de hardcodar o prefixo, os dois prefixos coexistem
+    num só processo, e a atribuição é por recurso via `{ plugin, prefix }` no composition root.
+    A ATRIBUIÇÃO divergiu, e muito. O ADR desenha `/api/v1` como a exceção — "Colaboradores
+    (`partners`) — primeiro recurso" — e `/api/v2` como o lugar do modelo novo, listando `auth` e
+    `contracts`. A realidade em `src/server.ts` é o inverso: **11 plugins registrados explicitamente sob
+    `/api/v1`**, incluindo os QUATRO de `auth` (`users`, `approvers`, `roles`, `me`), que o ADR atribui
+    ao v2. O v2 ficou com os plugins sem prefixo explícito, que caem no default.
+    Ou seja: o v1, previsto como espelho pontual do legado, virou a superfície majoritária — e o
+    contrato que o ADR declara CONGELADO é o que mais recebeu recursos.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — a coexistência dos dois prefixos, a atribuição por recurso, a mudança no `buildApp`, e
+    o congelamento do v1 com contraparte v2 no redesenho.
+
+prior_art:
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Destilou como "Versionamento **por recurso**: v1 espelha legado e é congelado; v2 é o default do
+      `buildApp`" — as três partes corretas como leitura do ADR, e a `http-edge.md:44` tem a seção.
+      O que não verificou é a ATRIBUIÇÃO: a rule repete a tabela do ADR (v1 = colaboradores; v2 = auth,
+      contracts) e o `server.ts` põe auth inteiro em v1. Um agente que siga a rule ao criar rota de auth
+      vai para o prefixo errado.
+
+claims:
+  - id: ADR-0033-C1
+    text: |
+      Dois prefixos de versão coexistem no MESMO processo Fastify, atribuídos POR RECURSO/MÓDULO — não
+      globalmente. `/api/v1` para recursos que espelham o legado; `/api/v2` para o modelo novo.
+    kind: obligation
+    source_lines: ['32-38', 53]
+    applies_to:
+      - 'src/server.ts'
+      - 'src/shared/http/app.ts'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: o mecanismo confere — os dois prefixos coexistem num só processo, atribuídos por recurso no composition root'
+        - 'src/server.ts:316 — collaboratorsHttpPlugin sob prefix /api/v1, o primeiro recurso previsto pelo ADR'
+        - 'src/server.ts:380 — usersHttpPlugin sob /api/v1, mas o ADR atribui auth ao v2'
+        - 'src/server.ts:405 — rolesHttpPlugin sob /api/v1; :420 — meHttpPlugin sob /api/v1; :388 — approversHttpPlugin sob /api/v1'
+        - 'nota: 11 plugins com prefix /api/v1 explícito — 6 de partners, 4 de auth, 1 de programs'
+      verify: |
+        grep -n "plugin:\|prefix:" src/server.ts | grep -A1 "plugin:" | head -20
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o composition root, quando um recurso for registrado em prefixo divergente do que o
+        registro de decisão atribui a ele, então o teste falha. Hoje falharia nos quatro plugins de auth.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        O prefixo de versão MUST ser atribuído por recurso no composition root. A atribuição
+        recurso→prefixo MUST constar de lista canônica única, mantida junto do registro de decisão.
+      rationale: |
+        O mecanismo vale; a tabela do ADR não descreve a realidade e não pode ser a fonte. Estreitar para
+        exigir a LISTA (e não a tabela de junho) resolve os dois problemas: torna a regra testável e
+        obriga a reconciliar a atribuição real. Terceira alegação do inventário que trava na falta de
+        lista canônica, junto com prefixo de tabela (`ADR-0020-C9`, `ADR-0006-C6`) e dependência crítica
+        (`ADR-0011-C3`).
+
+  - id: ADR-0033-C2
+    text: |
+      `buildApp()` deixa de hardcodar o prefixo. `BuildAppOptions.routes` passa a aceitar
+      `FastifyPluginAsync | { plugin, prefix? }` — união retrocompatível. Plugin direto ou `{ plugin }`
+      sem prefixo caem no default `/api/v2`.
+    kind: obligation
+    source_lines: ['42-47']
+    applies_to:
+      - 'src/shared/http/app.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: o composition root registra plugins nas duas formas — com { plugin, prefix } explícito e como plugin direto'
+        - 'src/server.ts:291 — comentário: "Modelo novo (greenfield) → /api/v2 (plugin direto, forma legada do buildApp)"'
+        - 'nota: 11 registros usam a forma { plugin, prefix: /api/v1 }; os demais usam plugin direto e caem no default'
+      verify: |
+        grep -n "prefix: '/api/v" src/server.ts | wc -l; grep -n "forma legada do buildApp" src/server.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado `buildApp` com plugin direto, quando registrado, então MUST cair em `/api/v2`. Dado
+        `{ plugin, prefix }`, MUST cair no prefixo informado. Verificável por `fastify.inject`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `buildApp` MUST NOT hardcodar prefixo de versão. A união `FastifyPluginAsync | { plugin, prefix }`
+        MUST permanecer retrocompatível, com default explícito.
+      rationale: |
+        Cumprida, e a retrocompatibilidade da união é o que permitiu introduzir v1 sem tocar os
+        call-sites de auth e contracts. É uma decisão de desenho de API interna que vale preservar — o
+        contrário (prefixo obrigatório) teria forçado editar todos os registros.
+
+  - id: ADR-0033-C3
+    text: |
+      O contrato `/api/v1` é CONGELADO — evolui só por correção. Quando um recurso v1 for redesenhado,
+      ganha uma contraparte v2, e o contrato v1 NÃO muta.
+    kind: prohibition
+    source_lines: [37, 54]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Exige comparar o shape das rotas v1 ao longo do histórico. Não verificável num snapshot; precisa de diff de contrato (oasdiff) entre versões.'
+    testability:
+      verdict: testable-with-work
+      layer: contract
+      red: |
+        Dado o OpenAPI gerado, quando uma rota `/api/v1` mudar de shape entre dois commits, então o teste
+        falha — salvo correção declarada.
+      expected_error: null
+      blocker: |
+        Exige baseline de contrato versionado e comparação (`oasdiff` ou equivalente). O ADR-0040 já
+        aponta "contrato OpenAPI/`oasdiff` como evolução" — é o mesmo mecanismo, ainda não montado.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Rota sob `/api/v1` MUST NOT mudar de shape. Redesenho MUST criar contraparte em `/api/v2` e
+        aposentar a v1 por `Sunset` (RFC 8594), no padrão do ADR-0032.
+      rationale: |
+        Adotar mesmo sem enforcement: é a única proteção do contrato que o frontend legado consome, e a
+        consequência de violá-la é quebra silenciosa de cliente. O caminho mecânico existe e está
+        nomeado no `ADR-0040` (`oasdiff`) — vale ligar os dois quando o baseline for montado.
+
+  - id: ADR-0033-C4
+    text: |
+      O hook `onSend` de hardening (`cache-control: no-store`) passa a cobrir `/api/v1` E `/api/v2` —
+      toda rota de negócio é dado sensível, independente da versão.
+    kind: obligation
+    source_lines: ['48-49']
+    applies_to:
+      - 'src/shared/http/app.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -n "no-store\|onSend" src/shared/http/app.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma resposta de rota sob `/api/v1`, quando não trouxer `cache-control: no-store`, então o
+        teste falha. Simétrico para `/api/v2`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Toda rota de negócio MUST responder com `cache-control: no-store`, em qualquer prefixo de
+        versão. O hardening MUST ser aplicado no shell, não por rota.
+      rationale: |
+        Não verificado nesta fase — é uma linha de grep que ficou para a Fase 2. A regra vale
+        independentemente: cache de resposta com dado financeiro é vazamento por infraestrutura, e
+        aplicar no shell (não por rota) é o que garante cobertura de rota nova.
+
+findings:
+  - |
+    A atribuição do ADR está invertida na prática. Ele desenha `/api/v1` como exceção pontual
+    ("Colaboradores — primeiro recurso") e lista `auth` e `contracts` em `/api/v2`. O `src/server.ts` tem
+    **11 plugins sob `/api/v1`**, incluindo os QUATRO de `auth` (`users`, `approvers`, `roles`, `me`). O
+    prefixo que o ADR declara CONGELADO é o que mais recebeu recursos.
+  - |
+    Consequência prática, não estética: a `.claude/rules/http-edge.md:44` repete a tabela do ADR. Um
+    agente que crie rota de `auth` seguindo a rule vai para `/api/v2`, enquanto as quatro rotas de auth
+    existentes estão em `/api/v1`. É drift que produz inconsistência na primeira rota nova.
+  - |
+    Terceira alegação do inventário que trava na ausência de uma LISTA CANÔNICA — depois de prefixo de
+    tabela por módulo (`ADR-0020-C9` e `ADR-0006-C6`) e dependência crítica (`ADR-0011-C3`). Três lacunas
+    da mesma natureza: o ADR dá exemplos onde precisaria dar a lista, e o exemplo envelhece.
+  - |
+    O `ADR-0033` declara "não superseda ADR-0025/0027/0028, ela os cumpre". Cumpre o `0027` e o `0028`;
+    **substitui** o `0025` no ponto do roteamento, que fixava `/api/v2/*`. Registrado também na
+    `ADR-0025-C4` — é a primeira supersessão do acervo que o próprio sucessor nega estar fazendo.
+
+provenance:
+  tickets:
+    - HTTP-PAGINATION-HARMONIZE
+    - PARTNERS-HTTP-V1-BOOTSTRAP
+  issues: []
+  note: |
+    O acervo tem COLLABORATORS-HTTP-* (7 tickets), PARTNERS-HTTP-V1-BOOTSTRAP e HTTP-PAGINATION-HARMONIZE
+    — nenhum lido; foram eles que povoaram o `/api/v1`. O ADR-0031 (módulo partners) é o par deste e
+    entra no lote 7b.

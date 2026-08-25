@@ -1,8 +1,14 @@
+---
+inquiry: 0022
+title: "Inquiry 0022 — `src/jobs/`/auto-expire: anti-pattern ou complexidade essencial?"
+state: decided
+last_reviewed: 2026-08-06
+---
+
 [← Voltar para Inquiries](./README.md)
 
 # Inquiry 0022 — `src/jobs/`/auto-expire: anti-pattern ou complexidade essencial?
 
-- **Status:** Concluída
 - **Data:** 2026-06-16
 - **Gatilho:** Stakeholder (dev/P.O.) sentiu "um GIGANTE anti-pattern" no auto-expire e em `src/jobs/`, sem conseguir nomeá-lo. Pediu estudo completo com hipóteses em TODAS as dimensões (linguagem, lib, infra, processo, arquitetura).
 - **Método:** Workflow multi-agente — **35 agentes**, 4 fases (Diagnóstico 5 lentes → Hipóteses 6 dimensões → Avaliação adversarial 1:1 → Síntese). Teoria canônica via `acdg-skills` (path), citada por `arquivo.md:linha`. Placar dos vereditos: **4 adopt-now · 8 adopt-conditionally · 1 defer · 10 reject**.

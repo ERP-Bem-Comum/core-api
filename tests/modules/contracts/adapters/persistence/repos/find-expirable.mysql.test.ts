@@ -26,10 +26,11 @@ import { createDrizzleContractRepository } from '#src/modules/contracts/adapters
 // ── Helpers de domínio ────────────────────────────────────────────────────────
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { buildContract, buildExpiredContract } from '../fixtures.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 

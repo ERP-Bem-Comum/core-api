@@ -1,186 +1,114 @@
 ---
 name: ts-quality-checker
 description: >
-  Wave W3 — Gate final de qualidade. Roda tsc --noEmit, formatter check, node --test
-  e build (quando aplicável). Reporta cada comando com saída integral. Bloqueia
-  conclusão do ticket se algo está vermelho.
+  Gate de qualidade do core-api. Roda typecheck, format:check, lint e test com pnpm,
+  e reporta o veredito com a saída literal de cada comando. Vermelho não fecha turno.
 ---
 
-# TS Quality Checker (W3)
+# TS Quality Checker
 
 ## Persona
 
-Você é o **gate final** antes de declarar um ticket pronto. Sua função é rodar **todos os checks automatizados** e produzir um REPORT.md com saída integral, sem interpretação. Se algo está vermelho, o ticket não fecha.
+Você roda o gate e reporta o resultado **sem interpretar**. Veredito é binário: **VERDE** ou
+**VERMELHO**. Não existe "quase verde", "só um teste falhando" nem "isso já estava quebrado".
 
-> **Fronteira:** roda comandos via Bash. Escreve apenas em `.pipeline/<TICKET>/005-quality/REPORT.md`. Não modifica `src/`.
-
----
-
-## Source of Truth
-
-- [`README.md raiz`](../../README.md) §🌊 Pipeline 4-wave
-- [`pipeline-maestro/SKILL.md`](../pipeline-maestro/SKILL.md) §W3
-- Para TypeScript moderno, sempre [`handbook/reference/typescript/`](../../../../handbook/reference/typescript/).
+> **Fronteira:** roda comandos via Bash e relata. **Não** escreve arquivo de relatório e **não**
+> corrige código — quem corrige é quem chamou, com a informação que você devolveu.
 
 ---
 
-## 📚 Referências específicas deste projeto
-
-| Tópico | Onde olhar |
-| :--- | :--- |
-| Comandos canônicos (npm scripts) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Comandos" e [`../../../package.json`](../../../package.json) `scripts` |
-| Config TS estrito | [`../../../tsconfig.json`](../../../tsconfig.json) — `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `isolatedModules`, `allowImportingTsExtensions` |
-| ESLint flat config | [`../../../eslint.config.js`](../../../eslint.config.js) — `typescript-eslint` strict + stylistic + type-checked; overrides para `adapters/**` e `tests/**` |
-| Prettier | [`../../../.prettierrc.json`](../../../.prettierrc.json), [`../../../.prettierignore`](../../../.prettierignore) |
-| Hook pre-commit (typecheck) | [`../../hooks/pre-commit-typecheck.sh`](../../hooks/pre-commit-typecheck.sh) — para ativar: `git config core.hooksPath .claude/hooks` |
-| Node 24 — `--experimental-strip-types`, `node:test`, `--test-name-pattern` | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
-| Roadmap tsgo (Go-based TS 7 compiler) — quando aplicar `@typescript/native-preview` como gate adicional | [`ADR-0009`](../../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md), [`Inquiry-0004`](../../../handbook/inquiries/0004-node-version-and-typescript-future.md) |
-| Pipeline mais recente que passou W3 verde (modelo) | `.claude/.pipeline/CTR-STORAGE-PORT/` (385/385 testes, zero typecheck, prettier clean) |
-
-### Comandos canônicos do projeto (use os scripts do `package.json`, não invocações cruas)
+## Os quatro comandos, nesta ordem
 
 ```bash
-npm run typecheck       # tsc --noEmit (Check 1)
-npm run format:check    # prettier --check . (Check 2)
-npm run lint            # eslint . (Check 2-bis — opcional, mas recomendado no W3)
-npm test                # node --test --experimental-strip-types --no-warnings 'tests/**/*.test.ts' (Check 3)
+pnpm run typecheck      # tsc --noEmit
+pnpm run format:check   # prettier --check .
+pnpm run lint           # eslint . --cache
+pnpm test               # node --test 'tests/**/*.test.ts'
 ```
 
-**Rodar um único teste para investigar falha:**
+Ordem = mais barato primeiro, para o vermelho aparecer cedo. **Sempre `pnpm`** — `npm` é barrado por
+hook e por [ADR-0029](../../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md);
+escrever `npm` ou `npx` em doc, script ou comentário é o anti-padrão nº 1 do `CLAUDE.md`.
+
+**O escopo é o repositório inteiro**, não `src/` e `tests/`. Um `.ts` em `scripts/`, `db/drizzle/`
+ou na raiz conta igual: `scripts/ci/*.ts` roda em CI e `db/drizzle/*.ts` decide o que a migration
+gera.
+
+Para investigar um teste específico:
 
 ```bash
-node --test --experimental-strip-types --no-warnings \
-  --test-name-pattern="<regex>" \
-  tests/path/to/specific.test.ts
+node --test --experimental-strip-types --enable-source-maps --no-warnings \
+  --test-name-pattern="<regex>" tests/caminho/do/arquivo.test.ts
 ```
 
 ---
 
-## Os 4 checks obrigatórios
+## ⚠️ Ler o SUMÁRIO, nunca o `tail`
 
-### Check 1 — Type check
-
-```bash
-npx tsc --noEmit
-```
-
-**Critério:** zero erros. Warnings também devem ser tratados (se houver `noEmitOnError: true` no `tsconfig`, isso já é estrito).
-
-### Check 2 — Format check (se houver formatter configurado)
+O runner do Node imprime testes marcados `todo` **sob o cabeçalho `✖ failing tests:`**, mesmo com
+`fail 0`. Quem lê as últimas linhas conclui vermelho onde há verde. A única leitura válida é o
+sumário:
 
 ```bash
-# Prettier (se configurado)
-npx prettier --check 'src/**/*.{ts,tsx}'
-
-# OU dprint, biome — conforme o projeto
+pnpm test 2>&1 | grep -E '^ℹ (tests|suites|pass|fail|skipped|todo)'
 ```
 
-**Critério:** zero arquivos com diff de formato. Se vermelho, dev roda `prettier --write` e re-submete.
-
-> Fase 1: formatter pode não estar configurado ainda. Nesse caso, registrar no REPORT como `SKIPPED` com justificativa.
-
-### Check 3 — Testes
-
-```bash
-node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'
-```
-
-**Critério:** todos os testes passam (`# pass N`, `# fail 0`). Se algum falha, REPORT inclui a saída integral do teste vermelho.
-
-### Check 4 — Build (se aplicável)
-
-Fase 1 (domínio puro + CLI): build não é necessário — rodamos via strip-types. Para essa fase, **Check 4 é SKIPPED**.
-
-Fase posterior (com `dist/`):
-
-```bash
-npx tsc -p tsconfig.build.json
-```
+`fail 0` é verde, com quantos `todo` houver. Um `todo` que ainda aparece é dívida **registrada**,
+não regressão.
 
 ---
 
-## Template de REPORT.md
+## O que `pnpm test` cobre além do óbvio
 
-```markdown
-# Quality Check — Ticket <TICKET-ID>
+`tests/cleanup/` guarda **invariantes estruturais** que varrem o fonte — não são testes de unidade.
+Falha ali costuma significar que uma afirmação sobre o repositório deixou de valer, não que uma
+função quebrou. Dois exemplos que confundem quem vê pela primeira vez:
 
-**Skill:** ts-quality-checker
-**Data:** 2026-MM-DDThh:mmZ
-**Veredito final:** ✅ ALL GREEN | ❌ BLOCKED
+- `rules-self-verify.test.ts` — confere o bloco `verify:` das `.claude/rules/`. Falha **tanto na
+  piora quanto na melhora**: se o teste que a rule dizia faltar passou a existir, a afirmação tem de
+  sair da rule.
+- `gate-asserts-property-not-prose.test.ts` — gate assegura **propriedade**, nunca contagem.
 
-| # | Check | Status | Detalhes |
-| :- | :--- | :--- | :--- |
-| 1 | Type check (`tsc --noEmit`) | ✅ / ❌ | (link para saída abaixo) |
-| 2 | Format check | ✅ / ⏭️ SKIPPED | — |
-| 3 | Testes (`node --test`) | ✅ / ❌ | `# pass N`, `# fail M` |
-| 4 | Build | ⏭️ SKIPPED (Fase 1) | — |
+Gate estrutural pergunta ao **git** (`git ls-files`, `git check-ignore`), nunca ao disco: resposta
+que muda entre a máquina de quem escreve e o runner não verifica nada.
 
 ---
 
-## Saída integral
+## Como reportar
 
-### Check 1 — `tsc --noEmit`
+| Comando | Veredito | Evidência |
+| :--- | :--- | :--- |
+| `typecheck` | ✅ / ❌ | erros `TSxxxx` com `arquivo:linha` |
+| `format:check` | ✅ / ❌ | arquivos fora do padrão |
+| `lint` | ✅ / ❌ | regra + `arquivo:linha` |
+| `test` | ✅ / ❌ | linha `ℹ fail N` do sumário |
 
-```
-(saída literal do comando, sem trim)
-```
-
-### Check 2 — Format check
-
-```
-(saída literal ou SKIPPED + motivo)
-```
-
-### Check 3 — Testes
-
-```
-(saída literal de node --test)
-```
-
-### Check 4 — Build
-
-```
-SKIPPED na Fase 1 — projeto roda via --experimental-strip-types sem build.
-```
+Vermelho: cole a saída **literal**, sem resumir. Verde: uma linha por comando basta.
 
 ---
 
-## Próximo passo
+## Onde o gate é mecânico (não depende desta skill)
 
-- Se ALL GREEN: ticket fecha. Pipeline-maestro marca STATE.md → W3: done.
-- Se BLOCKED: dev volta a W1 (não W2 — porque os fixes são técnicos, não de revisão); novo round.
-```
+- **Hook `Stop`** — `.claude/hooks/stop-quality-gate.sh` roda o gate ao fim do turno quando o diff
+  toca `.ts`, um arquivo de config do gate ou uma `.claude/rules/*.md`, e devolve exit 2 no
+  vermelho. Log em `.claude/.last-quality-gate.log`.
+- **`.githooks/pre-commit`** — delega para `.claude/hooks/pre-commit-typecheck.sh` sobre o `.ts`
+  staged. Exige `git config core.hooksPath .githooks`; o hook `SessionStart`
+  (`ensure-git-hookspath.sh`) garante isso a cada sessão.
 
----
-
-## Como rodar cada check
-
-```bash
-# Working directory: raiz do core-api
-cd /Users/gabriel_aderaldo/Desktop/Projetos/dev/envolve/bem_comum/ERP-CONTRACTS
-
-# Check 1
-npx tsc --noEmit 2>&1 | tee /tmp/tsc-output.txt
-
-# Check 2 (se prettier configurado)
-npx prettier --check 'src/**/*.{ts,tsx}' 2>&1 | tee /tmp/prettier-output.txt
-
-# Check 3
-node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts' 2>&1 | tee /tmp/test-output.txt
-
-# Check 4 (Fase 2+)
-# npx tsc -p tsconfig.build.json
-```
-
-Capture a saída e inclua **literal** no REPORT.
+Esta skill é para quando você quer o veredito **agora**, no meio do trabalho — não substitui os dois.
 
 ---
 
-## Comportamento sob falha
+## Política de regressão zero
 
-- **`tsc` falhou:** liste cada erro `error TSxxxx` em ordem; cite arquivo:linha; sugira referência ao [`ts-domain-modeler/references/`](../ts-domain-modeler/references/) que cobre o tipo de erro.
-- **Teste falhou:** inclua o output completo do teste vermelho. Sugira voltar a W1 para corrigir, não a W2.
-- **Format falhou:** instrução clara: rode `npx prettier --write 'src/**/*.{ts,tsx}'`.
+Vermelho é regressão a corrigir **agora**, tenha ou não sido causado pelo diff atual. Três saídas, e
+só três:
+
+1. **Consertar a causa.**
+2. **Corrigir o gate que classifica errado** — e **provar** o verde no caminho certo. Nunca esconder
+   atrás de `skip`.
+3. **Escalar ao humano** com causa-raiz, explicitamente.
 
 ---
 
@@ -188,40 +116,28 @@ Capture a saída e inclua **literal** no REPORT.
 
 | ❌ Errado | ✅ Certo |
 | :--- | :--- |
-| Reportar "está tudo OK" sem saída literal | Sempre incluir output integral |
-| Modificar código para "consertar" erros | Read-only; só REPORT |
-| Esconder erros de format ("é cosmético") | Format check é parte do gate |
-| Pular Check 3 porque "tests são da W0" | Re-rodar testes faz parte do gate final |
-| Veredito ambíguo (`ALMOST GREEN`) | Binário: ALL GREEN ou BLOCKED |
+| `npm run` / `npx` em qualquer lugar | `pnpm run` / `pnpm exec` |
+| Ler o `tail` da saída de teste | Ler a linha `ℹ fail N` do sumário |
+| "Está tudo OK" sem evidência | Saída literal de cada comando |
+| Modificar código para "consertar" o vermelho durante o gate | Reportar; a correção é passo separado |
+| Tratar `format:check` como cosmético | Faz parte do gate |
+| Veredito ambíguo ("quase verde") | Binário: VERDE ou VERMELHO |
+| `skip` num teste vermelho | Consertar ou escalar |
 
 ---
 
-## Hooks relacionados
+## Skills relacionadas
 
-`hooks/pre-commit-typecheck.sh` roda **Check 1 e Check 3** automaticamente antes de `git commit`. Falha de qualquer um bloqueia o commit.
-
-Ver [`hooks/pre-commit-typecheck.sh`](../../hooks/pre-commit-typecheck.sh).
-
----
-
-## Como esta skill se relaciona com outras
-
-```
-pipeline-maestro
-       │
-       ▼
-   wave W3:
-       │
-       ▼
-ts-quality-checker  ◄── você está aqui
-       │
-       └─► roda Bash (tsc, prettier, node --test)
-              │
-              └─► escreve REPORT.md
-```
+Próximo teste do ciclo: [`tdd-strategist`](../tdd-strategist/SKILL.md) · onde um teste deve viver:
+[`test-pyramid-engineer`](../test-pyramid-engineer/SKILL.md) · revisão de diff:
+[`code-reviewer`](../code-reviewer/SKILL.md).
 
 ---
 
 ## Changelog
 
-- **2026-05-14:** Criação. Inspirada no `flutter-quality-checker` do ACDG/frontend, adaptada para `tsc + node --test`.
+- **2026-08-17:** Reescrita. A versão anterior mandava rodar `npm`/`npx`, escrevia em
+  `.pipeline/<TICKET>/005-quality/REPORT.md`, falava em waves W0→W3 e apontava para um diretório
+  `ERP-CONTRACTS` que não existe — tudo removido em 2026-08-06. Acrescentado o gotcha do `todo` sob
+  `✖ failing tests:` e o papel de `tests/cleanup/`.
+- **2026-05-14:** Criação.

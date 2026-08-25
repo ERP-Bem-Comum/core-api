@@ -1,9 +1,9 @@
 ---
 name: code-reviewer
 description: >
-  Wave W2 — Audit read-only do código produzido em W1. Verifica adesão às regras
+  Audit read-only de um diff ou conjunto de arquivos. Verifica adesão às regras
   do CLAUDE.md raiz, padrões de domínio puro, ports/adapters, módulo isolation, e
-  uso correto de TypeScript moderno. Produz REVIEW.md com APPROVED ou REJECTED+issues.
+  uso correto de TypeScript moderno. Reporta APPROVED ou REJECTED com os achados.
 ---
 
 # Code Reviewer (W2)
@@ -38,8 +38,6 @@ Em ordem decrescente de autoridade:
 | tsconfig estrito (strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `isolatedModules`) | [`../../../tsconfig.json`](../../../tsconfig.json) |
 | ADRs imutáveis (vencem tudo) | [`handbook/architecture/adr/`](../../../handbook/architecture/adr/) — atenção especial a 0006, 0009, 0013, 0014, 0015, 0018, 0019 |
 | Reviews já realizadas (exemplos de severidade + escopo) | `tests/reports/REVIEW.md`, `tests/reports/E2E-SECURITY-REVIEW.md`, `tests/bdd/QA-REPORT.md` |
-| Exemplos vivos de tickets aprovados (round 1, sem rejection) | `.claude/.pipeline/CTR-STORAGE-PORT/004-code-review/`, `CTR-ADAPTER-DRIZZLE-DUAL/004-code-review/` |
-| Suite de regressão dedicada a defeitos críticos passados | `tests/regression/reports-2026-05-15.test.ts` (e `.claude/.pipeline/CTR-DEFECTS-CRITICAL/`, `CTR-DEFECTS-MEDIUM/`) |
 
 ---
 
@@ -172,7 +170,7 @@ return err('aditivo-invalido' as const);
 ## Próximo passo
 
 - **Se REJECTED:** dev volta a W1, aplica fixes da seção 🔴. Round vira N+1. Rodada 3 → escalar.
-- **Se APPROVED:** pipeline-maestro avança para W3.
+- **Se APPROVED:** segue para o gate de qualidade.
 ```
 
 ---
@@ -206,7 +204,6 @@ return err('aditivo-invalido' as const);
 ## Como esta skill se relaciona com outras
 
 ```
-pipeline-maestro
        │
        ▼
    wave W2:
@@ -215,7 +212,6 @@ pipeline-maestro
 code-reviewer  ◄── você está aqui
        │
        ├─► consulta SKILL.md de ts-domain-modeler, ports-and-adapters, modular-monolith
-       └─► devolve REVIEW.md ao pipeline-maestro
 ```
 
 ---

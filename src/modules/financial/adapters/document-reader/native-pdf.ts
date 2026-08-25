@@ -1,6 +1,7 @@
 import { ok, err } from '../../../../shared/primitives/result.ts';
 import type { Result } from '../../../../shared/primitives/result.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
+import * as Cnpj from '../../../../shared/kernel/cnpj.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import type { DocumentType } from '../../domain/document/types.ts';
@@ -223,6 +224,59 @@ const parseBrCents = (raw: string): number | undefined => {
 
 const group1 = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1];
 
+// #566: normaliza o CNPJ/CPF lido para o comprimento canônico (CNPJ 14, CPF 11).
+// Menos que 11 → inválido (undefined). Slice protege contra dígitos vizinhos capturados junto.
+//
+// ADR-0044: CNPJ pode conter letras (12 alfanuméricos + 2 DVs numéricos), então a captura do bloco
+// emitente aceita `[0-9A-Za-z]` — e com isso o `raw` passa a atravessar o texto VIZINHO quando o
+// identificador não é um CNPJ (a captura não sabe onde ele termina). Os dois ramos abaixo tratam
+// esse `raw` largo de formas diferentes, e é essa assimetria que importa:
+//
+//   - ramo CNPJ: testa os 14 primeiros caracteres significativos contra o checksum do kernel. O
+//     comprimento canônico é o que delimita o identificador; o resto da captura é descartado.
+//   - ramo legado (CPF, ou identificador que o checksum do kernel recusa): recorta o `raw` à corrida
+//     inicial de `[\d.\-/\s]` — ATÉ a primeira letra. Sem esse recorte, um CPF seguido de
+//     `IM 0012345` produziria `52998224725001` — 14 caracteres de comprimento plausível, montados
+//     com os algarismos da inscrição municipal, que seguiriam silenciosos até o
+//     `resolveSupplierByCnpj` e o autofill do front.
+//     Foi exatamente a regressão que reprovou a tentativa anterior; ver
+//     `tests/reports/W2-2026-08-04-cnpj-alfanumerico-REPROVADO.md`. Alargar a captura exige
+//     estreitar o consumidor.
+const normalizeTaxId = (raw: string | undefined): string | undefined => {
+  if (raw === undefined) return undefined;
+  const cnpj = raw
+    .replace(/[.\-/\s]/g, '')
+    .toUpperCase()
+    .slice(0, 14);
+  if (Cnpj.isValidCnpj(cnpj)) return cnpj;
+  const digits = (/^[\d.\-/\s]*/.exec(raw)?.[0] ?? '').replace(/\D/g, '');
+  if (digits.length >= 14) return digits.slice(0, 14);
+  if (digits.length >= 11) return digits.slice(0, 11);
+  return undefined;
+};
+
+// Primeiro identificador NORMALIZÁVEL entre todas as ocorrências do rótulo.
+//
+// Enquanto a captura exigia `\d` logo após o rótulo, uma ocorrência de campo preenchido com texto
+// (`CNPJ / CPF / NIF NAO INFORMADO`) simplesmente não casava, e o motor seguia sozinho para a
+// ocorrência seguinte. Com a classe alargada do ADR-0044 ela passa a casar — e a captura gulosa
+// atravessa a quebra de linha e COME o rótulo seguinte, escondendo-o. O campo preenchido com lixo
+// passaria a apagar o identificador válido que vem depois.
+//
+// Por isso a varredura é sobre as posições do RÓTULO, não sobre os matches do identificador: o
+// `lastIndex` avança só até o fim do rótulo, então a ocorrência seguinte chega intacta. Estreitar a
+// classe de volta resolveria o sintoma e desfaria o ADR-0044; a gula precisa ser contida pelo laço.
+const TAX_ID_AT_START = /^([0-9A-Za-z][0-9A-Za-z.\-/\s]{9,24})/;
+
+const firstTaxId = (text: string): string | undefined => {
+  const label = /CNPJ\s*\/\s*CPF\s*\/\s*NIF\s*/gi;
+  for (let m = label.exec(text); m !== null; m = label.exec(text)) {
+    const id = normalizeTaxId(group1(text.slice(m.index + m[0].length), TAX_ID_AT_START));
+    if (id !== undefined) return id;
+  }
+  return undefined;
+};
+
 const detectType = (text: string): DocumentType | undefined => {
   if (/NFS-e|NOTA FISCAL DE SERVI/i.test(text)) return 'NFS-e';
   if (/RECIBO DE PAGAMENTO A AUT|\bRPA\b/i.test(text)) return 'RPA';
@@ -271,12 +325,47 @@ export const structureText = (
   if (type === undefined) return err('malformed-document');
 
   const documentNumber = group1(text, /N[uú]mero[^:\n]*:\s*(\S+)/i);
+  // Isola o bloco do EMITENTE (prestador) — do rótulo "EMITENTE ..." até "TOMADOR ..." — para NUNCA pegar
+  // o CNPJ/nome do TOMADOR (o DANFSe traz os dois). Sem os marcadores, cai no texto inteiro (layout genérico).
+  const emitStart = text.search(/EMITENTE\s+DA\s+NFS-?e|EMITENTE\s+DA\s+NOTA|EMITENTE\b/i);
+  const emitTail = emitStart === -1 ? text : text.slice(emitStart);
+  const tomadorAt = emitTail.search(/TOMADOR\s+D[OA]\s+SERVI[ÇC]O|TOMADOR\b/i);
+  const emitBlock = tomadorAt === -1 ? emitTail : emitTail.slice(0, tomadorAt);
+
   // #396 F2 (CWE-20): terminador `[^:\n]+` (não `.+`) — o unpdf colapsa `\n` em espaço, então `.+`
   // engoliria o documento inteiro após "Prestador:", contaminando o legalName e estourando `description`.
-  const legalName = group1(text, /Prestador:\s*([^:\n]+)/i)?.trim();
-  const taxId = group1(text, /CNPJ:\s*(\d+)/i) ?? group1(text, /CPF:\s*(\d+)/i);
+  const legalName =
+    group1(text, /Prestador:\s*([^:\n]+)/i)?.trim() ??
+    // DANFSe: "Nome / Nome Empresarial <IM numérico opcional> <nome> E-mail". Remove o IM à esquerda.
+    group1(emitBlock, /Nome\s*\/\s*Nome Empresarial\s+(.+?)\s+E-?mail/i)
+      ?.replace(/^[\d.\-/]+\s+/, '')
+      .trim();
+  // #566: identificador COMPLETO no comprimento canônico — 14 posições p/ CNPJ, 11 p/ CPF. O `\s` no
+  // run tolera a quebra de linha da camada de texto do unpdf (o "-90" pode cair na linha seguinte);
+  // `normalizeTaxId` corta no comprimento canônico. Menos que CPF → undefined (não seta supplier —
+  // evita o truncado silencioso, #566).
+  //
+  // #627: o braço `CNPJ:` aceita LETRAS (ADR-0044) — antes ele parava na 1ª letra e, por a cascata
+  // ser `??`, vencia o braço 3 devolvendo 11 caracteres indistinguíveis de um CPF.
+  //
+  // Alargar a captura só é seguro porque o ramo legado de `normalizeTaxId` deriva os dígitos do
+  // PREFIXO numérico do `raw` (`/^[\d.\-/\s]*/`), não do `raw` inteiro. É o que impede um CPF seguido
+  // de `IM 0012345` de virar 14 caracteres montados com dígitos do texto vizinho — a regressão que
+  // reprovou a tentativa de 2026-08-04 (`tests/reports/W2-2026-08-04-cnpj-alfanumerico-REPROVADO.md`),
+  // cujo diagnóstico foi: alargar a captura sem estreitar o consumidor. O consumidor já está
+  // estreito, e é por isso — e só por isso — que esta linha pôde mudar.
+  //
+  // O braço `CPF:` segue NUMÉRICO de propósito: CPF não é alfanumérico, e alargá-lo apenas ampliaria
+  // a janela em que dígitos vizinhos podem se colar ao identificador.
+  const taxId =
+    normalizeTaxId(group1(text, /CNPJ:\s*([0-9A-Za-z.\-/\s]{11,25})/i)) ??
+    normalizeTaxId(group1(text, /CPF:\s*([\d.\-/\s]{11,20})/i)) ??
+    // ADR-0044: a 1ª posição do CNPJ é alfanumérica — exigir `\d` aqui é a mesma família de bug que
+    // "14 dígitos". Quem delimita o identificador é `normalizeTaxId`, não a classe de caracteres.
+    firstTaxId(emitBlock);
+  // Basta o CNPJ para resolver o fornecedor (#FIN-OCR-AUTOFILL-SUPPLIER); legalName é auxiliar.
   const supplier: SupplierIdentity | undefined =
-    legalName !== undefined && taxId !== undefined ? { legalName, taxId } : undefined;
+    taxId !== undefined ? { legalName: legalName ?? '', taxId } : undefined;
   const competence = parseCompetence(text);
 
   const grossRaw =
@@ -297,12 +386,22 @@ export const structureText = (
 
   const retentions = grossCents !== undefined ? parseRetentions(text, grossCents) : [];
 
+  // #566: "Descrição do Serviço <texto> TRIBUTAÇÃO MUNICIPAL" (DANFSe) → campo `description` do
+  // rascunho. Colapsa espaços e limita a varchar(500). NÃO carrega o fornecedor (resolve em supplierRef).
+  const descRaw = group1(
+    text,
+    /Descri[çc][ãa]o\s+do\s+Servi[çc]o\s+(.+?)\s+TRIBUTA[ÇC][ÃA]O\s+MUNICIPAL/is,
+  );
+  const description =
+    descRaw !== undefined ? descRaw.replace(/\s+/g, ' ').trim().slice(0, 500) : undefined;
+
   return ok({
     resolvedVia,
     type,
     ...(documentNumber !== undefined ? { documentNumber } : {}),
     ...(competence !== undefined ? { competence } : {}),
     ...(supplier !== undefined ? { supplier } : {}),
+    ...(description !== undefined ? { description } : {}),
     ...(grossValue !== undefined ? { grossValue } : {}),
     ...(retentions.length > 0 ? { retentions } : {}),
   });

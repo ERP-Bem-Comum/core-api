@@ -93,5 +93,12 @@ export const createInMemoryBankStatementRepository = (
       }
       return Promise.resolve(ok(found));
     },
+
+    deleteById: async (
+      statementId: string,
+    ): Promise<Result<void, BankStatementRepositoryError>> => {
+      statements.delete(statementId); // idempotente: inexistente → no-op
+      return ok(undefined);
+    },
   };
 };

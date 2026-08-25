@@ -19,8 +19,9 @@ import { createDrizzleCostStructureRepository } from '#src/modules/budget-plans/
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
 import { startCalibration } from '#src/modules/budget-plans/application/use-cases/start-calibration.ts';
 import { createScenery } from '#src/modules/budget-plans/application/use-cases/create-scenery.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
 // Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).

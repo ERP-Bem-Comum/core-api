@@ -95,11 +95,13 @@ const paymentDetailInput = z
  * Body de criação de documento fiscal. `asDraft: false` (default) → Open com títulos;
  * `asDraft: true` → Draft (campos opcionais, sem geração de títulos).
  */
-export const createDocumentBodySchema = z.object({
-  type: documentTypeSchema,
-  documentNumber: z.string().min(1).max(60),
+const createDocumentBodyBaseSchema = z.object({
+  // #534: os 5 campos abaixo são opcionais no schema — o domínio `saveDraft` aceita rascunho parcial.
+  // O `superRefine` os reexige quando `asDraft:false` (Open com títulos), preservando o 400 do fluxo.
+  type: documentTypeSchema.optional(),
+  documentNumber: z.string().min(1).max(60).optional(),
   series: z.string().max(20).optional(),
-  supplierRef: z.uuid(),
+  supplierRef: z.uuid().optional(),
   payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']).optional(),
   approverRef: z.uuid().optional(),
   contractRef: z.uuid().optional(),
@@ -109,8 +111,8 @@ export const createDocumentBodySchema = z.object({
   subcategoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
-  paymentMethod: paymentMethodSchema,
-  grossValueCents: centsStringSchema,
+  paymentMethod: paymentMethodSchema.optional(),
+  grossValueCents: centsStringSchema.optional(),
   sourceDiscountsCents: centsStringSchema.default('0'),
   discountsCents: centsStringSchema.default('0'),
   penaltyCents: centsStringSchema.default('0'),
@@ -133,7 +135,39 @@ export const createDocumentBodySchema = z.object({
   asDraft: z.boolean().default(false),
 });
 
+// #534: fora do rascunho (`asDraft:false` → Open com títulos), os 5 campos voltam a ser obrigatórios.
+// Rejeita cedo (400) com o `path` do campo faltante, preservando o contrato do fluxo Open.
+const OPEN_REQUIRED_FIELDS = [
+  'type',
+  'documentNumber',
+  'supplierRef',
+  'paymentMethod',
+  'grossValueCents',
+] as const;
+
+export const createDocumentBodySchema = createDocumentBodyBaseSchema.superRefine((val, ctx) => {
+  if (val.asDraft) return;
+  for (const field of OPEN_REQUIRED_FIELDS) {
+    if (val[field] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'obrigatório quando asDraft:false',
+      });
+    }
+  }
+});
+
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
+
+// #579: corpo OPCIONAL do submit (promover rascunho no lugar com os campos revisados). Mesmos campos
+// do create (defaults de cents/arrays preservados) + `version` opcional (optimistic lock). Sem corpo →
+// promove como está (comportamento atual, backward-compat). Validado por safeParse no handler.
+export const submitDraftBodySchema = createDocumentBodyBaseSchema.extend({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+});
+
+export type SubmitDraftBody = z.infer<typeof submitDraftBodySchema>;
 
 // ─── PATCH /documents/:id (adjustDocument) ──────────────────────────────────
 
@@ -313,6 +347,17 @@ export const documentResponseSchema = z
       })
       .strict()
       .nullable(),
+    // #62/Feature 2: comprovante-fonte guardado no storage. null = documento sem anexo. `url` é o
+    // endpoint proxy que serve os bytes INLINE (área de OCR da edição) — sem download, sem presigned.
+    attachment: z
+      .object({
+        fileName: z.string(),
+        mimeType: z.string(),
+        sizeBytes: z.number().int().min(0),
+        url: z.string(),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 
@@ -428,7 +473,7 @@ export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineRespons
  */
 export const importBankStatementBodySchema = z.object({
   debitAccountRef: z.uuid(),
-  format: z.enum(['OFX', 'CSV']),
+  format: z.enum(['OFX', 'CSV', 'PDF']),
   content: z.string().min(1).max(5_000_000),
   fileName: z.string().min(1).max(255).optional(),
 });
@@ -662,6 +707,12 @@ export const manualEntryBodySchema = z.object({
   // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
   destinationAccountRef: z.uuid().optional(),
   productLabel: z.string().min(1).max(120).optional(),
+  // #370: campos de documento (opcionais; aplicabilidade por tipo é do front). `documentValueCents`
+  // omitido → default = valor da transação conciliada (no domínio).
+  documentNumber: z.string().min(1).max(60).optional(),
+  documentType: documentTypeSchema.optional(),
+  issueDate: z.iso.date().optional(),
+  documentValueCents: centsStringSchema.optional(),
 });
 
 export type ManualEntryBody = z.infer<typeof manualEntryBodySchema>;
@@ -673,6 +724,12 @@ export const manualEntryResponseSchema = z.object({
   // #502/S2: a resposta ecoa o carimbo de taxonomia (plano + subcategoria) do título manual.
   budgetPlanRef: z.string().nullable(),
   subcategoryRef: z.string().nullable(),
+  // #370: eco dos campos de documento. `documentValueCents` já vem com o default aplicado (nunca null
+  // na criação); `issueDate` em YYYY-MM-DD.
+  documentNumber: z.string().nullable(),
+  documentType: z.string().nullable(),
+  issueDate: z.string().nullable(),
+  documentValueCents: z.string(),
 });
 
 export const batchBodySchema = z.object({
@@ -721,6 +778,22 @@ export const exportReconciliationQuerySchema = z.object({
   }),
 });
 
+// #649: export por CONTA + INTERVALO (sem periodId) — permite exportar a qualquer momento, sem período
+// fechado. `periodStart`/`periodEnd` são datas `YYYY-MM-DD` (parseadas com `new Date(...)` na borda,
+// idêntico ao POST /reconciliation-periods/close → export idêntico ao de um período com essas datas).
+export const exportReconciliationByRangeQuerySchema = z.object({
+  debitAccountRef: z.uuid(),
+  periodStart: z.iso.date(),
+  periodEnd: z.iso.date(),
+  format: z.enum(['ofx', 'csv', 'csv-nibo']).meta({
+    description: 'ofx | csv | csv-nibo',
+  }),
+});
+
+export type ExportReconciliationByRangeQuery = z.infer<
+  typeof exportReconciliationByRangeQuerySchema
+>;
+
 // ─── Conta-cedente (019 — CRUD + encerrar) ─────────────────────────────────────
 
 const accountTypeSchema = z.enum(['corrente', 'poupanca', 'investimento', 'cartao', 'outro']);
@@ -744,6 +817,9 @@ export const createCedenteAccountBodySchema = z.object({
 export type CreateCedenteAccountBody = z.infer<typeof createCedenteAccountBodySchema>;
 
 export const editCedenteAccountBodySchema = z.object({
+  // #722: preenchível quando ausente, para a conta cadastrada sem ele passar a gerar remessa. Trocar
+  // um convênio já preenchido é recusado no use case — ele viaja no nome de toda remessa transmitida.
+  convenio: z.string().min(1).max(20).optional(),
   bankCode: z.string().min(1).max(10).optional(),
   agency: z.string().min(1).max(10).optional(),
   accountNumber: z.string().min(1).max(20).optional(),
@@ -869,6 +945,75 @@ export const recentPaymentsResponseSchema = z.array(recentPaymentSchema);
 
 export type RecentPaymentDto = z.infer<typeof recentPaymentSchema>;
 
+// Widget "Fornecedores sem Contrato" (DASH-F5 · #242, reference:read) — GET
+// /financial/dashboard/no-contract-suppliers. Top-5 fornecedores sem contrato por total, decrescente.
+// Envelope `{ suppliers: [...] }` + `totalCents: z.number()`: paridade com o REP-2/#240 do `reports`
+// (mesma agregação já exposta assim), sem o `payableCount` (widget lean — não pedido pelo Dashboard).
+// `.strict()` — fail-loud se o mapper de DTO vazar campo extra (padrão do módulo financial).
+export const noContractSupplierSchema = z
+  .object({
+    supplierRef: z.string(),
+    name: z.string().nullable(),
+    totalCents: z.number(),
+  })
+  .strict();
+
+export const noContractSuppliersResponseSchema = z
+  .object({
+    suppliers: z.array(noContractSupplierSchema),
+  })
+  .strict();
+
+export type NoContractSupplierDto = z.infer<typeof noContractSupplierSchema>;
+export type NoContractSuppliersResponseDto = z.infer<typeof noContractSuppliersResponseSchema>;
+
+// KPI "Despesas por Centro de Custo" (DASH-F1 · #241, reference:read) — GET
+// /financial/dashboard/cost-centers. Base = títulos Pagos no mês de referência (M-1); variação M-1 vs
+// M-2 via o motor #237. O core devolve os NÚMEROS prontos (centavos); a formatação humana ("12,5%")
+// é do BFF (#352). `percentage` da variação é a UNIÃO DISCRIMINADA do domínio (variation.ts),
+// serializada COMO ESTÁ — a borda não formata. `ref`/`name` nullable (CC nulo = título sem centro).
+const variationPercentageSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('value'), percent: z.number() }).strict(),
+  z.object({ kind: z.literal('no-change') }).strict(),
+  z.object({ kind: z.literal('new') }).strict(),
+]);
+
+export const dashboardCostCentersResponseSchema = z
+  .object({
+    // Σ dos totais M-1 de todos os CCs (centavos).
+    totalExpenses: z.number(),
+    variation: z
+      .object({
+        absoluteCents: z.number(),
+        percentage: variationPercentageSchema,
+      })
+      .strict(),
+    // CC com maior total M-1; null quando não houve despesa paga em M-1.
+    topCostCenter: z
+      .object({
+        ref: z.string().nullable(),
+        name: z.string().nullable(),
+        totalCents: z.number(),
+      })
+      .strict()
+      .nullable(),
+    // Por CC (só total M-1 > 0), ordenado por totalCents desc. `percentage` = totalCents*100/totalExpenses
+    // (0 quando totalExpenses=0 — guarda divisão por zero).
+    distribution: z.array(
+      z
+        .object({
+          ref: z.string().nullable(),
+          name: z.string().nullable(),
+          totalCents: z.number(),
+          percentage: z.number(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type DashboardCostCentersResponseDto = z.infer<typeof dashboardCostCentersResponseSchema>;
+
 // ─── Read-model do extrato por conta + período (#139) ──────────────────────────
 
 export const accountStatementQuerySchema = z.object({
@@ -932,6 +1077,9 @@ export const transactionReconciliationResponseSchema = z
     reconciledAt: z.iso.datetime(),
     differenceCents: z.string().nullable(),
     items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() }).strict()),
+    // Categoria do lançamento manual, resolvida server-side (ref → nome). null = sem categoria ou
+    // conciliação sem lançamento manual (título real fica p/ fatia 2).
+    category: z.string().nullable(),
   })
   .strict();
 
@@ -1030,6 +1178,27 @@ export const payableListResponseSchema = z
   })
   .strict();
 
+// ─── GET /payable-titles/counts (#536) — contagem agregada por status ─────────
+// Mesmos filtros da lista, sem `status` (queremos o breakdown) nem paginação.
+export const payableCountsQuerySchema = z.object({
+  documentType: documentTypeSchema.optional(),
+  supplierRef: z.uuid().optional(),
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+});
+
+export type PayableCountsQuery = z.infer<typeof payableCountsQuerySchema>;
+
+// `total` = títulos (qualquer status); `draft` = documentos Draft (rascunho, sem título);
+// `byStatus` = contagem por status de título presente (chave ausente = 0 no front).
+export const payableCountsResponseSchema = z
+  .object({
+    total: z.number().int().nonnegative(),
+    draft: z.number().int().nonnegative(),
+    byStatus: z.record(z.string(), z.number().int().nonnegative()),
+  })
+  .strict();
+
 // ─── Resolução em lote (#357, ADR-0049) — POST /financial/payables:batch ──────
 // Destrava o match card da Conciliação (#172) em 1 hop: payableId[] → resumo do título,
 // já com supplierName/supplierDocument (fin_supplier_view). Subset de payableSummarySchema
@@ -1117,6 +1286,17 @@ export const updatePayableDueDateBodySchema = z.object({
   version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   // Novo vencimento do título alvo (date-only `YYYY-MM-DD`). Não propaga ao documento-pai nem aos irmãos.
   dueDate: z.iso.date(),
+  // Pré-condição do compare-and-swap: o vencimento que o cliente tinha na tela. A gravação só
+  // acontece se o título ainda estiver com ele — senão, 409.
+  //
+  // ⚠️ OBRIGATÓRIO de propósito. Torná-lo opcional pareceria mais gentil com o front, mas a
+  // ausência teria de cair num CAS mais fraco, e uma requisição sem o campo passaria a ter menos
+  // garantia do que aparenta — sem nada na resposta dizendo isso. Um campo exigido quebra alto e
+  // uma vez; a degradação silenciosa erra baixo e para sempre.
+  expectedDueDate: z.iso.date().meta({
+    description:
+      'Vencimento atual do título, como exibido ao usuário. A alteração é recusada com 409 se outro operador já houver reagendado este título.',
+  }),
 });
 
 // ─── #62 Ingestão de documento (POST /documents/ingest) ──────────────────────
@@ -1154,3 +1334,321 @@ export const ingestDocumentResponseSchema = z.object({
   documentId: z.string(),
   resolvedVia: z.enum(['xml', 'native-text', 'unpdf']).nullable(),
 });
+
+// #577: comprovante-fonte embutido no create (base64 no JSON). Mesma allowlist de mime do ingest;
+// magic-bytes + tamanho (bytes decodificados) são revalidados no handler. Usado na rota dedicada
+// e sub-scopada POST /documents/with-source-file (bodyLimit isolado).
+export const sourceFileInputSchema = z
+  .object({
+    fileName: z.string().min(1).max(255),
+    mimeType: z.enum(INGEST_MIME_ALLOWLIST),
+    base64: z.string().min(1),
+  })
+  .strict();
+
+export const createDocumentWithSourceFileBodySchema = createDocumentBodyBaseSchema
+  .extend({ sourceFile: sourceFileInputSchema.optional() })
+  .superRefine((val, ctx) => {
+    if (val.asDraft) return;
+    for (const field of OPEN_REQUIRED_FIELDS) {
+      if (val[field] === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'obrigatório quando asDraft:false',
+        });
+      }
+    }
+  });
+
+export type CreateDocumentWithSourceFileBody = z.infer<
+  typeof createDocumentWithSourceFileBodySchema
+>;
+
+// #580: leitura pura (parse-only). Query só com o mimeType (mesma allowlist do ingest); o corpo é
+// octet-stream (bytes crus). Não persiste nada — devolve os campos extraídos p/ o front auto-preencher.
+export const parseDocumentQuerySchema = z.object({
+  mimeType: z.enum(INGEST_MIME_ALLOWLIST),
+});
+
+export const parseDocumentResponseSchema = z
+  .object({
+    resolvedVia: z.enum(['xml', 'native-text', 'unpdf']).nullable(),
+    supplierRef: z.string().nullable(),
+    supplierName: z.string().nullable(),
+    supplierTaxId: z.string().nullable(),
+    type: z.string().nullable(),
+    documentNumber: z.string().nullable(),
+    competencia: z.string().nullable(),
+    issueDate: z.string().nullable(),
+    grossValueCents: z.string().nullable(),
+    description: z.string().nullable(),
+    retentions: z.array(
+      z
+        .object({
+          type: z.string(),
+          baseCents: z.string(),
+          rateBps: z.number().int().min(0),
+          valueCents: z.string(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type ParseDocumentResponseDto = z.infer<typeof parseDocumentResponseSchema>;
+
+// ── Pré-voo da remessa (#720) ───────────────────────────────────────────────────────────────────
+//
+// Responde "o que sai e o que não sai" ANTES de gerar: sem consumir NSA, sem prender documento e
+// sem tocar no bucket. O teto de ids acompanha o do `payables:batch` — a seleção do operador vem
+// do mesmo grid.
+
+export const remittancePreviewBodySchema = z
+  .object({
+    // ⚠️ OBRIGATÓRIO desde a #804 (CA7) — mudança de contrato. A composição dos lotes depende da
+    // forma de lançamento, e a forma se decide comparando o banco do favorecido com o do CEDENTE:
+    // sem saber qual conta vai pagar, não há como repartir a seleção. É a mesma conta que a geração
+    // recebe, e é de propósito — pré-voo e arquivo respondem à mesma pergunta ou o pré-voo não
+    // serve para conferir.
+    cedenteAccountId: z.uuid(),
+    // TÍTULOS, não notas: o grid de Contas a Pagar é payable-centric e é dele que a seleção sai.
+    // Cada título tem forma, vencimento e ciclo de vida próprios — inclusive as retenções, que são
+    // títulos a pagar como qualquer outro e podem ficar em aberto com o pai já pago.
+    payableIds: z.array(z.uuid()).min(1).max(200),
+  })
+  .strict();
+
+// O motivo viaja junto do campo, e não como frase: `missing` pede preenchimento, `unmappable` e
+// `malformed` pedem correção do que já está lá. O operador age diferente em cada caso, e uma
+// mensagem de texto obrigaria a interface a interpretar prosa para saber onde levá-lo.
+const payoutGapSchema = z
+  .object({
+    field: z.enum([
+      'pix-key',
+      'payee-bank-code',
+      'payee-agency',
+      'payee-account-number',
+      'payee-account-digit',
+      'payment-detail',
+    ]),
+    // `check-digit-mismatch` (#734) entra aqui porque o enum é o contrato publicado no OpenAPI: o
+    // domínio produzir um motivo que o schema não lista faria a resposta ser recusada na
+    // serialização, com 500 no lugar do pré-voo.
+    reason: z.enum(['missing', 'unmappable', 'malformed', 'check-digit-mismatch']),
+  })
+  .strict();
+
+export const remittancePreviewResponseSchema = z
+  .object({
+    lines: z.array(
+      z
+        .object({
+          payableId: z.uuid(),
+          // A nota de origem, para o front agrupar os títulos dela no grid. `null` em `not-found`:
+          // sem o título lido não há vínculo a declarar.
+          documentId: z.uuid().nullable(),
+          // `not-found` é status de linha, não erro da chamada: o id que o operador selecionou tem
+          // de aparecer na resposta, ainda que o título não exista mais. `not-approved` (#736) é
+          // distinto de `blocked`: falta aprovar, não falta dado do cadastro.
+          // `transmitted` (#792, ADR-0065 §5): o título já saiu numa remessa. Nunca `ready` — a
+          // recusa deixaria de chegar no último clique — e nunca `not-approved`, que mandaria o
+          // operador aprovar o que já foi ao banco.
+          status: z.enum([
+            'ready',
+            'blocked',
+            'out-of-van',
+            'not-found',
+            'not-approved',
+            'transmitted',
+          ]),
+          route: z.enum(['pix', 'transfer', 'billet', 'tax-guide']).nullable(),
+          missing: z.array(payoutGapSchema.shape.field),
+          gaps: z.array(payoutGapSchema),
+          // Valor DO TÍTULO — no filho de retenção não é o líquido da nota.
+          valueCents: centsStringSchema,
+        })
+        .strict(),
+    ),
+    readyCount: z.number().int().nonnegative(),
+    blockedCount: z.number().int().nonnegative(),
+    outOfVanCount: z.number().int().nonnegative(),
+    notFoundCount: z.number().int().nonnegative(),
+    notApprovedCount: z.number().int().nonnegative(),
+    transmittedCount: z.number().int().nonnegative(),
+    readyTotalCents: centsStringSchema,
+    // O valor fora da VAN fica FORA dos dois totais: somá-lo ao impedido inflaria o número que o
+    // operador usa para decidir se vale correr atrás do cadastro — e cadastro nenhum resolve câmbio.
+    blockedTotalCents: centsStringSchema,
+    // Como a seleção se REPARTE no arquivo (#804, CA7). Um lote por forma de lançamento e banco do
+    // favorecido — a mesma régua do emissor, que o front NÃO deve replicar.
+    batches: z.array(
+      z
+        .object({
+          // O código CNAB cru (G029), porque é o que o operador confere contra o arquivo
+          // transmitido, e o rótulo legível ao lado. Os dois, e não só um: o código sozinho não
+          // significa nada na tela, e o rótulo sozinho impede a conferência.
+          launchForm: z.string().length(2),
+          launchFormLabel: z.string(),
+          // `null` no boleto: o Segmento J não carrega banco de destino — quem recebe está no
+          // código de barras —, então não há banco a exibir.
+          payeeBankCode: z.string().nullable(),
+          count: z.number().int().positive(),
+          totalCents: centsStringSchema,
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type RemittancePreviewResponseDto = z.infer<typeof remittancePreviewResponseSchema>;
+
+// Geração da remessa (#720). Nem tipo de serviço nem forma de lançamento entram: a forma é derivada
+// do conteúdo, um lote por forma (#711). Recebê-las seria aceitar do cliente uma afirmação que o
+// arquivo pode contradizer.
+export const generateRemittanceBodySchema = z
+  .object({
+    cedenteAccountId: z.uuid(),
+    // TÍTULOS. Mesma unidade do pré-voo e do grid — o operador confere e gera sobre a mesma lista.
+    payableIds: z.array(z.uuid()).min(1).max(200),
+  })
+  .strict();
+
+export const generateRemittanceResponseSchema = z
+  .object({
+    remittanceId: z.uuid(),
+    fileName: z.string(),
+    objectKey: z.string(),
+    nsa: z.number().int().positive(),
+    totalCents: centsStringSchema,
+    lineCount: z.number().int().positive(),
+  })
+  .strict();
+
+export type GenerateRemittanceResponseDto = z.infer<typeof generateRemittanceResponseSchema>;
+
+// ── Acompanhamento de remessa (#728) ────────────────────────────────────────────────────────────
+//
+// Leitura da tela de acompanhamento: lista paginada + detalhe. `status` sai do banco como está
+// (persistido e atualizado pelo worker) — nunca derivado de prefixo de objeto.
+
+// Objeto simples, SEM `.strict()`, como os schemas de filtro irmãos (a borda ignora chave extra na
+// querystring). `page`/`limit` são coeridos (querystring chega como string) e opcionais — o handler
+// aplica o default (page=1, limit=25).
+export const remittanceListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+// #728: totalCents/lineCount NÃO são persistidos hoje em `fin_remittances` — exigiriam colunas +
+// mudança no generate. Fora deste PR read-only. Devolvemos apenas `documentCount` (= documentIds.length).
+const remittanceStatusSchema = z.enum(['Queued', 'Transmitted', 'Failed', 'Discarded']);
+
+export const remittanceListItemSchema = z
+  .object({
+    remittanceId: z.uuid(),
+    cedenteAccountId: z.uuid(),
+    nsa: z.number().int(),
+    fileName: z.string(),
+    status: remittanceStatusSchema,
+    generatedAt: z.string(),
+    settledAt: z.string().nullable(),
+    detail: z.string().nullable(),
+    payableCount: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const remittanceListResponseSchema = z
+  .object({
+    remittances: z.array(remittanceListItemSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int(),
+    limit: z.number().int(),
+  })
+  .strict();
+
+export type RemittanceListResponseDto = z.infer<typeof remittanceListResponseSchema>;
+
+// ─── quarentena do retorno da VAN (#753) ─────────────────────────────────────
+
+/**
+ * ⚠️ `z.coerce.boolean()` NÃO serve aqui, e o erro seria silencioso: a coerção é `Boolean(valor)`,
+ * então `?includeReleased=false` — string não-vazia — vira `true`. O filtro faria o oposto do que o
+ * cliente pediu e devolveria o histórico inteiro onde ele queria só o que está preso.
+ *
+ * O enum das duas grafias válidas recusa qualquer outra coisa com 400 antes do use case, que é o
+ * que a dupla validação do ADR-0027 existe para dar.
+ */
+export const vanReturnQuarantineQuerySchema = z.object({
+  includeReleased: z.enum(['true', 'false']).optional(),
+});
+
+const quarantineReasonSchema = z.enum(['missing-provenance', 'hash-mismatch', 'origin-not-logged']);
+
+export const vanReturnQuarantineItemSchema = z
+  .object({
+    // Chave do objeto, não nome de arquivo: o nome é do banco e ganha sufixo desempatador em
+    // colisão, então é o caminho completo que identifica.
+    objectKey: z.string(),
+    reason: quarantineReasonSchema,
+    observedSha256: z.string(),
+    // Só existe em `hash-mismatch`. `null` — e não ausente — porque o consumidor precisa distinguir
+    // "não havia declaração" de "o campo não veio nesta versão da API".
+    expectedSha256: z.string().nullable(),
+    firstSeenAt: z.string(),
+    lastSeenAt: z.string(),
+    releasedAt: z.string().nullable(),
+  })
+  .strict();
+
+export const vanReturnQuarantineResponseSchema = z
+  .object({
+    quarantined: z.array(vanReturnQuarantineItemSchema),
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type VanReturnQuarantineResponseDto = z.infer<typeof vanReturnQuarantineResponseSchema>;
+
+export const remittanceDetailResponseSchema = remittanceListItemSchema
+  .extend({
+    payableIds: z.array(z.uuid()),
+    // As notas tocadas, deduplicadas: dois títulos da mesma nota aparecem uma vez só aqui.
+    documentIds: z.array(z.uuid()),
+  })
+  .strict();
+
+export type RemittanceDetailResponseDto = z.infer<typeof remittanceDetailResponseSchema>;
+
+export const remittanceIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID da remessa' }),
+});
+
+// ─── POST /financial/remittances/:id/discard (#792, ADR-0065 §4) ─────────────
+//
+// Descarta a remessa e devolve os títulos dela a `Aprovado`. É a via de saída da VAN: depois de uma
+// transmissão que falhou, o padrão do setor não é retentar pelo mesmo canal (o banco bloqueia
+// duplicidade) — é tirar o título da remessa e pagá-lo à mão, registrando depois com a baixa manual.
+export const discardRemittanceBodySchema = z
+  .object({
+    // Motivo OBRIGATÓRIO, e o `min(1)` depois do `trim` é a metade que importa: o descarte libera
+    // valor para nova transmissão, e um motivo em branco tornaria a operação inauditável — que é
+    // justamente o oposto do que ela existe para garantir. O domínio recusa de novo (`isBlank`); a
+    // dupla validação é intencional (ADR-0027).
+    reason: z.string().trim().min(1).max(500).meta({
+      description: 'Por que a remessa está sendo descartada (fica na trilha de auditoria)',
+    }),
+  })
+  .strict();
+
+export const discardRemittanceResponseSchema = z
+  .object({
+    remittanceId: z.uuid(),
+    // Os títulos que voltaram à fila. Devolver a lista, e não só um `ok`, é o que permite ao front
+    // levar o operador ao passo seguinte (pagar fora da VAN e dar baixa manual) sem uma segunda
+    // consulta — e é a lista que ele confere contra o que esperava liberar.
+    releasedPayableIds: z.array(z.uuid()),
+  })
+  .strict();
+
+export type DiscardRemittanceResponseDto = z.infer<typeof discardRemittanceResponseSchema>;

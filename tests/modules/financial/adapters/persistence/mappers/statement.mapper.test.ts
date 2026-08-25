@@ -91,4 +91,17 @@ describe('financial/adapters/persistence/mappers/statement.mapper', () => {
     assert.equal(back.ok, false);
     if (!back.ok) assert.equal(back.error, 'invalid-statement-entry-type');
   });
+
+  // W0 RED (#562): o read-mapper reidrata extrato com file_format='PDF' (persistido pelo #557). Antes,
+  // toFormat só conhecia OFX/CSV → toDomain devolvia invalid-statement-file-format → excluir/ler extrato
+  // PDF dava 503 (quebrava o guard do deleteBankStatement, que lê as transações).
+  it('#562: toDomain reidrata extrato com file_format PDF (não rejeita como formato inválido)', () => {
+    const statement = buildStatement();
+    const row = { ...statementToRow(statement), fileFormat: 'PDF' };
+    const txRows = transactionsToRows(statement);
+
+    const back = toDomain(row, txRows);
+    assert.equal(back.ok, true, JSON.stringify(back));
+    if (back.ok) assert.equal(back.value.file.format, 'PDF');
+  });
 });

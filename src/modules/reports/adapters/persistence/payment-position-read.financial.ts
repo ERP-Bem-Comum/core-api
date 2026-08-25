@@ -15,8 +15,10 @@ import type {
 export const PaymentPositionReadFromFinancial = (
   listAggregation: PaymentPositionReader['list'],
 ): PaymentPositionReadPort => ({
-  list: async () => {
-    const listed = await listAggregation();
+  // #588: repassa o filtro (opcional) ao reader do financial. Estruturalmente idêntico ao
+  // `PaymentPositionFilter` do financial — passa direto, sem remapear.
+  list: async (filter) => {
+    const listed = await listAggregation(filter);
     if (!listed.ok) return err<PaymentPositionReadError>('payment-position-read-unavailable');
     return ok(listed.value);
   },

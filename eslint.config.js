@@ -19,20 +19,26 @@ export default tseslint.config(
       // tools/bugs-scripts/ — scripts de diagnóstico black-box descartáveis
       // (já gitignored); não entram em nenhum tsconfig (projectService falha).
       'tools/bugs-scripts/**',
-      // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
-      // de ports para documentar design — não entram em nenhum tsconfig.
-      'specs/**',
+      // handbook/specs/ guarda o histórico de especificação das features. Os
+      // contracts/*.ts de lá são esboços de port para documentar design — nunca
+      // entraram em tsconfig algum, e o projectService type-aware falha neles.
+      // (Viviam na raiz como `specs/` até 2026-08-06, quando o spec-kit saiu e o
+      // acervo virou documento no handbook.)
+      'handbook/specs/**',
       // Worktrees de sessões paralelas do Claude Code são cópias completas de
       // src/ e tests/ de outras branches. O .gitignore já as exclui, mas o flat
       // config do ESLint NÃO lê .gitignore — sem isto o projectService type-aware
       // ingere ~1748 .ts extras e estoura o heap do V8 (OOM no `pnpm run lint`).
       '.claude/**',
-      '.agents/**',
       // Worktrees de épico criados na raiz (`epic/<branch>`, convenção do dev):
       // mesmo caso dos worktrees do Claude — cópia completa de src/ e tests/ de
       // outra branch. Sem esta exclusão o projectService ingere os .ts extras e
       // estoura o heap (OOM no lint), além de lintar código de outra branch.
       'epic/**',
+      // Fixtures do gate Semgrep (.semgrep/tests/**) — TS/SH com violações de ADR
+      // INTENCIONAIS (mysqlEnum, json column) para `semgrep --test`. Não entram em
+      // nenhum tsconfig; o projectService type-aware falharia neles.
+      '.semgrep/**',
     ],
   },
 

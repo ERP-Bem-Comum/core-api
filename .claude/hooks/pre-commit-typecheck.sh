@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Hook: PreToolUse (Bash git commit *)
+# Git hook de pre-commit (invocado por .githooks/pre-commit — ver core.hooksPath).
 # Roda 4 gates antes do commit: format → typecheck → lint → tests.
-# Exit 0 = permite commit. Exit 2 = bloqueia commit.
+# Exit 0 = permite commit. Exit != 0 = bloqueia commit. Escape: git commit --no-verify.
 #
-# Inspirado em .claude/hooks/pre-commit-kodus.sh do projeto ACDG/frontend.
+# HRN-BLOCKING-GATE: até 2026-07-29 este script era inalcançável — checava um
+# subdiretório de pacote que não existe nesta topologia e saía 0 antes de qualquer
+# verificação. O core-api é a raiz do repo; não há pacote a atravessar.
 
 set -uo pipefail
 
@@ -13,16 +15,19 @@ if [ -z "${REPO_ROOT}" ]; then
   exit 0
 fi
 
-CORE_API_DIR="${REPO_ROOT}/ERP-CONTRACTS"
+# O core-api É a raiz do repositório — não há subdiretório de pacote a atravessar.
+CORE_API_DIR="${REPO_ROOT}"
 
-# Se não estamos no core-api (ex: rodando em outro pacote do monorepo), passa.
+# Se o toplevel não for um projeto TS (ex: hook copiado para outro repo), passa.
 if [ ! -f "${CORE_API_DIR}/tsconfig.json" ]; then
   exit 0
 fi
 
-# Só roda se houver mudanças staged em arquivos .ts dentro do core-api
-STAGED_TS=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
-  | grep -E '^ERP-CONTRACTS/.+\.tsx?$' \
+# Só roda se houver mudanças staged em arquivos .ts/.tsx.
+# ACMRD e não ACM: apagar (D) ou renomear (R) um .ts que outros importam quebra o
+# tsc tanto quanto editá-lo — e seria justamente o commit que o gate não inspecionaria.
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMRD 2>/dev/null \
+  | grep -E '\.tsx?$' \
   || true)
 if [ -z "${STAGED_TS}" ]; then
   exit 0
@@ -53,7 +58,14 @@ run_pnpm_script() {
       echo "✅ ${label} OK" >&2
     fi
   else
-    echo "⚠️  pnpm não encontrado — pulando ${label}" >&2
+    # Fail-closed: um gate que não conseguiu rodar NÃO é um gate que aprovou.
+    # Git hooks rodam em shell não-interativo e não-login, que não carrega os rc
+    # onde o fnm injeta o PATH do Node/pnpm — então "pnpm ausente" é cenário real
+    # (cliente GUI de git, editor com integração, processo com PATH mínimo), não
+    # hipotético. Liberar o commit aqui reproduziria a classe de defeito que este
+    # ticket existe para corrigir.
+    echo "❌ pnpm não encontrado no PATH — o gate não pôde rodar (${label})" >&2
+    FAILED=1
   fi
 }
 

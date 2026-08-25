@@ -41,13 +41,52 @@ export type {
 export { openSuppliersWithoutContractReader } from './suppliers-without-contract-projection.ts';
 export type {
   SupplierWithoutContractRow,
+  SupplierWithoutContractPlanRow,
+  SuppliersWithoutContractFilter,
   SuppliersWithoutContractReader,
 } from './suppliers-without-contract-projection.ts';
+
+// Reader boot-scoped do KPI "Despesas por Centro de Custo" do Dashboard (DASH-F1 · #241 — read-only).
+// Agrega fin_payable_view (WHERE status='Paid') por Centro de Custo em 2 baldes de mês (M-1/M-2 via
+// dois CASE-SUM sobre paid_at); as janelas são INPUT do `list`. Pool aberto uma vez (não por requisição).
+export { openDashboardCostCentersReader } from './dashboard-cost-centers-projection.ts';
+export type {
+  DashboardCostCenterRow,
+  DashboardCostCentersWindows,
+  DashboardCostCentersReader,
+} from './dashboard-cost-centers-projection.ts';
 
 // Reader boot-scoped da "Posição de Pagamentos" (#243 REP-4 — read-only). Agrega fin_payable_view
 // por Fornecedor×CentroCusto×Categoria em 3 baldes. Consumido pelo `reports` via ACL.
 export { openPaymentPositionReader } from './payment-position-projection.ts';
-export type { PaymentPositionRow, PaymentPositionReader } from './payment-position-projection.ts';
+export type {
+  PaymentPositionRow,
+  PaymentPositionReader,
+  PaymentPositionFilter,
+} from './payment-position-projection.ts';
+
+// Reader boot-scoped do "Relatório Geral" (#442 REP-6 — Slice A, read-only). Linhas PLANAS
+// PAGINADAS de títulos a-pagar (fin_payable_view), colunas servíveis via LEFT JOIN same-module.
+// Consumido pelo `reports` via ACL.
+export { openGeneralReportReader } from './general-report-projection.ts';
+export type {
+  GeneralReportRow,
+  GeneralReportPayeeKind,
+  GeneralReportFilter,
+  GeneralReportPagination,
+  GeneralReportOrder,
+  GeneralReportReader,
+} from './general-report-projection.ts';
+
+// Reader boot-scoped do "Fluxo de Caixa" (#590 REP — Slice A, read-only). Agrega fin_payable_view
+// por Categoria × Subcategoria em 2 baldes (REALIZED/EXPECTED). Consumido pelo `reports` via ACL.
+export { openCashflowReader } from './cashflow-projection.ts';
+export type {
+  CashflowRow,
+  CashflowChartRow,
+  CashflowFilter,
+  CashflowReader,
+} from './cashflow-projection.ts';
 
 // Reader boot-scoped da "Análise de Planejamento" (#114 REP-3 — read-only). Agrega fin_payable_view
 // por categoria×CC×mês num período. Consumido pelo `reports` via ACL.

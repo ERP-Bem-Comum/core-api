@@ -1,6 +1,6 @@
 name: ci
 
-# Gate de qualidade automatizado em PR — espelha o W3 local (AGENTS.md §"Pipeline
+# Gate de qualidade automatizado em PR — espelha o gate local (CLAUDE.md §"Política de regressão zero
 # fail-first"): typecheck + format:check + lint + test (unit). Hoje o W3 só roda na
 # máquina do dev; este workflow torna o gate obrigatório e auditável em todo PR.
 #
@@ -36,6 +36,19 @@ jobs:
         run: corepack enable
       - name: Install (frozen-lockfile)
         run: pnpm install --frozen-lockfile
+      # Sem esta restauração o `--cache` do lint não vale NADA aqui: o runner nasce limpo,
+      # o cache é sempre frio, e o gate paga os ~44s cheios (Inquiry-0029, §4).
+      # A chave inclui o lockfile e a config porque ambos invalidam o cache do ESLint;
+      # `restore-keys` aceita cache de outro commit — o ESLint revalida por arquivo.
+      - name: Restaura cache do ESLint
+        # ADR-0011 §"Pin de versões" — pin por SHA.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .eslintcache
+          key: eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'eslint.config.js', 'tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'eslint.config.js', 'tsconfig.json') }}-
+            eslint-${{ runner.os }}-
       - name: Typecheck
         run: pnpm run typecheck
       - name: Format check

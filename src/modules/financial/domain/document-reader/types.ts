@@ -30,4 +30,7 @@ export type DocumentReaderResult = Readonly<{
   supplier?: SupplierIdentity;
   grossValue?: Money;
   retentions?: readonly Retention[];
+  // #566: descrição do serviço da NFS-e (ex.: "Descrição do Serviço …") → campo `description` do
+  // rascunho. NÃO carrega o fornecedor (que resolve para `supplierRef` via #560).
+  description?: string;
 }>;

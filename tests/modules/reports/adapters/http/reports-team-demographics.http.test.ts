@@ -6,8 +6,9 @@
  *
  * CA1 200 com as 3 distribuicoes em `CategoryCount[]`.
  * CA2 nenhum campo por pessoa no payload.
- * CA7 RBAC: sem `collaborator:read-sensitive` -> 403; com -> 200. `collaborator:read` sozinho
- *     NAO abre. (Modo `bypass` libera tudo por decisao da P.O. - ADR-0053 rejeitado, sem carve-out.)
+ * CA7 RBAC: gate = `collaborator:read`, o MESMO da tabela (REPORTS-DEMOGRAPHICS-GATE-ALIGN,
+ *     P.O. 2026-07-20). Sem permissao -> 403. Permissoes sao planas: `read-sensitive` sozinho
+ *     tambem da 403. (Modo `bypass` libera tudo - ADR-0053 rejeitado, sem carve-out.)
  * CA9 regressao zero: GET /api/v2/reports/team (#238) inalterado.
  */
 
@@ -96,6 +97,11 @@ const member = (over: Partial<TeamMember> = {}): TeamMember => ({
   active: true,
   education: 'Superior completo',
   experienceInPublicSector: true,
+  // 3 colunas demográficas (REPORTS-TEAM-DEMOGRAPHIC-COLUMNS) — entraram no contrato de
+  // `TeamMember` depois deste ticket; a fixture as declara para seguir espelhando o port.
+  genderIdentity: 'MULHER_CIS',
+  race: 'PARDO',
+  age: 41,
   ...over,
 });
 
@@ -132,7 +138,7 @@ const getDemographics = (perms: string): Promise<LightMyRequestResponse> =>
 
 describe('reports/http - GET /reports/team/demographics (REP-1 . demograficos)', () => {
   it('CA1: 200 com as 3 distribuicoes como CategoryCount[]', async () => {
-    const res = await getDemographics(SENSITIVE);
+    const res = await getDemographics(READER);
     assert.equal(res.statusCode, 200, res.body);
 
     const body = res.json() as TeamDemographics;
@@ -151,7 +157,7 @@ describe('reports/http - GET /reports/team/demographics (REP-1 . demograficos)',
   });
 
   it('CA1/CA4: INDIGENA atravessa a fronteira e a soma bate com o total de ativos', async () => {
-    const res = await getDemographics(SENSITIVE);
+    const res = await getDemographics(READER);
     const body = res.json() as TeamDemographics;
 
     assert.ok(
@@ -165,7 +171,7 @@ describe('reports/http - GET /reports/team/demographics (REP-1 . demograficos)',
   });
 
   it('CA2: nenhum campo por pessoa no payload', async () => {
-    const res = await getDemographics(SENSITIVE);
+    const res = await getDemographics(READER);
     const body = res.json() as Record<string, unknown>;
 
     assert.deepEqual(Object.keys(body).sort(), ['ageRange', 'gender', 'race', 'totalActive']);
@@ -190,14 +196,22 @@ describe('reports/http - GET /reports/team/demographics (REP-1 . demograficos)',
     assert.equal(res.statusCode, 403, res.body);
   });
 
-  it('CA7: collaborator:read sozinho NAO abre o relatorio demografico -> 403', async () => {
+  // REPORTS-DEMOGRAPHICS-GATE-ALIGN (P.O. 2026-07-20): o gate desceu para `collaborator:read`, o
+  // MESMO da tabela. Motivo: `GET /reports/team` mostra raca/genero POR PESSOA, com nome, sob
+  // `read`; trancar o agregado (que nao identifica ninguem) atras de uma permissao mais restritiva
+  // nao protegia nada e deixava os graficos vazios em todo ambiente. A segregacao volta no
+  // redesenho do RBAC, para os DOIS endpoints juntos.
+  it('CA7: collaborator:read abre o relatorio demografico -> 200 (mesmo gate da tabela)', async () => {
     const res = await getDemographics(READER);
-    assert.equal(res.statusCode, 403, res.body);
+    assert.equal(res.statusCode, 200, res.body);
   });
 
-  it('CA7: com collaborator:read-sensitive -> 200', async () => {
+  // Permissoes sao PLANAS, nao hierarquicas: `read-sensitive` NAO implica `read`. Quem so tem a
+  // sensivel nao entra — e na pratica ninguem esta nesse estado (quem ve o relatorio tem `read`,
+  // que a tabela exige). Documentado para ninguem assumir hierarquia que nao existe.
+  it('CA7: read-sensitive SOZINHO nao abre — o gate e read, e permissao nao e hierarquica', async () => {
     const res = await getDemographics(SENSITIVE);
-    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(res.statusCode, 403, res.body);
   });
 
   it('CA7: a permissao existe no catalogo do partners e no catalogo RBAC do auth', () => {
@@ -210,7 +224,11 @@ describe('reports/http - GET /reports/team/demographics (REP-1 . demograficos)',
 });
 
 describe('reports/http - CA9 regressao zero em GET /reports/team (#238)', () => {
-  it('CA9: a projecao das 9 colunas segue inalterada sob collaborator:read', async () => {
+  // O contrato desta rota passou de 10 para 13 campos no REPORTS-TEAM-DEMOGRAPHIC-COLUMNS
+  // (decisao da P.O. 2026-07-20: a tabela "Equipe ABC" exibe Idade/Identidade de genero/Raca-cor
+  // e mostrava "-" por falta de contrato). A lista abaixo acompanha essa mudanca; o que o CA9
+  // guarda segue sendo o mesmo: os 10 campos do #238 continuam la, sob a MESMA permissao.
+  it('CA9: a projecao do #238 segue inalterada sob collaborator:read (agora com as 3 colunas)', async () => {
     const res = await get('/api/v2/reports/team', READER);
     assert.equal(res.statusCode, 200, res.body);
 
@@ -218,12 +236,15 @@ describe('reports/http - CA9 regressao zero em GET /reports/team (#238)', () => 
     assert.equal(body.team.length, 1);
     assert.deepEqual(Object.keys(body.team[0]!).sort(), [
       'active',
+      'age',
       'education',
       'employmentRelationship',
       'experienceInPublicSector',
+      'genderIdentity',
       'id',
       'name',
       'program',
+      'race',
       'registrationStatus',
       'role',
       'startOfContract',

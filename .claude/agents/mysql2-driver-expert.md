@@ -4,6 +4,7 @@ tools: Read, Glob, Grep, Edit, Bash
 model: sonnet
 maxTurns: 60
 color: orange
+memory: project
 description: >
   Use proactively for `mysql2` 3.x driver work (NÃO ORM, NÃO SQL puro).
   Trigger keywords: "createPool", "pool tuning", "connectTimeout", "idleTimeout",
@@ -212,3 +213,20 @@ contratos-orchestrator
 ## Changelog
 
 - **2026-05-19** — Criação. Foca em `handbook/reference/mysql2/` (5 arquivos) + ponto de integração com Drizzle (`drizzle-orm/mysql2`) + invariantes do projeto (TLS, `multipleStatements: false`, `caching_sha2_password`).
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

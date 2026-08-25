@@ -45,7 +45,7 @@ export type ImportBankStatementDeps = Readonly<{
 
 export type ImportBankStatementInput = Readonly<{
   debitAccountRef: string;
-  format: 'OFX' | 'CSV';
+  format: 'OFX' | 'CSV' | 'PDF';
   content: string;
   fileName?: string;
 }>;
@@ -102,7 +102,7 @@ export const importBankStatement =
     if (accR.value === null) return err('account-not-found');
     if (isClosed(accR.value)) return err('account-closed');
 
-    const parsed = deps.parser.parse(input.format, input.content);
+    const parsed = await deps.parser.parse(input.format, input.content);
     if (!parsed.ok) return err(parsed.error);
 
     // Guard R18: período fechado não aceita nova importação (checa início e fim do extrato).

@@ -1,9 +1,10 @@
 // Schema Drizzle (mysql-core) do módulo programs. Prefixo `prg_*` (ADR-0014).
 //
-// ⚠️ CHARSET/COLLATE — aplicado em SQL manual na migration (drizzle-orm 0.45.x não
-// expõe charset/collate table-level):
-//   - Por tabela: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
-//   - Em colunas UUID (`id`, `event_id`, `aggregate_id`): `COLLATE utf8mb4_bin`
+// ⚠️ CHARSET table-level — aplicado em SQL manual na migration (drizzle-orm 0.45.x não expõe
+// charset/collate table-level): `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`.
+//
+// A collation das COLUNAS de identificador não é mais manual (#636): vem dos tipos de
+// `shared/persistence/identifier-columns.ts`, que emitem o `COLLATE utf8mb4_bin` no DDL.
 //
 // ADR-0020: sem JSON nativo (payload do outbox é varchar), sem ENUM (status via
 // varchar + CHECK), sem AUTO_INCREMENT em PK de domínio (id é UUID v4 do domínio;
@@ -11,7 +12,6 @@
 
 import {
   bigint,
-  char,
   check,
   datetime,
   index,
@@ -23,16 +23,22 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
+import {
+  imageStorageKey,
+  uuidKey,
+  uuidKeyFixed,
+} from '#src/shared/persistence/identifier-columns.ts';
+
 export const programs = mysqlTable(
   'prg_programs',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     programNumber: bigint('program_number', { mode: 'number' }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     sigla: varchar('sigla', { length: 20 }).notNull(),
     director: varchar('director', { length: 255 }),
     generalCharacteristics: varchar('general_characteristics', { length: 2000 }),
-    logoKey: varchar('logo_key', { length: 512 }),
+    logoKey: imageStorageKey('logo_key'),
     status: varchar('status', { length: 16 }).notNull(),
     version: int('version').notNull(),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
@@ -51,8 +57,8 @@ export const programs = mysqlTable(
 export const prgOutbox = mysqlTable(
   'prg_outbox',
   {
-    eventId: char('event_id', { length: 36 }).primaryKey().notNull(),
-    aggregateId: char('aggregate_id', { length: 36 }).notNull(),
+    eventId: uuidKeyFixed('event_id').primaryKey().notNull(),
+    aggregateId: uuidKeyFixed('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
     schemaVersion: smallint('schema_version').notNull(),
