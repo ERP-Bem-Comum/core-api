@@ -56,7 +56,11 @@ O `0.1.0` estava **correto** até aqui: pela regra 4, `0.y.z` significa que a AP
 
 O motivo é concreto: mergear `1.0.0-rc.1` na `dev` faria a `dev` declarar-se uma release-candidate, e todo commit posterior nasceria nominalmente **dentro** de uma rc que não o contém — um registro que mente sobre o código pela via da data, não do conteúdo. Na promoção, o operador roda `pnpm release:notes`, faz o bump e cria a tag no mesmo commit. `package.json#version` permanece em `0.1.0` na `dev`, e isso é **correto** enquanto nenhuma versão tiver sido publicada.
 
-**D9 — Este ADR não autoriza a promoção a produção.** A `1.0.0-rc.1` marcará a árvore candidata; o que a libera para `main` são os critérios da [#873](https://github.com/ERP-Bem-Comum/core-api/issues/873), incluindo o CA0 — se o RBAC vai a produção em `bypass` (hoje fixado em `src/server.ts:161`) ou `enforced`. Essa decisão é de negócio e permanece aberta.
+**D9 — Este ADR não autoriza a promoção a produção.** A `1.0.0-rc.1` marcará a árvore candidata; o que a libera para `main` são os critérios da [#873](https://github.com/ERP-Bem-Comum/core-api/issues/873), incluindo o CA0 — se o RBAC vai a produção em `bypass` (hoje fixado em `src/server.ts:161`) ou `enforced`.
+
+**D10 — O que promove `-rc.N` a GA é a cerimônia de validação, não o calendário.** O `1.0.0` é publicado quando a **cerimônia de validação da release** demonstrar a conexão **ponta a ponta, do sistema até a VAN**. É esse evento que resolve o CA0 da #873 e que data a promoção — o critério de aceite não é uma espera indefinida por decisão de negócio, e descrevê-lo como tal informa mal o estado do projeto.
+
+A escada de pré-lançamento de D1 existe exatamente para isto: `-rc.N` significa, por definição, **candidato aguardando validação**, e a cerimônia é a validação. Se ela reprovar, o recuo tem nome — `-rc.2` — em vez de queimar o `1.0.0`, que é o argumento de D3 com um evento concreto por trás. Aprovada, o GA é bump e tag **sem tocar em `src/`**: a árvore validada é exatamente a publicada, e é essa identidade que a cerimônia certifica.
 
 ## Consequências
 
