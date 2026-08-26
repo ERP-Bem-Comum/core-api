@@ -59,6 +59,7 @@ import {
 import {
   financialHttpPlugin,
   buildFinancialHttpDeps,
+  buildVanSandboxPlugin,
 } from '#src/modules/financial/public-api/http.ts';
 import {
   budgetPlansHttpPlugin,
@@ -286,12 +287,22 @@ const main = async (): Promise<void> => {
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
+  // Exercício da VAN. `undefined` quando o token falta/é fraco ou o storage próprio não está
+  // configurado — e aí a rota não entra no array abaixo. Fail-closed no composition root: não
+  // existe caminho em que ela suba sem credencial, porque a decisão é sobre EXISTIR, não sobre
+  // responder 401. O storage dela é PRÓPRIO (`VAN_SANDBOX_S3_*`) e não liga o do módulo.
+  const vanSandbox = buildVanSandboxPlugin(process.env);
+
   const app = await buildApp({
     routes: [
       // Modelo novo (greenfield) → /api/v2 (plugin direto, forma legada do buildApp).
       authHttpPlugin(authDeps),
       contractsHttpPlugin(contractsDeps, { requireAuth, authorize: authDeps.authorize }),
       financialHttpPlugin(financialDeps, { requireAuth, authorize: authDeps.authorize }),
+      // Exercício da VAN → /api/v2/financial/van/sandbox/remittance. Autenticação PRÓPRIA (Bearer
+      // estático), sem `requireAuth`/`authorize`: sob `AUTH_RBAC_MODE=bypass` — ligado inclusive em
+      // produção (#634) — `authorize` é no-op e todo autenticado passaria.
+      ...(vanSandbox === undefined ? [] : [vanSandbox]),
       // Resolução em lote de fornecedores (#356; ADR-0049 §3) → /api/v2/partners/suppliers:batch.
       suppliersBatchHttpPlugin(partnersDeps, {
         requireAuth,
