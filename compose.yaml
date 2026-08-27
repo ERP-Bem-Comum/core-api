@@ -308,6 +308,47 @@ services:
       PROGRAMS_LOGO_S3_FORCE_PATH_STYLE: '${PROGRAMS_LOGO_S3_FORCE_PATH_STYLE:-}'
       PROGRAMS_LOGO_S3_ACCESS_KEY_ID: '${PROGRAMS_LOGO_S3_ACCESS_KEY_ID:-}'
       PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY: '${PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY:-}'
+      # ── Storage da VAN no serviço HTTP (ADR-0060/0061) ───────────────────────────────────
+      # `buildVanStorage()` (`financial/adapters/http/composition.ts`) lê estas envs. Ausentes, ele
+      # cai em `createInMemoryVanStorage()` — e era esse o estado do serviço `http` até aqui, o que
+      # deixava MUDAS as rotas que dependem do bucket: o download confere o hash contra um arquivo
+      # que não existe, e o descarte decide olhando um bucket vazio.
+      #
+      # ⚠️ CONSEQUÊNCIA DE PREENCHÊ-LAS, e ela não é sobre esta linha: com bucket real configurado,
+      # `POST /financial/remittances` passa a gravar em `saida/` DE VERDADE — que é enfileirar
+      # pagamento no banco, sem desfazer (ADR-0060). E `AUTH_RBAC_MODE=bypass` está ligado inclusive
+      # em produção por decisão do dono (#634), o que torna `authorize` um no-op: na prática,
+      # qualquer usuário autenticado gera remessa. Vazias aqui, preenchidas por ambiente.
+      VAN_S3_REGION: '${VAN_S3_REGION:-us-east-1}'
+      VAN_S3_BUCKET: '${VAN_S3_BUCKET:-}'
+      VAN_S3_ENDPOINT: '${VAN_S3_ENDPOINT:-}'
+      # Ausente, o parser infere pelo endpoint (acerta AWS e localhost, erra hostname de rede
+      # interna). Valor ininterpretável é erro nomeado, não default silencioso.
+      VAN_S3_FORCE_PATH_STYLE: '${VAN_S3_FORCE_PATH_STYLE:-}'
+      # As duas juntas ou NENHUMA — nenhuma é o caminho de produção (IAM Role da task).
+      VAN_S3_ACCESS_KEY_ID: '${VAN_S3_ACCESS_KEY_ID:-}'
+      VAN_S3_SECRET_ACCESS_KEY: '${VAN_S3_SECRET_ACCESS_KEY:-}'
+      # ── Exercício da VAN — rota POST /financial/van/sandbox/remittance ───────────────────
+      # Grava um `.REM` FICTÍCIO em `sandbox/`, nunca em `saida/`. Todas vazias por default: sem
+      # token E sem storage a rota NÃO é registrada, em nenhum ambiente.
+      #
+      # O conjunto é PRÓPRIO, e não reusa o `VAN_S3_*` acima, pela mesma razão que aquele não reusa
+      # o singleton `S3_*`: o exercício pode — e em geral deve — apontar para outro bucket, ou outra
+      # conta. Mantendo-o separado, mudar o destino do arquivo de teste nunca é uma edição no bloco
+      # que decide para onde vai o dinheiro.
+      #
+      # O token é o único controle de acesso da rota (Bearer, comparado em tempo constante) — gere
+      # com `openssl rand -hex 32` e mantenha fora do repositório. Abaixo de 32 caracteres a rota
+      # recusa subir e avisa em stderr.
+      VAN_SANDBOX_TOKEN: '${VAN_SANDBOX_TOKEN:-}'
+      VAN_SANDBOX_S3_REGION: '${VAN_SANDBOX_S3_REGION:-}'
+      VAN_SANDBOX_S3_BUCKET: '${VAN_SANDBOX_S3_BUCKET:-}'
+      VAN_SANDBOX_S3_ENDPOINT: '${VAN_SANDBOX_S3_ENDPOINT:-}'
+      VAN_SANDBOX_S3_FORCE_PATH_STYLE: '${VAN_SANDBOX_S3_FORCE_PATH_STYLE:-}'
+      VAN_SANDBOX_S3_PREFIX: '${VAN_SANDBOX_S3_PREFIX:-}'
+      # As duas juntas ou NENHUMA — nenhuma é o caminho de produção (IAM Role da task).
+      VAN_SANDBOX_S3_ACCESS_KEY_ID: '${VAN_SANDBOX_S3_ACCESS_KEY_ID:-}'
+      VAN_SANDBOX_S3_SECRET_ACCESS_KEY: '${VAN_SANDBOX_S3_SECRET_ACCESS_KEY:-}'
       # ── Base URLs dos links de e-mail transacional (#331/#332) — as TRÊS obrigatórias em
       # produção (`shared/http/email-link-base-urls.ts`): boot falha em vez de enviar e-mail
       # com link quebrado. Presente exige URL absoluta http(s); relativa o SPA descarta.

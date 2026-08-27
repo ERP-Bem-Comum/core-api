@@ -17,3 +17,9 @@ export type {
   FinancialCompositionConfig,
   FinancialDriver,
 } from '../adapters/http/composition.ts';
+
+// Exercício da VAN — plugin acessório, montado só quando `VAN_SANDBOX_TOKEN` e `VAN_SANDBOX_S3_*`
+// estão configurados. Uma factory só, e não as peças soltas: quem chama não deve poder montar a
+// rota com um storage de sua escolha, porque a escolha errada é o bucket de pagamento. A remoção é
+// trivial de propósito — esta linha, uma no `server.ts` e quatro arquivos.
+export { buildVanSandboxPlugin } from '../adapters/http/van-sandbox-composition.ts';
