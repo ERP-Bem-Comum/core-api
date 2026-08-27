@@ -59,21 +59,29 @@ const missingField = (route: VanRoute, field: PayoutGap['field']): PayoutReadine
 // ⚠️ Quem consome esta régua para EMITIR precisa converter também — `ready` deixou de significar
 // "o `payment_detail` já são os 44 dígitos". Ver `remittance-payment-reader.drizzle.ts`.
 
-// TODO(human): traduzir o erro da conversão para o motivo que o operador lê.
+// Traduz o erro da conversão no motivo que o operador lê. Forma o mesmo par que `checkDigitGaps` em
+// `payee-account.ts`: a aritmética diz o que é verdade sobre o dígito, e a POLÍTICA — esta função —
+// decide o que o sistema faz com isso.
 //
-// `resolveBarcode` devolve dois erros, e esta função decide o que cada um vira em `PayoutGapReason`
-// — que é o que a interface usa para dizer ao operador o que fazer. A união tem quatro valores, e
-// três deles são candidatos plausíveis aqui:
+// `unknown-length` → `malformed`. Com 44, 47 e 48 todos mapeados, não sobra formato de boleto que o
+// sistema não saiba converter: o que chega com outro comprimento é código truncado ou digitado a
+// mais. `unmappable` significa outra coisa neste domínio — "há um dado legítimo de outra natureza e
+// ninguém sabe traduzi-lo", como o nome de banco em texto livre de `readBankCode`. Um código de
+// barras pela metade não é isso, e `unmappable` era justamente o balde errado que a #788 esvaziou.
 //
-//   'malformed'            — "o dado está errado, corrija"
-//   'unmappable'           — "o formato não é suportado" (era o que a linha digitável recebia)
-//   'check-digit-mismatch' — "está bem-formado e mesmo assim errado; o algoritmo produz outro
-//                            dígito" — criado pela #734 para o DV da CONTA bancária
-//
-// Os dois casos a mapear:
-//   'unknown-length'             — não tem 44, 47 nem 48 dígitos
-//   'field-check-digit-mismatch' — tem o comprimento certo, mas um DV de bloco não fecha
-const reasonForConversionError = (error: DigitableLineError): PayoutGapReason => {};
+// `field-check-digit-mismatch` → `check-digit-mismatch`, e NÃO `malformed` como pedia literalmente
+// o CA2 da #788: aquele critério foi escrito antes de a #734 criar o quarto motivo, e o que ele
+// exige — que a recusa deixe de ser `unmappable` — continua valendo. 47 dígitos numéricos ESTÃO no
+// formato certo; mandar "corrigir o formato" é mandar consertar o que já está certo (ver
+// `types.ts` §PayoutGapReason). O operador errou UM dígito, e é isso que o motivo precisa dizer.
+const reasonForConversionError = (error: DigitableLineError): PayoutGapReason => {
+  switch (error) {
+    case 'unknown-length':
+      return 'malformed';
+    case 'field-check-digit-mismatch':
+      return 'check-digit-mismatch';
+  }
+};
 
 const readBarcode = (raw: string | null, route: VanRoute): PayoutReadiness => {
   // Só dígitos: o cadastro guarda com pontuação em alguns casos, e o campo do arquivo é numérico.
