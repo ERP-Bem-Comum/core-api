@@ -57,6 +57,7 @@ async function readAll(
       contractRef: finDocuments.contractRef,
       categoryRef: finDocuments.categoryRef,
       budgetPlanRef: finDocuments.budgetPlanRef,
+      subcategoryRef: finDocuments.subcategoryRef,
       costCenterRef: finDocuments.costCenterRef,
       programRef: finDocuments.programRef,
     })
@@ -80,6 +81,10 @@ async function readAll(
       categoryRef: row.categoryRef,
       // #446 (REP-3 / Slice B): repõe budgetPlanRef da fonte de verdade (fin_documents).
       budgetPlanRef: row.budgetPlanRef,
+      // M2/RN-M2-12: a folha também vem da fonte de verdade. É por aqui que as linhas projetadas
+      // ANTES desta fatia — todas com `subcategory_ref` nulo — recuperam a subcategoria sem
+      // depender de o documento ser salvo de novo.
+      subcategoryRef: row.subcategoryRef,
       costCenterRef: row.costCenterRef,
       programRef: row.programRef,
       valueCents: row.valueCents,

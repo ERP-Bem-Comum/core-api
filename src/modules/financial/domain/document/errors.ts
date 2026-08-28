@@ -22,4 +22,7 @@ export type DocumentError =
   // recebeu a ordem de pagamento. Mudar o valor aqui faria o arquivo enviado e o título divergirem,
   // e a conciliação do retorno compararia coisas diferentes. Para corrigir a nota, descarta-se a
   // remessa primeiro. O domínio não consulta remessa: recebe os ids presos como dado de entrada.
-  | 'document-has-held-payable';
+  | 'document-has-held-payable'
+  // M2/RN-M2-11: a reclassificação da taxonomia entrou por um título de RETENÇÃO. O imposto é alvo
+  // da cascata, nunca fonte — quem dita sob qual projeto o gasto aparece é o título líquido.
+  | 'reclassification-source-not-parent';

@@ -51,6 +51,7 @@ export const createDrizzlePayableViewStore = (
               contractRef: r.contractRef,
               categoryRef: r.categoryRef,
               budgetPlanRef: r.budgetPlanRef,
+              subcategoryRef: r.subcategoryRef,
               costCenterRef: r.costCenterRef,
               programRef: r.programRef,
               valueCents: r.valueCents,
@@ -72,6 +73,11 @@ export const createDrizzlePayableViewStore = (
               contractRef: incoming('contract_ref'),
               categoryRef: incoming('category_ref'),
               budgetPlanRef: incoming('budget_plan_ref'),
+              // M2/RN-M2-05: a reclassificação chega por REPROJEÇÃO — o `DocumentSaved` reemitido
+              // reescreve pai e filhos. Deixar a subcategoria fora deste `set` faria a linha nascer
+              // com a folha certa e nunca mais atualizá-la, que é a forma silenciosa de o relatório
+              // mentir depois de uma reclassificação.
+              subcategoryRef: incoming('subcategory_ref'),
               costCenterRef: incoming('cost_center_ref'),
               programRef: incoming('program_ref'),
               valueCents: incoming('value_cents'),

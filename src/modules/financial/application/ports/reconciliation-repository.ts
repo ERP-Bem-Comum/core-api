@@ -4,6 +4,7 @@ import type { ReconciliationId } from '../../domain/reconciliation/reconciliatio
 import type { ReconciliationEvent } from '../../domain/reconciliation/events.ts';
 import type { StatementTransactionId } from '../../domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpart } from '../../domain/expected-counterpart/types.ts';
+import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { FinancialAppendableEvent } from './outbox.ts';
 
 // Port da conciliação (US2/US3/US4). `confirm`/`undo` são unit-of-work ATÔMICOS (uma transação):
@@ -15,12 +16,40 @@ import type { FinancialAppendableEvent } from './outbox.ts';
 //   (callers sem evento — testes de contrato/seed — passam nada; sem append).
 export type ReconciliationRepositoryError = 'reconciliation-repository-failure';
 
+// M2 (RN-M2-03/04/06): a reclassificação de UM documento, já decidida pelo domínio, pronta para ser
+// escrita DENTRO da transação da conciliação.
+//
+// Chega como dado pronto — refs, eventos e trilha — e não como agregado, porque o que falta neste
+// ponto é só persistir. O domínio já disse quais são os 5 refs (`reclassifyTaxonomy`), já montou o
+// `DocumentSaved` que reprojeta pai e filhos, e já projetou o de→para. Passar o agregado obrigaria
+// o adapter a saber montar evento e trilha, que é decisão, não escrita.
+//
+// ⚠️ Por que isto viaja no `confirm` em vez de um `DocumentRepository.save` antes dele: são duas
+// transações distintas, e a RN-M2-06 exige UMA. Salvar o documento primeiro e conciliar depois abre
+// a janela em que o título ficou reclassificado sem estar conciliado — exatamente o "órfão em PAGO"
+// que a M2 existe para fechar, invertido.
+export type ReconciliationReclassification = Readonly<{
+  documentId: string;
+  programRef: string | null;
+  budgetPlanRef: string | null;
+  costCenterRef: string | null;
+  categoryRef: string | null;
+  subcategoryRef: string | null;
+  // `DocumentSaved` reemitido: é ele que faz a projeção reescrever o `fin_payable_view` do pai E dos
+  // filhos com a nova classificação (RN-M2-05). Sem ele a cascata não chega ao relatório.
+  events: readonly FinancialAppendableEvent[];
+  // RN-M2-07: quem, quando, de→para — no pai e em cada filho. Vazio quando nada mudou (invariante 6).
+  timeline: readonly FinancialTimelineEntry[];
+}>;
+
 export type ReconciliationRepository = Readonly<{
   // Insere conciliação+itens, `Paid→Reconciled` nos títulos e `Pending→Reconciled` na transação — na mesma tx.
+  // `reclassifications` (M2): UPDATE dos 5 refs do documento + outbox + trilha, na MESMA tx.
   confirm: (
     reconciliation: Reconciliation,
     transactionId: StatementTransactionId,
     events?: readonly ReconciliationEvent[],
+    reclassifications?: readonly ReconciliationReclassification[],
   ) => Promise<Result<void, ReconciliationRepositoryError>>;
   // Lançamento manual (US5): insere conciliação `ManualEntry` + `fin_manual_entries` e marca a transação
   // `Pending→Reconciled` — mesma tx. SEM título (items vazio). `reconciliation.manualEntry` deve estar setado.

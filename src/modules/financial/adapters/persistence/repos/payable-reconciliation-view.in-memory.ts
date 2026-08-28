@@ -17,6 +17,18 @@ export type PayableRecord = Readonly<{
   valueCents: number;
   dueDate: Date;
   paymentMethod: string;
+  // M2/#268 — opcionais para não obrigar todo seed existente a declarar o que não exercita. No
+  // adapter real `kind` vem de `fin_payables` e os 5 refs do LEFT JOIN em `fin_documents`; aqui os
+  // dois moram no mesmo registro plano porque não há JOIN a espelhar.
+  //
+  // `kind` default 'Parent': o título líquido é o caso comum e o único que existe em documento sem
+  // retenção. Quem testa a cascata declara o 'Child' explicitamente.
+  kind?: 'Parent' | 'Child';
+  programRef?: string | null;
+  budgetPlanRef?: string | null;
+  costCenterRef?: string | null;
+  categoryRef?: string | null;
+  subcategoryRef?: string | null;
 }>;
 export type PayableStore = Map<string, PayableRecord>;
 
@@ -59,6 +71,12 @@ export const createInMemoryPayableReconciliationView = (
         valueCents: rec.valueCents,
         dueDate: rec.dueDate,
         paymentMethod: rec.paymentMethod,
+        kind: rec.kind ?? 'Parent',
+        programRef: rec.programRef ?? null,
+        budgetPlanRef: rec.budgetPlanRef ?? null,
+        costCenterRef: rec.costCenterRef ?? null,
+        categoryRef: rec.categoryRef ?? null,
+        subcategoryRef: rec.subcategoryRef ?? null,
       });
     }
     return Promise.resolve(ok(paid));

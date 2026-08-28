@@ -19,6 +19,8 @@ const record = (payableId: string, status: PayableView['status'] = 'Open'): Paya
   contractRef: null,
   categoryRef: null,
   budgetPlanRef: null,
+  // M2/RN-M2-12: a folha entrou no read-model.
+  subcategoryRef: null,
   costCenterRef: null,
   programRef: null,
   valueCents: 77500,

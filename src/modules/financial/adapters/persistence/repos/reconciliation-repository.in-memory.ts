@@ -6,9 +6,12 @@ import type { ReconciliationEvent } from '#src/modules/financial/domain/reconcil
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type {
+  ReconciliationReclassification,
   ReconciliationRepository,
   ReconciliationRepositoryError,
 } from '#src/modules/financial/application/ports/reconciliation-repository.ts';
+import type { DocumentStore } from './document-repository.in-memory.ts';
+import type { TimelineStore } from './timeline-repository.in-memory.ts';
 import type {
   FinancialOutbox,
   FinancialAppendableEvent,
@@ -26,6 +29,14 @@ export type InMemoryReconciliationStores = Readonly<{
   // #269/US2: Map de contrapartidas COMPARTILHADO com o expected-counterpart-store in-memory — o
   // `confirmCounterpartMatch` muta a contrapartida (→Matched) na mesma unit-of-work da perna de B.
   expectedCounterparts?: Map<string, ExpectedCounterpart>;
+  // M2: store de documentos COMPARTILHADO com o document-repository in-memory — a reclassificação
+  // (RN-M2-03) reescreve os 5 refs do documento na mesma unit-of-work da conciliação. Omitido nos
+  // testes que não exercitam a M2; sem ele, uma reclassificação é recusada em vez de ignorada, para
+  // que o driver `memory` nunca informe sucesso sobre uma escrita que não aconteceu.
+  documents?: DocumentStore;
+  // M2/RN-M2-07: trilha compartilhada com o timeline-repository in-memory (mesmo papel que o
+  // `timelineStore` cumpre no `document-repository.in-memory`).
+  timeline?: TimelineStore;
 }>;
 
 // Flipa o status de uma transação no statementStore compartilhado (reconstruindo o statement imutável).
@@ -77,6 +88,47 @@ export const createInMemoryReconciliationRepository = (
   const { payables, statements } = stores;
   const expectedCounterparts =
     stores.expectedCounterparts ?? new Map<string, ExpectedCounterpart>();
+  const { documents, timeline } = stores;
+
+  // M2/RN-M2-03/04/06: espelha o bloco de reclassificação do adapter Drizzle — reescreve os 5 refs
+  // do documento e acumula a trilha. Roda ANTES de mutar títulos e transação, pela mesma razão que o
+  // `appendOrFail`: falhar depois de meia escrita é o estado que a atomicidade existe para proibir.
+  const applyReclassifications = (
+    reclassifications: readonly ReconciliationReclassification[] | undefined,
+  ): Result<void, ReconciliationRepositoryError> => {
+    if (reclassifications === undefined || reclassifications.length === 0) return ok(undefined);
+    // Sem store de documentos não há onde escrever. Recusar (em vez de seguir) mantém a promessa de
+    // que sucesso significa dado gravado — um no-op silencioso faria o teste de contrato aprovar
+    // justamente a cascata que não aconteceu.
+    if (documents === undefined) return err('reconciliation-repository-failure');
+
+    for (const r of reclassifications) {
+      const entry = documents.get(r.documentId);
+      if (entry === undefined) return err('reconciliation-repository-failure');
+      documents.set(r.documentId, {
+        ...entry,
+        aggregate: {
+          ...entry.aggregate,
+          document: {
+            ...entry.aggregate.document,
+            programRef: r.programRef,
+            budgetPlanRef: r.budgetPlanRef,
+            costCenterRef: r.costCenterRef,
+            categoryRef: r.categoryRef,
+            subcategoryRef: r.subcategoryRef,
+          },
+        },
+      } as typeof entry);
+
+      if (timeline !== undefined) {
+        for (const e of r.timeline) {
+          const key = String(e.documentId);
+          timeline.set(key, [...(timeline.get(key) ?? []), e]);
+        }
+      }
+    }
+    return ok(undefined);
+  };
 
   // #127 — atomicidade: publica os eventos ANTES de mutar os stores; falha no outbox → nada muda
   // (espelha o rollback da unit-of-work do Drizzle). No-op quando não há eventos (callers de seed).
@@ -93,6 +145,7 @@ export const createInMemoryReconciliationRepository = (
       reconciliation: Reconciliation,
       transactionId: StatementTransactionId,
       events?: readonly ReconciliationEvent[],
+      reclassifications?: readonly ReconciliationReclassification[],
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
       for (const item of reconciliation.items) {
         const rec = payables.get(String(item.payableId));
@@ -102,6 +155,14 @@ export const createInMemoryReconciliationRepository = (
       }
       const published = await appendOrFail(events);
       if (!published.ok) return published;
+      // M2: o `DocumentSaved` reemitido vai ao MESMO outbox, e antes de qualquer mutação — é ele que
+      // reprojeta pai e filhos no `fin_payable_view` (RN-M2-05).
+      const reclassPublished = await appendOrFail(
+        (reclassifications ?? []).flatMap((r) => [...r.events]),
+      );
+      if (!reclassPublished.ok) return reclassPublished;
+      const reclassified = applyReclassifications(reclassifications);
+      if (!reclassified.ok) return reclassified;
       if (!flipTransaction(statements, String(transactionId), 'Pending', 'Reconciled')) {
         return err('reconciliation-repository-failure');
       }

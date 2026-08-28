@@ -89,6 +89,10 @@ const parseSnapshotRow = (
     categoryRef: asString(refs.categoryRef),
     // #446 (REP-3 / Slice B): Plano Orçamentário (top-level ref do documento) projetado no read-model.
     budgetPlanRef: asString(refs.budgetPlanRef),
+    // M2/RN-M2-12: subcategoria pelo mesmo caminho das irmãs. Evento antigo (gravado antes desta
+    // fatia) não traz a chave e projeta `null` — degradação graciosa, não payload inválido: a linha
+    // volta a carregar a folha no próximo `DocumentSaved` daquele documento.
+    subcategoryRef: asString(refs.subcategoryRef),
     costCenterRef: asString(refs.costCenterRef),
     programRef: asString(refs.programRef),
     valueCents: Number(valueCentsStr),

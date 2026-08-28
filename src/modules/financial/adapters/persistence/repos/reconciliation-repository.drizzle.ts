@@ -14,18 +14,22 @@ import type { ReconciliationEvent } from '#src/modules/financial/domain/reconcil
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type {
+  ReconciliationReclassification,
   ReconciliationRepository,
   ReconciliationRepositoryError,
 } from '#src/modules/financial/application/ports/reconciliation-repository.ts';
 import type { FinancialAppendableEvent } from '#src/modules/financial/application/ports/outbox.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import {
+  finDocuments,
+  finDocumentTimeline,
   finExpectedCounterpart,
   finManualEntries,
   finPayables,
   finReconciliationItems,
   finReconciliations,
   finStatementTransactions,
+  finTimelineFieldChanges,
 } from '../schemas/mysql.ts';
 import {
   reconciliationToRow,
@@ -33,6 +37,7 @@ import {
   manualEntryToRow,
   toDomain,
 } from '../mappers/reconciliation.mapper.ts';
+import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 
 const logStore = (op: string, cause: unknown): void => {
@@ -53,6 +58,7 @@ export const createDrizzleReconciliationRepository = (
       reconciliation: Reconciliation,
       transactionId: StatementTransactionId,
       events?: readonly ReconciliationEvent[],
+      reclassifications?: readonly ReconciliationReclassification[],
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
       try {
         await db.transaction(async (tx) => {
@@ -119,6 +125,36 @@ export const createDrizzleReconciliationRepository = (
               ),
             );
           if (affectedRowsOf(txRes) !== 1) throw new Error('transaction-not-pending');
+
+          // M2/RN-M2-06: a reclassificação entra AQUI, na transação que já está aberta — refs do
+          // documento, `DocumentSaved` (que reprojeta pai e filhos) e trilha, tudo ou nada junto com
+          // a conciliação. O `throw` de qualquer passo reverte inclusive os UPDATEs de status acima.
+          for (const r of reclassifications ?? []) {
+            const docRes = await tx
+              .update(finDocuments)
+              .set({
+                programRef: r.programRef,
+                budgetPlanRef: r.budgetPlanRef,
+                costCenterRef: r.costCenterRef,
+                categoryRef: r.categoryRef,
+                subcategoryRef: r.subcategoryRef,
+              })
+              .where(eq(finDocuments.id, r.documentId));
+            // O documento foi lido nesta mesma operação; sumir entre a leitura e aqui é corrida real
+            // (cancelamento concorrente), e gravar taxonomia em nada é pior que reverter.
+            if (affectedRowsOf(docRes) !== 1) throw new Error('document-not-found');
+
+            if (r.timeline.length > 0) {
+              const mapped = r.timeline.map(mapEntryToRows);
+              await tx.insert(finDocumentTimeline).values(mapped.map((m) => m.entryRow));
+              const changeRows = mapped.flatMap((m) => [...m.changeRows]);
+              if (changeRows.length > 0) {
+                await tx.insert(finTimelineFieldChanges).values(changeRows);
+              }
+            }
+
+            await appendFinOutboxInTx(tx, r.events);
+          }
 
           // #127: estado + evento na MESMA tx (atomicidade — ADR-0015). Falha aqui reverte tudo.
           await appendFinOutboxInTx(tx, events ?? []);
