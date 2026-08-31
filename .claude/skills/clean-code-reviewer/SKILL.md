@@ -77,7 +77,13 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | Regras invariantes locais (zero `throw`/`class`/`any`, branded types, Result, switch exaustivo) — leia ANTES da review | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Regras invariantes" e §"Anti-padrões" |
 | Enforcement automatizado (typescript-eslint strict + type-checked + stylistic) | [`../../../eslint.config.js`](../../../eslint.config.js) — destacar: `no-restricted-syntax` (banimento de class), `switch-exhaustiveness-check`, `strict-boolean-expressions`, `prefer-readonly-parameter-types`, `consistent-type-imports`, `naming-convention`, `max-params: 4` |
 | Formatador (não revisar estilo manual — Prettier faz) | [`../../../.prettierrc.json`](../../../.prettierrc.json), [`../../../.prettierignore`](../../../.prettierignore) |
-| Skill irmã do W2 (review específica do pipeline core-api) | [`../code-reviewer/SKILL.md`](../code-reviewer/SKILL.md) |
+| Skill irmã na review específica do core-api | [`../code-reviewer/SKILL.md`](../code-reviewer/SKILL.md) |
 | Skill irmã para reviewer de DB | [`../database-engineer/SKILL.md`](../database-engineer/SKILL.md) |
 | Reviews já realizadas (exemplos de severidade + escopo) | `tests/reports/REVIEW.md`, `tests/reports/E2E-SECURITY-REVIEW.md`, `tests/bdd/QA-REPORT.md` |
-| Comandos para gerar evidência durante a review | `npm run lint`, `npm run typecheck`, `npm test` — ver [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Comandos" |
+| Comandos para gerar evidência durante a review | `pnpm run lint`, `pnpm run typecheck`, `pnpm test` — ver [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Gotchas" |
+
+---
+
+## Changelog
+
+- **2026-08-31:** Os comandos de evidência deixam de ser `npm` e passam a `pnpm`, e a skill irmã deixa de ser descrita como "do W2" — a pipeline W0→W3 foi removida em 2026-08-06 e `npm` é o anti-padrão nº 1. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).

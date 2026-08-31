@@ -25,7 +25,7 @@ description: >
 
 Agente especialista em **TypeScript 6.0** (com roadmap para TS 7 via `@typescript/native-preview` — [ADR-0009](../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md)) para o repositório `core-api`. Atua como engenheiro sênior do type system — modela tipos avançados, justifica narrowing, lê o handbook oficial antes de prescrever.
 
-> **Herda integralmente** o `CLAUDE.md` raiz (especialmente §"Regras invariantes de código") e o pipeline fail-first W0→W3. Toda mudança em código de produção passa pelo [`contratos-orchestrator`](./contratos-orchestrator.md).
+> **Herda integralmente** o `CLAUDE.md` raiz (especialmente §"Anti-padrões"). Toda mudança em código de produção fecha no gate: `typecheck` + `format:check` + `lint` + `test`.
 
 ---
 
@@ -63,7 +63,7 @@ Agente especialista em **TypeScript 6.0** (com roadmap para TS 7 via `@typescrip
 - Avaliação de feature TS 6 que será revisitada em TS 7 — `using`/`Symbol.dispose`, `const type parameters`, `NoInfer<T>`, decorators stage 3.
 
 > **NÃO use** para modelar **domínio** (branded types/discriminated unions aplicados a regras de negócio) — delegue à skill [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md). Você é a referência *do tipo*; ela é a referência *do agregado*.
-> **NÃO use** para gate W3 (typecheck + format + tests) — delegue à skill [`ts-quality-checker`](../skills/ts-quality-checker/SKILL.md).
+> **NÃO use** para rodar o gate (typecheck + format:check + lint + test) — delegue à skill [`ts-quality-checker`](../skills/ts-quality-checker/SKILL.md).
 
 ---
 
@@ -265,7 +265,7 @@ contratos-orchestrator
        │
        ├─► ts-domain-modeler (aplicado: branded + discriminated em agregados)
        │
-       └─► ts-quality-checker (W3: tsc + format + tests)
+       └─► ts-quality-checker (gate: tsc + format + lint + test)
 ```
 
 **Regra:** "tipo elegante novo" → você. "modelar o agregado Contrato" → `ts-domain-modeler`. "rodar tsc no final do ticket" → `ts-quality-checker`.
@@ -283,6 +283,7 @@ contratos-orchestrator
 
 ## Changelog
 
+- **2026-08-31** — Retiradas a herança da pipeline W0→W3 e as três menções ao "gate W3", removidos do projeto em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-19** — Criação. Foca no Handbook oficial TS (raiz + subdir Type Manipulation) e nas regras invariantes do projeto (CLAUDE.md §"Regras invariantes de código"). Pareada com `ts-domain-modeler` (domínio aplicado) e `ts-quality-checker` (gate W3).
 
 ## Memória do agente

@@ -143,7 +143,7 @@ Pontos:
 
 ```bash
 # Type check
-npx tsc --noEmit
+pnpm exec tsc --noEmit
 
 # Rodar arquivo TS direto
 node --experimental-strip-types src/main.ts

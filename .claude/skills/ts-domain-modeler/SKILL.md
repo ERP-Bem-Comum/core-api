@@ -212,10 +212,10 @@ tests/modules/contracts/domain/
    ↓
 6. repository.ts         (port — type)
    ↓
-7. <aggregate>.test.ts   (caso a wave seja W1; se W0, este vem antes do passo 1)
+7. <aggregate>.test.ts   (test-after; em test-first, este vem antes do passo 1)
 ```
 
-W0 inverte: testes primeiro (que falham), depois implementação.
+Test-first inverte: testes primeiro (que falham), depois implementação.
 
 ---
 
@@ -889,7 +889,7 @@ Imperative Shell (application/use-cases/)
 
 - §6 — `isOk` / `isErr` como type guards em contextos onde o narrowing direto (`if (r.ok)`) não é suficiente (ex.: callbacks, predicados).
 - §7 — `mapErr` para adaptar erros de porta (repositório, eventBus) para o tipo de erro do use case — evita re-wrap manual.
-- §8 — Documentar no JSDoc do use case qual estratégia (α/β/γ) foi usada e por quê — facilita revisão em W2 e manutenção futura.
+- §8 — Documentar no JSDoc do use case qual estratégia (α/β/γ) foi usada e por quê — facilita a revisão e a manutenção futura.
 
 ---
 
@@ -1721,11 +1721,10 @@ Os blocos abaixo **ainda não tiveram ticket CTR-SKILL-REFRESH-* concluído**. A
 1. **Ler** `handbook/domain/<modulo>/` integral do BC alvo.
 2. **Ler** [`references/`](./references/) relevantes para os tipos avançados envolvidos.
 3. **Confirmar** com o usuário se há ambiguidade no handbook.
-4. **W0 ou W1?** — se W0, escrever testes que falham. Se W1, implementar.
+4. **Test-first?** — se sim, escrever primeiro os testes que falham.
 5. **Implementar inside-out** (VO → types → eventos → funções → port).
 6. **Validar** com `tsc --noEmit` no escopo modificado.
-7. **Escrever** `<ticket>/003-impl/REPORT.md` (W1) ou `<ticket>/002-tests/REPORT.md` (W0).
-8. **Devolver** ao orquestrador.
+7. **Devolver** o veredito no próprio turno — sem artefato em disco.
 
 ### Checklist de auto-revisão antes de fechar REPORT
 
@@ -1777,6 +1776,7 @@ ts-domain-modeler          ◄── você está aqui (modela tipos puros)
 
 ## Changelog
 
+- **2026-08-31:** Retiradas as waves W0/W1/W2 do fluxo e do passo-a-passo: a ordem de escrita fala em test-first/test-after, e o passo 7 deixa de mandar escrever `<ticket>/003-impl/REPORT.md` — os tickets foram removidos em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-14:** Criação. Adapta `flutter-expert` (ACDG/frontend) para o contexto TS puro + DDD do ERP Bem Comum.
 - **2026-05-20:** §3.D criada (Tagged Errors + State Machine + Invariantes Contextuais + Aninhamento). Checklist de auto-revisão +3 itens (tagged records, tipo refinado distinto, assinatura refinada). Anti-patterns +2 linhas (assertPending, 3 status × 4 kinds).
 - **2026-05-20:** §3.C criada (Discriminated Unions & Exhaustive Switch); fix do exhaustive default na seção "Obrigações" (issue pré-existente identificada em SKILL-REFRESH-D W2).
