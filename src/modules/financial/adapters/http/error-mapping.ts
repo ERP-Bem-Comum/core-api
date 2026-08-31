@@ -162,12 +162,6 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Acompanhamento de remessa (#728): repositório de leitura indisponível → 503 (tentar de novo é a
   // ação certa; não é culpa do operador).
   'remittance-repository-unavailable',
-  // #634/#792: a geração recusa enquanto o RBAC estiver em bypass. 503 e não 403 porque não é o
-  // requisitante que está proibido — é o servidor que não deve oferecer esta operação nesta
-  // configuração. Entra aqui, e não num `reply.send` próprio na guarda, para que o envelope seja o
-  // mesmo de todo 5xx do módulo: `code: 'internal'`, mensagem genérica, `requestId` presente, slug
-  // real só no log. Era a única exceção a essa política no `financial`.
-  'remittance-disabled-under-rbac-bypass',
   // Quarentena do retorno (#753): a tabela não respondeu. Sem esta linha o erro cairia no default
   // 422 — "regra de negócio inválida" —, mandando o operador procurar defeito num dado que está
   // certo, enquanto o problema é o banco.
