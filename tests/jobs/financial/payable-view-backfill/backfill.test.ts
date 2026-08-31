@@ -10,6 +10,9 @@ import { createInMemoryPayableViewStore } from '#src/modules/financial/adapters/
 import type { PayableView } from '#src/modules/financial/domain/payable-view/types.ts';
 import { backfillPayableViews } from '#src/jobs/financial/payable-view-backfill/backfill.ts';
 
+// #894: recência que o backfill carimba. Fixo, porque estes casos não exercitam ordenação.
+const BACKFILL_AT = new Date('2026-01-01T00:00:00.000Z');
+
 const record = (payableId: string, status: PayableView['status'] = 'Open'): PayableView => ({
   payableId,
   documentId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -19,6 +22,8 @@ const record = (payableId: string, status: PayableView['status'] = 'Open'): Paya
   contractRef: null,
   categoryRef: null,
   budgetPlanRef: null,
+  // M2/RN-M2-12: a folha entrou no read-model.
+  subcategoryRef: null,
   costCenterRef: null,
   programRef: null,
   valueCents: 77500,
@@ -32,7 +37,7 @@ const record = (payableId: string, status: PayableView['status'] = 'Open'): Paya
 describe('jobs/payable-view-backfill — backfillPayableViews (#236)', () => {
   it('CA1: aplica os records e conta applied', async () => {
     const store = createInMemoryPayableViewStore();
-    const r = await backfillPayableViews([record('p1'), record('p2')], store);
+    const r = await backfillPayableViews([record('p1'), record('p2')], store, BACKFILL_AT);
     assert.equal(r.ok, true);
     if (r.ok) {
       assert.equal(r.value.applied, 2);
@@ -44,15 +49,15 @@ describe('jobs/payable-view-backfill — backfillPayableViews (#236)', () => {
 
   it('CA2: idempotente — rerodar não duplica', async () => {
     const store = createInMemoryPayableViewStore();
-    await backfillPayableViews([record('p1'), record('p2')], store);
-    await backfillPayableViews([record('p1'), record('p2')], store);
+    await backfillPayableViews([record('p1'), record('p2')], store, BACKFILL_AT);
+    await backfillPayableViews([record('p1'), record('p2')], store, BACKFILL_AT);
     const list = await store.list();
     if (list.ok) assert.equal(list.value.length, 2);
   });
 
   it('CA3: vazio → {0,0}, sem escrita', async () => {
     const store = createInMemoryPayableViewStore();
-    const r = await backfillPayableViews([], store);
+    const r = await backfillPayableViews([], store, BACKFILL_AT);
     assert.equal(r.ok, true);
     if (r.ok) assert.equal(r.value.applied, 0);
     const list = await store.list();

@@ -74,6 +74,14 @@ export const createDrizzlePayableReconciliationView = (
             value: finPayables.value,
             dueDate: finPayables.dueDate,
             paymentMethod: finPayables.paymentMethod,
+            // M2/#268: o LEFT JOIN com fin_documents já existia (para o filtro de status); os 5 refs
+            // saem dele sem custo de query nova.
+            kind: finPayables.kind,
+            programRef: finDocuments.programRef,
+            budgetPlanRef: finDocuments.budgetPlanRef,
+            costCenterRef: finDocuments.costCenterRef,
+            categoryRef: finDocuments.categoryRef,
+            subcategoryRef: finDocuments.subcategoryRef,
           })
           .from(finPayables)
           // #323 (regressão): "todo título pago aparece na conciliação". O grid Contas a Pagar deriva
@@ -94,6 +102,12 @@ export const createDrizzlePayableReconciliationView = (
             valueCents: r.value,
             dueDate: r.dueDate,
             paymentMethod: r.paymentMethod,
+            kind: r.kind,
+            programRef: r.programRef,
+            budgetPlanRef: r.budgetPlanRef,
+            costCenterRef: r.costCenterRef,
+            categoryRef: r.categoryRef,
+            subcategoryRef: r.subcategoryRef,
           })),
         );
       } catch (cause) {

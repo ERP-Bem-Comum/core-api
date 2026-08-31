@@ -41,8 +41,11 @@ const main = async (): Promise<number> => {
       process.stderr.write(`${TAG}falha ao ler a fonte: ${source.error}\n`);
       return 1;
     }
-    const store = createDrizzlePayableViewStore(handle, ClockReal());
-    const result = await backfillPayableViews(source.value.records, store);
+    const clock = ClockReal();
+    const store = createDrizzlePayableViewStore(handle, clock);
+    // #894: o backfill leu a fonte de verdade AGORA — carimba `now` como recência para que a
+    // reposição vença eventos antigos e perca para eventos futuros. Mesmo relógio do store.
+    const result = await backfillPayableViews(source.value.records, store, clock.now());
     if (!result.ok) return 1;
     process.stderr.write(
       `${TAG}concluído — ${result.value.applied} aplicados, ${result.value.failed} falhas, ` +

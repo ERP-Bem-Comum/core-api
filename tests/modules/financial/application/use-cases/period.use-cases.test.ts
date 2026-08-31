@@ -31,6 +31,7 @@ import { undoReconciliation } from '#src/modules/financial/application/use-cases
 import { confirm as domainConfirm } from '#src/modules/financial/domain/reconciliation/reconciliation.ts';
 import * as ReconciliationId from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import * as PayableId from '#src/modules/financial/domain/shared/payable-id.ts';
+import { m2DepsStub } from '#tests/support/reconciliation-m2-deps.ts';
 
 const ACCOUNT = '11111111-1111-4111-8111-111111111111';
 const START = new Date('2024-05-01T00:00:00.000Z');
@@ -263,6 +264,8 @@ describe('financial — guard period-closed (CA4)', () => {
       cedenteStore,
       periods: periodStore,
       clock: ClockReal(),
+      // M2: inertes — este caso prova o guard de período fechado, sem reclassificação.
+      ...m2DepsStub,
     })({
       transactionId: String(txId),
       payableIds: [String(PayableId.generate())],

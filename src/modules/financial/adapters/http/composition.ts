@@ -50,6 +50,25 @@ import {
 import { comparisonWindows } from '../../domain/dashboard/variation.ts';
 import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
 import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
+// M2 (RN-M2-09/10): validação do CAMINHO da taxonomia contra a árvore do plano (ADR-0051), via
+// `budget-plans/public-api` — o financeiro nunca toca `bgp_*`.
+import {
+  buildBudgetPlansReadPort,
+  type BudgetPlansReadPort,
+} from '#src/modules/budget-plans/public-api/read.ts';
+import { createBudgetPlansTaxonomyPathRead } from '../persistence/repos/taxonomy-path-read.from-budget-plans.ts';
+import { createInMemoryTaxonomyPathRead } from '../persistence/repos/taxonomy-path-read.in-memory.ts';
+import type { TaxonomyPath, TaxonomyPathRead } from '../../application/ports/taxonomy-path-read.ts';
+
+// #268: os 5 refs vigentes de um título, para a leitura do conciliado. Shape plano — é DTO de borda,
+// não VO: quem o consome é o `transactionReconciliationToDto`.
+export type TitleTaxonomyDto = Readonly<{
+  programRef: string | null;
+  budgetPlanRef: string | null;
+  costCenterRef: string | null;
+  categoryRef: string | null;
+  subcategoryRef: string | null;
+}>;
 // #357: resumo de título em lote — POST /financial/payables:batch (ADR-0049).
 import {
   createInMemoryPayableSummaryByIdsView,
@@ -245,6 +264,12 @@ export type FinancialCompositionConfig = Readonly<{
   /** Port de leitura do NOME de usuário + alçada do aprovador (#207/#289 — ADR-0032).
    *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
   authUserReadPort?: AuthUserReadPort & ApproverAuthorityReadPort;
+  /** M2 · RN-M2-09/10 — read-port do `budget-plans` (ADR-0051): valida o CAMINHO da taxonomia no
+   *  confirm da conciliação. Injetado em testes; driver mysql constrói automaticamente se ausente. */
+  budgetPlansReadPort?: BudgetPlansReadPort;
+  /** M2 — atalho para os testes (memory): os caminhos de taxonomia aceitos como válidos. Ausente →
+   *  nenhum caminho é válido, e toda reclassificação é recusada (default seguro). */
+  taxonomyPaths?: readonly TaxonomyPath[];
   /** Read-model de payables (#239 — widget "Últimos pagamentos"). Em produção é alimentado de forma
    *  ASSÍNCRONA pelo worker `payable-view-projection` (ADR-0022) — não pelas rotas de escrita deste
    *  composition root. Injetado em testes HTTP para semear dados determinísticos via `applyPayableEvent`;
@@ -417,8 +442,10 @@ export type FinancialHttpDeps = Readonly<{
   resolveUserName: (id: string | null) => Promise<string | null>;
   /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
   resolveCategoryName: (ref: string | null) => Promise<string | null>;
-  /** Fatia 2: categoryRef do documento conciliado (payableId → doc). null = sem doc/categoria (graceful). */
-  resolveTitleCategoryRef: (payableId: string) => Promise<string | null>;
+  /** #268: os 5 refs do documento conciliado (payableId → doc). null = sem doc (graceful). Substitui o
+   *  `resolveTitleCategoryRef` da fatia 2 — a categoria era o único nível devolvido, e a tela precisa
+   *  do caminho inteiro para reabrir o "Editar" na classificação vigente (M2-2). */
+  resolveTitleTaxonomy: (payableId: string) => Promise<TitleTaxonomyDto | null>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -478,6 +505,9 @@ type Pools = Readonly<{
   dashboardCostCentersReader: DashboardCostCentersReader;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
+  // M2/RN-M2-09/10: valida o caminho da taxonomia contra a árvore do plano (ADR-0051). No driver
+  // `memory` nasce VAZIO — sem plano carregado não há caminho válido, e reclassificar é recusado.
+  taxonomyPathRead: TaxonomyPathRead;
   // #207/#289: port de leitura do nome de usuário + alçada do aprovador (ADR-0032). memory:
   // injetado ou null; mysql: construído.
   authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | null;
@@ -548,6 +578,8 @@ type MemoryPoolSeams = Readonly<{
   remittanceRepo?: RemittanceRepository;
   // #753: in-memory vazio por padrão; testes HTTP injetam objetos presos.
   vanReturnQuarantine?: VanReturnQuarantineStore;
+  // M2: caminhos de taxonomia aceitos. Ausente → nenhum, e reclassificar é recusado.
+  taxonomyPaths?: readonly TaxonomyPath[];
 }>;
 
 const buildMemoryPools = (
@@ -588,6 +620,10 @@ const buildMemoryPools = (
     payables: payableStore,
     statements: statementStore,
     expectedCounterparts: expectedCounterpartMap,
+    // M2: os MESMOS stores que o document-repo e o timeline-repo usam — a reclassificação é escrita
+    // na mesma unit-of-work da conciliação (paridade in-memory da tx do Drizzle, RN-M2-06).
+    documents: documentStore,
+    timeline: timelineStore,
   });
   const cedenteStore = createInMemoryCedenteAccountStore();
   // #269: contrapartida esperada (vazia no boot; nasce ao conciliar uma transferência A→B).
@@ -635,11 +671,19 @@ const buildMemoryPools = (
         rows.push({
           payableId: pay.id,
           documentId: pay.documentId,
+          // M2/RN-M2-11: o `PayableStore` da conciliação guarda só id/status/valor — o `kind` vem do
+          // agregado, onde ele existe. Pai é UM por documento, então comparar com o id do pai é a
+          // mesma pergunta que o `fin_payables.kind` responde no JOIN do Drizzle.
+          kind: entry.aggregate.payables?.parent.id === pay.id ? 'Parent' : 'Child',
           supplierRef: doc.supplier ?? null,
           documentNumber: doc.documentNumber ?? null,
           dueDate: doc.dueDate ?? null,
           categoryRef: doc.categoryRef ?? null,
           costCenterRef: doc.costCenterRef ?? null,
+          // M2 + #268: os 5 níveis, derivados do documento como no JOIN do Drizzle.
+          budgetPlanRef: doc.budgetPlanRef ?? null,
+          subcategoryRef: doc.subcategoryRef ?? null,
+          programRef: doc.programRef ?? null,
           competencia: doc.competencia !== null ? Competencia.toString(doc.competencia) : null,
           payeeKind: doc.payeeKind ?? null,
         });
@@ -680,6 +724,9 @@ const buildMemoryPools = (
     dashboardCostCentersReader,
     contractorReadPort,
     authUserReadPort,
+    // M2: fake dos caminhos válidos. Vazio por padrão — o driver `memory` não tem árvore de plano, e
+    // aprovar caminho nenhum é o default que faz o teste falhar do lado certo (RN-M2-09).
+    taxonomyPathRead: createInMemoryTaxonomyPathRead(seams.taxonomyPaths ?? []),
     shutdown: () => Promise.resolve(),
   };
 };
@@ -808,6 +855,28 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     dashboardCostCentersReader = readerR.value;
     closeDashboardCostCentersReader = readerR.value.close;
   }
+  // M2/RN-M2-09/10: read-port do `budget-plans` para validar o CAMINHO da taxonomia no confirm.
+  // Boot-scoped (pool próprio — molde de `buildProgramsReadPort`/`buildPartnersReadPort`), aberto por
+  // ÚLTIMO → só o seu próprio caminho de erro fecha os anteriores. Injetado tem precedência (testes).
+  let budgetPlansReadPort: BudgetPlansReadPort | null = config.budgetPlansReadPort ?? null;
+  let closeBudgetPlansPort: () => Promise<void> = () => Promise.resolve();
+  if (budgetPlansReadPort === null) {
+    const portR = await buildBudgetPlansReadPort({ connectionString: writerUrl });
+    if (!portR.ok) {
+      await closeDashboardCostCentersReader();
+      await closeSuppliersReader();
+      await closeAuthUserPort();
+      await closeContractorPort();
+      await programsReadPort.close();
+      await contractsReadPort.close();
+      await handle.close();
+      throw new Error(
+        `financial-composition: falha ao abrir budget-plans read port (${portR.error})`,
+      );
+    }
+    budgetPlansReadPort = portR.value;
+    closeBudgetPlansPort = portR.value.close;
+  }
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
@@ -855,7 +924,10 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     periodStore: createDrizzleReconciliationPeriodStore(handle),
     contractorReadPort,
     authUserReadPort,
+    // M2: ACL do caminho da taxonomia — o financeiro fala com o seu próprio port, e o adapter traduz.
+    taxonomyPathRead: createBudgetPlansTaxonomyPathRead(budgetPlansReadPort),
     shutdown: async () => {
+      await closeBudgetPlansPort();
       await closeDashboardCostCentersReader();
       await closeSuppliersReader();
       await closeAuthUserPort();
@@ -970,6 +1042,10 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
       cedenteStore: pools.cedenteStore,
       periods: pools.periodStore,
       clock,
+      // M2: só exercitados quando o body traz `taxonomy`.
+      documents: pools.repo,
+      payableDocs: pools.payableDocView,
+      taxonomyPaths: pools.taxonomyPathRead,
     }),
     undoReconciliation: undoReconciliation({
       reconciliationRepo: pools.reconciliationRepo,
@@ -1106,10 +1182,18 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
       if (!r.ok) return null;
       return r.value.find((c) => String(c.id) === ref)?.name ?? null;
     },
-    resolveTitleCategoryRef: async (payableId) => {
+    resolveTitleTaxonomy: async (payableId) => {
       const r = await pools.payableDocView.findByPayableIds([payableId]);
       if (!r.ok) return null;
-      return r.value[0]?.categoryRef ?? null;
+      const row = r.value[0];
+      if (row === undefined) return null;
+      return {
+        programRef: row.programRef,
+        budgetPlanRef: row.budgetPlanRef,
+        costCenterRef: row.costCenterRef,
+        categoryRef: row.categoryRef,
+        subcategoryRef: row.subcategoryRef,
+      };
     },
     shutdown: pools.shutdown,
   };
@@ -1140,6 +1224,7 @@ export const buildFinancialHttpDeps = async (
         ...(config.vanReturnQuarantine !== undefined
           ? { vanReturnQuarantine: config.vanReturnQuarantine }
           : {}),
+        ...(config.taxonomyPaths !== undefined ? { taxonomyPaths: config.taxonomyPaths } : {}),
       }),
       config.clock,
     );

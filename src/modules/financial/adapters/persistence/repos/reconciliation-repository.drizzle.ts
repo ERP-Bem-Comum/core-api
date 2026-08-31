@@ -14,18 +14,22 @@ import type { ReconciliationEvent } from '#src/modules/financial/domain/reconcil
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type {
+  ReconciliationReclassification,
   ReconciliationRepository,
   ReconciliationRepositoryError,
 } from '#src/modules/financial/application/ports/reconciliation-repository.ts';
 import type { FinancialAppendableEvent } from '#src/modules/financial/application/ports/outbox.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import {
+  finDocuments,
+  finDocumentTimeline,
   finExpectedCounterpart,
   finManualEntries,
   finPayables,
   finReconciliationItems,
   finReconciliations,
   finStatementTransactions,
+  finTimelineFieldChanges,
 } from '../schemas/mysql.ts';
 import {
   reconciliationToRow,
@@ -33,7 +37,9 @@ import {
   manualEntryToRow,
   toDomain,
 } from '../mappers/reconciliation.mapper.ts';
+import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
+import { makeVersionConflict, isVersionConflict } from './version-conflict.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-reconciliation-repo] ${op} failed: ${String(cause)}\n`);
@@ -53,6 +59,7 @@ export const createDrizzleReconciliationRepository = (
       reconciliation: Reconciliation,
       transactionId: StatementTransactionId,
       events?: readonly ReconciliationEvent[],
+      reclassifications?: readonly ReconciliationReclassification[],
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
       try {
         await db.transaction(async (tx) => {
@@ -120,11 +127,67 @@ export const createDrizzleReconciliationRepository = (
             );
           if (affectedRowsOf(txRes) !== 1) throw new Error('transaction-not-pending');
 
+          // M2/RN-M2-06: a reclassificação entra AQUI, na transação que já está aberta — refs do
+          // documento, `DocumentSaved` (que reprojeta pai e filhos) e trilha, tudo ou nada junto com
+          // a conciliação. O `throw` de qualquer passo reverte inclusive os UPDATEs de status acima.
+          for (const r of reclassifications ?? []) {
+            // #893 — o CAS do agregado. `WHERE version = ?` transforma o UPDATE numa AFIRMAÇÃO sobre
+            // o estado lido ("aplique se, e só se, ninguém tocou o documento desde que eu o li"), que
+            // é o que o `affectedRows` precisa para significar alguma coisa: sem ela, um
+            // `WHERE id = ?` casa sempre e o desfecho é last-write-wins silencioso.
+            //
+            // `version + 1` é a outra metade, e é a que o cenário do editor concorrente expõe: sem o
+            // incremento, esta escrita fica INVISÍVEL para os demais escritores do agregado, que
+            // seguem segurando um token que já não descreve o estado. Nenhum nível de isolamento
+            // resolveria — sob MVCC o `findById` do use case é consistent read e não trava a linha
+            // de propósito; a distância a cobrir é entre a LEITURA que informou a decisão e a
+            // ESCRITA que a aplica, não algo que aconteça dentro desta transação.
+            const docRes = await tx
+              .update(finDocuments)
+              .set({
+                programRef: r.programRef,
+                budgetPlanRef: r.budgetPlanRef,
+                costCenterRef: r.costCenterRef,
+                categoryRef: r.categoryRef,
+                subcategoryRef: r.subcategoryRef,
+                version: r.expectedVersion + 1,
+              })
+              .where(
+                and(eq(finDocuments.id, r.documentId), eq(finDocuments.version, r.expectedVersion)),
+              );
+            // `affectedRows = 0` agora tem duas leituras possíveis — o documento sumiu, ou a versão
+            // divergiu — e a segunda é a esperada num sistema concorrente. Distinguir importa: o
+            // conflito é 409 (o mesmo pedido volta a valer depois de reler), e sumiço é 404.
+            if (affectedRowsOf(docRes) !== 1) {
+              const [still] = await tx
+                .select({ id: finDocuments.id })
+                .from(finDocuments)
+                .where(eq(finDocuments.id, r.documentId))
+                .limit(1);
+              if (still === undefined) throw new Error('document-not-found');
+              throw makeVersionConflict(r.documentId, r.expectedVersion);
+            }
+
+            if (r.timeline.length > 0) {
+              const mapped = r.timeline.map(mapEntryToRows);
+              await tx.insert(finDocumentTimeline).values(mapped.map((m) => m.entryRow));
+              const changeRows = mapped.flatMap((m) => [...m.changeRows]);
+              if (changeRows.length > 0) {
+                await tx.insert(finTimelineFieldChanges).values(changeRows);
+              }
+            }
+
+            await appendFinOutboxInTx(tx, r.events);
+          }
+
           // #127: estado + evento na MESMA tx (atomicidade — ADR-0015). Falha aqui reverte tudo.
           await appendFinOutboxInTx(tx, events ?? []);
         });
         return ok(undefined);
       } catch (cause) {
+        // #893: conflito de versão é desfecho SEMÂNTICO (409), não falha de infra (500). O `if` vem
+        // antes do log genérico porque não é incidente — é concorrência funcionando.
+        if (isVersionConflict(cause)) return err('document-version-conflict');
         logStore('confirm', cause);
         return err('reconciliation-repository-failure');
       }

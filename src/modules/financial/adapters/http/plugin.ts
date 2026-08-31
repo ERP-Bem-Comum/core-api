@@ -1617,6 +1617,9 @@ const financialRoutes =
           payableIds: body.payableIds,
           ...(difference !== undefined ? { difference } : {}),
           ...(body.allocations !== undefined ? { allocations: body.allocations } : {}),
+          // M2: os 5 refs viajam JUNTOS ou nenhum. O schema já garante que o bloco, quando presente,
+          // está completo — nada de espalhar aqui, que é como o #505 nasceu no caminho vizinho.
+          ...(body.taxonomy !== undefined ? { taxonomy: body.taxonomy } : {}),
           reconciledBy: req.userId,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
@@ -1754,17 +1757,31 @@ const financialRoutes =
         const reconciledByName = await deps.resolveUserName(result.value.audit.reconciledBy);
         // Categoria (ref → nome) — modal "Conciliação realizada". Lançamento manual tem precedência
         // (fatia 1); senão, vem do documento do 1º título conciliado (fatia 2).
-        let categoryRef = result.value.manualEntry?.categoryRef ?? null;
-        if (categoryRef === null) {
+        //
+        // #268: além do NOME (rótulo), a resposta passa a devolver os 5 refs vigentes — é deles que a
+        // tela precisa para reabrir o "Editar" já posicionado na classificação atual. O nome sozinho
+        // não serve: não dá para pré-selecionar um `<select>` com um rótulo.
+        const manualEntry = result.value.manualEntry;
+        let taxonomy =
+          manualEntry === null
+            ? null
+            : {
+                programRef: manualEntry.programRef,
+                budgetPlanRef: manualEntry.budgetPlanRef,
+                costCenterRef: manualEntry.costCenterRef,
+                categoryRef: manualEntry.categoryRef,
+                subcategoryRef: manualEntry.subcategoryRef,
+              };
+        if (taxonomy === null) {
           const firstItem = result.value.items[0];
           if (firstItem !== undefined) {
-            categoryRef = await deps.resolveTitleCategoryRef(String(firstItem.payableId));
+            taxonomy = await deps.resolveTitleTaxonomy(String(firstItem.payableId));
           }
         }
-        const category = await deps.resolveCategoryName(categoryRef);
+        const category = await deps.resolveCategoryName(taxonomy?.categoryRef ?? null);
         return sendResult(
           reply,
-          ok(transactionReconciliationToDto(result.value, reconciledByName, category)),
+          ok(transactionReconciliationToDto(result.value, reconciledByName, category, taxonomy)),
           { ok: 200 },
         );
       },
@@ -1864,10 +1881,16 @@ const financialRoutes =
         const result = await deps.confirmBatch({
           transactionIds: body.transactionIds,
           // Bridge undefined→omitido (exactOptionalPropertyTypes vs Zod .optional()).
+          // #505: os CINCO níveis atravessam. `budgetPlanRef` e `subcategoryRef` sempre existiram no
+          // `manualEntryBodySchema` (o mesmo schema desta rota) e no `recordManualEntry` do outro
+          // lado — o descarte acontecia AQUI, neste mapeamento, e por isso não havia erro nenhum
+          // para investigar: o lote gravava três de cinco e reportava sucesso.
           template: {
             type: t.type,
             ...(t.supplierRef !== undefined ? { supplierRef: t.supplierRef } : {}),
+            ...(t.budgetPlanRef !== undefined ? { budgetPlanRef: t.budgetPlanRef } : {}),
             ...(t.categoryRef !== undefined ? { categoryRef: t.categoryRef } : {}),
+            ...(t.subcategoryRef !== undefined ? { subcategoryRef: t.subcategoryRef } : {}),
             ...(t.costCenterRef !== undefined ? { costCenterRef: t.costCenterRef } : {}),
             ...(t.programRef !== undefined ? { programRef: t.programRef } : {}),
             ...(t.description !== undefined ? { description: t.description } : {}),

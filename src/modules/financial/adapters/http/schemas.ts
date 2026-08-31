@@ -554,6 +554,28 @@ export const confirmReconciliationBodySchema = z.object({
       note: z.string().min(1).max(500).optional(),
     })
     .optional(),
+  // M2 (RN-M2-03/04): reclassificação da taxonomia aplicada ao(s) título(s) LÍQUIDO(s) desta
+  // conciliação e cascateada aos títulos de retenção dos mesmos documentos (decisão A da P.O.).
+  //
+  // ⚠️ O BLOCO é opcional; os 5 refs DENTRO dele não são. Um caminho parcial não identifica nó algum
+  // na árvore do plano (ADR-0051) e não é validável contra ela — aceitá-lo seria gravar exatamente o
+  // "caminho morto" que o M2-10 manda recusar. O front já tem os 5 nos selects em cascata: ao trocar
+  // só a subcategoria (M2-2), reenvia os outros quatro inalterados.
+  taxonomy: z
+    .object({
+      programRef: z.uuid(),
+      budgetPlanRef: z.uuid(),
+      costCenterRef: z.uuid(),
+      categoryRef: z.uuid(),
+      subcategoryRef: z.uuid(),
+    })
+    .meta({
+      description:
+        'Reclassificação dos 5 níveis (Programa → Plano → Centro de Custo → Categoria → Subcategoria). ' +
+        'Aplicada ao título líquido e cascateada aos títulos de retenção do mesmo documento. ' +
+        'Os 5 refs devem formar um caminho existente e ativo do plano; caso contrário a conciliação é recusada.',
+    })
+    .optional(),
 });
 
 export type ConfirmReconciliationBody = z.infer<typeof confirmReconciliationBodySchema>;
@@ -592,6 +614,16 @@ const paidPayableSchema = z
     valueCents: z.string(),
     dueDate: z.string(),
     paymentMethod: z.string(),
+    // #268 (dentro da M2): a classificação vigente de volta na leitura — a coluna CATEGORIA da aba
+    // "Buscar/Criar vários" mostrava "—" porque a API nunca a devolveu, não porque faltasse o dado.
+    // `kind` diz quem pode ser FONTE de reclassificação: o botão "Editar" só habilita com 'Parent'
+    // na seleção (RN-M2-11).
+    kind: z.enum(['Parent', 'Child']),
+    programRef: z.string().nullable(),
+    budgetPlanRef: z.string().nullable(),
+    costCenterRef: z.string().nullable(),
+    categoryRef: z.string().nullable(),
+    subcategoryRef: z.string().nullable(),
   })
   .strict();
 
@@ -1080,6 +1112,19 @@ export const transactionReconciliationResponseSchema = z
     // Categoria do lançamento manual, resolvida server-side (ref → nome). null = sem categoria ou
     // conciliação sem lançamento manual (título real fica p/ fatia 2).
     category: z.string().nullable(),
+    // #268 (dentro da M2): os 5 refs VIGENTES da conciliação, de volta na leitura. `category` acima
+    // continua sendo o NOME (rótulo de tela) e não substitui isto: a tela precisa dos ids para
+    // reabrir o "Editar" já posicionado na classificação atual (M2-2 — mexer só na subcategoria).
+    taxonomy: z
+      .object({
+        programRef: z.string().nullable(),
+        budgetPlanRef: z.string().nullable(),
+        costCenterRef: z.string().nullable(),
+        categoryRef: z.string().nullable(),
+        subcategoryRef: z.string().nullable(),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 

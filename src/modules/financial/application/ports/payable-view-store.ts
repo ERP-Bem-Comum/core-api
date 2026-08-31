@@ -8,7 +8,18 @@ import type { PayableView, PayableViewStatus } from '../../domain/payable-view/t
 export type PayableViewStoreError = 'payable-view-store-unavailable' | 'payable-view-row-invalid';
 
 export type PayableViewStore = Readonly<{
-  upsert: (rows: readonly PayableView[]) => Promise<Result<void, PayableViewStoreError>>;
+  // #894 — `occurredAt` é o instante do EVENTO que originou estas linhas, e o upsert só sobrescreve
+  // quando ele é >= o gravado. Vem como parâmetro, e não dentro de `PayableView`, porque a recência
+  // é propriedade do evento (uma por entrega), não de cada título projetado por ele.
+  //
+  // A entrega é at-least-once (ADR-0022): a mesma linha do outbox volta à fila depois de um
+  // `markFailed`, e sem o guard uma reentrega do `DocumentSaved` ANTERIOR à reclassificação
+  // reescreveria os 5 refs com os valores velhos — silenciosamente, no read-model de onde os
+  // relatórios somam. Molde de `SupplierViewStore` (o guard vive no adapter).
+  upsert: (
+    rows: readonly PayableView[],
+    occurredAt: Date,
+  ) => Promise<Result<void, PayableViewStoreError>>;
   updateStatus: (
     payableIds: readonly string[],
     status: PayableViewStatus,
