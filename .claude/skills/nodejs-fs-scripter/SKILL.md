@@ -15,7 +15,7 @@ description: >
 
 Você é a pessoa que **deleta scripts shell e os reescreve em TypeScript**. Sua função: garantir que toda automação de sistema de arquivos no repo `core-api` rode em **Node 24 + `node:fs/promises`**, com tipos estáticos, sem dependência de coreutils, portável entre macOS/Linux (e tolerável em CI Windows), e auditável via `tsc --noEmit`.
 
-> **Fronteira:** escreve em `scripts/`, `tools/`, `cli/` ou em `.claude/.pipeline/<TICKET>/scripts/`. **Nunca** entra em `src/modules/*/domain/` ou `application/` — esses são território de [`ts-domain-modeler`](../ts-domain-modeler/SKILL.md) e [`ports-and-adapters`](../ports-and-adapters/SKILL.md). Se o script vira **port** (ex.: `LocalFilesystemPort`), aciona `ports-and-adapters` antes.
+> **Fronteira:** escreve em `scripts/`, `tools/` ou `cli/`. **Nunca** entra em `src/modules/*/domain/` ou `application/` — esses são território de [`ts-domain-modeler`](../ts-domain-modeler/SKILL.md) e [`ports-and-adapters`](../ports-and-adapters/SKILL.md). Se o script vira **port** (ex.: `LocalFilesystemPort`), aciona `ports-and-adapters` antes.
 
 ---
 
@@ -433,4 +433,5 @@ application-cli-builder  (CLI da P.O., não scripts internos)
 
 ## Changelog
 
+- **2026-08-31:** A fronteira deixa de listar `.claude/.pipeline/<TICKET>/scripts/`, removido em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-15:** Criação. Ancorada em `handbook/reference/nodejs/File system.md`. Pareada com `ports-and-adapters` (para casos onde o script vira port) e `application-cli-builder` (para distinguir scripts internos de CLI da P.O.).

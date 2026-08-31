@@ -65,11 +65,17 @@ Quando o aluno disser "quero ver TDD de verdade aqui", aponte para:
 
 | Tópico | Onde olhar |
 | :--- | :--- |
-| Pipeline obrigatória W0 RED → W1 GREEN para todo código não-trivial | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Trabalho não-trivial passa pela pipeline" |
+| Vermelho não fecha turno — teste, lint, typecheck ou build | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Política de regressão zero" |
 | Runner usado no projeto: `node:test` nativo + `--experimental-strip-types` (sem Jest, sem Vitest) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
-| Comandos do dia-a-dia (`npm test`, single-test com `--test-name-pattern`) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Comandos" |
+| Comandos do dia-a-dia (`pnpm test`, single-test com `--test-name-pattern`) | [`../../rules/testing.md`](../../rules/testing.md) |
 | Estrutura: `tests/` espelha `src/`, sufixo `.test.ts` é descoberto, `.contract.ts`/`.suite.ts` são suites parametrizadas reutilizáveis | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Convenções de testes" |
 | Exemplos vivos de testes na base | `tests/modules/contracts/domain/shared/money.test.ts`, `period.test.ts`, `bucket-name.test.ts`, `storage-key.test.ts` |
 | Suite de contrato reutilizável (mesmo cenário roda contra adapter InMemory e contra adapter real) | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts`, `tests/modules/contracts/application/ports/document-storage.contract.ts` |
 | Tests de regressão dedicados a bugs passados | `tests/regression/reports-2026-05-15.test.ts` |
 | Tests E2E rodando contra a CLI real (drivers `memory` e `mysql`) | `tests/cli/contracts.cli.test.ts` (memory — offline), `tests/cli/contracts.cli.mysql.test.ts` (mysql — opt-in via `pnpm test:integration`) |
+
+---
+
+## Changelog
+
+- **2026-08-31:** A "pipeline obrigatória W0 RED → W1 GREEN" dá lugar à política de regressão zero, e o comando do dia-a-dia deixa de ser `npm test` — as waves saíram em 2026-08-06 e `npm` é o anti-padrão nº 1. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).

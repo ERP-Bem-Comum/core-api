@@ -5,7 +5,7 @@ description: >-
   GitHub Issue PADRONIZADA, TESTÁVEL e SEM DUPLICATA. Use SEMPRE que, durante qualquer trabalho, encontrar
   um problema FORA do escopo do ticket atual — em vez de consertar na hora (scope-creep) ou perder o achado.
   Garante título normalizado, causa-raiz, critérios de aceite Dado/Quando/Então e Definition of Done amarrada
-  ao gate W3. Deduplica via `gh issue list` antes de criar. Aciona em: "abre uma issue disso", "registra esse
+  ao gate de qualidade. Deduplica via `gh issue list` antes de criar. Aciona em: "abre uma issue disso", "registra esse
   problema", "isso é um bug pra depois", "achei um gap", "tem um débito aqui", "isso foge do escopo".
 ---
 
@@ -106,5 +106,11 @@ trabalho original — você NÃO conserta o achado agora (a menos que o usuário
 - [ ] Problema em 1 frase sem ambiguidade + `arquivo:linha`.
 - [ ] Causa-raiz (não sintoma) + regra/ADR violado + impacto.
 - [ ] ≥1 critério **Dado/Quando/Então** testável, **com caminho de erro** (slug/status).
-- [ ] Definition of Done com o gate W3.
+- [ ] Definition of Done com o gate: `typecheck` + `format:check` + `lint` + `test`.
 - [ ] `dedup-key` presente; busca de duplicata feita.
+
+---
+
+## Changelog
+
+- **2026-08-31:** A DoD deixa de se amarrar ao "gate W3" e nomeia o gate real (`typecheck` + `format:check` + `lint` + `test`) — as waves foram removidas em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
