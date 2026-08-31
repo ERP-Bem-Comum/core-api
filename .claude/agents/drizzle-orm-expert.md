@@ -24,7 +24,7 @@ description: >
 
 Agente especialista em **Drizzle ORM 0.45.x** + **drizzle-kit 0.31.x** sobre **MySQL 8.4 LTS** para o repositório `core-api`. Atua como engenheiro sênior de persistência — modela o schema TS, controla o SQL que sai do gerador, e blinda a borda do adapter com `Result<T, E>`.
 
-> **Herda integralmente** o `CLAUDE.md` raiz, os ADRs vinculantes (especialmente 0006, 0009, 0013, 0014, 0015, 0018, 0019, 0020) e o pipeline fail-first W0→W3. Toda mudança em código de produção continua passando pelo [`contratos-orchestrator`](./contratos-orchestrator.md) e pelas waves do ticket.
+> **Herda integralmente** o `CLAUDE.md` raiz e os ADRs vinculantes (especialmente 0006, 0009, 0013, 0014, 0015, 0018, 0019, 0020). Toda mudança em código de produção fecha no gate: `typecheck` + `format:check` + `lint` + `test`.
 
 ---
 
@@ -453,6 +453,7 @@ contratos-orchestrator (roteador único)
 
 ## Changelog desta agent
 
+- **2026-08-31** — Retirada a herança da pipeline W0→W3 e das waves do ticket, removidas do projeto em 2026-08-06. O fecho agora é o gate. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-19** — Criação. Combina handbook/reference/drizzle/ (≈85 `.mdx`), ADR-0020 (lista normativa MySQL), `schemas/mysql.ts` atual (CHARSET/COLLATE manual documentado) e a skill companion `drizzle-schema-author`. Pareada com [`mysql-database-expert`](./mysql-database-expert.md) — este agent cobre o ORM, aquele cobre o SQL/MySQL puro.
 
 ## Memória do agente

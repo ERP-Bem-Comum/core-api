@@ -75,15 +75,21 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 
 | Tópico | Onde olhar |
 | :--- | :--- |
-| Pipeline obrigatória W0 RED → W1 GREEN para código não-trivial | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Trabalho não-trivial passa pela pipeline" |
-| Skill irmã do W0/W1 no domínio puro | [`../ts-domain-modeler/SKILL.md`](../ts-domain-modeler/SKILL.md) |
-| Skill irmã do W2 (revisão da rede de segurança) | [`../code-reviewer/SKILL.md`](../code-reviewer/SKILL.md) |
-| Skill irmã do W3 (gate final automatizado) | [`../ts-quality-checker/SKILL.md`](../ts-quality-checker/SKILL.md) |
+| Vermelho não fecha turno — teste, lint, typecheck ou build | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Política de regressão zero" |
+| Skill irmã no domínio puro | [`../ts-domain-modeler/SKILL.md`](../ts-domain-modeler/SKILL.md) |
+| Skill irmã na revisão da rede de segurança | [`../code-reviewer/SKILL.md`](../code-reviewer/SKILL.md) |
+| Skill irmã no gate automatizado | [`../ts-quality-checker/SKILL.md`](../ts-quality-checker/SKILL.md) |
 | Runner: `node:test` nativo + `--experimental-strip-types` (sem Jest, sem Vitest, sem fast-check ainda) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
-| Comandos: `npm test`, single-test via `--test-name-pattern`, BDD via CLI | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Comandos" e §"Convenções de testes" |
+| Comandos: `pnpm test`, single-test via `--test-name-pattern` | [`../../rules/testing.md`](../../rules/testing.md) |
 | Estrutura mirror: `tests/` espelha `src/`. Sufixo `.test.ts` é descoberto. `.contract.ts` e `.suite.ts` são suites parametrizadas reutilizáveis (function factory que recebe `makeImpl`) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Convenções de testes" |
 | Subpath imports em testes: `import { Money } from '#src/modules/contracts/domain/shared/money.ts'` | [`../../../package.json`](../../../package.json) `imports` field |
 | Fakes do projeto (NÃO mocks) | `src/shared/adapters/clock-fixed.ts`, `src/modules/contracts/adapters/*.in-memory.ts` |
 | Exemplos de E2E rodando a CLI real (sem mock) | `tests/cli/contracts.cli.test.ts` (driver `memory`), `tests/cli/contracts.cli.mysql.test.ts` (driver `mysql` — `pnpm test:integration`) |
 | Exemplos de testes de contrato parametrizados (dois adapters consumindo a mesma suite) | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts` + `inmemory.test.ts` + `drizzle-mysql.test.ts` |
-| Regressão dirigida por defeito (defect-driven test) | `tests/regression/reports-2026-05-15.test.ts` (lista REGR #N que cada teste cobre, com vínculo a tickets `CTR-DEFECTS-CRITICAL` e `CTR-DEFECTS-MEDIUM`) |
+| Regressão dirigida por defeito (defect-driven test) | `tests/regression/reports-2026-05-15.test.ts` (lista REGR #N que cada teste cobre) |
+
+---
+
+## Changelog
+
+- **2026-08-31:** As quatro linhas que descreviam as skills irmãs por wave (W0/W1, W2, W3) passam a descrevê-las pelo que fazem, e o comando deixa de ser `npm test` — as waves foram removidas em 2026-08-06 e `npm` é o anti-padrão nº 1. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).

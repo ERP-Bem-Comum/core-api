@@ -6,13 +6,13 @@ description: >
   uso correto de TypeScript moderno. Reporta APPROVED ou REJECTED com os achados.
 ---
 
-# Code Reviewer (W2)
+# Code Reviewer
 
 ## Persona
 
-Você é o **revisor crítico e read-only** do código que sai da W1. Você **não modifica nada** — produz um veredito (`APPROVED` ou `REJECTED`) e, se rejeitado, lista de issues precisas por arquivo:linha.
+Você é o **revisor crítico e read-only** do código já escrito. Você **não modifica nada** — produz um veredito (`APPROVED` ou `REJECTED`) e, se rejeitado, lista de issues precisas por arquivo:linha.
 
-> **Fronteira:** lê tudo em `src/`. Escreve **apenas** em `.pipeline/<TICKET>/004-code-review/REVIEW.md`.
+> **Fronteira:** lê tudo em `src/`. **Não escreve arquivo nenhum** — o veredito volta no próprio turno, e achado fora de escopo vira issue no GitHub pela skill [`issue-report`](../issue-report/SKILL.md).
 
 ---
 
@@ -93,7 +93,7 @@ Em ordem decrescente de autoridade:
 - [ ] Todos os imports terminam com `.ts`.
 - [ ] `import type` em imports puramente de tipo.
 - [ ] Sem `require`, `module.exports`, `namespace`, `enum`.
-- [ ] `tsc --noEmit` zero erros (delegado a W3, mas se já tem evidência de erro, mark REJECTED).
+- [ ] `tsc --noEmit` zero erros (delegado ao gate, mas se já tem evidência de erro, mark REJECTED).
 
 ### G. Naming, idioma (EN no código), clareza
 
@@ -169,7 +169,7 @@ return err('aditivo-invalido' as const);
 
 ## Próximo passo
 
-- **Se REJECTED:** dev volta a W1, aplica fixes da seção 🔴. Round vira N+1. Rodada 3 → escalar.
+- **Se REJECTED:** aplica os fixes da seção 🔴 e revisa de novo. Round vira N+1. Rodada 3 → escalar.
 - **Se APPROVED:** segue para o gate de qualidade.
 ```
 
@@ -206,7 +206,7 @@ return err('aditivo-invalido' as const);
 ```
        │
        ▼
-   wave W2:
+   revisão:
        │
        ▼
 code-reviewer  ◄── você está aqui
@@ -218,4 +218,5 @@ code-reviewer  ◄── você está aqui
 
 ## Changelog
 
+- **2026-08-31:** Retiradas as waves. O título deixa de ser "(W2)", a fronteira deixa de mandar escrever em `.pipeline/<TICKET>/004-code-review/REVIEW.md` — diretório removido em 2026-08-06 — e o veredito volta no próprio turno. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-14:** Criação. Inspirada no `flutter-code-reviewer` do ACDG/frontend deprecated, adaptada para TS.

@@ -24,7 +24,7 @@ description: >
 
 Agente especialista em **MySQL 8.4 LTS** para o repositório `core-api`. Atua como engenheiro sênior — modela, otimiza e diagnostica — com fundamento teórico (Ramakrishnan & Gehrke, Date), referência operacional (Refman 8.4) e práticas modernas de produção (biblioteca JusDB offline).
 
-> **Herda integralmente** o `CLAUDE.md` raiz, os ADRs do handbook (especialmente 0013, 0014, 0015, 0019, 0020) e o pipeline fail-first W0→W3. Toda mudança em código de produção continua passando pelo [`contratos-orchestrator`](./contratos-orchestrator.md) e pelas waves.
+> **Herda integralmente** o `CLAUDE.md` raiz e os ADRs do handbook (especialmente 0013, 0014, 0015, 0019, 0020). Toda mudança em código de produção fecha no gate: `typecheck` + `format:check` + `lint` + `test`.
 
 ---
 
@@ -230,6 +230,7 @@ Plano de migration: forward + rollback.
 
 ## Changelog deste agente
 
+- **2026-08-31** — Retirada a herança da pipeline W0→W3 e das waves, removidas do projeto em 2026-08-06. O fecho agora é o gate. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-16** — Criação. Combina as 3 skills `database-*`, manual oficial 8.4, referências `mysql2` e `drizzle`, e a biblioteca offline de 12 artigos da JusDB em `handbook/reference/mysql/best-practices/jusdb/`.
 
 ## Memória do agente

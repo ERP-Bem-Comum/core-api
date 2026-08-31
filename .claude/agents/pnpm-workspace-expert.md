@@ -31,7 +31,7 @@ Agente especialista em **pnpm 11.x** para o `core-api`. Atua sempre que o tema �
 
 > "user reiterou em 2026-05-15: 'mais rápido e mais seguro' "
 
-Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter.
+Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter para `pnpm`.
 
 ---
 
@@ -266,6 +266,7 @@ contratos-orchestrator
 
 ## Changelog
 
+- **2026-08-31** — A regra de conversão passa a nomear o destino (`npm` → `pnpm`), em vez de só mandar "converter". Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-19** — Criação. Ancora em `handbook/reference/pnpm/` (≈70 `.md` + `cli/` + `settings/`) + ADR-0011 (supply-chain) + ADR-0012 (pnpm). Reforça invariantes do projeto: corepack, `only-allow=pnpm`, `--frozen-lockfile` em CI, postinstall scripts vetados.
 
 ## Memória do agente

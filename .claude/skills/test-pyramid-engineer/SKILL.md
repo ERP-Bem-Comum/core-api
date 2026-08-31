@@ -83,7 +83,7 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 - Quer o **ciclo red-green-refactor / próximo teste** → [`tdd-strategist`](../tdd-strategist/SKILL.md)
 - Quer **filosofia / debate de escolas** (Detroit vs London, pirâmide vs trophy) → [`tdd-theorist`](../tdd-theorist/SKILL.md)
 - Quer **aprender do zero** → [`tdd-tutor`](../tdd-tutor/SKILL.md)
-- Quer **rodar o gate final W3** (executar tsc+format+lint+test) → [`ts-quality-checker`](../ts-quality-checker/SKILL.md)
+- Quer **rodar o gate** (executar tsc+format+lint+test) → [`ts-quality-checker`](../ts-quality-checker/SKILL.md)
 - Detalhe de `node:test` (runner, `--test-name-pattern`, mocks nativos) → agente [`nodejs-runtime-expert`](../../agents/nodejs-runtime-expert.md)
 
 ---
@@ -93,9 +93,15 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | Tópico                                                                      | Onde olhar                                                                                                                 |
 | :-------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------- |
 | Convenções de runner, mirror `src/`↔`tests/`, `.suite.ts`/`.contract.ts`    | [`.claude/rules/testing.md`](../../rules/testing.md)                                                                       |
-| Pipeline W0 RED → W1 GREEN, política de regressão zero                      | [`CLAUDE.md`](../../../CLAUDE.md) §"Política de regressão zero"                                              |
+| Política de regressão zero — vermelho não fecha turno                       | [`CLAUDE.md`](../../../CLAUDE.md) §"Política de regressão zero"                                              |
 | Fakes do projeto (NÃO mocks)                                                | `src/shared/adapters/clock-fixed.ts`, `src/modules/contracts/adapters/*.in-memory.ts`                                      |
 | Contract tests parametrizados (1 suíte, 2 adapters)                         | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts` + `inmemory.test.ts` + `drizzle-mysql.test.ts` |
 | E2E rodando a CLI real                                                      | `tests/cli/contracts.cli.test.ts` (memory) · `tests/cli/contracts.cli.mysql.test.ts` (integration)                         |
 | Regressão dirigida por defeito                                              | `tests/regression/reports-2026-05-15.test.ts`                                                                              |
 | Runner: `node:test` nativo + `--experimental-strip-types` (sem Jest/Vitest) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/)                                                        |
+
+---
+
+## Changelog
+
+- **2026-08-31:** O "gate final W3" vira o gate, e a linha de regressão zero deixa de nomear as waves — removidas em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
