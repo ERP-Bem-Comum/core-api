@@ -72,6 +72,7 @@ import { createInMemoryRemittanceRepository } from '../persistence/repos/remitta
 import { createS3VanStorage } from '../van/van-storage.s3.ts';
 import { createInMemoryVanStorage } from '../van/van-storage.in-memory.ts';
 import { parseVanS3Env } from '../van/van-s3-config.ts';
+import { decideVanStorage } from '../van/van-storage-decision.ts';
 import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-translator.ts';
 import { createRemittanceBatchPlanner } from '../cnab/batch-planner.ts';
 import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
@@ -694,11 +695,25 @@ const buildDocumentStorage = (): SourceFileStoragePort => {
 };
 
 // Bucket da VAN — envs `VAN_S3_*` PRÓPRIAS, nunca o singleton `S3_*`: é outro bucket, possivelmente
-// em outra conta (ADR-0060). Sem configuração, in-memory: o boot não quebra, e o que não sobe para
-// `saida/` não vira pagamento.
+// em outra conta (ADR-0060).
+//
+// O que decide o desfecho é `decideVanStorage` (#798), e não mais um ternário sobre `config.ok`:
+// ausência de configuração continua degradando para memória — a VAN ainda não subiu, e derrubar o
+// boot por isso derrubaria a borda inteira —, mas agora COM aviso, e configuração presente e
+// recusada deixa de ser indistinguível dela.
 const buildVanStorage = (): VanStoragePort => {
-  const config = parseVanS3Env(process.env);
-  return config.ok ? createS3VanStorage(config.value) : createInMemoryVanStorage();
+  const decision = decideVanStorage(parseVanS3Env(process.env), process.env);
+  switch (decision.kind) {
+    case 's3':
+      return createS3VanStorage(decision.config);
+    case 'memory':
+      process.stderr.write(`${decision.warning}\n`);
+      return createInMemoryVanStorage();
+    case 'refuse':
+      // `throw` é o contrato local desta composição para configuração que não permite subir — o
+      // irmão logo abaixo (`buildMysqlPools`) faz o mesmo com pool que não abre.
+      throw new Error(decision.error);
+  }
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
