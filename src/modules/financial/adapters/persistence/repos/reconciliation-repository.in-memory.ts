@@ -105,8 +105,13 @@ export const createInMemoryReconciliationRepository = (
     for (const r of reclassifications) {
       const entry = documents.get(r.documentId);
       if (entry === undefined) return err('reconciliation-repository-failure');
+      // #893 — paridade com o CAS do Drizzle. Sem esta checagem aqui o fake aprovaria justamente o
+      // caminho que o banco recusa, e a divergência só apareceria em produção: é o mesmo par
+      // fake×banco que já deixou um defeito armado no `manualEntry` desta feature.
+      if (entry.version !== r.expectedVersion) return err('document-version-conflict');
       documents.set(r.documentId, {
         ...entry,
+        version: r.expectedVersion + 1,
         aggregate: {
           ...entry.aggregate,
           document: {

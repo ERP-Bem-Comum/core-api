@@ -35,10 +35,21 @@ export const createDrizzlePayableViewStore = (
   const { db } = handle;
 
   return {
-    upsert: async (viewRows): Promise<Result<void, PayableViewStoreError>> => {
+    upsert: async (viewRows, occurredAt): Promise<Result<void, PayableViewStoreError>> => {
       if (viewRows.length === 0) return ok(undefined);
       try {
         const now = clock.now();
+        // #894 — guard de recência (molde de `supplier-view-store.drizzle.ts:43`, exigido pela
+        // `.claude/rules/adapters.md` citando o ADR-0045): a linha só é sobrescrita quando o evento
+        // entrante é >= o que a escreveu. Sem ele, reentregar um `DocumentSaved` antigo apaga a
+        // reclassificação — e a entrega É repetida por desenho (at-least-once).
+        //
+        // ⚠️ `>=` e não `>`, como no irmão: reaplicar o MESMO evento tem de continuar sendo idempotente
+        // (é o que cura uma projeção que ficou para trás). O empate real de `occurred_at` entre dois
+        // eventos DIFERENTES do mesmo documento é possível — `fsp: 3` —, e nesse caso a ordem volta a
+        // ser indeterminada; não há segunda coluna de ordenação no read-model para desempatar, e
+        // inventar uma aqui seria decidir por conta própria um contrato que é do outbox.
+        const fresher = sql`${incoming('occurred_at')} >= ${finPayableView.occurredAt}`;
         await db
           .insert(finPayableView)
           .values(
@@ -60,30 +71,35 @@ export const createDrizzlePayableViewStore = (
               debitAccountRef: r.debitAccountRef,
               paidAt: r.paidAt,
               updatedAt: now,
+              occurredAt,
             })),
           )
           .onDuplicateKeyUpdate({
             // `status` e `paid_at` ficam de fora de propósito (donos dos eventos de transição /
             // markPaid — reprocessar DocumentSaved não regride status nem apaga a data de pagamento).
+            //
+            // Todo o resto passa pelo `if(fresher, …)`: um evento atrasado não altera campo nenhum,
+            // em vez de alterar alguns e deixar a linha meio velha e meio nova.
             set: {
-              documentId: incoming('document_id'),
-              kind: incoming('kind'),
-              retentionType: incoming('retention_type'),
-              supplierRef: incoming('supplier_ref'),
-              contractRef: incoming('contract_ref'),
-              categoryRef: incoming('category_ref'),
-              budgetPlanRef: incoming('budget_plan_ref'),
+              documentId: sql`if(${fresher}, ${incoming('document_id')}, ${finPayableView.documentId})`,
+              kind: sql`if(${fresher}, ${incoming('kind')}, ${finPayableView.kind})`,
+              retentionType: sql`if(${fresher}, ${incoming('retention_type')}, ${finPayableView.retentionType})`,
+              supplierRef: sql`if(${fresher}, ${incoming('supplier_ref')}, ${finPayableView.supplierRef})`,
+              contractRef: sql`if(${fresher}, ${incoming('contract_ref')}, ${finPayableView.contractRef})`,
+              categoryRef: sql`if(${fresher}, ${incoming('category_ref')}, ${finPayableView.categoryRef})`,
+              budgetPlanRef: sql`if(${fresher}, ${incoming('budget_plan_ref')}, ${finPayableView.budgetPlanRef})`,
               // M2/RN-M2-05: a reclassificação chega por REPROJEÇÃO — o `DocumentSaved` reemitido
               // reescreve pai e filhos. Deixar a subcategoria fora deste `set` faria a linha nascer
               // com a folha certa e nunca mais atualizá-la, que é a forma silenciosa de o relatório
               // mentir depois de uma reclassificação.
-              subcategoryRef: incoming('subcategory_ref'),
-              costCenterRef: incoming('cost_center_ref'),
-              programRef: incoming('program_ref'),
-              valueCents: incoming('value_cents'),
-              dueDate: incoming('due_date'),
-              debitAccountRef: incoming('debit_account_ref'),
-              updatedAt: incoming('updated_at'),
+              subcategoryRef: sql`if(${fresher}, ${incoming('subcategory_ref')}, ${finPayableView.subcategoryRef})`,
+              costCenterRef: sql`if(${fresher}, ${incoming('cost_center_ref')}, ${finPayableView.costCenterRef})`,
+              programRef: sql`if(${fresher}, ${incoming('program_ref')}, ${finPayableView.programRef})`,
+              valueCents: sql`if(${fresher}, ${incoming('value_cents')}, ${finPayableView.valueCents})`,
+              dueDate: sql`if(${fresher}, ${incoming('due_date')}, ${finPayableView.dueDate})`,
+              debitAccountRef: sql`if(${fresher}, ${incoming('debit_account_ref')}, ${finPayableView.debitAccountRef})`,
+              updatedAt: sql`if(${fresher}, ${incoming('updated_at')}, ${finPayableView.updatedAt})`,
+              occurredAt: sql`if(${fresher}, ${incoming('occurred_at')}, ${finPayableView.occurredAt})`,
             },
           });
         return ok(undefined);

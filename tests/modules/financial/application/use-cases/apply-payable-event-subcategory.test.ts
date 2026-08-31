@@ -15,6 +15,10 @@ import { strict as assert } from 'node:assert';
 import { applyPayableEvent } from '#src/modules/financial/application/use-cases/apply-payable-event.ts';
 import { createInMemoryPayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.in-memory.ts';
 
+// #894: instante do evento — o guard de recência do read-model o exige. Valor fixo: estes casos
+// não exercitam ordenação, e um `new Date()` por chamada tornaria o teste dependente do relógio.
+const OCCURRED_AT = new Date('2026-01-01T00:00:00.000Z');
+
 const DOCUMENT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const PARENT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CHILD = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -61,6 +65,7 @@ describe('financial/application — projeção da subcategoria no fin_payable_vi
     const store = createInMemoryPayableViewStore();
     const r = await applyPayableEvent({ store })({
       eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
       payload: documentSaved(),
     });
     assert.equal(r.ok, true);
@@ -76,6 +81,7 @@ describe('financial/application — projeção da subcategoria no fin_payable_vi
     const store = createInMemoryPayableViewStore();
     await applyPayableEvent({ store })({
       eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
       payload: documentSaved(),
     });
 
@@ -100,6 +106,7 @@ describe('financial/application — projeção da subcategoria no fin_payable_vi
     const store = createInMemoryPayableViewStore();
     await applyPayableEvent({ store })({
       eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
       payload: documentSaved(),
     });
 
@@ -108,6 +115,7 @@ describe('financial/application — projeção da subcategoria no fin_payable_vi
     const NEW_CAT = '88888888-8888-4888-8888-888888888888';
     await applyPayableEvent({ store })({
       eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
       payload: documentSaved({ subcategoryRef: NEW_SUB, categoryRef: NEW_CAT }),
     });
 
@@ -132,6 +140,7 @@ describe('financial/application — projeção da subcategoria no fin_payable_vi
 
     const r = await applyPayableEvent({ store })({
       eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
       payload: JSON.stringify(payload),
     });
 
@@ -143,5 +152,66 @@ describe('financial/application — projeção da subcategoria no fin_payable_vi
     const parent = listed.value.find((v) => v.payableId === PARENT);
     assert.equal(parent?.subcategoryRef, null);
     assert.equal(parent?.categoryRef, CATEGORY);
+  });
+
+  // #894 — a entrega do outbox é at-least-once: um `markFailed` devolve a linha à fila SEM tirá-la
+  // da ordem, então o evento anterior à reclassificação pode chegar DEPOIS dela. Enquanto os 5 refs
+  // eram imutáveis isso não custava nada; é a M2 que passa a produzir dois `DocumentSaved` do mesmo
+  // documento dizendo classificações diferentes.
+  it('#894: reentrega do evento ANTIGO não retrocede a classificação já projetada', async () => {
+    const store = createInMemoryPayableViewStore();
+    const ANTES = new Date('2026-01-01T10:00:00.000Z');
+    const DEPOIS = new Date('2026-01-01T11:00:00.000Z');
+    const NEW_SUB = '77777777-7777-4777-8777-777777777777';
+
+    // A reclassificação já foi projetada…
+    await applyPayableEvent({ store })({
+      eventType: 'DocumentSaved',
+      occurredAt: DEPOIS,
+      payload: documentSaved({ subcategoryRef: NEW_SUB }),
+    });
+
+    // …e o worker reentrega o evento velho, que carrega a classificação de antes.
+    const replay = await applyPayableEvent({ store })({
+      eventType: 'DocumentSaved',
+      occurredAt: ANTES,
+      payload: documentSaved(),
+    });
+    // Não é erro: a reentrega é legítima, ela só não pode retroceder. Devolver erro aqui mandaria a
+    // linha para a DLQ e criaria um alarme para um evento que se comportou como devia.
+    assert.equal(replay.ok, true);
+
+    const listed = await store.list();
+    assert.equal(listed.ok, true);
+    if (!listed.ok) return;
+
+    // O que se perderia sem o guard: os relatórios voltariam a somar sob a classificação antiga, sem
+    // erro, sem log, e sem ninguém ter desfeito nada.
+    const rows = listed.value;
+    for (const id of [PARENT, CHILD]) {
+      const projected = rows.find((v) => v.payableId === id);
+      assert.equal(projected?.subcategoryRef, NEW_SUB, `título ${id} regrediu`);
+    }
+  });
+
+  it('#894: evento MAIS NOVO segue sobrescrevendo — o guard não congela a linha', async () => {
+    const store = createInMemoryPayableViewStore();
+    const NEW_SUB = '77777777-7777-4777-8777-777777777777';
+
+    await applyPayableEvent({ store })({
+      eventType: 'DocumentSaved',
+      occurredAt: new Date('2026-01-01T10:00:00.000Z'),
+      payload: documentSaved(),
+    });
+    await applyPayableEvent({ store })({
+      eventType: 'DocumentSaved',
+      occurredAt: new Date('2026-01-01T11:00:00.000Z'),
+      payload: documentSaved({ subcategoryRef: NEW_SUB }),
+    });
+
+    const listed = await store.list();
+    if (!listed.ok) return;
+    const parent = listed.value.find((v) => v.payableId === PARENT);
+    assert.equal(parent?.subcategoryRef, NEW_SUB);
   });
 });

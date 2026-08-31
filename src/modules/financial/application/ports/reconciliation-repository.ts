@@ -14,7 +14,14 @@ import type { FinancialAppendableEvent } from './outbox.ts';
 // `events` (#127): eventos de domínio gravados no `fin_outbox` NA MESMA transação da unit-of-work
 //   (atomicidade — ADR-0015; evento durável SSE estado persistido). Opcional/trailing para back-compat
 //   (callers sem evento — testes de contrato/seed — passam nada; sem append).
-export type ReconciliationRepositoryError = 'reconciliation-repository-failure';
+// `document-version-conflict` (M2/#893): a reclassificação escreve `fin_documents`, e essa escrita
+// participa do MESMO optimistic lock das outras portas do agregado. Quando a versão lida pelo use
+// case já não é a vigente, o desfecho é este slug — e não uma falha de repositório —, porque o
+// pedido não está malformado: ele está velho, e refazê-lo sobre o estado atual volta a valer. O
+// mapeamento para 409 já existe (`error-mapping.ts`).
+export type ReconciliationRepositoryError =
+  | 'reconciliation-repository-failure'
+  | 'document-version-conflict';
 
 // M2 (RN-M2-03/04/06): a reclassificação de UM documento, já decidida pelo domínio, pronta para ser
 // escrita DENTRO da transação da conciliação.
@@ -30,6 +37,17 @@ export type ReconciliationRepositoryError = 'reconciliation-repository-failure';
 // que a M2 existe para fechar, invertido.
 export type ReconciliationReclassification = Readonly<{
   documentId: string;
+  // #893 — token do optimistic lock, lido junto com o documento no use case.
+  //
+  // Sem ele o `UPDATE` afirmaria só "a linha existe", que é uma pré-condição que nada diz sobre o
+  // estado em que a decisão foi tomada: um editor concorrente que tivesse lido a mesma versão
+  // salvaria depois com `WHERE version = <a mesma>`, casaria, e reescreveria a linha inteira com os
+  // refs antigos — a reclassificação sumiria da fonte de verdade E do read-model, sem conflito
+  // reportado a ninguém, com a trilha continuando a afirmar o de→para. O critério é a fronteira do
+  // AGREGADO, não o caminho de código: reclassificar altera cinco atributos do Root `Document`, e
+  // por isso incrementa a versão dele como qualquer outra mutação (Vernon, IDDD p. 483 — "just
+  // incrementing the version on our own", quando o incremento automático não acontece).
+  expectedVersion: number;
   programRef: string | null;
   budgetPlanRef: string | null;
   costCenterRef: string | null;

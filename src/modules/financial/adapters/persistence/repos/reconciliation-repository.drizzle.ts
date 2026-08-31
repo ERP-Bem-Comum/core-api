@@ -39,6 +39,7 @@ import {
 } from '../mappers/reconciliation.mapper.ts';
 import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
+import { makeVersionConflict, isVersionConflict } from './version-conflict.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-reconciliation-repo] ${op} failed: ${String(cause)}\n`);
@@ -130,6 +131,17 @@ export const createDrizzleReconciliationRepository = (
           // documento, `DocumentSaved` (que reprojeta pai e filhos) e trilha, tudo ou nada junto com
           // a conciliação. O `throw` de qualquer passo reverte inclusive os UPDATEs de status acima.
           for (const r of reclassifications ?? []) {
+            // #893 — o CAS do agregado. `WHERE version = ?` transforma o UPDATE numa AFIRMAÇÃO sobre
+            // o estado lido ("aplique se, e só se, ninguém tocou o documento desde que eu o li"), que
+            // é o que o `affectedRows` precisa para significar alguma coisa: sem ela, um
+            // `WHERE id = ?` casa sempre e o desfecho é last-write-wins silencioso.
+            //
+            // `version + 1` é a outra metade, e é a que o cenário do editor concorrente expõe: sem o
+            // incremento, esta escrita fica INVISÍVEL para os demais escritores do agregado, que
+            // seguem segurando um token que já não descreve o estado. Nenhum nível de isolamento
+            // resolveria — sob MVCC o `findById` do use case é consistent read e não trava a linha
+            // de propósito; a distância a cobrir é entre a LEITURA que informou a decisão e a
+            // ESCRITA que a aplica, não algo que aconteça dentro desta transação.
             const docRes = await tx
               .update(finDocuments)
               .set({
@@ -138,11 +150,23 @@ export const createDrizzleReconciliationRepository = (
                 costCenterRef: r.costCenterRef,
                 categoryRef: r.categoryRef,
                 subcategoryRef: r.subcategoryRef,
+                version: r.expectedVersion + 1,
               })
-              .where(eq(finDocuments.id, r.documentId));
-            // O documento foi lido nesta mesma operação; sumir entre a leitura e aqui é corrida real
-            // (cancelamento concorrente), e gravar taxonomia em nada é pior que reverter.
-            if (affectedRowsOf(docRes) !== 1) throw new Error('document-not-found');
+              .where(
+                and(eq(finDocuments.id, r.documentId), eq(finDocuments.version, r.expectedVersion)),
+              );
+            // `affectedRows = 0` agora tem duas leituras possíveis — o documento sumiu, ou a versão
+            // divergiu — e a segunda é a esperada num sistema concorrente. Distinguir importa: o
+            // conflito é 409 (o mesmo pedido volta a valer depois de reler), e sumiço é 404.
+            if (affectedRowsOf(docRes) !== 1) {
+              const [still] = await tx
+                .select({ id: finDocuments.id })
+                .from(finDocuments)
+                .where(eq(finDocuments.id, r.documentId))
+                .limit(1);
+              if (still === undefined) throw new Error('document-not-found');
+              throw makeVersionConflict(r.documentId, r.expectedVersion);
+            }
 
             if (r.timeline.length > 0) {
               const mapped = r.timeline.map(mapEntryToRows);
@@ -161,6 +185,9 @@ export const createDrizzleReconciliationRepository = (
         });
         return ok(undefined);
       } catch (cause) {
+        // #893: conflito de versão é desfecho SEMÂNTICO (409), não falha de infra (500). O `if` vem
+        // antes do log genérico porque não é incidente — é concorrência funcionando.
+        if (isVersionConflict(cause)) return err('document-version-conflict');
         logStore('confirm', cause);
         return err('reconciliation-repository-failure');
       }

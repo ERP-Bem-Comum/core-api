@@ -227,7 +227,9 @@ const buildReclassifications = async (
     if (!docIdR.ok) return err('document-not-found');
     const loadedR = await deps.documents.findById(docIdR.value);
     if (!loadedR.ok) return err(loadedR.error);
-    const { document, payables } = loadedR.value;
+    // `version` viaja até a escrita (#893): é o token do optimistic lock, e descartá-lo aqui é o que
+    // deixava o `UPDATE` da reclassificação sem pré-condição sobre o estado lido.
+    const { document, payables, version } = loadedR.value;
     // Rascunho não tem título, logo não chega aqui por um `payableId`. O guard existe para estreitar
     // o tipo sem inventar um caminho para um estado que a leitura não produz.
     if (document.status === 'Draft' || payables === null) return err('document-not-found');
@@ -246,6 +248,7 @@ const buildReclassifications = async (
 
     out.push({
       documentId: row.documentId,
+      expectedVersion: version,
       programRef: taxonomy.programRef,
       budgetPlanRef: taxonomy.budgetPlanRef,
       costCenterRef: taxonomy.costCenterRef,

@@ -20,7 +20,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import {
@@ -32,6 +32,8 @@ import {
   finPayables,
   finPayableView,
   finDocumentTimeline,
+  finTimelineFieldChanges,
+  finOutbox,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts';
 import { createDrizzlePayableDocumentView } from '#src/modules/financial/adapters/persistence/repos/payable-document-view.drizzle.ts';
@@ -53,6 +55,10 @@ import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente
 import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+
+// #894: instante do evento — o guard de recência do read-model o exige. Valor fixo: estes casos
+// não exercitam ordenação, e um `new Date()` por chamada tornaria o teste dependente do relógio.
+const OCCURRED_AT = new Date('2026-01-01T00:00:00.000Z');
 
 const PROGRAM = '11111111-1111-4111-8111-1111111111a1';
 const PLAN = '22222222-2222-4222-8222-2222222222a2';
@@ -251,6 +257,17 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const { documentId, parentId, childId } = await seedDocumentWithRetention();
       const txId = await seedTransaction(cedenteId, 95_000);
 
+      // ⚠️ O SEED já gravou um `DocumentSaved` (o `saveDocument` emite um), e ele carrega taxonomia
+      // NULA. Limpar o outbox do documento AQUI deixa exatamente UM evento a projetar — o que a
+      // reclassificação vai emitir — e é o que torna este caso determinístico.
+      //
+      // A primeira versão deste teste pegava `.find(e => e.eventType === 'DocumentSaved')` sobre uma
+      // consulta SEM `ORDER BY`, com os dois eventos no banco: escolhia um arbitrário. Passou na
+      // máquina local e falhou no CI, que devolveu o do seed e projetou nulos. Ordenar por
+      // `enqueued_at` não resolveria de verdade — os dois INSERTs distam poucos milissegundos e a
+      // coluna tem `fsp: 3`, então o empate é possível e a escolha voltaria a ser arbitrária.
+      await handle.db.delete(finOutbox).where(eq(finOutbox.aggregateId, documentId));
+
       const r = await confirmReconciliation(deps())({
         transactionId: txId,
         payableIds: [parentId],
@@ -261,17 +278,24 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
       // O worker de projeção roda fora do processo (ADR-0022 — consistência eventual). Aqui aplicamos
       // o MESMO use case que ele aplica, sobre o evento que a conciliação gravou no outbox.
-      const saved = await handle.db.query.finOutbox
-        .findMany({ where: (t, { eq: e }) => e(t.aggregateId, documentId) })
-        .catch(() => []);
-      const documentSaved = (saved as { eventType: string; payload: string }[]).find(
-        (e) => e.eventType === 'DocumentSaved',
-      );
-      assert.ok(documentSaved !== undefined, 'a conciliação tem de gravar DocumentSaved no outbox');
+      //
+      // `select` explícito, e não `db.query.…().catch(() => [])`: o `catch` que existia aqui
+      // transformava falha de consulta em lista vazia, e uma falha de infraestrutura teria virado
+      // "evento não encontrado" — diagnóstico que aponta para o lugar errado.
+      const saved = await handle.db
+        .select({ eventType: finOutbox.eventType, payload: finOutbox.payload })
+        .from(finOutbox)
+        .where(
+          and(eq(finOutbox.aggregateId, documentId), eq(finOutbox.eventType, 'DocumentSaved')),
+        );
+
+      assert.equal(saved.length, 1, 'a conciliação grava UM DocumentSaved (o do seed foi limpo)');
+      const documentSaved = saved[0];
+      assert.ok(documentSaved !== undefined);
 
       const applied = await applyPayableEvent({
         store: createDrizzlePayableViewStore(handle, ClockReal()),
-      })({ eventType: 'DocumentSaved', payload: documentSaved?.payload ?? '' });
+      })({ eventType: 'DocumentSaved', occurredAt: OCCURRED_AT, payload: documentSaved.payload });
       assert.equal(applied.ok, true, JSON.stringify(applied));
 
       const rows = await handle.db
@@ -307,23 +331,59 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
     it('RN-M2-07: a trilha grava o de→para no documento e em cada título', async () => {
       const cedenteId = await seedActiveAccount();
-      const { documentId, parentId } = await seedDocumentWithRetention();
+      const { documentId, parentId, childId } = await seedDocumentWithRetention();
       const txId = await seedTransaction(cedenteId, 95_000);
 
-      await confirmReconciliation(deps())({
+      const r = await confirmReconciliation(deps())({
         transactionId: txId,
         payableIds: [parentId],
         taxonomy: TAXONOMY,
         reconciledBy: USER,
       });
+      // Sem esta linha um `err` passaria: a trilha da reclassificação estaria vazia com razão, e o
+      // teste leria isso como "não gravou" em vez de "não conciliou".
+      assert.equal(r.ok, true, JSON.stringify(r));
 
-      const entries = await handle.db
-        .select({ id: finDocumentTimeline.id })
+      // ⚠️ NÃO contar entries do documento: o `saveDocument` do seed já grava 3 sozinho (1 do
+      // documento + 1 por título), então `length >= 3` fica verde mesmo com o bloco de trilha do
+      // adapter apagado — o teste não distinguiria código certo de errado.
+      //
+      // O discriminador é o CONTEÚDO: só a reclassificação escreve uma mudança de `programRef` cujo
+      // `after` é o programa novo (o documento do seed nasce com os 5 refs nulos). Casar por ele
+      // isola exatamente as entries desta operação.
+      const changed = await handle.db
+        .select({
+          targetKind: finDocumentTimeline.targetKind,
+          targetId: finDocumentTimeline.targetId,
+          field: finTimelineFieldChanges.field,
+          beforeValue: finTimelineFieldChanges.beforeValue,
+          afterValue: finTimelineFieldChanges.afterValue,
+        })
         .from(finDocumentTimeline)
-        .where(eq(finDocumentTimeline.documentId, documentId));
+        .innerJoin(
+          finTimelineFieldChanges,
+          eq(finTimelineFieldChanges.timelineEntryId, finDocumentTimeline.id),
+        )
+        .where(
+          and(
+            eq(finDocumentTimeline.documentId, documentId),
+            eq(finTimelineFieldChanges.field, 'programRef'),
+            eq(finTimelineFieldChanges.afterValue, PROGRAM),
+          ),
+        );
 
-      // O `saveDocument` do seed já deixou marcos; o que a M2 acrescenta são 3 (documento + 2 títulos).
-      assert.ok(entries.length >= 3, `trilha esperada >= 3 entries, veio ${entries.length}`);
+      // 1 do documento + 1 do pai + 1 do filho. O filho é o que importa auditar: a pergunta real é
+      // "por que ESTE imposto está sob ESTE projeto?", e ela se responde na trilha do título de
+      // retenção — que ninguém selecionou, e que mudou por cascata.
+      const targets = changed.map((c) => `${c.targetKind}:${c.targetId}`).sort();
+      assert.deepEqual(
+        targets,
+        [`Document:${documentId}`, `Payable:${parentId}`, `Payable:${childId}`].sort(),
+      );
+
+      // O de→para tem de carregar o ANTES, senão a trilha responde "está sob este projeto" sem
+      // responder "e antes estava sob qual".
+      for (const change of changed) assert.equal(change.beforeValue, null);
     });
 
     it('RN-M2-06: caminho inválido NÃO concilia e NÃO reclassifica — nada é gravado pela metade', async () => {
@@ -355,6 +415,135 @@ if (!process.env['MYSQL_INTEGRATION']) {
         .from(finPayables)
         .where(eq(finPayables.id, parentId));
       assert.equal(pay?.status, 'Paid');
+    });
+
+    // #893 — o optimistic lock. Testado no REPOSITÓRIO, e não pelo use case, porque o use case lê a
+    // versão e escreve na mesma chamada: por fora não há janela onde enfiar o editor concorrente. O
+    // que se prova aqui é o contrato do adapter — versão velha na mão, escrita recusada.
+    it('#893: reclassificar com versão VELHA é recusado, e nada é gravado', async () => {
+      const cedenteId = await seedActiveAccount();
+      const { documentId, parentId } = await seedDocumentWithRetention();
+      const txId = await seedTransaction(cedenteId, 95_000);
+
+      const [beforeRow] = await handle.db
+        .select({ version: finDocuments.version })
+        .from(finDocuments)
+        .where(eq(finDocuments.id, documentId));
+      const current = beforeRow?.version;
+      assert.equal(typeof current, 'number');
+      if (typeof current !== 'number') return;
+
+      // Simula o editor concorrente pelo único ponto onde ele é observável: a versão que o use case
+      // LEU já não é a vigente quando ele vai escrever. Envelopar a leitura é mais honesto que
+      // chamar o repositório na mão — assim o teste exercita o caminho inteiro, do use case ao SQL.
+      const base = deps();
+      const staleRead = {
+        ...base,
+        documents: {
+          findById: async (id: Parameters<typeof base.documents.findById>[0]) => {
+            const r = await base.documents.findById(id);
+            return r.ok ? { ...r, value: { ...r.value, version: r.value.version - 1 } } : r;
+          },
+        },
+      };
+
+      const stale = await confirmReconciliation(staleRead)({
+        transactionId: txId,
+        payableIds: [parentId],
+        taxonomy: TAXONOMY,
+        reconciledBy: USER,
+      });
+
+      assert.equal(stale.ok, false, 'versão velha tem de ser RECUSADA');
+      if (stale.ok) return;
+      // 409, não 500: o pedido não está malformado — está velho, e refazê-lo sobre o estado atual
+      // volta a valer.
+      assert.equal(stale.error, 'document-version-conflict');
+
+      // E o resto da unit-of-work reverteu junto: sem isto, a recusa teria deixado a conciliação
+      // gravada e só a taxonomia de fora — exatamente o "pela metade" que a RN-M2-06 proíbe.
+      const [doc] = await handle.db
+        .select({ categoryRef: finDocuments.categoryRef, version: finDocuments.version })
+        .from(finDocuments)
+        .where(eq(finDocuments.id, documentId));
+      assert.equal(doc?.categoryRef, null);
+      assert.equal(doc?.version, current, 'versão não pode ter avançado numa escrita recusada');
+
+      const [pay] = await handle.db
+        .select({ status: finPayables.status })
+        .from(finPayables)
+        .where(eq(finPayables.id, parentId));
+      assert.equal(pay?.status, 'Paid');
+    });
+
+    // #894 — o guard de recência do read-model. É o cenário que o vermelho do CI destapou: existem
+    // DOIS `DocumentSaved` do mesmo documento com taxonomias diferentes, e a entrega é at-least-once.
+    it('#894: reentregar o DocumentSaved ANTIGO não apaga a reclassificação no read-model', async () => {
+      const cedenteId = await seedActiveAccount();
+      const { documentId, parentId, childId } = await seedDocumentWithRetention();
+      const txId = await seedTransaction(cedenteId, 95_000);
+
+      // O evento do seed (taxonomia NULA) — guardado ANTES de conciliar, que é o que o outbox teria
+      // devolvido à fila num `markFailed`.
+      const [older] = await handle.db
+        .select({ payload: finOutbox.payload, occurredAt: finOutbox.occurredAt })
+        .from(finOutbox)
+        .where(
+          and(eq(finOutbox.aggregateId, documentId), eq(finOutbox.eventType, 'DocumentSaved')),
+        );
+      assert.ok(older !== undefined, 'o seed grava um DocumentSaved');
+
+      await handle.db.delete(finOutbox).where(eq(finOutbox.aggregateId, documentId));
+
+      const r = await confirmReconciliation(deps())({
+        transactionId: txId,
+        payableIds: [parentId],
+        taxonomy: TAXONOMY,
+        reconciledBy: USER,
+      });
+      assert.equal(r.ok, true, JSON.stringify(r));
+
+      const [newer] = await handle.db
+        .select({ payload: finOutbox.payload, occurredAt: finOutbox.occurredAt })
+        .from(finOutbox)
+        .where(
+          and(eq(finOutbox.aggregateId, documentId), eq(finOutbox.eventType, 'DocumentSaved')),
+        );
+      assert.ok(newer !== undefined);
+
+      const store = createDrizzlePayableViewStore(handle, ClockReal());
+      // 1. a projeção aplica o evento da reclassificação (o mundo em ordem).
+      const first = await applyPayableEvent({ store })({
+        eventType: 'DocumentSaved',
+        payload: newer.payload,
+        occurredAt: newer.occurredAt,
+      });
+      assert.equal(first.ok, true, JSON.stringify(first));
+
+      // 2. e então o worker reentrega o ANTIGO. Sem o guard, este passo apagaria os 5 refs — sem
+      // erro, sem log, e só o relatório mostraria depois.
+      const replay = await applyPayableEvent({ store })({
+        eventType: 'DocumentSaved',
+        payload: older.payload,
+        occurredAt: older.occurredAt,
+      });
+      assert.equal(replay.ok, true, 'a reentrega não é erro — ela apenas não pode retroceder');
+
+      const rows = await handle.db
+        .select({
+          payableId: finPayableView.payableId,
+          programRef: finPayableView.programRef,
+          subcategoryRef: finPayableView.subcategoryRef,
+        })
+        .from(finPayableView)
+        .where(eq(finPayableView.documentId, documentId));
+
+      assert.equal(rows.length, 2, 'pai + filho');
+      for (const row of rows) {
+        assert.equal(row.programRef, PROGRAM, `linha ${row.payableId} regrediu`);
+        assert.equal(row.subcategoryRef, SUBCATEGORY, `linha ${row.payableId} regrediu`);
+      }
+      assert.ok(rows.some((x) => x.payableId === childId));
     });
   });
 }

@@ -16,7 +16,15 @@ import {
 } from '../../domain/payable-view/types.ts';
 import type { PayableViewStore, PayableViewStoreError } from '../ports/payable-view-store.ts';
 
-export type ApplyPayableEventInput = Readonly<{ eventType: string; payload: string }>;
+// `occurredAt` (#894) vem da LINHA do outbox, não do payload: é o instante que o `fin_outbox` já
+// carimba em toda escrita (`fin-outbox-helpers.ts` — do evento quando ele traz um, senão o `now` da
+// transação). Tirá-lo de lá, e não de dentro do JSON, evita depender de cada emissor lembrar de
+// carimbar — e é o mesmo relógio que ordena a fila.
+export type ApplyPayableEventInput = Readonly<{
+  eventType: string;
+  payload: string;
+  occurredAt: Date;
+}>;
 
 export type ApplyPayableEventError = 'payable-event-payload-invalid' | PayableViewStoreError;
 
@@ -158,7 +166,9 @@ export const applyPayableEvent =
     if (input.eventType === 'DocumentSaved') {
       const rows = parseDocumentSaved(input.payload);
       if (!rows.ok) return err(rows.error);
-      return deps.store.upsert(rows.value);
+      // #894: o guard de recência vive no adapter (molde de `applySupplierEvent`) — aqui só se passa
+      // o instante do evento adiante.
+      return deps.store.upsert(rows.value, input.occurredAt);
     }
     if (input.eventType === 'PayableManuallyPaid') {
       const paid = parsePaid(input.payload);

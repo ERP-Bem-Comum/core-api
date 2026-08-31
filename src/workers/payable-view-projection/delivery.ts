@@ -10,11 +10,21 @@ import { deliveryUnavailable } from '#src/shared/outbox/index.ts';
 import { applyPayableEvent } from '#src/modules/financial/public-api/index.ts';
 import type { PayableViewStore } from '#src/modules/financial/public-api/index.ts';
 
-/** Mensagem opaca extraída da row do `fin_outbox` (sem desserializar o evento de domínio). */
-export type PayableProjectionMessage = Readonly<{ eventType: string; payload: string }>;
+/**
+ * Mensagem opaca extraída da row do `fin_outbox` (sem desserializar o evento de domínio).
+ *
+ * `occurredAt` (#894) acompanha o payload porque a projeção precisa saber QUANDO o evento
+ * aconteceu para não deixar uma reentrega antiga sobrescrever estado mais novo — a entrega é
+ * at-least-once, então "chegou depois" não significa "é mais recente".
+ */
+export type PayableProjectionMessage = Readonly<{
+  eventType: string;
+  payload: string;
+  occurredAt: Date;
+}>;
 
 export const rowToMessage: RowToProcessed<PayableProjectionMessage> = (row) =>
-  ok({ eventType: row.eventType, payload: row.payload });
+  ok({ eventType: row.eventType, payload: row.payload, occurredAt: row.occurredAt });
 
 export const createPayableProjectionDelivery = (
   store: PayableViewStore,
