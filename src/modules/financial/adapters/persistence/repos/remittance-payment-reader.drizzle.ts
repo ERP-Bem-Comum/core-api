@@ -34,6 +34,7 @@ import type {
 } from '#src/modules/financial/domain/document/types.ts';
 import { isApprovedForRemittance } from '#src/modules/financial/domain/document/remittance-approval.ts';
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
+import { resolveBarcode } from '#src/modules/financial/domain/payout/digitable-line.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
 import type { PayeeContractor } from '../../http/payee-bank-composition.ts';
 import { finDocuments, finPayables } from '../schemas/mysql.ts';
@@ -144,13 +145,22 @@ const toPaymentData = (
     }
 
     case 'billet': {
-      // `ready` no boleto garante 44 dígitos — a régua já recusou linha digitável e código curto.
-      const barcode = (row.paymentDetail ?? '').replace(/\D/g, '');
+      // O G063 grava CÓDIGO DE BARRAS, e desde a #788 o cadastro aceita também a linha digitável —
+      // `ready` já não significa "o `payment_detail` são os 44 dígitos". Converter aqui é o que
+      // torna a CA4 verdadeira: os bytes que saem de uma linha digitável têm de ser IDÊNTICOS aos
+      // que sairiam do código de barras equivalente.
+      const barcode = resolveBarcode((row.paymentDetail ?? '').replace(/\D/g, ''));
+      // Inalcançável pela mesma razão da transferência: a régua chamou `resolveBarcode` e só
+      // aprovou porque a conversão passou. Fica explícito porque as duas chamadas são
+      // independentes — se um dia divergirem, o erro aqui é preferível a gravar 47 dígitos num
+      // campo de 44, que desloca todo o resto do registro.
+      if (!barcode.ok) return err('remittance-payment-incomplete');
+
       return ok({
         payableId: row.payableId,
         documentId: row.documentId,
         route: 'billet',
-        barcode,
+        barcode: barcode.value,
         // Nome do CEDENTE do título: quem recebe. Sem favorecido resolvido o campo sai vazio — ele
         // é informativo, e o dinheiro segue o código de barras, não o nome.
         beneficiaryName: contractor?.name ?? '',

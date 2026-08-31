@@ -138,7 +138,11 @@ describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
 // agência ou conta do favorecido — é a confirmação, na fonte, de que o boleto não depende do
 // cadastro bancário.
 const BARCODE = '23791234500000150000123456789012345678901234'; // 44 dígitos
-const DIGITABLE_LINE = '23791234500000150000123456789012345678901234567'; // 47 — não serve
+// Linha digitável de COBRANÇA (47) e de ARRECADAÇÃO (48), com os DVs de bloco que a regra FEBRABAN
+// calcula — os mesmos pares sintéticos de `digitable-line.test.ts`. Nenhum boleto real entra aqui:
+// linha digitável identifica cedente, valor e vencimento, e os três repositórios são públicos.
+const DIGITABLE_LINE = '23791234546789012345767890123457512340000015000'; // 47
+const TAX_GUIDE_LINE = '836500000010500012345673890123456786901234567898'; // 48
 
 describe('checkPayoutReadiness — boleto e guia dependem do código de barras, não do favorecido', () => {
   for (const paymentMethod of ['Boleto', 'GuiaRecolhimento'] as const) {
@@ -167,17 +171,41 @@ describe('checkPayoutReadiness — boleto e guia dependem do código de barras, 
     assert.equal(r.status, 'ready');
   });
 
-  // 47 dígitos é LINHA DIGITÁVEL: dado presente e inaproveitável enquanto não houver conversão —
-  // o mesmo desfecho do nome de banco sem código. Não é hipótese: 1 dos 20 boletos do dump de
-  // produção está nesse formato.
-  it('marca a linha digitável como inconvertível, não como ausente', () => {
+  // CA1 — a linha digitável passou a servir (#788). É ela que vem impressa no boleto e é ela que o
+  // operador digita; recusá-la bloqueava um título com o dado preenchido corretamente. Não é
+  // hipótese: 1 dos 20 boletos do dump de produção do legado está nesse formato.
+  it('aprova a linha digitável de cobrança, que a régua converte para código de barras', () => {
     const r = checkPayoutReadiness(
       candidate({ paymentMethod: 'Boleto', paymentDetail: DIGITABLE_LINE }),
     );
-    assert.equal(r.status, 'incomplete');
-    assert.equal(reasonFor(r, 'payment-detail'), 'unmappable');
+    assert.equal(r.status, 'ready');
   });
 
+  // A guia de arrecadação tem 48 e nunca foi dado errado — era um terceiro comprimento que ninguém
+  // tinha mapeado, e caía em `malformed` acusando o operador de um erro que era do sistema.
+  it('aprova a linha digitável de arrecadação', () => {
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'GuiaRecolhimento', paymentDetail: TAX_GUIDE_LINE }),
+    );
+    assert.equal(r.status, 'ready');
+  });
+
+  // CA2 — o comprimento está certo e o dado é numérico; o que falhou foi UM dígito. `malformed`
+  // mandaria corrigir um formato que já está correto, e é a distinção que a #734 criou ao dar nome
+  // próprio ao caso. O mesmo motivo que o DV da conta bancária usa.
+  it('marca DV de campo que não fecha como check-digit-mismatch, não como malformado', () => {
+    const wrongDigit = DIGITABLE_LINE[9] === '9' ? '8' : '9';
+    const corrupted = DIGITABLE_LINE.slice(0, 9) + wrongDigit + DIGITABLE_LINE.slice(10);
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'Boleto', paymentDetail: corrupted }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'payment-detail'), 'check-digit-mismatch');
+  });
+
+  // Com 44, 47 e 48 todos mapeados, o que sobra de comprimento é código truncado ou digitado a
+  // mais — dado errado, e não formato que o sistema desconhece. `unmappable` deixou de valer para
+  // este campo: ele continua sendo o motivo do banco em texto livre, em `readBankCode`.
   it('marca comprimento arbitrário como malformado', () => {
     for (const detail of ['34191790010', '123', '9'.repeat(50)]) {
       const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: detail }));
