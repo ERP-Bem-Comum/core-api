@@ -90,7 +90,7 @@ import { createDrizzleRemittanceRepository } from '../persistence/repos/remittan
 import { createInMemoryRemittanceRepository } from '../persistence/repos/remittance-repository.in-memory.ts';
 import { createS3VanStorage } from '../van/van-storage.s3.ts';
 import { createInMemoryVanStorage } from '../van/van-storage.in-memory.ts';
-import { parseVanS3Env } from '../van/van-s3-config.ts';
+import { parseVanS3Env, describeVanS3ConfigError } from '../van/van-s3-config.ts';
 import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-translator.ts';
 import { createRemittanceBatchPlanner } from '../cnab/batch-planner.ts';
 import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
@@ -748,11 +748,24 @@ const buildDocumentStorage = (): SourceFileStoragePort => {
 };
 
 // Bucket da VAN — envs `VAN_S3_*` PRÓPRIAS, nunca o singleton `S3_*`: é outro bucket, possivelmente
-// em outra conta (ADR-0060). Sem configuração, in-memory: o boot não quebra, e o que não sobe para
-// `saida/` não vira pagamento.
+// em outra conta (ADR-0060).
+//
+// FAIL-FAST, sem fallback (#798). Não existe ramo para memória aqui: env lida é env obrigatória, em
+// TODO ambiente. O ternário anterior (`config.ok ? s3 : inMemory`) colapsava "a VAN não foi
+// configurada" e "a VAN foi configurada errado" no mesmo desfecho mudo — a borda subia, respondia
+// 201, e o que ia para `saida/` não existia.
+//
+// A razão de não haver degradação graciosa: em homologação e produção as envs são postas à mão, na
+// console da AWS, por quem opera a infraestrutura. Ali, cair para memória não é degradar — é
+// esconder um erro de configuração humana de quem tem como corrigi-lo. Localmente o bucket vem do
+// orquestrador de containers (MinIO), não de um ramo neste arquivo; e o double in-memory continua
+// existindo para teste, injetado por seam, que é outra coisa.
 const buildVanStorage = (): VanStoragePort => {
   const config = parseVanS3Env(process.env);
-  return config.ok ? createS3VanStorage(config.value) : createInMemoryVanStorage();
+  // `throw` é o contrato local desta composição para configuração que não permite subir — o irmão
+  // logo abaixo (`buildMysqlPools`) faz o mesmo com pool que não abre.
+  if (!config.ok) throw new Error(describeVanS3ConfigError(config.error));
+  return createS3VanStorage(config.value);
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
