@@ -76,6 +76,37 @@ export type RemittanceRepository = Readonly<{
     remittance: Remittance,
     events?: readonly RemittanceSaveEvent[],
   ) => Promise<Result<void, RemittanceSaveError>>;
+
+  // ⚠️ AS N REMESSAS DE UMA GERAÇÃO, NUMA TRANSAÇÃO SÓ (CA4 da #838).
+  //
+  // Existe porque uma seleção passou a poder produzir mais de um arquivo — o layout manda certas
+  // modalidades em arquivo separado —, e gravá-las uma a uma tem um modo de falha sem saída:
+  //
+  //   1. a remessa A commita, e seus títulos ficam reservados e `Transmitted`;
+  //   2. a B falha, e o operador recebe erro;
+  //   3. ele refaz a mesma seleção, e é recusado com `already-held` — pelos títulos de A;
+  //   4. e **não há como retentar** sem antes descartar A, uma remessa que ele nunca soube que existiu.
+  //
+  // Numa transação só, o desfecho é "nada aconteceu, tente de novo" — que é o que o operador já
+  // espera do fluxo. `save` passa a ser o caso de um elemento, e não uma implementação paralela:
+  // duas transações com a mesma responsabilidade divergiriam na primeira correção feita numa só.
+  //
+  // ⚠️ A ORDEM DE AQUISIÇÃO DE LOCKS É PRESERVADA, e ela é medida, não preferência: `fin_payables`
+  // ANTES de `fin_remittances` (inquiry-0031 — 20/20 deadlocks no braço errado, 0/15 no certo).
+  // Para N remessas isso significa travar os títulos de TODAS elas antes de tocar em qualquer
+  // remessa; intercalar por remessa reintroduziria o ciclo que a inquiry fechou.
+  //
+  // ⚠️ Custo declarado: a transação vive MAIS TEMPO, e é isso — não um conflito novo — que muda o
+  // risco. As insert-intentions da mesma transação não esperam umas pelas outras (*"multiple
+  // transactions inserting into the same index gap need not wait for each other if they are not
+  // inserting at the same position within the gap"*, Oracle, MySQL 8.4 Reference Manual §17.7.1,
+  // p. 3040); o que aumenta é a janela em que uma geração concorrente encontra o gap lock desta.
+  // Por isso a implementação Drizzle envolve a transação em `withDeadlockRetry` — o refman trata o
+  // retry como o desfecho esperado, não como remendo (§17.7.5.3, p. 3069).
+  saveAll: (
+    remittances: readonly Remittance[],
+    events?: readonly RemittanceSaveEvent[],
+  ) => Promise<Result<void, RemittanceSaveError>>;
   findById: (id: RemittanceId) => Promise<Result<Remittance | null, RemittanceRepositoryError>>;
   findByFileName: (
     fileName: string,

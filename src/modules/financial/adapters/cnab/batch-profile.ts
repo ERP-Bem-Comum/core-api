@@ -180,6 +180,61 @@ const PAYEE_ACCOUNT_TYPE_CHECKING = 'CC'; // Conta Corrente — `PP` seria Poupa
 export const complementPurposeFor = (launchForm: string): string | null =>
   TED_LAUNCH_FORMS.has(launchForm) ? PAYEE_ACCOUNT_TYPE_CHECKING : null;
 
+// ─── A forma que exige ARQUIVO próprio (partição multi-arquivo, CA4 da #838) ───────────────────
+//
+// Quarta função a derivar da forma de lançamento, e a primeira que decide algo acima do registro: o
+// manual (pág. 15) exige que o Pix vá "em arquivo separado dos demais serviços e modalidades". Sem
+// esta régua, uma seleção mista produz um arquivo bem-formado que o banco recusa inteiro.
+//
+// ⚠️ NÃO é "cada forma no seu arquivo", e o golden prova o contrário: o de TED traz `01`, `41` e `31`
+// nos três lotes do MESMO arquivo. Formas convivem; o que não convive com elas é o Pix. Por isso a
+// função é um agrupamento — e não um predicado "esta forma é exclusiva?" —, que erraria por excesso
+// de partição no dia em que houvesse duas modalidades exclusivas entre si mas não entre elas.
+//
+// Total sobre G029, como as três irmãs acima: forma nova cai no grupo comum. Uma forma desconhecida
+// que de fato exigisse arquivo próprio produziria arquivo recusado — mas o caminho oposto (partir por
+// omissão) quebraria em dois os arquivos mistos que o banco JÁ aceita, e é o dano que se paga sem ter
+// lido nada no manual.
+//
+// ⚠️ ESTA É UMA PROPRIEDADE DO LAYOUT, E NÃO O ESTADO DA IMPLEMENTAÇÃO — a nota existe porque a fonte
+// errada está a um import de distância e responde a uma pergunta *parecida*. `hasRemittanceIssuer`
+// (`domain/payout/van-routes.ts`, #837) responde "esta rota tem emissor?", que hoje é `não` para o Pix
+// e vira `sim` quando a #838 destravar. A pergunta daqui é outra: "esta forma exige arquivo próprio?"
+// — e para o Pix a resposta é `sim` HOJE e continua `sim` DEPOIS de ele ganhar emissor.
+//
+// Derivar a partição daquela régua faria a partição DESAPARECER exatamente no dia em que ela passasse
+// a ter efeito prático, sem que uma linha mudasse aqui. O arquivo misto resultante é o que o banco
+// recusa, e ninguém lembraria por quê. É a sexta reincidência do padrão que `.claude/rules/cnab.md`
+// registra em §"Parâmetro opcional é o defeito": uma fonte que responde perto do que se perguntou.
+//
+// ⚠️ VIVE AQUI, e não no montador, pela razão que mudou `batchKeyFor` de casa na #804: DOIS
+// consumidores — o montador, que reparte o arquivo, e o pré-voo, que precisa dizer na tela quantos
+// arquivos saem. Uma segunda cópia faria a tela descrever um arquivo e o banco receber outro.
+const FILE_GROUP_DEFAULT = 'default';
+const FILE_GROUP_PIX = 'pix';
+
+export const fileGroupFor = (launchForm: string): string =>
+  launchForm === LAUNCH_PIX_TRANSFER ? FILE_GROUP_PIX : FILE_GROUP_DEFAULT;
+
+// G021, header de ARQUIVO, colunas 172-174 — a literal que declara o arquivo como sendo de Pix.
+//
+// Deriva do GRUPO, não da forma, e a diferença é a que importa: o campo é do arquivo, e um arquivo
+// tem um grupo só, enquanto pode ter várias formas (o golden de TED tem `01`, `41` e `31`). Derivá-lo
+// da forma obrigaria quem escreve o header a eleger uma das formas do arquivo como representante —
+// escolha que não existe no layout e que daria resultado diferente conforme a ordem dos lotes.
+//
+// `null` com a mesma semântica de `tedPurposeFor`: "este arquivo NÃO tem o campo", e as posições saem
+// em branco. Quem escreve a linha é que traduz `null` em brancos.
+//
+// ⚠️ MEDIDO nos dois goldens em 01/09/2026, e é o que sustenta as três posições — o manual descreve o
+// campo 22 partido (22.0 identificação em 172-174, 22.1 reservado em 175-191), mas quem prova a
+// literal é o arquivo do banco: golden de Pix traz [PIX] em 172-174 e 17 brancos em 175-191; golden
+// de TED traz brancos nos dois. Ver `remittance-file.ts`, que emitia `blanks(20)` no trecho inteiro.
+const PIX_FILE_IDENTIFICATION = 'PIX';
+
+export const pixIdentificationFor = (fileGroup: string): string | null =>
+  fileGroup === FILE_GROUP_PIX ? PIX_FILE_IDENTIFICATION : null;
+
 // Os três primeiros dígitos do código de barras são o banco emissor do título (Carta-Circular Bacen
 // 2.926) — é o que separa liquidação de título do próprio banco de título de outro banco.
 //

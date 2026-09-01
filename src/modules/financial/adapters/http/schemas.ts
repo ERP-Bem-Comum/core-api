@@ -1578,7 +1578,10 @@ export const generateRemittanceBodySchema = z
   })
   .strict();
 
-export const generateRemittanceResponseSchema = z
+// Um arquivo gerado. Passou a ser item de lista na CA4 da #838: o layout do banco manda certas
+// modalidades em arquivo separado, e uma seleção pode produzir mais de um — cada um com NSA, nome e
+// objeto no bucket próprios.
+const generatedRemittanceFileSchema = z
   .object({
     remittanceId: z.uuid(),
     fileName: z.string(),
@@ -1587,6 +1590,18 @@ export const generateRemittanceResponseSchema = z
     totalCents: centsStringSchema,
     lineCount: z.number().int().positive(),
   })
+  .strict();
+
+// ⚠️ MUDANÇA DE CONTRATO em `/api/v2` (greenfield, ADR-0033): a resposta era o arquivo; passou a ser
+// `{ files: [...] }`. Devolver o primeiro e omitir o resto faria a tela de confirmação exibir um
+// comprovante que descreve metade do que foi enfileirado — e o operador confirmaria acreditando ter
+// conferido, que é o defeito que o pré-voo existe para não cometer.
+//
+// Lista mesmo com um elemento só: um corpo que mudasse de forma conforme a seleção obrigaria o
+// consumidor a tratar dois contratos, e o caso de um arquivo — o comum — seria o testado, enquanto o
+// de dois seria o quebrado.
+export const generateRemittanceResponseSchema = z
+  .object({ files: z.array(generatedRemittanceFileSchema).min(1) })
   .strict();
 
 export type GenerateRemittanceResponseDto = z.infer<typeof generateRemittanceResponseSchema>;
