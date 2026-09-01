@@ -38,6 +38,7 @@
     "docs:refs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/refs.ts",
     "docs:links": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/link-scan.ts",
     "cnab:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/cnab-manual-index.ts",
+    "cnab:ispb": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/build-ispb-map.ts",
     "logbook": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/claude/logbook.ts",
     "release:notes": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/release-notes.ts",
     "audit": "pnpm audit --prod --audit-level=high",
