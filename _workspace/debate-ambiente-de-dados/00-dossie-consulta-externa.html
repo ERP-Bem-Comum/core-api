@@ -744,6 +744,34 @@
       </table>
     </div>
 
+    <div class="callout" style="background: var(--crit-soft); border-left-color: var(--crit)">
+      <span class="chip chip--open">Errata · 01 set 2026</span>
+      <p>
+        <strong
+          >Duas linhas da tabela abaixo estavam erradas na v1–v5 deste documento, e um parecer
+          externo construiu argumento em cima delas.</strong
+        >
+        Ficam corrigidas aqui em vez de silenciosamente reescritas.
+      </p>
+      <p>
+        <strong>1. <code>ON DELETE CASCADE</code>: são 14, não 2.</strong> A varredura original
+        procurou <code>ON DELETE [A-Z ]+</code> e só capturou maiúsculas; o
+        <code>drizzle-kit</code> emite em minúsculas, e havia mais 12. O quadro real das 28 FKs com
+        política declarada é <strong>14 cascade · 11 restrict · 3 no action</strong> — integridade
+        referencial declarada no servidor em mais da metade, não em duas.
+      </p>
+      <p>
+        <strong>2. "Soft delete: 13" era ocorrência de identificador, não tabela.</strong> São 13
+        menções a <code>deletedAt</code> no código, concentradas em <strong>um</strong> arquivo de
+        schema. Lido ao lado de "CASCADE: 2", o número sugeria uma proporção — 13 soft deletes
+        manuais contra 2 cascatas — que <strong>não existe</strong>.
+      </p>
+      <p>
+        Consequência: qualquer leitura de que este projeto evita delegar integridade ao banco
+        <strong>não se apoia nestes números</strong>. Eles dizem o contrário.
+      </p>
+    </div>
+
     <h3>Recursos de ORM que este projeto <em>não</em> usa</h3>
     <p>
       Verificado por varredura, não por leitura de documentação. Isto importa porque muita
@@ -781,12 +809,15 @@
             <td class="num">0</td>
           </tr>
           <tr>
-            <td><code>ON DELETE CASCADE</code></td>
-            <td class="num">2</td>
+            <td>
+              <code>ON DELETE CASCADE</code>
+              <span class="chip chip--open" style="margin-left: 0.4rem">corrigido</span>
+            </td>
+            <td class="num">14</td>
           </tr>
           <tr>
-            <td>Soft delete (sempre <code>isNull()</code> explícito)</td>
-            <td class="num">13</td>
+            <td>Soft delete — <strong>1 arquivo de schema</strong>, 13 ocorrências no código</td>
+            <td class="num">1</td>
           </tr>
         </tbody>
       </table>
