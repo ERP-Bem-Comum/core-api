@@ -1499,9 +1499,12 @@ export const remittancePreviewResponseSchema = z
           // `transmitted` (#792, ADR-0065 §5): o título já saiu numa remessa. Nunca `ready` — a
           // recusa deixaria de chegar no último clique — e nunca `not-approved`, que mandaria o
           // operador aprovar o que já foi ao banco.
+          // `no-issuer` (#837): cadastro completo, rota que o arquivo ainda não emite. Distinto de
+          // `blocked` — não há campo a preencher — e de `out-of-van`, que é definitivo.
           status: z.enum([
             'ready',
             'blocked',
+            'no-issuer',
             'out-of-van',
             'not-found',
             'not-approved',
@@ -1517,6 +1520,7 @@ export const remittancePreviewResponseSchema = z
     ),
     readyCount: z.number().int().nonnegative(),
     blockedCount: z.number().int().nonnegative(),
+    noIssuerCount: z.number().int().nonnegative(),
     outOfVanCount: z.number().int().nonnegative(),
     notFoundCount: z.number().int().nonnegative(),
     notApprovedCount: z.number().int().nonnegative(),

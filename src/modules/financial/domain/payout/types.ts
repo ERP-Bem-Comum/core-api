@@ -79,9 +79,23 @@ export type PayoutCandidate = Readonly<{
   payee: PayeePaymentTarget | null;
 }>;
 
-// Três respostas, não duas. `out-of-van` não é "incompleto": nenhum cadastro conserta câmbio, então
+// Quatro respostas, não duas — e cada uma manda o operador a um lugar diferente, que é a régua que
+// justifica um valor novo. `out-of-van` não é "incompleto": nenhum cadastro conserta câmbio, então
 // oferecer campo a preencher seria mandar o operador a uma correção que não existe.
+//
+// `no-issuer` é o quarto (#837), e nasce de o pré-voo e o emissor discordarem sobre a Guia de
+// Recolhimento: a régua aprovava porque o código de barras estava válido, e a geração recusava
+// porque não há emissor para a rota. **Colapsá-lo em `incomplete` tira do operador a informação que
+// diz o que fazer**: em `incomplete` ele completa o cadastro; aqui não há o que completar, e a ação
+// é retirar o título da seleção. E colapsá-lo em `out-of-van` mentiria na direção oposta —
+// `out-of-van` é definitivo (o layout contratado não transporta câmbio), enquanto este é
+// transitório e cai sozinho quando o emissor entrar.
+//
+// Carrega a `route` de propósito, ao contrário de `out-of-van`: a rota é conhecida e é o que a tela
+// precisa para dizer QUAL forma ainda não sai. `gaps` não existe aqui — não há campo a apontar, e um
+// array vazio faria o front oferecer um lugar para onde levar o operador que não leva a lugar algum.
 export type PayoutReadiness =
   | Readonly<{ status: 'ready'; route: VanRoute }>
   | Readonly<{ status: 'incomplete'; route: VanRoute; gaps: readonly PayoutGap[] }>
+  | Readonly<{ status: 'no-issuer'; route: VanRoute }>
   | Readonly<{ status: 'out-of-van'; paymentMethod: PaymentMethod }>;

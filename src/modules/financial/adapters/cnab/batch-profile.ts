@@ -14,6 +14,7 @@
 // decide a forma, e a forma decide a câmara (`clearingHouseFor`). Enquanto ela foi um opcional com
 // default, o default valeu para TODOS os pagamentos — inclusive os que o banco recusa (#751).
 import { ok, err, type Result } from '../../../../shared/primitives/result.ts';
+import { hasRemittanceIssuer, type RouteWithIssuer } from '../../domain/payout/van-routes.ts';
 
 // O mínimo que decide o perfil. O montador passa o pagamento inteiro; aqui só interessa o que
 // participa da decisão — e é por isso que o boleto declara o código de barras: é dele que sai o
@@ -236,13 +237,36 @@ export const batchKeyFor = (
   return `${launchForm}${BATCH_KEY_SEPARATOR}${payeeBank ?? String(payeeBankCode)}`;
 };
 
+// O pagamento cuja rota TEM emissor, estreitado pelo mesmo `RouteWithIssuer` que o pré-voo consulta.
+//
+// O predicado é sobre o PAGAMENTO inteiro, e não sobre `payment.route`: um type predicate aplicado a
+// uma propriedade não estreita o objeto que a contém — só checagem direta do discriminante faz isso.
+// Escrito sobre a propriedade, o `switch` abaixo continuaria vendo as quatro variantes e exigiria os
+// `case` de `pix` e `tax-guide` de volta, que é a duplicação que a #837 remove.
+type IssuablePayment = Extract<ProfiledPayment, { route: RouteWithIssuer }>;
+
+const isIssuable = (payment: ProfiledPayment): payment is IssuablePayment =>
+  hasRemittanceIssuer(payment.route);
+
 // Transferência e boleto são as rotas com emissor. PIX e tributo ainda não têm — e o certo, até
 // terem, é a recusa nomeada: emiti-los pelo perfil de transferência mandaria ao banco um pagamento
 // bem-formado para a operação errada, usando dados que aquela rota sequer consulta.
+//
+// ⚠️ A LISTA DE ROTAS SUPORTADAS NÃO ESTÁ MAIS AQUI. Ela vive em `domain/payout/van-routes.ts`,
+// consultada por este guard e por `checkPayoutReadiness` — uma fonte, dois consumidores (#837). O
+// arranjo desfaz a divergência que fazia o pré-voo aprovar a Guia de Recolhimento e a geração
+// recusá-la no último clique, e é o que garante que ligar uma rota lá ligue os DOIS lados.
+//
+// ⚠️ E é por isso que o `switch` abaixo cobre duas variantes, não quatro: ele é exaustivo sobre
+// `IssuablePayment`. No dia em que `'pix'` entrar naquele array, este `switch` deixa de ser
+// exaustivo e **o typecheck quebra apontando para cá** — o compilador dizendo onde o emissor de Pix
+// falta. É a rede que impede o Pix de sair pelo perfil de transferência, que é o defeito da #751.
 export const batchProfileFor = (
   payment: ProfiledPayment,
   cedenteBankCode: string,
 ): Result<CnabBatchProfile, BatchProfileError> => {
+  if (!isIssuable(payment)) return err('remittance-launch-form-unsupported');
+
   switch (payment.route) {
     case 'transfer': {
       // Sem banco do favorecido não há forma a derivar — e o caminho por omissão custaria caro nos
@@ -278,9 +302,5 @@ export const batchProfileFor = (
         paymentIndicator: null,
       });
     }
-
-    case 'pix':
-    case 'tax-guide':
-      return err('remittance-launch-form-unsupported');
   }
 };

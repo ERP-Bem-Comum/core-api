@@ -601,6 +601,7 @@ export const remittancePreviewToDto = (
   })),
   readyCount: preview.readyCount,
   blockedCount: preview.blockedCount,
+  noIssuerCount: preview.noIssuerCount,
   outOfVanCount: preview.outOfVanCount,
   notFoundCount: preview.notFoundCount,
   notApprovedCount: preview.notApprovedCount,

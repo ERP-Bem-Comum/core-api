@@ -564,10 +564,18 @@ export const updatePayablePayment = (
   // chega por composição na borda, ADR-0032). Julgá-las aqui com `payee: null` reprovaria toda
   // troca para PIX, recusando por ignorância em vez de por dado sujo. Quem as julga é o pré-voo,
   // que tem o favorecido em mãos.
+  //
+  // ⚠️ A comparação é com `incomplete`, e NÃO `!== 'ready'` — a diferença decide se o operador
+  // consegue cadastrar uma Guia de Recolhimento. Desde a #837 a régua devolve `no-issuer` para a
+  // rota que não tem emissor no arquivo, e a guia é exatamente esse caso: com `!== 'ready'`, o
+  // código de barras VÁLIDO de uma guia passaria a ser recusado como se estivesse torto, e a forma
+  // de pagamento ficaria impossível de selecionar. O que esta régua julga é o DADO; que a rota saia
+  // ou não na remessa é assunto do pré-voo, e a P.O. tirou a guia do escopo da REMESSA, não do
+  // cadastro do título.
   const paysByBarcode = paymentMethod === 'Boleto' || paymentMethod === 'GuiaRecolhimento';
   if (paysByBarcode) {
     const readiness = checkPayoutReadiness({ paymentMethod, paymentDetail, payee: null });
-    if (readiness.status !== 'ready') return err('payable-payment-detail-invalid');
+    if (readiness.status === 'incomplete') return err('payable-payment-detail-invalid');
   }
 
   const repay = (p: Payable): Payable =>
