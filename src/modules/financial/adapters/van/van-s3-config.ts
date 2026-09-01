@@ -18,6 +18,20 @@ export type VanS3ConfigError =
   | Readonly<{ tag: 'invalid-prefix'; field: string; raw: string }>
   | Readonly<{ tag: 'invalid-env'; field: string; raw: string }>;
 
+// Diagnóstico legível para quem opera o boot. Toda env lida por este parser é OBRIGATÓRIA em todo
+// ambiente — quem consome derruba o processo, e esta é a mensagem que sai antes de ele morrer. Em
+// PT sem acentuação: o stderr do boot antecede qualquer garantia de encoding do coletor de log.
+//
+// Sobre ecoar o valor recusado (CWE-532): das três variantes, só `invalid-prefix` e `invalid-env`
+// carregam `raw`, e os únicos campos que as produzem são `VAN_S3_PREFIX_*` e
+// `VAN_S3_FORCE_PATH_STYLE` — nenhum é credencial. O XOR de chave/secret sai como `missing-env`,
+// que carrega só o NOME. Variante nova que devolva `raw` de campo sensível precisa de guarda de
+// forma antes de passar por aqui.
+export const describeVanS3ConfigError = (error: VanS3ConfigError): string =>
+  error.tag === 'missing-env'
+    ? `van-storage: ${error.field} nao configurada — obrigatoria em todo ambiente`
+    : `van-storage: ${error.field} com valor invalido "${error.raw}"`;
+
 export type VanPrefixes = Readonly<{
   outbound: string;
   processed: string;

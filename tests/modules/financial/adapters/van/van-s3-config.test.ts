@@ -2,7 +2,10 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
-import { parseVanS3Env } from '#src/modules/financial/adapters/van/van-s3-config.ts';
+import {
+  parseVanS3Env,
+  describeVanS3ConfigError,
+} from '#src/modules/financial/adapters/van/van-s3-config.ts';
 
 const base = { VAN_S3_REGION: 'sa-east-1', VAN_S3_BUCKET: 'bucket-qualquer' };
 
@@ -151,5 +154,43 @@ describe('VAN_S3_FORCE_PATH_STYLE — a env sobrescreve a heurística', () => {
       assert.ok(isErr(r), `esperava err para ${raw}`);
       assert.equal(r.error.tag, 'invalid-env');
     }
+  });
+});
+
+// O erro derruba o boot (#798), e esta mensagem é a última coisa que quem opera vê antes disso. Ela
+// é o diagnóstico inteiro: sem o nome do campo, o operador sabe que não subiu e não sabe o que
+// preencher — que era exatamente o que o fallback mudo produzia, só que sem derrubar.
+describe('describeVanS3ConfigError — o diagnóstico do fail-fast', () => {
+  const describe_ = (over: Readonly<Record<string, string>>) => {
+    const r = parseVanS3Env(over);
+    assert.ok(isErr(r), 'esperava err');
+    return describeVanS3ConfigError(r.error);
+  };
+
+  it('nomeia o campo ausente e diz que ele vale em todo ambiente', () => {
+    const message = describe_({ VAN_S3_REGION: 'sa-east-1' });
+    assert.match(message, /VAN_S3_BUCKET/);
+    assert.match(message, /todo ambiente/);
+  });
+
+  it('nomeia o campo e o valor recusado quando a env é ininterpretável', () => {
+    const message = describe_({ ...base, VAN_S3_FORCE_PATH_STYLE: 'talvez' });
+    assert.match(message, /VAN_S3_FORCE_PATH_STYLE/);
+    assert.match(message, /"talvez"/);
+  });
+
+  it('nomeia o prefixo recusado', () => {
+    const message = describe_({ ...base, VAN_S3_PREFIX_RETURNS: '/retorno' });
+    assert.match(message, /VAN_S3_PREFIX_RETURNS/);
+  });
+
+  // CWE-532: a mensagem sai em stderr no boot, e o coletor de log tem audiência maior e retenção
+  // mais longa que o secret store. O XOR de credencial é a única variante que toca campo sensível —
+  // e sai como `missing-env`, que carrega só o NOME. Este teste é a guarda dessa propriedade: se
+  // alguma variante passar a devolver `raw` de credencial, ele fica vermelho.
+  it('nunca ecoa credencial — o XOR nomeia o campo sem revelar o valor presente', () => {
+    const message = describe_({ ...base, VAN_S3_ACCESS_KEY_ID: 'AKIAEXEMPLO' });
+    assert.match(message, /VAN_S3_SECRET_ACCESS_KEY/);
+    assert.equal(message.includes('AKIAEXEMPLO'), false);
   });
 });
