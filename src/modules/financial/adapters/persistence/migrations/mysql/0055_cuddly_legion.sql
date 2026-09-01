@@ -1,0 +1,1 @@
+ALTER TABLE `fin_payable_view` ADD `occurred_at` datetime(3) DEFAULT '1970-01-01 00:00:00.000' NOT NULL;

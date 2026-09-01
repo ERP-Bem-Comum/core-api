@@ -12,6 +12,10 @@ import { strict as assert } from 'node:assert';
 import { applyPayableEvent } from '#src/modules/financial/application/use-cases/apply-payable-event.ts';
 import { createInMemoryPayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.in-memory.ts';
 
+// #894: instante do evento — o guard de recência do read-model o exige. Valor fixo: estes casos
+// não exercitam ordenação, e um `new Date()` por chamada tornaria o teste dependente do relógio.
+const OCCURRED_AT = new Date('2026-01-01T00:00:00.000Z');
+
 const DOC = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const P1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SUP = '11111111-1111-4111-8111-111111111111';
@@ -54,6 +58,7 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
     const store = createInMemoryPayableViewStore();
     const r = await applyPayableEvent({ store })({
       eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
       payload: documentSaved(),
     });
     assert.equal(r.ok, true);
@@ -92,7 +97,11 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
         },
       ],
     });
-    const r = await applyPayableEvent({ store })({ eventType: 'DocumentSaved', payload });
+    const r = await applyPayableEvent({ store })({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload,
+    });
     assert.equal(r.ok, true);
     const list = await store.list();
     if (list.ok) assert.equal(list.value[0]?.budgetPlanRef, null);
@@ -101,36 +110,72 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
   it('CA3: transições de status atualizam a linha (Approved/Paid/Cancelled/Open)', async () => {
     const store = createInMemoryPayableViewStore();
     const deps = { store };
-    await applyPayableEvent(deps)({ eventType: 'DocumentSaved', payload: documentSaved() });
+    await applyPayableEvent(deps)({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload: documentSaved(),
+    });
 
     const statusAfter = async (): Promise<string | undefined> => {
       const l = await store.list();
       return l.ok ? l.value[0]?.status : undefined;
     };
 
-    await applyPayableEvent(deps)({ eventType: 'PayableApproved', payload: statusEvent(P1) });
+    await applyPayableEvent(deps)({
+      eventType: 'PayableApproved',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
     assert.equal(await statusAfter(), 'Approved');
 
-    await applyPayableEvent(deps)({ eventType: 'PayableManuallyPaid', payload: statusEvent(P1) });
+    await applyPayableEvent(deps)({
+      eventType: 'PayableManuallyPaid',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
     assert.equal(await statusAfter(), 'Paid');
 
-    await applyPayableEvent(deps)({ eventType: 'DocumentCancelled', payload: statusEvent(P1) });
+    await applyPayableEvent(deps)({
+      eventType: 'DocumentCancelled',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
     assert.equal(await statusAfter(), 'Cancelled');
 
-    await applyPayableEvent(deps)({ eventType: 'ApprovalUndone', payload: statusEvent(P1) });
+    await applyPayableEvent(deps)({
+      eventType: 'ApprovalUndone',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
     assert.equal(await statusAfter(), 'Open');
   });
 
   it('CA4: idempotência — reprocessar o mesmo evento não duplica nem corrompe', async () => {
     const store = createInMemoryPayableViewStore();
     const deps = { store };
-    await applyPayableEvent(deps)({ eventType: 'DocumentSaved', payload: documentSaved() });
-    await applyPayableEvent(deps)({ eventType: 'DocumentSaved', payload: documentSaved() });
+    await applyPayableEvent(deps)({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload: documentSaved(),
+    });
+    await applyPayableEvent(deps)({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload: documentSaved(),
+    });
     const l1 = await store.list();
     if (l1.ok) assert.equal(l1.value.length, 1);
 
-    await applyPayableEvent(deps)({ eventType: 'PayableApproved', payload: statusEvent(P1) });
-    await applyPayableEvent(deps)({ eventType: 'PayableApproved', payload: statusEvent(P1) });
+    await applyPayableEvent(deps)({
+      eventType: 'PayableApproved',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
+    await applyPayableEvent(deps)({
+      eventType: 'PayableApproved',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
     const l2 = await store.list();
     if (l2.ok) {
       assert.equal(l2.value.length, 1);
@@ -140,7 +185,11 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
 
   it('CA (skip): evento fora do contrato → ok, sem escrita', async () => {
     const store = createInMemoryPayableViewStore();
-    const r = await applyPayableEvent({ store })({ eventType: 'ApproverEscalated', payload: '{}' });
+    const r = await applyPayableEvent({ store })({
+      eventType: 'ApproverEscalated',
+      occurredAt: OCCURRED_AT,
+      payload: '{}',
+    });
     assert.equal(r.ok, true);
     const l = await store.list();
     if (l.ok) assert.equal(l.value.length, 0);
@@ -152,6 +201,7 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
     const store = createInMemoryPayableViewStore();
     const r = await applyPayableEvent({ store })({
       eventType: 'DocumentCancelled',
+      occurredAt: OCCURRED_AT,
       payload: JSON.stringify({ documentId: DOC, payableIds: [] }),
     });
     assert.equal(r.ok, true);
@@ -162,6 +212,7 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
     const store = createInMemoryPayableViewStore();
     const r = await applyPayableEvent({ store })({
       eventType: 'DocumentCancelled',
+      occurredAt: OCCURRED_AT,
       payload: JSON.stringify({ documentId: DOC, payableIds: ['ok', 123] }),
     });
     assert.equal(r.ok, false);
@@ -175,11 +226,20 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
   it('#792: PayableTransmitted projeta o título como Transmitted, não Approved', async () => {
     const store = createInMemoryPayableViewStore();
     const deps = { store };
-    await applyPayableEvent(deps)({ eventType: 'DocumentSaved', payload: documentSaved() });
-    await applyPayableEvent(deps)({ eventType: 'PayableApproved', payload: statusEvent(P1) });
+    await applyPayableEvent(deps)({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload: documentSaved(),
+    });
+    await applyPayableEvent(deps)({
+      eventType: 'PayableApproved',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
 
     const r = await applyPayableEvent(deps)({
       eventType: 'PayableTransmitted',
+      occurredAt: OCCURRED_AT,
       payload: JSON.stringify({
         documentId: DOC,
         payableId: P1,
@@ -221,7 +281,11 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
         },
       ],
     });
-    const r = await applyPayableEvent({ store })({ eventType: 'DocumentSaved', payload });
+    const r = await applyPayableEvent({ store })({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload,
+    });
     assert.equal(r.ok, true);
     const l = await store.list();
     assert.ok(l.ok);
@@ -254,7 +318,11 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
         },
       ],
     });
-    const r = await applyPayableEvent({ store })({ eventType: 'DocumentSaved', payload });
+    const r = await applyPayableEvent({ store })({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload,
+    });
     assert.equal(r.ok, true);
     const l = await store.list();
     if (l.ok) {

@@ -23,6 +23,10 @@ import {
 import { applyPayableEvent } from '#src/modules/financial/application/use-cases/apply-payable-event.ts';
 import { createInMemoryPayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.in-memory.ts';
 
+// #894: instante do evento — o guard de recência do read-model o exige. Valor fixo: estes casos
+// não exercitam ordenação, e um `new Date()` por chamada tornaria o teste dependente do relógio.
+const OCCURRED_AT = new Date('2026-01-01T00:00:00.000Z');
+
 const READER = 'reference:read';
 const TEST_USER_ID = '99999999-9999-4999-8999-999999999999';
 const SUP = '11111111-1111-4111-8111-111111111111';
@@ -101,10 +105,12 @@ before(async () => {
     const documentId = uuid(100 + n);
     await apply({
       eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
       payload: documentSavedPayload(payableId, documentId, '77500'),
     });
     const paid = await apply({
       eventType: 'PayableManuallyPaid',
+      occurredAt: OCCURRED_AT,
       payload: paidPayload(payableId, documentId, day),
     });
     assert.equal(paid.ok, true, 'seed: PayableManuallyPaid deve aplicar sem erro');
@@ -112,6 +118,7 @@ before(async () => {
   // Título aberto (não pago) — não deve aparecer no widget.
   await apply({
     eventType: 'DocumentSaved',
+    occurredAt: OCCURRED_AT,
     payload: documentSavedPayload(uuid(7), uuid(107), '1000'),
   });
 

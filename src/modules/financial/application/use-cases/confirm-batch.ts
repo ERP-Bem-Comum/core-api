@@ -11,10 +11,16 @@ export type ConfirmBatchDeps = Readonly<{
 
 export type ConfirmBatchInput = Readonly<{
   transactionIds: readonly string[];
+  // #505: o template carrega os CINCO níveis. Ele nasceu com três, e `budgetPlanRef`/`subcategoryRef`
+  // eram descartados em silêncio — o `recordManualEntry` sempre os aceitou, então o lote gravava
+  // classificação incompleta sem nenhum erro, e o relatório agrupado por plano ou por subcategoria
+  // via um balde vazio que ninguém sabia explicar.
   template: Readonly<{
     type: ManualEntryType;
     supplierRef?: string;
+    budgetPlanRef?: string;
     categoryRef?: string;
+    subcategoryRef?: string;
     costCenterRef?: string;
     programRef?: string;
     description?: string;
@@ -53,8 +59,14 @@ export const confirmBatch =
         ...(input.template.supplierRef !== undefined
           ? { supplierRef: input.template.supplierRef }
           : {}),
+        ...(input.template.budgetPlanRef !== undefined
+          ? { budgetPlanRef: input.template.budgetPlanRef }
+          : {}),
         ...(input.template.categoryRef !== undefined
           ? { categoryRef: input.template.categoryRef }
+          : {}),
+        ...(input.template.subcategoryRef !== undefined
+          ? { subcategoryRef: input.template.subcategoryRef }
           : {}),
         ...(input.template.costCenterRef !== undefined
           ? { costCenterRef: input.template.costCenterRef }

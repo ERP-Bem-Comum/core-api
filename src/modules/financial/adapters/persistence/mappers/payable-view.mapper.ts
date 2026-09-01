@@ -38,6 +38,7 @@ export const rowToPayableView = (
     contractRef: row.contractRef,
     categoryRef: row.categoryRef,
     budgetPlanRef: row.budgetPlanRef,
+    subcategoryRef: row.subcategoryRef,
     costCenterRef: row.costCenterRef,
     programRef: row.programRef,
     valueCents: row.valueCents,
