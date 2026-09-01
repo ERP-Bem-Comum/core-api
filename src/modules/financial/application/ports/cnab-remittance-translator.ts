@@ -50,6 +50,14 @@ export type RemittanceBilletPayment = Readonly<{
   route: 'billet';
   barcode: string;
   beneficiaryName: string;
+  // A inscrição de quem emitiu o título. O boleto continua não olhando conta bancária (#708, CA5) —
+  // o dinheiro segue o código de barras —, mas o layout exige IDENTIFICAR quem recebe, e isso é
+  // outra coisa: o registro que o banco declara obrigatório para título de cobrança nomeia sacado e
+  // cedente por inscrição, não por conta (#891).
+  //
+  // Obrigatórios, sem `?`: ver o comentário em `BilletPayment`, no montador.
+  beneficiaryDocumentType: '1' | '2';
+  beneficiaryDocument: string;
   dueDate: Date;
   valueCents: number;
   paymentDate: Date;
@@ -112,7 +120,12 @@ export type CnabTranslateError =
   // Rota contratada que ainda não tem emissor. Erro PRÓPRIO, e não um `translation-failed`
   // genérico: a ação de quem recebe é diferente — não há dado a corrigir no cadastro, o arquivo é
   // que ainda não sabe emitir aquela forma.
-  | 'cnab-launch-form-unsupported';
+  | 'cnab-launch-form-unsupported'
+  // Título de cobrança cujo Segmento J-52 não teria como identificar quem paga ou quem recebe
+  // (#891). Erro próprio pela mesma régua do convênio: a ação é CADASTRAR o dado do favorecido, e
+  // achatá-lo em `cnab-translation-failed` mandaria o operador abrir chamado de código para um
+  // campo que só ele pode preencher.
+  | 'cnab-billet-party-unidentified';
 
 export type CnabRemittanceTranslator = Readonly<{
   // Devolve o arquivo JÁ VERIFICADO. A inspeção estrutural mora do lado do adapter porque é ela que

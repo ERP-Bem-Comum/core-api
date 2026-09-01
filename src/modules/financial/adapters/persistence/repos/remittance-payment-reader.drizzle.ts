@@ -167,14 +167,31 @@ const toPaymentData = (
       // campo de 44, que desloca todo o resto do registro.
       if (!barcode.ok) return err('remittance-payment-incomplete');
 
+      // O CEDENTE do título deixou de ser informativo (#891).
+      //
+      // Enquanto o boleto emitia só o Segmento J, o nome era adorno — `contractor?.name ?? ''` — e
+      // o comentário que estava aqui dizia a verdade: o dinheiro segue o código de barras, não o
+      // nome. O Segmento J-52 muda o fato, não a opinião: o manual o declara obrigatório para
+      // título de cobrança (p. 33) e ele identifica sacado e cedente por INSCRIÇÃO. Sem o
+      // favorecido resolvido não há registro a emitir — só um bloco de 56 posições em branco, que é
+      // arquivo bem-formado divergindo do modelo do banco em silêncio.
+      //
+      // Recusar aqui, e não no montador, é o que preserva o contrato tudo-ou-nada do cabeçalho: o
+      // título sai da seleção ANTES de o NSA ser alocado, em vez de derrubar a remessa inteira
+      // depois de queimar um número de sequência que não volta.
+      if (contractor === null) return err('remittance-payment-incomplete');
+      const beneficiaryDocument = cleanDocument(contractor.document);
+      if (beneficiaryDocument === '') return err('remittance-payment-incomplete');
+
       return ok({
         payableId: row.payableId,
         documentId: row.documentId,
         route: 'billet',
         barcode: barcode.value,
-        // Nome do CEDENTE do título: quem recebe. Sem favorecido resolvido o campo sai vazio — ele
-        // é informativo, e o dinheiro segue o código de barras, não o nome.
-        beneficiaryName: contractor?.name ?? '',
+        // Nome e inscrição do CEDENTE do título: quem emitiu e recebe.
+        beneficiaryName: contractor.name,
+        beneficiaryDocumentType: documentTypeOf(beneficiaryDocument),
+        beneficiaryDocument,
         dueDate: paymentDate,
         valueCents,
         paymentDate,

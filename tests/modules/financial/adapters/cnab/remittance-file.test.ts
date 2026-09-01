@@ -55,6 +55,10 @@ const billet = (n: number, valueCents: number, issuerBank = '341'): RemittancePa
   route: 'billet',
   barcode: barcodeOf(issuerBank, n),
   beneficiaryName: `FORNECEDOR ${n}`,
+  // Inscrição do CEDENTE do título, que o Segmento J-52 exige (#891). Sintética, como a do
+  // `payee` acima — os repositórios são públicos e fixture é o caminho por onde dado real entra.
+  beneficiaryDocumentType: '2',
+  beneficiaryDocument: `9876543200011${n}`,
   dueDate: new Date(Date.UTC(2026, 7, 20)),
   paymentDate: PAYMENT_DATE,
   valueCents,
@@ -182,8 +186,13 @@ describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
     const lines = linesOf(file.content);
     const types = lines.map((l) => at(l, 8, 8)).join('');
 
-    // header de arquivo · (header de lote, A, B, trailer de lote) · (header, J, trailer) · trailer
-    assert.equal(types, '013351359');
+    // header de arquivo · (header de lote, A, B, trailer) · (header, J, J-52, trailer) · trailer
+    //
+    // As duas rotas emitem PAR de registros, e é simetria de layout, não coincidência: o crédito em
+    // conta precisa do B para o endereço do favorecido, e o título de cobrança precisa do J-52 para
+    // identificar sacado e cedente (#891). Enquanto o boleto saía sozinho, esta linha era
+    // `013351359` — um registro a menos, que o trailer fechava e o banco não reconhecia.
+    assert.equal(types, '0133513359');
     assert.equal(file.batchCount, 2);
   });
 
@@ -197,7 +206,8 @@ describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
     assert.equal(batchOf(lines[4] ?? ''), '0001'); // trailer do 1º lote
     assert.equal(batchOf(lines[5] ?? ''), '0002'); // header do 2º lote
     assert.equal(batchOf(lines[6] ?? ''), '0002'); // Segmento J
-    assert.equal(batchOf(lines[7] ?? ''), '0002'); // trailer do 2º lote
+    assert.equal(batchOf(lines[7] ?? ''), '0002'); // Segmento J-52
+    assert.equal(batchOf(lines[8] ?? ''), '0002'); // trailer do 2º lote
   });
 
   // O CA2: sem isto, o segundo lote continuaria a contagem do primeiro e o banco recusaria o
@@ -218,7 +228,10 @@ describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
     assert.equal(Number(at(transferTrailer, 18, 23)), 4); // header + A + B + trailer
     assert.equal(Number(at(transferTrailer, 24, 41)), 1500);
 
-    assert.equal(Number(at(billetTrailer, 18, 23)), 4); // header + J + J + trailer
+    // header + (J + J-52) + (J + J-52) + trailer. ⚠️ A SOMATÓRIA não muda: o J-52 não carrega valor,
+    // e contá-lo duas vezes dobraria o total do lote. É a distinção que `paymentCentsOf` faz no
+    // inspetor — registro que existe e não paga.
+    assert.equal(Number(at(billetTrailer, 18, 23)), 6);
     assert.equal(Number(at(billetTrailer, 24, 41)), 1000);
   });
 
@@ -607,10 +620,19 @@ describe('Remessa Multipag — todo pagamento entra BLOQUEADO para liberação m
   const segmentOf = (line: string): string => at(line, 14, 14);
   const sequenceOf = (line: string): string => at(line, 9, 13);
 
-  // Os detalhes que representam um PAGAMENTO: A (transferência) e J (boleto). O B fica de fora de
-  // propósito — é o complemento de endereço do favorecido, e ali 015-017 é CNAB em branco.
+  // O J-52 grava `'J'` na coluna 014 como o J, e quem os separa é a identificação de registro
+  // opcional (G067, 018-019).
+  const isSegmentJ52 = (line: string): boolean =>
+    segmentOf(line) === 'J' && at(line, 18, 19) === '52';
+
+  // Os detalhes que representam um PAGAMENTO: A (transferência) e J (boleto). Ficam de fora, de
+  // propósito, os dois COMPLEMENTOS — o B, que traz endereço do favorecido, e o J-52, que identifica
+  // sacado e cedente (#891). Nenhum dos dois carrega a instrução: no B, 015-017 é CNAB em branco; no
+  // J-52, 016-017 é o `C004` de cobrança, campo diferente do `G061` apesar da coluna coincidir.
   const isPaymentDetail = (line: string): boolean =>
-    at(line, 8, 8) === '3' && (segmentOf(line) === 'A' || segmentOf(line) === 'J');
+    at(line, 8, 8) === '3' &&
+    !isSegmentJ52(line) &&
+    (segmentOf(line) === 'A' || segmentOf(line) === 'J');
 
   it('grava a instrução 09 em TODO detalhe de pagamento, seja transferência ou boleto', () => {
     // Duas formas na mesma seleção, logo dois lotes: sem as duas rotas no arquivo, o caso não
@@ -646,5 +668,97 @@ describe('Remessa Multipag — todo pagamento entra BLOQUEADO para liberação m
     for (const line of segmentsB) {
       assert.equal(at(line, 15, 17), '   ', `detalhe ${sequenceOf(line)}`);
     }
+  });
+
+  // O MESMO contrapeso, para o complemento do boleto (#891). O J-52 é o registro em que a
+  // "correção" preguiçosa é mais tentadora: ele grava `'J'` na coluna 014 como o J e ocupa as mesmas
+  // colunas 015-017 — e um `09` carimbado ali por simetria não seria instrução bloqueada nenhuma.
+  //
+  // ⚠️ 016-017 no J-52 é o `C004`, "Código de Movimento Remessa", cujo domínio (manual p. 118) diz
+  // **'09' = Protestar**. Quem propagasse a política do #805 para cá emitiria arquivo bem-formado
+  // mandando PROTESTAR o título que se está pagando — e nenhum inspetor de forma pegaria.
+  it('não repete a instrução do J no Segmento J-52: 015 é branco e 016-017 é o C004 zerado', () => {
+    const file = build([payment(1, 10_000), billet(2, 5_000)]);
+    const segmentsJ52 = linesOf(file.content).filter((l) => at(l, 8, 8) === '3' && isSegmentJ52(l));
+
+    assert.equal(segmentsJ52.length, 1, 'guarda contra verde por vacuidade');
+    for (const line of segmentsJ52) {
+      const where = `detalhe ${sequenceOf(line)}`;
+      assert.equal(movementOf(line), ' ', `${where}: 015 é G004 (CNAB), não o G060 do Segmento J`);
+      assert.equal(instructionOf(line), '00', `${where}: 016-017 é C004, e '09' ali é PROTESTAR`);
+    }
+  });
+});
+
+/**
+ * O par J + J-52 do boleto (#891, CA1).
+ *
+ * O manual declara o J-52 obrigatório para título de cobrança (p. 33), e o emissor gravava só o J.
+ * Estes casos medem a montagem — que os dois saem, NA ORDEM, com sequenciais consecutivos, e que o
+ * trailer do lote conta os dois. A forma do registro isolado é medida em `multipag-segment-j52`.
+ */
+describe('Remessa Multipag — boleto emite o par J + J-52 (#891)', () => {
+  const segmentOf = (line: string): string => at(line, 14, 14);
+  const isJ52 = (line: string): boolean => segmentOf(line) === 'J' && at(line, 18, 19) === '52';
+  const detailsOf = (content: string): readonly string[] =>
+    linesOf(content).filter((l) => at(l, 8, 8) === '3');
+
+  it('emite o J-52 imediatamente depois do J, com o sequencial seguinte', () => {
+    const details = detailsOf(build([billet(1, 5_000)]).content);
+
+    assert.equal(details.length, 2, 'o boleto passou a ser um PAR de registros');
+    assert.equal(segmentOf(details[0] ?? ''), 'J');
+    assert.ok(!isJ52(details[0] ?? ''), 'o primeiro é o J do pagamento, não o complemento');
+    assert.ok(isJ52(details[1] ?? ''), 'o segundo é o J-52');
+
+    assert.equal(at(details[0] ?? '', 9, 13), '00001');
+    assert.equal(at(details[1] ?? '', 9, 13), '00002');
+  });
+
+  it('mantém o par consecutivo com vários boletos no mesmo lote', () => {
+    const details = detailsOf(build([billet(1, 100), billet(2, 200), billet(3, 300)]).content);
+
+    assert.equal(details.length, 6);
+    // A alternância é o invariante: J, J-52, J, J-52, J, J-52. Um J-52 deslocado ainda produziria
+    // seis registros e um trailer fechando — a ordem é o que o banco lê.
+    assert.deepEqual(details.map(isJ52), [false, true, false, true, false, true]);
+    assert.deepEqual(
+      details.map((l) => at(l, 9, 13)),
+      ['00001', '00002', '00003', '00004', '00005', '00006'],
+    );
+  });
+
+  // ⚠️ O nome do cedente aparece em DOIS registros do mesmo pagamento — 062-091 no J e 092-131 no
+  // J-52 —, e é o mesmo campo `G013`, do mesmo participante. Se divergirem, o arquivo declara dois
+  // beneficiários para um título só, e o banco não tem como saber qual vale.
+  it('grava o mesmo nome de cedente no J e no J-52', () => {
+    const details = detailsOf(build([billet(1, 5_000)]).content);
+    const noJ52 = at(details[0] ?? '', 62, 91);
+    const noJ52Complement = at(details[1] ?? '', 92, 131);
+
+    assert.equal(noJ52.trim(), 'FORNECEDOR 1');
+    assert.equal(noJ52Complement.trim(), noJ52.trim());
+  });
+
+  // O SACADO vem do ENVELOPE, não do pagamento: é a empresa que emite a remessa, a mesma que o
+  // header do arquivo declara. Um chamador não tem como afirmá-la diferente — e é isso que se mede.
+  it('grava como sacado a empresa do header do arquivo', () => {
+    const file = build([billet(1, 5_000)]);
+    const j52 = detailsOf(file.content).find(isJ52) ?? '';
+    const fileHeader = linesOf(file.content)[0] ?? '';
+
+    assert.equal(at(j52, 20, 20), CEDENTE.documentType);
+    assert.equal(at(j52, 21, 35), CEDENTE.document.padStart(15, '0'));
+    assert.equal(at(j52, 36, 75).trim(), CEDENTE.companyName);
+    // E a inscrição é a MESMA que o header do arquivo grava em 019-032 (G006), sem reformatação.
+    assert.equal(at(fileHeader, 19, 32), CEDENTE.document);
+  });
+
+  it('o trailer do lote conta o J-52 e não soma o valor dele duas vezes', () => {
+    const lines = linesOf(build([billet(1, 700), billet(2, 300)]).content);
+    const batchTrailer = lines.find((l) => at(l, 8, 8) === '5') ?? '';
+
+    assert.equal(Number(at(batchTrailer, 18, 23)), 6, 'header + (J + J-52) × 2 + trailer');
+    assert.equal(Number(at(batchTrailer, 24, 41)), 1000, 'o J-52 não carrega valor');
   });
 });

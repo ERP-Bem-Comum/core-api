@@ -36,6 +36,11 @@ export type RemittanceDefectCode =
   | 'detail-outside-batch'
   | 'detail-sequence-gap'
   | 'segment-a-without-b'
+  // Título de cobrança com o Segmento J e sem o J-52 que o manual declara obrigatório (p. 33).
+  // Enquanto este código não existiu, o arquivo saía com o trailer fechando e o inspetor aprovando:
+  // o defeito era invisível de ponta a ponta, e é essa cegueira que a #891 fecha — sem ela, o
+  // próximo emissor volta a esquecer o registro e nada acusa.
+  | 'segment-j-without-j52'
   | 'batch-record-count-mismatch'
   | 'file-record-count-mismatch'
   | 'file-batch-count-mismatch'
@@ -56,11 +61,52 @@ const batchDeclaredTotal = (line: string): number => Number(at(line, 24, 41));
 const fileDeclaredBatches = (line: string): number => Number(at(line, 18, 23));
 const fileDeclaredRecords = (line: string): number => Number(at(line, 24, 29));
 
+// O J e o J-52 compartilham a coluna 014 — os DOIS gravam `'J'` (campo `*G039`). Distingui-los pelo
+// VALOR de 018-019 sozinho é o defeito que esta função já teve, e ele custava caro: `at(line, 18, 19)`
+// só é a Identificação de Registro Opcional (`G067`) NO J-52. No Segmento J aquelas duas posições são
+// os dois primeiros dígitos do CÓDIGO DE BARRAS — `segmentJ` grava o barcode em 018-061 —, e o barcode
+// começa pelo COMPE do banco emissor. `readIssuerBank` aceita qualquer três dígitos, sem allow-list,
+// então um boleto de banco `52x` era lido como complemento: `paymentCentsOf` devolvia 0, o lote somava
+// um pagamento a menos, e saía `batch-total-mismatch` apontando o trailer — que estava certo. Depois
+// de `allocateNsa` consumir o número sob lock: NSA queimado, mensagem sem campo.
+//
+// ⚠️ AS TRÊS CONDIÇÕES SÃO DELIBERADAMENTE REDUNDANTES, e cada uma responde a uma pergunta DIFERENTE.
+// Remover qualquer uma "porque as outras já bastam" é reabrir a classe:
+//
+//   1. `018-019 === '52'`      — o G067 AFIRMA ser complemento. Necessária, e sozinha ambígua.
+//   2. `018-061` não é barcode — a FORMA nega: um J tem 44 dígitos ali (garantido por `isBarcode`, no
+//      montador); um J-52 tem nome Alfa a partir de 036. É a borda de classe de caractere, que é a
+//      testemunha honesta — contar posição dentro de corrida homogênea produz laudo confiante e falso.
+//   3. `015` não é dígito      — o campo de CONTROLE nega: no J a posição é `G060` (tipo de movimento,
+//      **Num**); no J-52 é `G004` CNAB (**Alfa**, brancos). Testa "não é dígito" e não "é branco"
+//      porque o G060 admite outros movimentos além da inclusão, e todos continuam sendo dígito.
+//
+// A defesa em profundidade é a mesma escolha que `segmentJ52` faz na guarda de identificação: o
+// caminho já está fechado por (2), e (1) e (3) existem contra o chamador novo e contra a edição futura
+// do layout. Nenhuma das três, sozinha, sobrevive a um arquivo adversário.
+const BARCODE_RUN = /^\d{44}$/;
+const isSegmentJ52 = (line: string): boolean =>
+  segment(line) === 'J' &&
+  at(line, 18, 19) === '52' &&
+  !BARCODE_RUN.test(at(line, 18, 61)) &&
+  !/^\d$/.test(at(line, 15, 15));
+
 // Quanto o registro de detalhe move — e a posição do valor NÃO é a mesma em todo segmento. `null`
 // distingue "registro que não carrega valor" (o B, que complementa o A) de "segmento que a
 // varredura não conhece": somar zero por desconhecimento daria um trailer conferido contra uma
 // soma incompleta, que é o defeito passar despercebido em silêncio.
+//
+// ⚠️ Classificar o J-52 como se fosse um J faria a somatória do lote ler 153-167 — que ali é o meio do
+// nome do sacador avalista, em branco. `Number('               ')` é 0, então o total FECHARIA por
+// acidente, e no dia em que o sacador passasse a ser preenchido a soma daria `NaN` sem que nada
+// tivesse mudado no total. É por isso que a classificação vem antes do `switch`, e por isso que ela
+// não pode depender de um único campo.
 const paymentCentsOf = (line: string): number | null => {
+  // Antes do `switch`: o complemento não carrega valor, como o Segmento B não carrega. Somar zero
+  // aqui é a afirmação de que o registro existe e não paga — distinta do `null` de baixo, que é
+  // "segmento que a varredura não conhece".
+  if (isSegmentJ52(line)) return 0;
+
   switch (segment(line)) {
     case 'A':
       return Number(at(line, 120, 134));
@@ -163,12 +209,23 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
 
   let open: OpenBatch | null = null;
   let pendingSegmentA = -1;
+  // O J que ainda espera o J-52, na mesma mecânica do A que espera o B: o par só se prova completo
+  // quando o segundo registro chega, e o que fecha o veredito é o fim do lote.
+  let pendingSegmentJ = -1;
   let batchCount = 0;
 
-  const closePendingSegmentA = (): void => {
+  // Os dois pares fecham JUNTOS, numa função só, e isso não é economia de linhas: são três os pontos
+  // onde um lote termina — header seguinte, trailer, fim do arquivo —, e um par que fosse fechado
+  // em dois deles e esquecido no terceiro deixaria de acusar exatamente no caso que a inspeção
+  // existe para pegar. Uma chamada por ponto é o que torna o esquecimento impossível.
+  const closePendingPairs = (): void => {
     if (pendingSegmentA !== -1) {
       add(pendingSegmentA + 1, 'segment-a-without-b', 'Segmento A sem o B correspondente');
       pendingSegmentA = -1;
+    }
+    if (pendingSegmentJ !== -1) {
+      add(pendingSegmentJ + 1, 'segment-j-without-j52', 'Segmento J sem o J-52 correspondente');
+      pendingSegmentJ = -1;
     }
   };
 
@@ -183,7 +240,7 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
         // Lote anterior que não fechou: o header seguinte é a prova de que faltou o trailer.
         if (open !== null) {
           add(open.headerLine, 'missing-batch-trailer', 'lote aberto sem registro tipo 5');
-          closePendingSegmentA();
+          closePendingPairs();
         }
         batchCount += 1;
         open = { headerLine: i + 1, detailCount: 0, sumCents: 0, sequence: 0 };
@@ -214,15 +271,32 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
         }
         open.sumCents += cents;
 
-        // O B é obrigatório no Multipag para o par de crédito em conta: um A sem par produz arquivo
-        // recusado. O J paga sozinho e não participa desta regra.
-        if (seg === 'A') {
+        // Os DOIS pares do layout. O B é obrigatório para o crédito em conta, e o J-52 para o título
+        // de cobrança (manual p. 33) — um A sem B e um J sem J-52 produzem, os dois, arquivo que
+        // diverge do modelo do banco.
+        //
+        // ⚠️ "O J paga sozinho" era o que este comentário dizia, e era verdade sobre o DINHEIRO, não
+        // sobre o registro: o valor viaja no J e o J-52 não carrega centavo nenhum. Foi essa leitura
+        // — correta sobre o pagamento, falsa sobre o layout — que deixou o complemento faltar sem
+        // que nada acusasse (#891).
+        //
+        // O J-52 é testado ANTES do `seg === 'J'` porque os dois gravam `'J'` na coluna 014: na
+        // ordem inversa, o complemento seria contado como um J novo e acusaria "J seguido de outro
+        // J" em todo par CORRETO.
+        if (isSegmentJ52(line)) {
+          pendingSegmentJ = -1;
+        } else if (seg === 'A') {
           if (pendingSegmentA !== -1) {
             add(pendingSegmentA + 1, 'segment-a-without-b', 'Segmento A seguido de outro A');
           }
           pendingSegmentA = i;
         } else if (seg === 'B') {
           pendingSegmentA = -1;
+        } else if (seg === 'J') {
+          if (pendingSegmentJ !== -1) {
+            add(pendingSegmentJ + 1, 'segment-j-without-j52', 'Segmento J seguido de outro J');
+          }
+          pendingSegmentJ = i;
         }
         break;
       }
@@ -232,7 +306,7 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
           add(i + 1, 'missing-batch-header', 'trailer de lote sem header correspondente');
           break;
         }
-        closePendingSegmentA();
+        closePendingPairs();
 
         // Totais: é aqui que mora o defeito caro. Contagem ou somatória divergente é dinheiro que
         // não fecha, e o banco recusa o arquivo inteiro sem dizer qual campo.
@@ -267,7 +341,7 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
   if (open !== null) {
     add(open.headerLine, 'missing-batch-trailer', 'lote aberto sem registro tipo 5');
   }
-  closePendingSegmentA();
+  closePendingPairs();
 
   if (batchCount === 0) add(0, 'missing-batch-header', 'arquivo sem nenhum lote');
 

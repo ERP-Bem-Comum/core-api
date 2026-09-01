@@ -34,6 +34,10 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     // faltando num título que está completo — o que falta é o emissor.
     case 'remittance-launch-form-unsupported':
       return 'cnab-launch-form-unsupported';
+    // Sobe com nome próprio pela mesma razão do convênio: o que falta é dado de CADASTRO, e o
+    // operador precisa ler isso, não "falhou a tradução" (#891).
+    case 'billet-party-unidentified':
+      return 'cnab-billet-party-unidentified';
     case 'numeric-field-overflow':
     case 'numeric-field-invalid':
     case 'remittance-billet-bank-unreadable':

@@ -72,6 +72,8 @@ const multiBatchFile = (): string => {
         route: 'billet' as const,
         barcode: '3419001'.padEnd(44, '7'),
         beneficiaryName: 'FORNECEDOR BOLETO',
+        beneficiaryDocumentType: '2' as const,
+        beneficiaryDocument: '98765432000111',
         dueDate: new Date(Date.UTC(2026, 7, 20)),
         paymentDate: new Date(Date.UTC(2026, 7, 12)),
         valueCents: 2500,
@@ -333,5 +335,156 @@ describe('Inspetor — arquivo de vários lotes (#711, CA6)', () => {
     assert.equal(at(120, 134), '000000000123456', 'valor do pagamento, 120-134');
 
     assert.deepEqual(inspectRemittanceFile(file.value.content), []);
+  });
+});
+
+/*
+ * O par J + J-52 (#891, CA4).
+ *
+ * É a asserção que fecha a classe. Enquanto o inspetor não cobrou o complemento, o emissor gravava o
+ * Segmento J sozinho e TUDO fechava: 240 posições, sequencial contínuo, trailer de lote conferindo,
+ * trailer de arquivo conferindo. O arquivo divergia do modelo do banco em silêncio, e nenhuma das
+ * quatro checagens existentes tinha como perceber — nenhuma delas pergunta que registros o layout
+ * exige, só se os que estão lá são coerentes entre si.
+ *
+ * ⚠️ O teste remove o J-52 e REPARA os dois trailers. Sem o reparo, a contagem também acusaria, e o
+ * caso passaria medindo `batch-record-count-mismatch` — provando que o inspetor sabe contar, que ele
+ * já sabia. O que precisa ser provado é que ele vê a AUSÊNCIA DO REGISTRO num arquivo cujos totais
+ * fecham, porque é exatamente esse o arquivo que o emissor produzia.
+ */
+describe('Inspetor — o boleto exige o par J + J-52 (#891, CA4)', () => {
+  const columnsOf = (line: string, from: number, to: number): string => line.slice(from - 1, to);
+
+  // ⚠️ A régua É duplicada aqui de propósito, e a duplicação NÃO é a fábrica de divergência que o
+  // CLAUDE.md proíbe — é o contrário. Importar `isSegmentJ52` do inspetor faria a fixture ser
+  // mutilada pela mesma função que o teste existe para provar: quando ela errasse, o teste recortaria
+  // o registro errado e continuaria verde, medindo a si mesmo. O teste precisa de um localizador
+  // INDEPENDENTE.
+  //
+  // Independente, porém, não é "mais frouxo": a versão anterior olhava só `018-019 === '52'` e casava
+  // com o Segmento J de um boleto de banco `52x` — o mesmo defeito do inspetor, na fixture. As três
+  // condições abaixo espelham as do `src` porque a AMBIGUIDADE é do layout, não da implementação.
+  const isSegmentJ52 = (line: string): boolean =>
+    columnsOf(line, 8, 8) === '3' &&
+    columnsOf(line, 14, 14) === 'J' &&
+    columnsOf(line, 18, 19) === '52' &&
+    !/^\d{44}$/.test(columnsOf(line, 18, 61)) &&
+    !/^\d$/.test(columnsOf(line, 15, 15));
+
+  // O banco emissor é parâmetro porque o código de barras COMEÇA por ele, e as três primeiras
+  // posições do barcode caem exatamente nas colunas 018-020 do Segmento J. Fixar `341` esconderia a
+  // classe inteira de defeito que o caso `52x` abaixo cobra.
+  const billetFile = (issuerBank = '341'): string => {
+    const r = buildRemittanceFile({
+      cedente: CEDENTE,
+      bankName: 'BRADESCO',
+      nsa: 7,
+      generatedAt: new Date(Date.UTC(2026, 7, 10, 14, 5, 9)),
+      payments: [
+        {
+          route: 'billet' as const,
+          barcode: `${issuerBank}9001`.padEnd(44, '7'),
+          beneficiaryName: 'FORNECEDOR BOLETO',
+          beneficiaryDocumentType: '2' as const,
+          beneficiaryDocument: '98765432000111',
+          dueDate: new Date(Date.UTC(2026, 7, 20)),
+          paymentDate: new Date(Date.UTC(2026, 7, 12)),
+          valueCents: 2500,
+        },
+      ],
+    });
+    assert.ok(isOk(r));
+    return r.value.content;
+  };
+
+  // A mutilação que reproduz o emissor de antes da #891: o J fica, o J-52 sai, e os dois
+  // totalizadores passam a declarar o arquivo que de fato restou.
+  const withoutSegmentJ52 = (content: string): string => {
+    const records = recordsOf(content);
+    const index = records.findIndex(isSegmentJ52);
+    assert.notEqual(
+      index,
+      -1,
+      'a fixture precisa conter um J-52 para que removê-lo signifique algo',
+    );
+
+    const kept = records.filter((_, i) => i !== index);
+    const rebuilt = kept.map((l) => `${l}${LINE_TERMINATOR}`).join('');
+
+    const batchTrailer = kept.findIndex((l) => columnsOf(l, 8, 8) === '5');
+    const fileTrailer = kept.findIndex((l) => columnsOf(l, 8, 8) === '9');
+
+    // Lote único nesta fixture: o lote é tudo menos o header e o trailer DO ARQUIVO.
+    const repaired = patch(rebuilt, batchTrailer, 18, String(kept.length - 2).padStart(6, '0'));
+    return patch(repaired, fileTrailer, 24, String(kept.length).padStart(6, '0'));
+  };
+
+  // A metade "verde" da prova invertida: o arquivo COMPLETO passa limpo. Sem ela, o caso abaixo
+  // poderia estar acusando um defeito que o montador já produzia.
+  it('não acusa nada no arquivo de boleto que o montador emite hoje', () => {
+    assert.deepEqual(inspectRemittanceFile(billetFile()), []);
+  });
+
+  it('acusa segment-j-without-j52 quando o complemento falta, com os totais fechando', () => {
+    const mutilated = withoutSegmentJ52(billetFile());
+
+    // A guarda que torna o caso honesto: se o reparo dos trailers falhasse, o defeito de contagem
+    // apareceria junto e o teste passaria por outro motivo.
+    assert.deepEqual(codes(mutilated), ['segment-j-without-j52']);
+
+    const [defect] = inspectRemittanceFile(mutilated);
+    // Aponta a linha do J órfão — quem opera precisa saber QUAL título ficou sem o complemento.
+    assert.equal(defect?.line, 3);
+  });
+
+  it('acusa o J seguido de outro J, que é o par quebrado no meio do lote', () => {
+    const records = recordsOf(billetFile());
+    const j = records.findIndex((l) => columnsOf(l, 8, 8) === '3' && !isSegmentJ52(l));
+    // Troca o J-52 por uma cópia do J: o lote continua com dois detalhes e o trailer segue fechando.
+    // ⚠️ O sequencial da cópia fica repetido, e é por isso que o assert abaixo procura o código na
+    // lista em vez de exigir que ele seja o único — `detail-sequence-gap` também acusa, com razão.
+    const swapped = records
+      .map((l) => (isSegmentJ52(l) ? (records[j] ?? '') : l))
+      .map((l) => `${l}${LINE_TERMINATOR}`)
+      .join('');
+
+    assert.ok(
+      codes(swapped).includes('segment-j-without-j52'),
+      'dois J seguidos são dois pagamentos, e o primeiro ficou sem complemento',
+    );
+  });
+
+  // O contrapeso da CA4: a exigência é do BOLETO, e carimbá-la no arquivo inteiro reprovaria toda
+  // remessa de transferência — que não tem J nenhum e está correta assim.
+  it('não exige J-52 de arquivo sem boleto algum', () => {
+    assert.deepEqual(inspectRemittanceFile(validFile(2)), []);
+  });
+
+  /*
+   * O J e o J-52 gravam o MESMO `'J'` na coluna 014, e distingui-los por `018-019 === '52'` lê um
+   * campo de DADOS como se fosse tag: no J-52 aquelas duas posições são a Identificação de Registro
+   * Opcional (`G067`); no Segmento J são os dois primeiros dígitos do CÓDIGO DE BARRAS, que começa
+   * pelo COMPE do banco emissor (`segmentJ` grava o barcode em 018-061). `readIssuerBank` aceita
+   * qualquer três dígitos, sem allow-list — então um boleto de banco `52x` chega até aqui.
+   *
+   * ⚠️ O dano NÃO é um defeito a mais: é um defeito a MENOS, e depois um errado. O J classificado
+   * como complemento não soma em `paymentCentsOf`, o lote fecha com um pagamento faltando, e o que
+   * aparece é `batch-total-mismatch` — apontando o trailer, que está certo. E isso acontece DEPOIS de
+   * `allocateNsa` consumir o número sob lock: NSA queimado, mensagem sem campo.
+   *
+   * A fronteira honesta é a classe de caractere, não o valor: um Segmento J tem 44 dígitos em
+   * 018-061 (garantido por `isBarcode`); um J-52 tem nome Alfa a partir de 036. É a mesma doutrina
+   * que `.claude/rules/cnab.md` fixa em §"Não conte caracteres dentro de corrida homogênea".
+   */
+  it('não confunde boleto de banco 52x com o complemento J-52', () => {
+    // A metade verde primeiro: o mesmo arquivo, com banco que não colide, já passa limpo — sem isto
+    // o caso poderia estar medindo um defeito do montador em vez do defeito do inspetor.
+    assert.deepEqual(inspectRemittanceFile(billetFile('341')), []);
+
+    assert.deepEqual(
+      inspectRemittanceFile(billetFile('520')),
+      [],
+      'boleto de banco 52x é pagamento legítimo — o valor dele tem de entrar na somatória do lote',
+    );
   });
 });
