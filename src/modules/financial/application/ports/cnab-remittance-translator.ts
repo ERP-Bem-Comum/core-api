@@ -127,7 +127,41 @@ export type CnabTranslateError =
   // campo que só ele pode preencher.
   | 'cnab-billet-party-unidentified';
 
+// ─── A partição em arquivos (CA4 da #838) ──────────────────────────────────────────────────────
+//
+// Uma seleção pode exigir MAIS DE UM arquivo: o layout do banco manda certas modalidades em arquivo
+// separado das demais. Qual é a régua, e quais modalidades, é conhecimento do adapter — a
+// application só precisa saber EM QUANTOS arquivos a seleção se reparte e QUAIS pagamentos vão em
+// cada um, porque é ela que aloca um NSA por arquivo e grava uma remessa por arquivo.
+//
+// ⚠️ Existe como operação SEPARADA de `translate`, e não como um `translate` que devolve N arquivos,
+// porque a alocação do NSA fica entre as duas. O NSA vem do banco, sob lock; o adapter é puro e não
+// pode alocá-lo. Sem esta separação, ou o adapter ganharia acesso ao repositório — furando o ADR-0006
+// — ou os N arquivos dividiriam um NSA, que é retransmissão aos olhos do banco.
+export type PlanRemittanceFilesInput = Readonly<{
+  // O banco do CEDENTE decide a forma de lançamento de cada título (crédito interno × transferência),
+  // e a forma decide o arquivo. Sem ele a partição não é derivável.
+  cedenteBankCode: string;
+  payments: readonly RemittancePaymentInput[];
+}>;
+
+export type RemittanceFilePlan = Readonly<{
+  // As posições dos pagamentos deste arquivo dentro de `payments`, em ordem crescente.
+  //
+  // Posições, e não os pagamentos: quem chamou já os tem, e devolver cópias criaria duas listas
+  // livres para divergir. É também por posição que a application casa cada referência de retorno com
+  // o `documentId` que só ela conhece — o mesmo casamento por índice que `yourNumbers` já exige.
+  paymentIndices: readonly number[];
+}>;
+
 export type CnabRemittanceTranslator = Readonly<{
+  // Em quantos arquivos esta seleção se reparte, e o que vai em cada um. Não monta nada e não
+  // consome NSA: é a pergunta que a application faz ANTES de alocar, justamente para saber quantos
+  // alocar.
+  planFiles: (
+    input: PlanRemittanceFilesInput,
+  ) => Result<readonly RemittanceFilePlan[], CnabTranslateError>;
+
   // Devolve o arquivo JÁ VERIFICADO. A inspeção estrutural mora do lado do adapter porque é ela que
   // conhece o layout — e porque o use case não deve poder esquecer de chamá-la antes de enfileirar
   // dinheiro.

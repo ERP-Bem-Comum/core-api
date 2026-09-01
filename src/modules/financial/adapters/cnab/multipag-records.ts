@@ -118,6 +118,14 @@ export type FileHeaderInput = Readonly<{
   bankName: string;
   nsa: number;
   generatedAt: Date;
+  // G021, colunas 172-174 — `null` quando o arquivo não é de Pix, e as posições saem em branco.
+  //
+  // Obrigatório e não opcional, de propósito: é a quinta reincidência do padrão que a rule do CNAB
+  // registra em §"Parâmetro opcional é o defeito". Um `?` aqui deixaria TODO arquivo sair sem a
+  // literal enquanto ninguém o preenchesse — e o arquivo de Pix sem `PIX` em 172-174 é bem-formado,
+  // some no meio dos demais e só é recusado pelo banco. Sendo obrigatório, o compilador cobra a
+  // derivação de quem monta o arquivo, que é quem sabe o grupo dele.
+  pixIdentification: string | null;
 }>;
 
 export type BatchHeaderInput = Readonly<{
@@ -168,7 +176,13 @@ export const fileHeader = (input: FileHeaderInput): Result<string, CnabRecordErr
     num(input.nsa, 6), // 158-163 NSA
     num(FILE_LAYOUT_VERSION, 3), // 164-166 versão do layout de arquivo
     num(RECORDING_DENSITY, 5), // 167-171 densidade (G020)
-    blanks(20), // 172-191 uso do banco
+    // O campo 22 se PARTE em duas (pág. 15): 3 posições de identificação + 17 reservadas ao banco.
+    // Eram `blanks(20)` num bloco só — aderente ao arquivo não-Pix por acidente, porque o arquivo
+    // não-Pix escreve brancos nas duas metades. Escrever `PIX` sem encurtar a vizinha produziria
+    // registro de 243 posições. Medido nos goldens: [PIX] + 17 brancos no de Pix; brancos nos dois
+    // no de TED.
+    text(input.pixIdentification ?? '', 3), // 172-174 identificação Pix (22.0, G021)
+    blanks(17), // 175-191 reservado banco (22.1)
     blanks(20), // 192-211 uso da empresa
     blanks(29), // 212-240 uso FEBRABAN
   ]);
