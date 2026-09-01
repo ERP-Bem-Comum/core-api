@@ -197,7 +197,7 @@ import { createInMemorySourceFileStorage } from '../storage/source-file-storage.
 import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts';
 import { createDocumentReader } from '../document-reader/create-document-reader.ts';
 import * as DocumentIdVo from '../../domain/shared/document-id.ts';
-import { parseAwsS3Env } from '#src/modules/contracts/public-api/index.ts';
+import { parseAwsS3Env, describeAwsS3EnvError } from '#src/modules/contracts/public-api/index.ts';
 import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
 import { bulkUpdateDueDate } from '../../application/use-cases/bulk-update-due-date.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
@@ -731,13 +731,20 @@ const buildMemoryPools = (
   };
 };
 
-// #62: storage do comprovante no driver mysql — S3 se o env estiver configurado, senão in-memory
-// (boot não quebra sem S3; o deploy real provê as credenciais via env/IAM Role).
+// #62: storage do comprovante no driver mysql. FAIL-FAST, sem fallback: env lida é env obrigatória,
+// em TODO ambiente. Em homologação e produção elas são postas à mão, na console da AWS, por quem
+// opera a infraestrutura — cair para memória ali não é degradar, é esconder um erro de configuração
+// humana de quem tem como corrigi-lo, aceitando o upload do comprovante e perdendo-o no restart.
+//
+// O ternário anterior (`s3.ok ? s3 : inMemory`) só não produzia dano porque
+// `buildContractsHttpDeps` (`server.ts:207`) usa o MESMO parser, faz `throw`, e roda antes daqui —
+// o comportamento correto vinha da ordem de composição de outro módulo, não desta linha.
 const buildDocumentStorage = (): SourceFileStoragePort => {
   const s3 = parseAwsS3Env(process.env);
-  return s3.ok
-    ? createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' })
-    : createInMemorySourceFileStorage();
+  // `throw` é o contrato local desta composição para configuração que não permite subir — o mesmo
+  // que `buildMysqlPools` faz com pool que não abre.
+  if (!s3.ok) throw new Error(describeAwsS3EnvError(s3.error));
+  return createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' });
 };
 
 // Bucket da VAN — envs `VAN_S3_*` PRÓPRIAS, nunca o singleton `S3_*`: é outro bucket, possivelmente

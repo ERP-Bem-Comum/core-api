@@ -40,7 +40,13 @@ export type {
   AwsS3ConfigInput,
   AwsS3EnvError,
 } from '../adapters/storage/s3-config-aws.ts';
-export { awsS3Config, parseAwsS3Env } from '../adapters/storage/s3-config-aws.ts';
+// `describeAwsS3EnvError` acompanha o parser: quem lê a env deste jeito derruba o boot quando ela
+// falta, e precisa da mesma mensagem que nomeia o campo. Sem ele, cada consumidor inventa a sua.
+export {
+  awsS3Config,
+  parseAwsS3Env,
+  describeAwsS3EnvError,
+} from '../adapters/storage/s3-config-aws.ts';
 
 export { createS3DocumentStorage } from '../adapters/storage/document-storage.s3.ts';
 
