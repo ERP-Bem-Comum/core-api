@@ -4,11 +4,13 @@ import { strict as assert } from 'node:assert';
 import { isOk } from '#src/shared/index.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
+import { hasRemittanceIssuer } from '#src/modules/financial/domain/payout/van-routes.ts';
 import type {
   PayeePaymentTarget,
   PayoutCandidate,
   PayoutGap,
   PayoutReadiness,
+  VanRoute,
 } from '#src/modules/financial/domain/payout/types.ts';
 import type { PaymentMethod } from '#src/modules/financial/domain/document/types.ts';
 
@@ -18,12 +20,25 @@ const EMPTY_TARGET: PayeePaymentTarget = {
   accountNumber: null,
   checkDigit: null,
   pixKey: null,
+  document: null,
 };
+
+// A inscrição que o Segmento J-52 exige do boleto (#891), OPACA de propósito.
+//
+// Um valor que não se parece com CPF/CNPJ prova o que importa: a régua decide aptidão e só pergunta
+// se HÁ inscrição — quem valida formato é `partners`, pelo VO do kernel, e desde 07/2026 o CNPJ pode
+// conter letras (ADR-0044). Um documento bem-formado aqui convidaria a próxima pessoa a supor que a
+// régua o valida. E mantém dado de cadastro fora de fixture, num repositório público.
+const PAYEE_DOCUMENT = 'inscricao-opaca';
 
 const target = (patch: Partial<PayeePaymentTarget>): PayeePaymentTarget => ({
   ...EMPTY_TARGET,
   ...patch,
 });
+
+// Favorecido que satisfaz a rota de boleto: basta a inscrição, nenhum dado bancário. É a fixture que
+// separa "sem banco" de "sem identidade" — o boleto tolera o primeiro e recusa o segundo.
+const billetPayee = (): PayeePaymentTarget => target({ document: PAYEE_DOCUMENT });
 
 // Conta estruturada COMPLETA: o único arranjo que o segmento A aceita sem inventar campo.
 //
@@ -55,6 +70,19 @@ const fieldsOf = (r: PayoutReadiness): readonly string[] => gapsOf(r).map((g) =>
 const reasonFor = (r: PayoutReadiness, field: string): string | undefined =>
   gapsOf(r).find((g) => g.field === field)?.reason;
 
+// O desfecho esperado QUANDO O CADASTRO ESTÁ BOM — `ready` se a rota tem emissor, `no-issuer` se
+// não tem (#837).
+//
+// ⚠️ Derivado de `hasRemittanceIssuer`, e NÃO escrito à mão em cada caso, por duas razões que se
+// somam. A primeira: os casos abaixo medem LEITURA DE CADASTRO — que a chave basta, que a linha
+// digitável converte, que a pontuação não atrapalha. Fixar `'ready'` neles os faria medir também
+// "existe emissor", e eles quebrariam no dia em que o emissor de Pix entrasse, sem defeito algum. A
+// segunda, e é a que importa mais: derivar da fonte mantém a asserção EXATA. `notEqual(status,
+// 'incomplete')` passaria por ser cego — e `no-issuer` só é alcançável depois de o dado ser aceito,
+// porque a régua julga cadastro primeiro. Então afirmar o desfecho exato já prova que o dado passou.
+const whenDataIsGood = (route: VanRoute): 'ready' | 'no-issuer' =>
+  hasRemittanceIssuer(route) ? 'ready' : 'no-issuer';
+
 describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo exige', () => {
   // O reenquadramento da P.O. (issue #708): elegibilidade é por forma do título, não por
   // "favorecido com banco completo". Boleto e PIX não olham a conta estruturada.
@@ -85,14 +113,14 @@ describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo e
 });
 
 describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
-  it('aprova PIX com chave mesmo sem nenhum dado bancário', () => {
+  it('aceita a chave de PIX mesmo sem nenhum dado bancário', () => {
     const r = checkPayoutReadiness(
       candidate({
         paymentMethod: 'PIX',
         payee: target({ pixKey: { keyType: 'email', key: 'a@b.com' } }),
       }),
     );
-    assert.equal(r.status, 'ready');
+    assert.equal(r.status, whenDataIsGood('pix'));
   });
 
   // O `keyType` NÃO participa da decisão de aptidão — ele viaja para quem emite o registro. Um
@@ -103,7 +131,7 @@ describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
       const r = checkPayoutReadiness(
         candidate({ paymentMethod: 'PIX', payee: target({ pixKey: { keyType, key: 'x' } }) }),
       );
-      assert.equal(r.status, 'ready', keyType);
+      assert.equal(r.status, whenDataIsGood('pix'), keyType);
     }
   });
 
@@ -145,18 +173,42 @@ const DIGITABLE_LINE = '23791234546789012345767890123457512340000015000'; // 47
 const TAX_GUIDE_LINE = '836500000010500012345673890123456786901234567898'; // 48
 
 describe('checkPayoutReadiness — boleto e guia dependem do código de barras, não do favorecido', () => {
-  for (const paymentMethod of ['Boleto', 'GuiaRecolhimento'] as const) {
-    it(`aprova ${paymentMethod} com código de barras e favorecido sem banco`, () => {
-      const r = checkPayoutReadiness(candidate({ paymentMethod, paymentDetail: BARCODE }));
-      assert.equal(r.status, 'ready');
+  for (const [paymentMethod, route] of [
+    ['Boleto', 'billet'],
+    ['GuiaRecolhimento', 'tax-guide'],
+  ] as const) {
+    // O BOLETO exige a inscrição do favorecido (Segmento J-52, #891); a GUIA, não. A assimetria é do
+    // layout e não do cadastro: o J-52 é registro de título de COBRANÇA, e o Segmento O — o da guia —
+    // não tem campo de inscrição algum. Carimbar a exigência nas duas seria inventar norma, e o
+    // parâmetro do loop é justamente o que mantém as duas rotas medindo coisas diferentes.
+    const forRoute = (t: PayeePaymentTarget): PayeePaymentTarget =>
+      route === 'billet' ? target({ ...t, document: PAYEE_DOCUMENT }) : t;
+
+    it(`aceita o código de barras de ${paymentMethod} com favorecido sem banco`, () => {
+      const r = checkPayoutReadiness(
+        candidate({ paymentMethod, paymentDetail: BARCODE, payee: forRoute(EMPTY_TARGET) }),
+      );
+      assert.equal(r.status, whenDataIsGood(route));
     });
 
     it(`recusa ${paymentMethod} sem código de barras`, () => {
-      const r = checkPayoutReadiness(candidate({ paymentMethod, payee: fullAccount() }));
+      const r = checkPayoutReadiness(candidate({ paymentMethod, payee: forRoute(fullAccount()) }));
       assert.equal(r.status, 'incomplete');
+      // UM campo só: com a inscrição presente, a única lacuna é o código de barras. Se este assert
+      // passar a ver dois, é sinal de que a exigência do J-52 vazou para a rota errada.
       assert.deepEqual(fieldsOf(r), ['payment-detail']);
     });
   }
+
+  // A contraprova da assimetria acima, e a razão de ela existir: sem inscrição, o BOLETO acusa —
+  // e acusa NOMEANDO O CAMPO, para o operador saber que a correção é no cadastro do favorecido.
+  it('recusa Boleto cujo favorecido não tem inscrição, mesmo com o código de barras certo', () => {
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'Boleto', paymentDetail: BARCODE, payee: EMPTY_TARGET }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['payee-document']);
+  });
 
   it('trata código de barras em branco como ausente', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: '   ' }));
@@ -167,7 +219,9 @@ describe('checkPayoutReadiness — boleto e guia dependem do código de barras, 
   // Aceita o dado com a pontuação que o cadastro às vezes guarda — o campo do arquivo é numérico.
   it('ignora pontuação no código de barras', () => {
     const dotted = '23791.23450 00001.500001 23456.789012 3 45678901234';
-    const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: dotted }));
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'Boleto', paymentDetail: dotted, payee: billetPayee() }),
+    );
     assert.equal(r.status, 'ready');
   });
 
@@ -176,18 +230,18 @@ describe('checkPayoutReadiness — boleto e guia dependem do código de barras, 
   // hipótese: 1 dos 20 boletos do dump de produção do legado está nesse formato.
   it('aprova a linha digitável de cobrança, que a régua converte para código de barras', () => {
     const r = checkPayoutReadiness(
-      candidate({ paymentMethod: 'Boleto', paymentDetail: DIGITABLE_LINE }),
+      candidate({ paymentMethod: 'Boleto', paymentDetail: DIGITABLE_LINE, payee: billetPayee() }),
     );
     assert.equal(r.status, 'ready');
   });
 
   // A guia de arrecadação tem 48 e nunca foi dado errado — era um terceiro comprimento que ninguém
   // tinha mapeado, e caía em `malformed` acusando o operador de um erro que era do sistema.
-  it('aprova a linha digitável de arrecadação', () => {
+  it('converte a linha digitável de arrecadação sem acusar o operador', () => {
     const r = checkPayoutReadiness(
       candidate({ paymentMethod: 'GuiaRecolhimento', paymentDetail: TAX_GUIDE_LINE }),
     );
-    assert.equal(r.status, 'ready');
+    assert.equal(r.status, whenDataIsGood('tax-guide'));
   });
 
   // CA2 — o comprimento está certo e o dado é numérico; o que falhou foi UM dígito. `malformed`

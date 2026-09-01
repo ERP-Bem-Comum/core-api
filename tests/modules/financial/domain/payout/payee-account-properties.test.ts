@@ -22,6 +22,7 @@ const target = (patch: Partial<PayeePaymentTarget>): PayeePaymentTarget => ({
   accountNumber: '123456',
   checkDigit: '7',
   pixKey: null,
+  document: null,
   ...patch,
 });
 

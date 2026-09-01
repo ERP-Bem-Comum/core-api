@@ -2,6 +2,7 @@ import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { PaymentMethod } from '../document/types.ts';
 import { type DigitableLineError, resolveBarcode } from './digitable-line.ts';
 import { decomposePayeeAccount } from './payee-account.ts';
+import { hasRemittanceIssuer } from './van-routes.ts';
 import type {
   PayoutCandidate,
   PayoutGap,
@@ -36,14 +37,29 @@ const routeOf = (method: PaymentMethod): VanRoute | null => {
 
 const isBlank = (value: string | null): boolean => (value?.trim() ?? '') === '';
 
-const ready = (route: VanRoute): PayoutReadiness => immutable({ status: 'ready' as const, route });
+// O que o CADASTRO responde: os dados que aquela rota exige estão lá e são legíveis?
+//
+// Tipo estreito de propósito, e é ele que mantém as duas perguntas da #837 separadas no compilador.
+// Esta metade não sabe — e não deve saber — se existe emissor para a rota: ela julga DADO, e só.
+// Declarado como `PayoutReadiness` inteiro, um `no-issuer` poderia escapar daqui, misturando de novo
+// o que a issue separou. Os helpers abaixo herdam o estreitamento pelo mesmo motivo.
+type RouteDataCheck = Extract<PayoutReadiness, { status: 'ready' | 'incomplete' }>;
 
-const incomplete = (route: VanRoute, gaps: readonly PayoutGap[]): PayoutReadiness =>
+const ready = (route: VanRoute): Extract<RouteDataCheck, { status: 'ready' }> =>
+  immutable({ status: 'ready' as const, route });
+
+const incomplete = (
+  route: VanRoute,
+  gaps: readonly PayoutGap[],
+): Extract<RouteDataCheck, { status: 'incomplete' }> =>
   immutable({ status: 'incomplete' as const, route, gaps });
 
 // `missingField(route, 'pix-key')` devolve o READINESS incompleto — não o campo. O nome diz o
 // motivo da incompletude, que é o que o chamador está afirmando ao usá-lo.
-const missingField = (route: VanRoute, field: PayoutGap['field']): PayoutReadiness =>
+const missingField = (
+  route: VanRoute,
+  field: PayoutGap['field'],
+): Extract<RouteDataCheck, { status: 'incomplete' }> =>
   incomplete(route, immutable([immutable({ field, reason: 'missing' as const })]));
 
 // O Segmento J grava CÓDIGO DE BARRAS: 44 dígitos, campo G063 (Carta-Circular Bacen 2.926).
@@ -83,7 +99,7 @@ const reasonForConversionError = (error: DigitableLineError): PayoutGapReason =>
   }
 };
 
-const readBarcode = (raw: string | null, route: VanRoute): PayoutReadiness => {
+const readBarcode = (raw: string | null, route: VanRoute): RouteDataCheck => {
   // Só dígitos: o cadastro guarda com pontuação em alguns casos, e o campo do arquivo é numérico.
   if (isBlank(raw)) return missingField(route, 'payment-detail');
 
@@ -94,12 +110,24 @@ const readBarcode = (raw: string | null, route: VanRoute): PayoutReadiness => {
   return incomplete(route, immutable([immutable({ field: 'payment-detail' as const, reason })]));
 };
 
-export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadiness => {
-  const route = routeOf(candidate.paymentMethod);
-  if (route === null) {
-    return immutable({ status: 'out-of-van' as const, paymentMethod: candidate.paymentMethod });
-  }
+// A pendência de INSCRIÇÃO do favorecido no boleto, ou `null` quando não há pendência.
+//
+// Devolve `null` — e não um `ready` — de propósito: quem responde "está apto" é a checagem do código
+// de barras, logo adiante. Se esta função devolvesse aptidão, haveria duas funções afirmando o mesmo
+// desfecho por caminhos diferentes, e a que fosse consultada primeiro venceria por acidente de
+// ordem. Aqui ela só sabe dizer o que FALTA.
+//
+// ⚠️ Favorecido ausente e favorecido com inscrição em branco caem no MESMO motivo, e é a resposta
+// certa para o operador: nos dois casos o que ele faz é ir ao cadastro completar a inscrição.
+// Distingui-los exigiria um motivo que descreve o encanamento ("o parceiro não resolveu") em vez do
+// que ele precisa fazer — e `payee` nulo aqui também é o que `document.ts` passa de propósito, o que
+// tornaria a distinção uma armadilha para o próximo a ler.
+const readBilletPayee = (
+  candidate: PayoutCandidate,
+): Extract<RouteDataCheck, { status: 'incomplete' }> | null =>
+  isBlank(candidate.payee?.document ?? null) ? missingField('billet', 'payee-document') : null;
 
+const checkRouteData = (candidate: PayoutCandidate, route: VanRoute): RouteDataCheck => {
   switch (route) {
     // A chave é o destino inteiro: o arquivo não olha agência nem conta. Conta completa NÃO
     // substitui a chave — quem escolheu PIX no lançamento paga por PIX, e trocar a rota por conta
@@ -119,11 +147,60 @@ export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadines
       return parts.ok ? ready(route) : incomplete(route, parts.error);
     }
 
-    // O dinheiro segue o código de barras, não o favorecido: um fornecedor sem nenhum dado bancário
-    // paga normalmente por boleto. É o que sustenta a decisão da P.O. de não bloquear o lote — e o
-    // Segmento J confirma na fonte, por não ter campo algum de agência ou conta do favorecido.
-    case 'billet':
+    // O dinheiro segue o código de barras, não a CONTA do favorecido: um fornecedor sem nenhum dado
+    // bancário paga normalmente por boleto. É o que sustenta a decisão da P.O. de não bloquear o
+    // lote — e o Segmento J confirma na fonte, por não ter campo algum de agência ou conta.
+    //
+    // ⚠️ MAS O BOLETO PASSOU A DEPENDER DA INSCRIÇÃO, e a distinção é fina: continua não olhando a
+    // CONTA, e passou a olhar QUEM É. O Segmento J-52 (#891) identifica sacado e cedente por
+    // CPF/CNPJ, e sem ele não há registro a emitir — só posições em branco. O emissor já recusa por
+    // isso; sem esta linha, o pré-voo aprovaria e a recusa voltaria a chegar no último clique, que é
+    // a divergência que a #837 fechou.
+    //
+    // A guia fica FORA da exigência de propósito: o J-52 é registro de título de COBRANÇA, e escrever
+    // no domínio uma exigência que o layout não faz para aquela rota seria inventar norma. Hoje é
+    // inócuo — a guia não tem emissor —, e é justamente por ser inócuo que a tentação de "já deixar
+    // igual" precisa ser recusada por escrito.
+    // ACUMULA, não para no primeiro: quem tem boleto sem código de barras E sem inscrição precisa
+    // ver as duas pendências de uma vez. Uma volta ao cadastro por vez é a experiência que
+    // `decomposePayeeAccount` já recusa para a conta, e não há razão para o boleto ser diferente.
+    // O código de barras vem antes por ser dado DO TÍTULO; a inscrição, do cadastro.
+    case 'billet': {
+      const barcode = readBarcode(candidate.paymentDetail, route);
+      const payeeGap = readBilletPayee(candidate);
+      if (payeeGap === null) return barcode;
+
+      const barcodeGaps = barcode.status === 'incomplete' ? barcode.gaps : [];
+      return incomplete(route, immutable([...barcodeGaps, ...payeeGap.gaps]));
+    }
+
     case 'tax-guide':
       return readBarcode(candidate.paymentDetail, route);
   }
+};
+
+// ⚠️ A ORDEM DAS DUAS PERGUNTAS É A DECISÃO, e ela não é arbitrária: o DADO é julgado primeiro, e só
+// um cadastro completo chega a ser recusado por falta de emissor (#837, CA4).
+//
+// O motivo é que os dois fatos têm validades diferentes. A lacuna de cadastro é fato sobre o
+// CADASTRO e não caduca — dizê-la deixa o operador com o título pronto para o dia em que a rota
+// ganhar emissor. A ausência de emissor é fato sobre a IMPLEMENTAÇÃO e caduca sozinha. Invertida, a
+// ordem esconderia a lacuna atrás de um `no-issuer` temporário, e no dia em que o emissor entrasse a
+// pendência de cadastro reapareceria inteira, sem ninguém ter sido avisado enquanto havia tempo.
+//
+// É por isso que PIX sem chave sai como `pix-key` faltando, e não como "rota sem emissor": os dois
+// motivos coexistem e não se confundem.
+export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadiness => {
+  const route = routeOf(candidate.paymentMethod);
+  if (route === null) {
+    return immutable({ status: 'out-of-van' as const, paymentMethod: candidate.paymentMethod });
+  }
+
+  const data = checkRouteData(candidate, route);
+  if (data.status !== 'ready') return data;
+
+  // A ÚNICA consulta à fonte de rotas com emissor deste lado da divergência — a outra é a de
+  // `batchProfileFor`. Não há lista aqui: uma segunda cópia seria a terceira verdade sobre o mesmo
+  // fato, e é ela que a #837 existe para não criar.
+  return hasRemittanceIssuer(route) ? data : immutable({ status: 'no-issuer' as const, route });
 };

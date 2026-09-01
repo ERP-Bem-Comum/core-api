@@ -564,10 +564,27 @@ export const updatePayablePayment = (
   // chega por composição na borda, ADR-0032). Julgá-las aqui com `payee: null` reprovaria toda
   // troca para PIX, recusando por ignorância em vez de por dado sujo. Quem as julga é o pré-voo,
   // que tem o favorecido em mãos.
+  //
+  // ⚠️ O QUE SE JULGA AQUI É A LACUNA DE `payment-detail`, e não "a régua não devolveu `ready`". A
+  // diferença decide se o operador consegue selecionar a forma de pagamento, e ela foi violada por
+  // duas mudanças independentes:
+  //
+  //   · a #837 fez a régua devolver `no-issuer` para rota sem emissor no arquivo — a Guia de
+  //     Recolhimento é exatamente esse caso, e um `!== 'ready'` recusaria o código de barras VÁLIDO
+  //     dela como se estivesse torto;
+  //   · a #891 fez o boleto exigir a INSCRIÇÃO do favorecido (Segmento J-52) — e como este agregado
+  //     chama com `payee: null` por não alcançar o cadastro, todo boleto viria `incomplete` por um
+  //     campo que ninguém aqui tem como preencher.
+  //
+  // Filtrar pelo campo é o que sobrevive às duas: esta operação valida o dado DO TÍTULO, que é o
+  // código de barras. Se a rota sai ou não na remessa, e se o cadastro do favorecido está completo,
+  // são perguntas do pré-voo — que tem o favorecido em mãos e não recusa o cadastro por elas.
   const paysByBarcode = paymentMethod === 'Boleto' || paymentMethod === 'GuiaRecolhimento';
   if (paysByBarcode) {
     const readiness = checkPayoutReadiness({ paymentMethod, paymentDetail, payee: null });
-    if (readiness.status !== 'ready') return err('payable-payment-detail-invalid');
+    const barcodeIsBad =
+      readiness.status === 'incomplete' && readiness.gaps.some((g) => g.field === 'payment-detail');
+    if (barcodeIsBad) return err('payable-payment-detail-invalid');
   }
 
   const repay = (p: Payable): Payable =>

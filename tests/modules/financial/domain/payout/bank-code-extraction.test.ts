@@ -35,6 +35,8 @@ const withBank = (bank: string): PayeePaymentTarget => ({
   accountNumber: '123456',
   checkDigit: '0',
   pixKey: null,
+  // A matéria aqui é o código do BANCO; a inscrição não participa da rota de transferência.
+  document: null,
 });
 
 const codeOf = (bank: string): string | null => {
@@ -160,6 +162,7 @@ describe('readPayeeBankCode — lê a instituição sem exigir cadastro emitíve
       accountNumber: '123456',
       checkDigit: '9', // o algoritmo produz '0' para esta conta
       pixKey: null,
+      document: null,
     };
 
     assert.equal(isOk(decomposePayeeAccount(dvErrado)), false, 'o emissor recusa, e deve recusar');

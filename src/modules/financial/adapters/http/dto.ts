@@ -601,6 +601,7 @@ export const remittancePreviewToDto = (
   })),
   readyCount: preview.readyCount,
   blockedCount: preview.blockedCount,
+  noIssuerCount: preview.noIssuerCount,
   outOfVanCount: preview.outOfVanCount,
   notFoundCount: preview.notFoundCount,
   notApprovedCount: preview.notApprovedCount,
@@ -617,20 +618,27 @@ export const remittancePreviewToDto = (
 });
 
 /**
- * Serializa o resultado da geração (#720).
+ * Serializa o resultado da geração (#720, e a partição multi-arquivo da CA4 da #838).
  *
  * O NSA vai no corpo de propósito: é o número que identifica a remessa junto ao banco e o que o
- * operador cita ao abrir chamado. Sem ele, a única forma de descobri-lo seria abrir o arquivo.
+ * operador cita ao abrir chamado. Sem ele, a única forma de descobri-lo seria abrir o arquivo. Com
+ * N arquivos, cada um tem o SEU — e é por isso que ele vive dentro de cada item, não no topo.
+ *
+ * ⚠️ `files` é lista mesmo quando tem um elemento só, e a uniformidade é deliberada: um corpo que
+ * mudasse de forma conforme a seleção obrigaria o consumidor a tratar dois contratos, e o caso de um
+ * arquivo é o comum — seria o testado, enquanto o de dois seria o quebrado.
  */
 export const generatedRemittanceToDto = (
   out: GenerateRemittanceOutput,
 ): GenerateRemittanceResponseDto => ({
-  remittanceId: String(out.remittanceId),
-  fileName: out.fileName,
-  objectKey: out.objectKey,
-  nsa: out.nsa,
-  totalCents: String(out.totalCents),
-  lineCount: out.lineCount,
+  files: out.files.map((f) => ({
+    remittanceId: String(f.remittanceId),
+    fileName: f.fileName,
+    objectKey: f.objectKey,
+    nsa: f.nsa,
+    totalCents: String(f.totalCents),
+    lineCount: f.lineCount,
+  })),
 });
 
 /**

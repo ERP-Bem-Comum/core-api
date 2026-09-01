@@ -49,7 +49,14 @@ export const createInMemoryRemittanceRepository = (
     Object.entries(seed.payableStatuses ?? {}),
   );
 
-  return {
+  // Nomeado porque `save` delega a `saveAll` e precisa de um nome para alcançá-lo — a mesma razão
+  // do adapter Drizzle.
+  const repo: RemittanceRepository &
+    Readonly<{
+      published: () => readonly RemittanceSaveEvent[];
+      payableStatus: (payableId: string) => DocumentStatus | undefined;
+      setPayableStatus: (payableId: string, status: DocumentStatus) => void;
+    }> = {
     // Espelha a SEMÂNTICA da reserva do adapter real (#789), não o mecanismo: lá a exclusão vem de
     // `SELECT … FOR UPDATE` sobre `fin_payables`; aqui, de uma checagem síncrona. O que os dois
     // precisam ter em comum é o veredito — um fake que aceitasse o que o banco recusa deixaria a
@@ -57,13 +64,25 @@ export const createInMemoryRemittanceRepository = (
     //
     // A reserva vale só na CRIAÇÃO. Na atualização a remessa encontra os próprios títulos presos,
     // por ela mesma, e recusar ali travaria o desfecho de toda remessa transmitida.
-    save: async (
-      remittance: Remittance,
+    //
+    // ⚠️ A ATOMICIDADE É PARTE DO CONTRATO ESPELHADO, e é o que a partição multi-arquivo tornou
+    // observável (CA4 da #838): o adapter real grava as N remessas numa transação, então ou todas
+    // entram ou nenhuma entra. Um fake que aplicasse a primeira e recusasse a segunda deixaria a
+    // suíte verde sobre um estado que produção nunca produz — e o teste que mais importa, o do
+    // caminho recusado, é justamente o que asserta "nada foi persistido". Por isso este método
+    // decide TUDO antes de escrever QUALQUER coisa: o fake não tem rollback, e o que ele tem é a
+    // opção de não começar.
+    saveAll: async (
+      toSave: readonly Remittance[],
       events: readonly RemittanceSaveEvent[] = [],
     ): Promise<Result<void, RemittanceSaveError>> => {
-      const isCreation = !remittances.has(remittance.id);
-      if (isCreation) {
-        const mine = new Set(remittance.payables.map((p) => p.payableId));
+      const creating = toSave.filter((r) => !remittances.has(r.id));
+      const updating = toSave.filter((r) => remittances.has(r.id));
+
+      const creatingPayableIds = creating.flatMap((r) => r.payables.map((p) => p.payableId));
+      const mine = new Set(creatingPayableIds);
+
+      if (creating.length > 0) {
         for (const other of remittances.values()) {
           if (!holdsPayables(other)) continue;
           if (other.payables.some((p) => mine.has(p.payableId))) {
@@ -71,31 +90,40 @@ export const createInMemoryRemittanceRepository = (
           }
         }
 
-        // A transição `Approved → Transmitted` (ADR-0065 §2), na mesma "transação" da reserva. No
-        // adapter real ela é um `UPDATE … WHERE id IN (…) AND status = 'Approved'` cuja contagem de
-        // linhas é o veredito; aqui o mecanismo é outro, mas o VEREDITO tem de ser o mesmo — um fake
-        // que aceitasse o que o banco recusa deixaria a suíte verde descrevendo produção errado.
-        //
-        // ⚠️ Título AUSENTE de `payableStatuses` é recusado, igual a título não-aprovado. Não é
-        // rigor inventado para o fake: é o que o banco faz. Lá o CAS casa `id = ? AND status =
-        // 'Approved'`, e um id que a tabela não conhece afeta ZERO linhas — que já é
-        // `affectedRows ≠ n`, conflito, transação inteira desfeita. Desconhecido e não-aprovado são
-        // o MESMO desfecho no adapter real, e um fake que os separasse estaria prometendo o que o
-        // banco não promete (o defeito de `b1973f86`, no casamento do retorno).
-        //
-        // O preço é que todo cenário que cria remessa por aqui semeia `payableStatuses` — ver o
-        // parâmetro `seed`. É preço justo: um teste que não diz em que estado o título estava não
-        // descreve produção, e a entrada do use case já exige `Approved` desde o #740.
-        if (remittance.payables.some((p) => payableStatuses.get(p.payableId) !== 'Approved')) {
+        // O mesmo título em DUAS remessas da mesma chamada. No adapter real isto não colide na PK —
+        // `(remittance_id, payable_id)` são chaves distintas —, mas a transição conta: o `IN (…)`
+        // leva o id duas vezes e o `UPDATE` afeta UMA linha, então `affectedRows ≠ n` e a transação
+        // inteira desfaz. Desfecho idêntico ao do título não-aprovado, e é o que se espelha aqui.
+        if (mine.size !== creatingPayableIds.length) {
           return Promise.resolve(err('remittance-payable-not-approved'));
         }
+      }
 
-        // Só DEPOIS do veredito fechado para todos os títulos. O adapter real desfaz o que escreveu
-        // quando a contagem diverge; o fake não tem rollback — o que ele tem é a opção de não
-        // começar, e é ela que preserva o "nada persistido" que o teste do caminho recusado assere.
-        for (const { payableId } of remittance.payables) {
-          payableStatuses.set(payableId, 'Transmitted');
-        }
+      // A transição `Approved → Transmitted` (ADR-0065 §2), na mesma "transação" da reserva. No
+      // adapter real ela é um `UPDATE … WHERE id IN (…) AND status = 'Approved'` cuja contagem de
+      // linhas é o veredito; aqui o mecanismo é outro, mas o VEREDITO tem de ser o mesmo — um fake
+      // que aceitasse o que o banco recusa deixaria a suíte verde descrevendo produção errado.
+      //
+      // ⚠️ Título AUSENTE de `payableStatuses` é recusado, igual a título não-aprovado. Não é
+      // rigor inventado para o fake: é o que o banco faz. Lá o CAS casa `id = ? AND status =
+      // 'Approved'`, e um id que a tabela não conhece afeta ZERO linhas — que já é
+      // `affectedRows ≠ n`, conflito, transação inteira desfeita. Desconhecido e não-aprovado são
+      // o MESMO desfecho no adapter real, e um fake que os separasse estaria prometendo o que o
+      // banco não promete (o defeito de `b1973f86`, no casamento do retorno).
+      //
+      // O preço é que todo cenário que cria remessa por aqui semeia `payableStatuses` — ver o
+      // parâmetro `seed`. É preço justo: um teste que não diz em que estado o título estava não
+      // descreve produção, e a entrada do use case já exige `Approved` desde o #740.
+      if (creatingPayableIds.some((id) => payableStatuses.get(id) !== 'Approved')) {
+        return Promise.resolve(err('remittance-payable-not-approved'));
+      }
+
+      // Só DEPOIS do veredito fechado para os títulos de TODAS as remessas em criação. O adapter
+      // real desfaz o que escreveu quando a contagem diverge; o fake não tem rollback — o que ele
+      // tem é a opção de não começar, e é ela que preserva o "nada persistido" que o teste do
+      // caminho recusado assere. Com N remessas a propriedade passou a valer entre elas também.
+      for (const payableId of creatingPayableIds) {
+        payableStatuses.set(payableId, 'Transmitted');
       }
 
       // A devolução do descarte (ADR-0065 §4), espelhando o CAS do adapter real:
@@ -111,9 +139,10 @@ export const createInMemoryRemittanceRepository = (
       //  - **restrito aos títulos desta remessa** impede que um descarte alcance título que outra
       //    remessa viva segura, que é o buraco que o #814 fechou pela porta da frente.
       //
-      // Não é `isCreation`: o descarte é atualização de desfecho, e chega por aqui com a remessa já
-      // em `Discarded`.
-      if (!isCreation && remittance.status === 'Discarded') {
+      // Percorre `updating`, e não um `isCreation` invertido: o descarte é atualização de desfecho,
+      // e chega por aqui com a remessa já em `Discarded`.
+      for (const remittance of updating) {
+        if (remittance.status !== 'Discarded') continue;
         for (const { payableId } of remittance.payables) {
           if (payableStatuses.get(payableId) === 'Transmitted') {
             payableStatuses.set(payableId, 'Approved');
@@ -121,10 +150,17 @@ export const createInMemoryRemittanceRepository = (
         }
       }
 
-      remittances.set(remittance.id, remittance);
+      for (const remittance of toSave) {
+        remittances.set(remittance.id, remittance);
+      }
       published.push(...events);
       return Promise.resolve(ok(undefined));
     },
+
+    save: async (
+      remittance: Remittance,
+      events: readonly RemittanceSaveEvent[] = [],
+    ): Promise<Result<void, RemittanceSaveError>> => repo.saveAll([remittance], events),
 
     published: () => [...published],
 
@@ -187,4 +223,6 @@ export const createInMemoryRemittanceRepository = (
       return Promise.resolve(ok({ items, total: ordered.length }));
     },
   };
+
+  return repo;
 };

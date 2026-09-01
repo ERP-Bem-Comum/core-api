@@ -17,6 +17,8 @@ import {
   clearingHouseFor,
   tedPurposeFor,
   complementPurposeFor,
+  fileGroupFor,
+  pixIdentificationFor,
   type BatchProfileError,
   type CnabBatchProfile,
   type ProfiledPayment,
@@ -33,6 +35,8 @@ import {
 import {
   paymentRecords,
   segmentJ,
+  segmentJ52,
+  type BilletParty,
   type CnabSegmentError,
   type Payee,
   type PayeeAddress,
@@ -84,6 +88,17 @@ export type BilletPayment = Readonly<{
   route: 'billet';
   barcode: string;
   beneficiaryName: string;
+  // A INSCRIÇÃO de quem emitiu o título, que o Segmento J-52 exige em 076-091 (#891). O nome
+  // sozinho não identifica o cedente para o banco.
+  //
+  // ⚠️ OBRIGATÓRIOS: sem `?`, sem default — e a ausência do opcional é a decisão, não um descuido.
+  // É o quinto caso que a rule `cnab.md` enumera: `address?: PayeeAddress`, logo acima, não produz
+  // valor errado, produz SILÊNCIO — ninguém tem o que passar, o `?? ''` vira branco em 100% das
+  // remessas (#858), e o adapter compila perfeitamente sem o dado que o layout exige. Um
+  // `beneficiaryDocument?` com `?? ''` reproduziria exatamente isso num registro novo. Aqui o
+  // compilador cobra quem esquecer, e a guarda de `segmentJ52` cobra quem passar vazio.
+  beneficiaryDocumentType: '1' | '2';
+  beneficiaryDocument: string;
   dueDate: Date;
   paymentDate: Date;
   valueCents: number;
@@ -127,6 +142,12 @@ export type RemittanceFileError =
   | CnabRecordError
   | BatchProfileError
   | 'remittance-without-payments'
+  // Seleção que mistura modalidades que o manual manda em arquivos SEPARADOS (pág. 15: o Pix vai em
+  // arquivo próprio). Recusa em vez de repartir, e a escolha é deliberada: este montador monta UM
+  // arquivo, e reparti-lo aqui produziria N arquivos com um NSA só — o mesmo número sequencial em
+  // dois arquivos distintos, que é retransmissão aos olhos do banco. Quem reparte é quem consegue
+  // alocar um NSA por arquivo, e isso vive no use case. Ver `planRemittanceFiles`.
+  | 'remittance-mixed-file-modalities'
   // Um componente da referência de G064 não coube na sua largura (#752, CA5). Recusar é a única
   // saída: truncar colapsaria duas referências distintas na mesma string, e o casamento do retorno
   // apontaria para o título errado — sem nada indicando que houve truncamento.
@@ -209,6 +230,14 @@ type BatchContext = Readonly<{
   batchNumber: number;
   firstRecordNumber: number;
   launchForm: string; // G029 do lote
+  // Quem PAGA — o SACADO do Segmento J-52 (#891). Vem do envelope, não do pagamento: é a mesma
+  // empresa para todo título do arquivo, e derivá-la aqui do `cedente` do input é o que impede um
+  // chamador de afirmar um pagador diferente do que o header do arquivo declara.
+  //
+  // ⚠️ O nome do campo é `payer` e não `cedente` DE PROPÓSITO. Nesta base `cedente` é a empresa
+  // dona do arquivo; no vocabulário de cobrança do J-52 essa mesma empresa é o **Sacado**, e
+  // "Cedente" é quem recebe. Reusar a palavra aqui faria o campo apontar para o bloco errado.
+  payer: BilletParty;
 }>;
 
 // Os registros de detalhe de UM pagamento, na rota dele. O sequencial do registro no lote (G038)
@@ -246,8 +275,13 @@ const detailsOf = (
         ...(payment.message !== undefined ? { message: payment.message } : {}),
       });
 
+    // O boleto é o PAR J + J-52, e a ordem é a do layout: o J-52 complementa o J imediatamente
+    // anterior (#891). O manual declara o J-52 "Obrigatório para pagamentos de títulos de Cobrança
+    // independente do valor" (p. 33) — emitir só o J produz arquivo que o trailer fecha, o inspetor
+    // aprova e o modelo do banco não reconhece. É a mesma relação que o par A+B tem na
+    // transferência, e por isso mora aqui, junto: quem emite um emite o outro, sem rota alternativa.
     case 'billet': {
-      const record = segmentJ({
+      const j = segmentJ({
         bankCode,
         batchNumber,
         recordNumber: firstRecordNumber,
@@ -261,7 +295,28 @@ const detailsOf = (
         ...(payment.surchargeCents !== undefined ? { surchargeCents: payment.surchargeCents } : {}),
         yourNumber,
       });
-      return record.ok ? ok([record.value]) : record;
+      if (!j.ok) return j;
+
+      const j52 = segmentJ52({
+        bankCode,
+        batchNumber,
+        // O sequencial do lote é do REGISTRO, não do pagamento: o J-52 é uma linha inteira e ocupa
+        // o número seguinte, como o Segmento B ocupa depois do A. Errar isto emite dois registros
+        // com o mesmo sequencial e o banco recusa o lote.
+        recordNumber: firstRecordNumber + 1,
+        payer: batch.payer,
+        // O nome do cedente é o MESMO que o Segmento J grava em 062-091 — mesmo campo `G013`, mesmo
+        // participante, mesmo pagamento. Passar os dois da mesma origem é o que garante que não
+        // divirjam dentro do par.
+        beneficiary: {
+          documentType: payment.beneficiaryDocumentType,
+          document: payment.beneficiaryDocument,
+          name: payment.beneficiaryName,
+        },
+      });
+      if (!j52.ok) return j52;
+
+      return ok([j.value, j52.value]);
     }
 
     // Inalcançável na prática — o perfil já recusou a rota antes de chegar aqui. Fica explícito
@@ -357,6 +412,59 @@ const groupIntoBatches = (
   return ok(order.map((key) => byKey.get(key) as Batch));
 };
 
+// ─── A partição multi-arquivo (CA4 da #838) ────────────────────────────────────────────────────
+//
+// Quais pagamentos vão em QUAL arquivo, sem montar arquivo nenhum. Devolve as posições de entrada
+// agrupadas — nunca os pagamentos —, e a escolha é deliberada: o chamador já os tem, e devolver
+// cópias abriria a porta para as duas listas divergirem. A posição é também o que ele usa para casar
+// as referências de G064 com os `documentId` que só ele conhece.
+//
+// ⚠️ SEPARADA DA MONTAGEM porque a alocação de NSA fica no meio das duas. Cada arquivo consome seu
+// próprio NSA — é o Número Sequencial do ARQUIVO, e dois arquivos com o mesmo número são, para o
+// banco, o mesmo arquivo transmitido duas vezes. Mas o NSA vem do banco de dados, sob lock, e esta
+// camada é pura (ADR-0006). Então quem sabe repartir não sabe alocar, e quem aloca não sabe
+// repartir: a partição precede a montagem, e o use case costura as duas.
+//
+// A ordem é a de PRIMEIRA APARIÇÃO de cada grupo na seleção, pela mesma razão que rege
+// `groupIntoBatches`: uma ordenação implícita faria dois arquivos com a mesma seleção saírem em
+// ordem diferente, e o operador confere contra o primeiro.
+export type RemittanceFilePlan = Readonly<{
+  // As posições de ENTRADA dos pagamentos deste arquivo, em ordem crescente.
+  paymentIndices: readonly number[];
+}>;
+
+export const planRemittanceFiles = (
+  payments: readonly RemittancePayment[],
+  cedenteBankCode: string,
+): Result<readonly RemittanceFilePlan[], RemittanceFileError> => {
+  if (payments.length === 0) return err('remittance-without-payments');
+
+  const order: string[] = [];
+  const byGroup = new Map<string, number[]>();
+
+  for (const [inputIndex, payment] of payments.entries()) {
+    // O perfil é derivado com a MESMA função do montador. Uma segunda derivação aqui faria a
+    // partição repartir por um critério e o arquivo sair por outro — e o defeito só apareceria como
+    // um arquivo de Pix com um lote de TED dentro, que o banco recusa inteiro.
+    const profile = batchProfileFor(profiledOf(payment), cedenteBankCode);
+    // Rota sem emissor aborta a partição inteira, e não só o arquivo dela: é a mesma postura de
+    // `groupIntoBatches`, e pelo mesmo motivo. Repartir e deixar um dos arquivos falhar adiante
+    // pagaria parte dos fornecedores e silenciaria o resto — com NSA já queimado no meio.
+    if (!profile.ok) return profile;
+
+    const group = fileGroupFor(profile.value.launchForm);
+    const indices = byGroup.get(group);
+    if (indices === undefined) {
+      order.push(group);
+      byGroup.set(group, [inputIndex]);
+    } else {
+      indices.push(inputIndex);
+    }
+  }
+
+  return ok(order.map((group) => ({ paymentIndices: byGroup.get(group) as readonly number[] })));
+};
+
 export const buildRemittanceFile = (
   input: RemittanceFileInput,
 ): Result<RemittanceFile, RemittanceFileError> => {
@@ -367,11 +475,32 @@ export const buildRemittanceFile = (
   const batches = groupIntoBatches(input.payments, input.cedente.bankCode);
   if (!batches.ok) return batches;
 
+  // ─── Um arquivo, UM grupo de modalidade ───────────────────────────────────────────────────────
+  //
+  // O grupo é derivado dos lotes, como tudo mais neste montador: a forma sai do conteúdo, e o grupo
+  // sai da forma. O primeiro lote define o grupo do arquivo e os demais têm de concordar.
+  //
+  // Recusar a divergência — em vez de repartir aqui, ou de escolher o grupo do primeiro lote e
+  // seguir — é o que torna o arquivo misto IMPOSSÍVEL de emitir por esquecimento. Uma régua que só
+  // descrevesse a partição deixaria o caminho aberto para quem não a chamasse, e o arquivo misto é
+  // bem-formado: ele passa no inspetor, o banco o aceita na entrada e recusa o processamento
+  // inteiro depois. É a diferença entre documentar a regra e cobrá-la.
+  const firstBatch = batches.value[0];
+  if (firstBatch === undefined) return err('remittance-without-payments');
+
+  const fileGroup = fileGroupFor(firstBatch.profile.launchForm);
+  if (batches.value.some((b) => fileGroupFor(b.profile.launchForm) !== fileGroup)) {
+    return err('remittance-mixed-file-modalities');
+  }
+
   const header = fileHeader({
     cedente: input.cedente,
     bankName: input.bankName,
     nsa: input.nsa,
     generatedAt: input.generatedAt,
+    // A identificação de Pix (172-174) é do ARQUIVO, e por isso deriva do grupo e não da forma de
+    // um lote: um arquivo tem um grupo só, mas pode ter várias formas.
+    pixIdentification: pixIdentificationFor(fileGroup),
   });
   if (!header.ok) return header;
 
@@ -415,6 +544,12 @@ export const buildRemittanceFile = (
           batchNumber,
           firstRecordNumber: details.length + 1,
           launchForm: batch.profile.launchForm,
+          // O SACADO do J-52 é a empresa do envelope — a mesma que o header do arquivo declara.
+          payer: {
+            documentType: input.cedente.documentType,
+            document: input.cedente.document,
+            name: input.cedente.companyName,
+          },
         },
         yourNumber,
       );

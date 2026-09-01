@@ -67,7 +67,16 @@ const reader = createInMemoryRemittancePreviewReader([
     // 44 dígitos EXATOS — é o código de barras (G063), não a linha digitável de 47.
     paymentDetail: '23791234500000150000123456789012345678901234',
     valueCents: 150_00,
-    payee: { bank: null, agency: null, accountNumber: null, checkDigit: null, pixKey: null },
+    // A inscrição opaca que o Segmento J-52 exige do boleto (#891) — sem dado bancário, que o boleto
+    // segue sem precisar. Quem valida formato é `partners`; aqui a régua só pergunta se existe.
+    payee: {
+      bank: null,
+      agency: null,
+      accountNumber: null,
+      checkDigit: null,
+      pixKey: null,
+      document: 'inscricao-opaca',
+    },
   },
   {
     documentId: DOC_ORIGEM,
@@ -76,7 +85,14 @@ const reader = createInMemoryRemittancePreviewReader([
     paymentMethod: 'PIX',
     paymentDetail: null,
     valueCents: 80_00,
-    payee: { bank: null, agency: null, accountNumber: null, checkDigit: null, pixKey: null },
+    payee: {
+      bank: null,
+      agency: null,
+      accountNumber: null,
+      checkDigit: null,
+      pixKey: null,
+      document: null,
+    },
   },
   {
     documentId: DOC_ORIGEM,

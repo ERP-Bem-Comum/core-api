@@ -114,6 +114,10 @@ describe('documentResponseSchema — .strict() (#384)', () => {
     payeeBank: {
       bankAccount: bankAccountFixture,
       pixKey: null,
+      // A inscrição do favorecido, exigida pelo Segmento J-52 (#891). `nullable`, não `optional`:
+      // omiti-la aqui reprova o fixture, e é isso que mantém este teste sendo a rede que pega o
+      // campo novo que o DTO carrega e o schema `.strict()` ainda não declara.
+      document: null,
     },
     attachment: null,
   };
