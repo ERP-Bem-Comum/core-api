@@ -112,24 +112,38 @@ describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo e
   });
 });
 
-describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
-  it('aceita a chave de PIX mesmo sem nenhum dado bancário', () => {
-    const r = checkPayoutReadiness(
-      candidate({
-        paymentMethod: 'PIX',
-        payee: target({ pixKey: { keyType: 'email', key: 'a@b.com' } }),
-      }),
-    );
+// ⚠️ ESTE BLOCO SE CHAMAVA "PIX exige a chave, e só a chave", e a mudança de nome é o registro de
+// uma premissa que caiu (#838). O "e só a chave" vinha da decisão da P.O. de 13/08 (#708) — "PIX
+// paga por chave, não olha agência ou conta" —, que descreve o NEGÓCIO corretamente e o ARQUIVO não:
+// o golden do banco traz banco, agência, DV, conta e DV do favorecido preenchidos no Segmento A, com
+// o layout (p. 39) marcando os quatro como obrigatórios.
+//
+// Quem reverter isto lendo a #708 reabre a divergência que a #837 fechou, pelo outro lado: o
+// pré-voo aprovaria um título que o emissor não consegue montar.
+const pixPayee = (): PayeePaymentTarget =>
+  target({ ...fullAccount(), pixKey: { keyType: 'email', key: 'a@b.com' } });
+
+describe('checkPayoutReadiness — PIX exige a chave E o bloco bancário (#838)', () => {
+  it('aceita PIX com chave e conta completa', () => {
+    const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX', payee: pixPayee() }));
     assert.equal(r.status, whenDataIsGood('pix'));
   });
 
   // O `keyType` NÃO participa da decisão de aptidão — ele viaja para quem emite o registro. Um
   // tipo desconhecido aqui não pode reprovar o título: quem valida o conjunto de tipos é
   // `partners`, no `createPixKey`, e duplicar essa lista seria criar a segunda fonte da verdade.
+  //
+  // ⚠️ Continua verdadeiro depois da #838, e a distinção é fina: o `keyType` fora do domínio `G100`
+  // faz o EMISSOR recusar (`remittance-pix-key-type-unsupported`), não o pré-voo. São perguntas
+  // diferentes — "o cadastro está completo?" e "sei emitir isto?" —, e é exatamente a separação que
+  // a #837 estabeleceu.
   it('não julga o tipo da chave, apenas a existência dela', () => {
     for (const keyType of ['email', 'cpf', 'random-key', 'algo-que-partners-ainda-nao-tem']) {
       const r = checkPayoutReadiness(
-        candidate({ paymentMethod: 'PIX', payee: target({ pixKey: { keyType, key: 'x' } }) }),
+        candidate({
+          paymentMethod: 'PIX',
+          payee: target({ ...fullAccount(), pixKey: { keyType, key: 'x' } }),
+        }),
       );
       assert.equal(r.status, whenDataIsGood('pix'), keyType);
     }
@@ -141,24 +155,48 @@ describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
     const r = checkPayoutReadiness(
       candidate({
         paymentMethod: 'PIX',
-        payee: target({ pixKey: { keyType: 'email', key: '  ' } }),
+        payee: target({ ...fullAccount(), pixKey: { keyType: 'email', key: '  ' } }),
       }),
     );
     assert.equal(r.status, 'incomplete');
   });
 
   it('recusa PIX sem chave apontando o campo', () => {
-    const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX' }));
+    const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX', payee: fullAccount() }));
     assert.equal(r.status, 'incomplete');
     assert.deepEqual(fieldsOf(r), ['pix-key']);
     assert.equal(reasonFor(r, 'pix-key'), 'missing');
   });
 
-  // Conta completa não substitui chave: quem escolheu PIX no lançamento paga por PIX.
+  // Conta completa não substitui chave: quem escolheu PIX no lançamento paga por PIX, e trocar a
+  // rota mudaria o custo e o prazo que o operador aceitou. Continua valendo — o que mudou é que
+  // agora a conta é exigida ALÉM da chave, não NO LUGAR dela.
   it('não aceita conta bancária no lugar da chave PIX', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX', payee: fullAccount() }));
     assert.equal(r.status, 'incomplete');
     assert.deepEqual(fieldsOf(r), ['pix-key']);
+  });
+
+  // O caso que a mudança de régua criou, e o que ele fixa é a ACUMULAÇÃO: quem tem PIX sem chave e
+  // sem conta precisa ver as duas pendências de uma vez, não uma volta ao cadastro por vez.
+  it('acumula as pendências de chave e de conta, sem parar na primeira', () => {
+    const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX' }));
+    assert.equal(r.status, 'incomplete');
+    assert.ok(fieldsOf(r).includes('pix-key'), 'a chave tem de aparecer');
+    assert.ok(fieldsOf(r).length > 1, `esperava conta junto, veio ${fieldsOf(r).join(', ')}`);
+  });
+
+  // A chave sozinha deixou de bastar, e este é o teste que prova a mudança — o inverso exato do que
+  // a suíte afirmava antes da #838.
+  it('recusa PIX com chave mas SEM dado bancário', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({ pixKey: { keyType: 'email', key: 'a@b.com' } }),
+      }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.equal(fieldsOf(r).includes('pix-key'), false, 'a chave está lá; o que falta é a conta');
   });
 });
 

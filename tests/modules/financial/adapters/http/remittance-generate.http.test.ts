@@ -29,7 +29,7 @@ const TEST_USER_ID = '99999999-9999-4999-8999-999999999999';
 const URL = '/api/v2/financial/remittances';
 const DOC_A = '11111111-1111-4111-8111-111111111111';
 const DOC_B = '22222222-2222-4222-8222-222222222222';
-const DOC_PIX = '33333333-3333-4333-8333-333333333333';
+const DOC_GUIA = '33333333-3333-4333-8333-333333333333';
 // Nunca entra numa remessa bem-sucedida: é o título dos cenários que devem falhar ANTES do NSA, e
 // reusar um já preso faria o 409 mascarar o que se quer medir.
 const DOC_LIVRE = '55555555-5555-4555-8555-555555555555';
@@ -91,10 +91,12 @@ const payments = createInMemoryRemittancePaymentReader([
     valueCents: 90_00,
     paymentDate: PAYMENT_DATE,
   },
+  // A rota sem emissor da fixture era `pix` até a #838, e virou a GUIA — que é a única que sobrou, e
+  // sobrou por decisão de escopo da P.O. (23/08), não por atraso de implementação.
   {
-    payableId: DOC_PIX,
-    documentId: DOC_PIX,
-    route: 'pix',
+    payableId: DOC_GUIA,
+    documentId: DOC_GUIA,
+    route: 'tax-guide',
     valueCents: 40_00,
     paymentDate: PAYMENT_DATE,
   },
@@ -152,7 +154,7 @@ const buildHandle = async (
     // desfecho — só apagaria a razão pela qual ele existe.
     remittanceRepo: createInMemoryRemittanceRepository({
       payableStatuses: Object.fromEntries(
-        [DOC_A, DOC_B, DOC_PIX, DOC_LIVRE].map((id) => [id, 'Approved' as const]),
+        [DOC_A, DOC_B, DOC_GUIA, DOC_LIVRE].map((id) => [id, 'Approved' as const]),
       ),
     }),
   });
@@ -280,7 +282,7 @@ describe('financial/http — POST /remittances (#720) · geração', () => {
   // CA5: o operador precisa distinguir "falta dado" de "o arquivo não emite esta forma" — não há
   // cadastro que resolva a segunda.
   it('CA5: título de rota sem emissor recusa com mensagem própria', async () => {
-    const res = await generate([DOC_PIX]);
+    const res = await generate([DOC_GUIA]);
     assert.equal(res.statusCode, 422, res.body);
 
     const body = res.json() as { error: { message: string } };

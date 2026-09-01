@@ -348,16 +348,60 @@ describe('Perfil de lote — a forma do boleto sai do código de barras', () => 
   });
 });
 
-describe('Perfil de lote — as rotas que ainda não têm emissor', () => {
-  // O ponto da issue: o montador tratava todo pagamento como o par de crédito em conta. Um título
-  // de PIX incluído numa seleção sairia como transferência, com dados bancários que aquela rota não
-  // usa — arquivo bem-formado, aceito pelo banco, pagamento errado.
+describe('Perfil de lote — a rota que não tem emissor', () => {
+  // O ponto da issue original (#711): o montador tratava todo pagamento como o par de crédito em
+  // conta. Um título sem perfil próprio sairia como transferência, com dados bancários que aquela
+  // rota não usa — arquivo bem-formado, aceito pelo banco, pagamento errado.
+  //
+  // ⚠️ O PIX SAIU DESTA LISTA na #838 e ganhou perfil próprio (forma `45`), medido logo abaixo. A
+  // guia ficou, e ficou por DECISÃO DE ESCOPO da P.O. (23/08) — imposto retido pago por guia
+  // permanece fora da remessa —, não por atraso de implementação. Não há release que a mova daqui.
   it('recusa nomeando o motivo, em vez de cair no perfil de transferência', () => {
-    for (const route of ['pix', 'tax-guide'] as const) {
+    for (const route of ['tax-guide'] as const) {
       const r = batchProfileFor({ route }, CEDENTE_BANK);
       assert.ok(isErr(r), `esperava erro para ${route}`);
       assert.equal(r.error, 'remittance-launch-form-unsupported');
     }
+  });
+});
+
+/**
+ * O perfil do lote de Pix (#838, CA1).
+ *
+ * Medido no golden `GOLDEN_TEST_MULTIPAG_PIX_240` (01/09/2026): header de lote com serviço `20`,
+ * forma `45` e versão de layout `045`.
+ */
+describe('Perfil de lote — Pix por chave', () => {
+  it('deriva a forma `45` sem bifurcação — o SPI é o mesmo trilho para todo recebedor', () => {
+    // A transferência escolhe entre crédito interno e TED conforme o banco do favorecido; o boleto,
+    // entre próprio banco e outro banco. O Pix não tem essa bifurcação, e é por isso que o perfil
+    // não consulta `cedenteBankCode` para decidir — só o recebe.
+    const r = batchProfileFor({ route: 'pix' }, CEDENTE_BANK);
+    assert.ok(isOk(r), 'o Pix passou a ter emissor na #838');
+    assert.equal(r.value.launchForm, LAUNCH_PIX_TRANSFER);
+    assert.equal(r.value.serviceType, '20');
+  });
+
+  it('usa a versão de layout dos PAGAMENTOS (`045`), não uma própria', () => {
+    // ⚠️ A CA1 da issue pedia "a versão de layout da seção de PIX", supondo seção separada. O manual
+    // desfaz a suposição: o header de lote da p. 23 é o mesmo para "Pagamento Fornecedor / TED / DOC
+    // / Pix". Quem tem versão própria é a COBRANÇA, com `040`. Inventar um terceiro valor produziria
+    // header que o banco recusa — e o golden confirma `045`.
+    const pix = batchProfileFor({ route: 'pix' }, CEDENTE_BANK);
+    const ted = batchProfileFor({ route: 'transfer', payeeBankCode: '341' }, CEDENTE_BANK);
+    assert.ok(isOk(pix) && isOk(ted));
+    assert.equal(pix.value.batchLayoutVersion, ted.value.batchLayoutVersion);
+  });
+
+  it('transita pela câmara do SPI, e não pela de TED nem por zeros', () => {
+    assert.equal(clearingHouseFor(LAUNCH_PIX_TRANSFER), '009');
+  });
+
+  it('não leva finalidade de TED nem finalidade complementar', () => {
+    // Medido no golden: 220-224 e 225-226 saem em BRANCOS na forma `45`. Preenchê-los fora de TED é
+    // recusa, conforme a inquiry-0033 — a mesma régua que vale para crédito em conta.
+    assert.equal(tedPurposeFor(LAUNCH_PIX_TRANSFER), null);
+    assert.equal(complementPurposeFor(LAUNCH_PIX_TRANSFER), null);
   });
 });
 
