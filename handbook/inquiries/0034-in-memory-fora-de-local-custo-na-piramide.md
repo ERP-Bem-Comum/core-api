@@ -58,7 +58,7 @@ a estimativa de 179:
 
 | Fronteira | Tipo | Entrada | Quantos consumidores |
 | :--- | :--- | :--- | ---: |
-| env → config | `ModuleDriverConfig` (`shared/persistence/module-driver-config.ts:32-34`) | `process.env` | **1** |
+| env → config | `ModuleDriverConfig` (`src/shared/persistence/module-driver-config.ts:32-34` **em `dev@01bbf477`**, o commit medido — a execução reescreveu o arquivo e hoje o tipo está na `:46`) | `process.env` | **1** |
 | config → deps do módulo | `FinancialCompositionConfig` e 5 irmãos, um por módulo | parâmetro de função | **179** |
 
 Comandos e resultados:
