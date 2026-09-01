@@ -26,7 +26,15 @@ import {
 // "defeito do emissor, abra o código", porque nenhum valor externo alimenta aqueles campos. Aqui o
 // valor vem do CADASTRO — o nome e a inscrição de quem emitiu o boleto —, e a ação é cadastrar.
 // Achatar os dois mandaria o operador abrir um chamado de código para um dado que só ele tem.
-export type CnabSegmentError = PositionalFieldError | 'billet-party-unidentified';
+//
+// `pix-key-unrepresentable` (#838) entra pela MESMA régua e pelo mesmo motivo: a chave vem do
+// cadastro, e uma que não cabe nas 99 posições do campo não é defeito do emissor — é dado a
+// corrigir. O que ela nunca pode virar é truncamento silencioso, porque as 99 primeiras posições de
+// uma chave maior são uma chave DIFERENTE, e o dinheiro vai para outro recebedor.
+export type CnabSegmentError =
+  | PositionalFieldError
+  | 'billet-party-unidentified'
+  | 'pix-key-unrepresentable';
 
 const DETAIL_RECORD_TYPE = 3;
 const MOVEMENT_INCLUSION = '0'; // G060 — 0 = inclusão (remessa)
@@ -288,6 +296,149 @@ export const segmentB = (input: SegmentBInput): Result<string, CnabSegmentError>
     num(0, 8), // 233-240 código ISPB
   ]);
 };
+
+// ─── Segmento B na modalidade PIX — o MESMO registro, outra régua ────────────────────────────
+//
+// Fonte primária: `jun-19-layout-multipag.pdf` p. 40 (local-only), subdivisão das Informações
+// 10/11/12 na modalidade Pix; tabela em `referencias/02-layout-registros.md:194-212`, medida contra
+// o golden `GOLDEN_TEST_MULTIPAG_PIX_240` do banco.
+//
+// ⚠️ FUNÇÃO PRÓPRIA, e não um campo opcional em `SegmentBInput`. As posições 033-226 são o mesmo
+// bloco físico com significado inteiramente diferente — lá endereço e valores nominais, aqui TXID,
+// identificação e chave. Um `pix?: {…}` no input existente faria o compilador aceitar tanto o
+// registro sem endereço quanto o sem chave, e o arquivo resultante é bem-formado nos dois casos: a
+// contagem fecha, o trailer bate, e o banco lê 99 posições com a régua errada. É o modo de falha que
+// a rule `cnab.md` registra em cinco casos, e o quinto (`address?`) ainda está aberto na #858
+// emitindo branco em 100% das remessas. Duas semânticas, dois montadores.
+//
+// O que os dois compartilham — cabeçalho de 001-032 e o ISPB em 233-240 — é justamente o que NÃO
+// muda entre as modalidades, e por isso a duplicação dessas linhas é aparente, não real.
+export type SegmentBPixInput = Readonly<{
+  bankCode: string; // banco do CEDENTE do arquivo, isto é, o pagador (001-003)
+  batchNumber: number;
+  recordNumber: number;
+  payee: Payee;
+  // G100, colunas 015-017 — os DOIS dígitos do domínio, já traduzidos por `pixInitiationFor`. Este
+  // registro escreve o que recebeu e não tem opinião sobre qual iniciação é a certa, exatamente como
+  // o Segmento A faz com `tedPurpose` e `complementPurpose`: quem deriva conhece a rota, quem monta
+  // conhece a largura. O alinhamento em 3 posições (`'04 '`, nunca `'004'`) é responsabilidade desta
+  // função, e é a razão de o campo chegar com dois.
+  initiation: string;
+  // G101, colunas 128-226 — a chave, como o cadastro a guarda. 99 posições Alfa alinhadas à esquerda.
+  pixKey: string;
+  // P015, colunas 233-240 — ISPB do PSP do recebedor, derivado do código de compensação por
+  // `payeeIspbFor` (#923). Obrigatório na modalidade, e sem default pelo mesmo motivo do `dueDate`
+  // acima: um `?` com `?? ''` compilaria em todo chamador e emitiria oito brancos.
+  payeeIspb: string;
+}>;
+
+// Dois dígitos, e a guarda é de COERÊNCIA INTERNA — o valor vem de `pixInitiationFor`, não do
+// cadastro. Derivada da largura pelo mesmo motivo de `isTedPurpose`: quem mudar uma muda a outra.
+const PIX_INITIATION_WIDTH = 2;
+const isPixInitiation = (raw: string): boolean =>
+  new RegExp(`^\\d{${String(PIX_INITIATION_WIDTH)}}$`).test(raw);
+
+// 99 posições é o TAMANHO DO CAMPO, e aqui ele é um limite real, não um alinhamento.
+const PIX_KEY_WIDTH = 99;
+
+export const segmentBPix = (input: SegmentBPixInput): Result<string, CnabSegmentError> => {
+  const { payee: p } = input;
+
+  // Coerência interna do G100, mesmo molde e mesmo erro reusado do P011/P013 no Segmento A: nenhum
+  // valor externo alimenta este campo, então formato inválido só é alcançável por defeito do próprio
+  // emissor, e a ação é abrir o código — não o cadastro.
+  if (!isPixInitiation(input.initiation)) return err('numeric-field-invalid');
+
+  // ⚠️ A guarda que impede pagar a OUTRA PESSOA. `text()` trunca por desenho (`positional.ts:158`,
+  // `.slice(0, size)`), o que é correto para nome e endereço — cortar um sobrenome não muda o
+  // destino do dinheiro. Uma chave Pix truncada muda: as 99 primeiras posições de uma chave maior
+  // são uma chave DIFERENTE, e ou o SPI a recusa, ou ela pertence a outro recebedor. O arquivo sai
+  // bem-formado nos dois casos e o `remittance-inspector.ts` não pega, porque não é defeito de forma.
+  //
+  // Erro PRÓPRIO, e não o `numeric-field-invalid` acima, pela distinção que este módulo já
+  // estabeleceu: o valor vem do CADASTRO, e a ação de quem corrige é cadastrar. Achatar os dois
+  // mandaria o operador abrir chamado de código para um dado que só ele tem.
+  const key = input.pixKey.trim();
+  if (key === '' || key.length > PIX_KEY_WIDTH) return err('pix-key-unrepresentable');
+
+  return joinFields([
+    num(input.bankCode, 3), // 001-003 banco do cedente
+    num(input.batchNumber, 4), // 004-007 lote
+    num(DETAIL_RECORD_TYPE, 1), // 008     tipo de registro (detalhe)
+    num(input.recordNumber, 5), // 009-013 nº do registro no lote
+    text('B', 1), // 014     segmento
+    // 015-017 forma de iniciação (G100). `text` e NÃO `num`: o campo é Alfa, e alinhar à esquerda com
+    // branco à direita é o que o golden grava — `'04 '`. Zero-padding produziria `'004'`, que não é
+    // valor do domínio.
+    text(input.initiation, 3),
+    num(p.documentType, 1), // 018     tipo de inscrição do favorecido (G005)
+    digits(p.document, 14), // 019-032 nº de inscrição do favorecido (G006)
+    // 033-067 TXID e 068-127 identificação do pagamento entre usuários — os dois OPCIONAIS no
+    // layout, e os dois em branco por não haver fonte. O golden traz texto livre em 068-127, o que
+    // prova que o campo aceita conteúdo, não que ele o exija. Inventar aqui seria escrever no arquivo
+    // um dado que o operador não digitou e não pode conferir.
+    blanks(35), // 033-067 TXID
+    blanks(60), // 068-127 identificação entre usuários
+    text(key, PIX_KEY_WIDTH), // 128-226 chave Pix (G101)
+    // 227-232 UG centralizadora (SIAPE). ZERADO, não em branco — o layout marca o campo Num sem
+    // obrigatoriedade, e é zerado que o golden do banco grava. A modalidade não é SIAPE.
+    num(0, 6),
+    digits(input.payeeIspb, 8), // 233-240 ISPB do PSP do recebedor (P015)
+  ]);
+};
+
+// ─── A Informação 2 do Segmento A na modalidade Pix (G031, colunas 178-217) ──────────────────
+//
+// Fonte primária: `jun-19-layout-multipag.pdf` p. 101, §"Formatação para identificação Pagamento via
+// Pix" — `CCCCCCCCCCCCCCIIIIIIIIRR`, onde C = inscrição do favorecido em 14 posições (o CPF, de 11,
+// entra alinhado à direita com zeros), I = ISPB (8) e R = complemento do registro (2). São 24
+// posições; as 16 restantes do campo saem em branco, e é o que o golden do banco grava.
+//
+// ⚠️ O MANUAL DESCREVE A INSCRIÇÃO COMO NUMÉRICA, e desde 07/2026 ela pode não ser: a Receita emite
+// CNPJ alfanumérico (ADR-0044). O layout do banco não acompanhou — e este emissor herda a premissa
+// dele, porque o campo tem de sair como o banco o lê. Registrado como achado próprio; não é decisão
+// desta função e não se resolve aqui.
+//
+// ⚠️ FUNÇÃO PRÓPRIA em vez de texto passado por `message`, e a razão é a rule `cnab.md`
+// §"Parâmetro opcional é o defeito". O `message?: string` do `SegmentAInput` é opcional com `?? ''`:
+// um chamador de Pix que o esquecesse emitiria 40 BRANCOS onde o layout exige a identificação — o
+// mesmo modo de falha do `address?`, que produz branco em 100% das remessas (#858). Aqui a inscrição
+// e o ISPB são obrigatórios na assinatura, e o compilador cobra quem esquecer.
+//
+// A ordem dos três campos é a do manual, e é a única coisa aqui que não se descobre olhando o
+// resultado: os 24 dígitos formam uma corrida homogênea, e trocar ISPB de lugar com a inscrição
+// produziria um bloco que o inspetor aprova e o banco lê como outro favorecido.
+export type PixPaymentInfoInput = Readonly<{
+  payeeDocument: string;
+  payeeIspb: string;
+  accountType: string;
+}>;
+
+// `01` conta corrente, `02` conta pagamento, `03` conta poupança (p. 101-102).
+//
+// PREMISSA DECLARADA, e é a MESMA do `PAYEE_ACCOUNT_TYPE_CHECKING` no P013 (decisão da P.O.,
+// 25/08/2026): o cadastro não guarda tipo de conta — a modelagem não existe em camada nenhuma, e é a
+// **#817**. O que sustenta a constante não é a raridade da poupança, é o PROCESSO descrito pela P.O.:
+// o operador confere a classificação antes de gerar, e o título classificado errado volta recusado,
+// com baixa manual. Erro com detecção e caminho de volta, não falha silenciosa.
+//
+// Confirmada pelo golden do banco, que grava `01`. Quando a #817 entrar, isto vira leitura do
+// cadastro e o formato desta função não muda.
+export const PIX_ACCOUNT_TYPE_CHECKING = '01';
+
+const PIX_INFO_DOCUMENT_WIDTH = 14;
+const PIX_INFO_ISPB_WIDTH = 8;
+const PIX_INFO_ACCOUNT_TYPE_WIDTH = 2;
+
+export const pixPaymentInfo = (input: PixPaymentInfoInput): Result<string, CnabSegmentError> =>
+  joinFields([
+    // `digits`, e não `text`: CPF de 11 posições entra zero-padded à esquerda até 14, que é o que o
+    // manual manda por extenso ("11 dígitos com 0 a esq"). Alinhar à esquerda produziria um número de
+    // inscrição que não é o de ninguém.
+    digits(input.payeeDocument, PIX_INFO_DOCUMENT_WIDTH),
+    digits(input.payeeIspb, PIX_INFO_ISPB_WIDTH),
+    num(input.accountType, PIX_INFO_ACCOUNT_TYPE_WIDTH),
+  ]);
 
 // ─── Segmento J — Pagamento de Títulos de Cobrança (boleto) ──────────────────────────────────
 //

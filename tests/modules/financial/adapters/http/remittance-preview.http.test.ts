@@ -78,6 +78,10 @@ const reader = createInMemoryRemittancePreviewReader([
       document: 'inscricao-opaca',
     },
   },
+  // ⚠️ O bloco bancário é PREENCHIDO de propósito, e passou a ser desde a #838: o Pix exige chave E
+  // conta, então uma fixture toda nula acumularia cinco pendências e o caso deixaria de medir o que
+  // o nome dele diz. Aqui falta exatamente uma coisa — a chave —, e é isso que a resposta tem de
+  // apontar. O DV `0` é o que o algoritmo do banco 237 produz para a conta `123456` (#734).
   {
     documentId: DOC_ORIGEM,
     payableId: PAY_PIX_SEM_CHAVE,
@@ -86,10 +90,10 @@ const reader = createInMemoryRemittancePreviewReader([
     paymentDetail: null,
     valueCents: 80_00,
     payee: {
-      bank: null,
-      agency: null,
-      accountNumber: null,
-      checkDigit: null,
+      bank: '237',
+      agency: '1234-5',
+      accountNumber: '123456',
+      checkDigit: '0',
       pixKey: null,
       document: null,
     },

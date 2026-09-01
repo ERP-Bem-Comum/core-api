@@ -39,7 +39,7 @@ import type { VanRoute } from './types.ts';
 // `'pix'` entrasse aqui — silenciosamente, e o arquivo misto resultante é o que o banco recusa. O
 // raciocínio é da frente da #838, e fica registrado porque quem reintroduz o defeito é sempre a
 // terceira pessoa, que leu "rotas com emissor" no domínio e entendeu como regra de negócio estável.
-const ROUTES_WITH_ISSUER = ['transfer', 'billet'] as const satisfies readonly VanRoute[];
+const ROUTES_WITH_ISSUER = ['transfer', 'billet', 'pix'] as const satisfies readonly VanRoute[];
 
 // A rota estreitada para quem EMITE. `batchProfileFor` faz `switch` sobre as variantes filtradas por
 // este tipo, e é daí que vem a rede do compilador: no dia em que `'pix'` entrar no array acima, o

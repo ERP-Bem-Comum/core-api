@@ -129,16 +129,41 @@ const readBilletPayee = (
 
 const checkRouteData = (candidate: PayoutCandidate, route: VanRoute): RouteDataCheck => {
   switch (route) {
-    // A chave é o destino inteiro: o arquivo não olha agência nem conta. Conta completa NÃO
-    // substitui a chave — quem escolheu PIX no lançamento paga por PIX, e trocar a rota por conta
-    // própria mudaria o custo e o prazo que o operador aceitou.
-    // Só a existência da chave decide aptidão — o `keyType` viaja para quem emite o registro, mas
-    // não participa desta decisão. Chave em branco é chave ausente: o cadastro guarda `''` com mais
-    // frequência que `null` (ver o CHECK do bloco bancário, em `types.ts`).
-    case 'pix':
-      return isBlank(candidate.payee?.pixKey?.key ?? null)
+    // ⚠️ O PIX PASSOU A EXIGIR CHAVE **E** BLOCO BANCÁRIO (#838), e esta é a linha que mais
+    // provavelmente alguém vai querer reverter lendo a decisão da P.O. de 13/08 (#708) — que dizia,
+    // com todas as letras, que "PIX paga por chave, não olha agência ou conta". A decisão não estava
+    // errada sobre o NEGÓCIO; ela estava incompleta sobre o ARQUIVO, e quem desfaz a diferença
+    // reabre a divergência que a #837 fechou.
+    //
+    // A evidência é do banco, não de leitura: no golden `GOLDEN_TEST_MULTIPAG_PIX_240` (forma `45`),
+    // o Segmento A traz banco, agência, DV, conta e DV do favorecido TODOS PREENCHIDOS — e o layout
+    // (p. 39) marca os quatro com asterisco de obrigatório. A chave endereça o pagamento no SPI; o
+    // Segmento A continua sendo o registro de crédito, e ele identifica a conta.
+    //
+    // A dependência já existia sem estar declarada, e é o que torna esta mudança menos brusca do que
+    // parece: `payeeIspbFor` (#923) deriva o ISPB do CÓDIGO DE COMPENSAÇÃO do favorecido, que é parte
+    // deste mesmo bloco. O emissor de Pix já não funcionava sem cadastro bancário; o que faltava era
+    // o pré-voo dizer isso ANTES da geração, em vez de no último clique.
+    //
+    // ACUMULA as duas pendências, como o boleto faz logo abaixo e pela mesma razão: quem tem Pix sem
+    // chave E sem conta precisa ver as duas de uma vez, não uma volta ao cadastro por vez. A chave
+    // vem primeiro por ser o dado que define a ROTA — sem ela o operador escolheu Pix por engano.
+    //
+    // Chave em branco é chave ausente: o cadastro guarda `''` com mais frequência que `null` (ver o
+    // CHECK do bloco bancário, em `types.ts`). E conta completa NÃO substitui a chave — quem escolheu
+    // PIX no lançamento paga por PIX, e trocar a rota mudaria o custo e o prazo que ele aceitou.
+    case 'pix': {
+      const keyGap = isBlank(candidate.payee?.pixKey?.key ?? null)
         ? missingField(route, 'pix-key')
-        : ready(route);
+        : null;
+      const parts = decomposePayeeAccount(candidate.payee);
+      if (keyGap === null && parts.ok) return ready(route);
+
+      return incomplete(
+        route,
+        immutable([...(keyGap === null ? [] : keyGap.gaps), ...(parts.ok ? [] : parts.error)]),
+      );
+    }
 
     // Única rota que depende da conta estruturada — e, portanto, a única em que o desencaixe do
     // cadastro vira impedimento de pagamento.

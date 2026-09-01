@@ -42,6 +42,16 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     // operador precisa ler isso, não "falhou a tradução" (#891).
     case 'billet-party-unidentified':
       return 'cnab-billet-party-unidentified';
+    // Mesma razão, outra rota: a chave é dado de cadastro, e o operador precisa ler que ela não cabe
+    // no campo — não "falhou a tradução" (#838).
+    case 'pix-key-unrepresentable':
+      return 'cnab-pix-key-unrepresentable';
+    // Os dois erros de TRADUÇÃO da rota Pix. Sobem nomeados pela mesma régua: um manda ao cadastro
+    // (ou à fonte do Bacen), o outro diz que o tipo da chave não existe no domínio do layout.
+    case 'payee-ispb-unknown':
+      return 'cnab-payee-ispb-unknown';
+    case 'remittance-pix-key-type-unsupported':
+      return 'cnab-pix-key-type-unsupported';
     // `remittance-mixed-file-modalities` converge para o desfecho genérico, e é escolha, não
     // descuido: a seleção mista NÃO deveria alcançar o montador — quem chama passa por `planFiles`,
     // que já reparte. Chegar aqui significa que alguém montou um arquivo sem repartir antes, e não há
