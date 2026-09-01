@@ -674,7 +674,7 @@ describe('Remessa Multipag — todo pagamento entra BLOQUEADO para liberação m
   // "correção" preguiçosa é mais tentadora: ele grava `'J'` na coluna 014 como o J e ocupa as mesmas
   // colunas 015-017 — e um `09` carimbado ali por simetria não seria instrução bloqueada nenhuma.
   //
-  // ⚠️ 016-017 no J-52 é o `C004`, "Código de Movimento Remessa", cujo domínio (manual p. 118) diz
+  // ⚠️ 016-017 no J-52 é o `C004`, "Código de Movimento Remessa", cujo domínio (manual p. 80) diz
   // **'09' = Protestar**. Quem propagasse a política do #805 para cá emitiria arquivo bem-formado
   // mandando PROTESTAR o título que se está pagando — e nenhum inspetor de forma pegaria.
   it('não repete a instrução do J no Segmento J-52: 015 é branco e 016-017 é o C004 zerado', () => {

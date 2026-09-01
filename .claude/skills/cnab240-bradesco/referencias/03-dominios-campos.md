@@ -4,8 +4,12 @@ Fonte: Manual de Procedimentos Multipag Bradesco, Nº 4008.523.687, **Versão 08
 seção "Descrição dos Campos" — **págs. 95-139** no PDF vigente
 (`handbook/guidelines/bradesco_guideline/jun-19-layout-multipag.pdf`).
 
-⚠️ Páginas citadas ao longo deste arquivo vieram de edição anterior. Use
-[`00-indice-campos.md`](./00-indice-campos.md) para localizar cada `Gxxx`/`Pxxx`.
+**Páginas reancoradas na Versão 08 em 01/09/2026** (#924) e cobradas por
+`tests/cleanup/cnab-reference-pages.test.ts` contra [`00-indice-campos.md`](./00-indice-campos.md).
+
+⚠️ Uma citação pode apontar, de propósito, para página diferente da descrição do campo — a **nota
+(2)** do `G029` está na p. 101 e o campo é definido na p. 100; a tabela `G059` começa na p. 106 e
+cada ocorrência tem a sua. Essas exceções vivem nomeadas no gate, não como tolerância.
 
 Se um valor não está aqui, **não invente**. Aponte a fonte oficial — Bacen (`bcb.gov.br`) para
 finalidade de TED e ISPB.
@@ -29,7 +33,7 @@ CPF (11 dígitos) em campo de 14 → 3 zeros à esquerda.
 ## G009 / G011 / G012 — Dígitos verificadores
 
 - **G009** (DV da agência): o manual o descreve como "Campo Não Obrigatório – Informação
-  Opcional" (pág. 82). **Mas o G059 `AG` e `AM` exigem o preenchimento.** Ver
+  Opcional" (pág. 95). **Mas o G059 `AG` e `AM` exigem o preenchimento.** Ver
   `05-armadilhas-e-divergencias.md`.
 - **G011** (DV da conta): para bancos com DV de duas posições, aqui vai a **1ª posição**.
   Ex.: C/C `45981-36` → G011 = `3`.

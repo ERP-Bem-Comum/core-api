@@ -3,18 +3,21 @@
 Fonte: Manual de Procedimentos Multipag Bradesco, Nº 4008.523.687, **Versão 08** – julho/2025
 (`handbook/guidelines/bradesco_guideline/jun-19-layout-multipag.pdf`).
 
-⚠️ As páginas citadas neste arquivo vieram de uma **edição anterior** e não conferem com o PDF
-acima — o deslocamento varia por seção. Para localizar um campo, use
-[`00-indice-campos.md`](./00-indice-campos.md), derivado do PDF vigente.
+**As páginas citadas aqui foram reancoradas na Versão 08 em 01/09/2026** (#924) e são cobradas por
+`tests/cleanup/cnab-reference-pages.test.ts` contra [`00-indice-campos.md`](./00-indice-campos.md),
+que é derivado do PDF vigente.
+
+⚠️ Ao trocar a edição do PDF, **regere o índice e reancore** — não converta por soma. O deslocamento
+varia por seção: medido +5 no header de arquivo, +6 no Segmento C, +7 no J-52 e +15 no J-52 para Pix.
 
 ## Tamanho e terminador
 
-- Todo registro tem **exatamente 240 bytes** (pág. 10).
+- Todo registro tem **exatamente 240 bytes** (pág. 14).
 - Terminador `CRLF` (`\r\n`) em todas as linhas, incluindo a última.
 - Arquivo de N linhas ocupa `N × 242` bytes.
 - Encoding ASCII / latin-1. **Sem acentuação.** Texto em **CAIXA ALTA**.
 
-## Alinhamento de campos (pág. 10)
+## Alinhamento de campos (pág. 14)
 
 > Campos Numéricos (Num) = sempre à direita e preenchidos com **zeros** à esquerda.
 > Campos Alfanuméricos (Alfa) = sempre à esquerda e preenchidos com **brancos** à direita.
@@ -48,20 +51,20 @@ Regras:
 - Lote de serviço = header de lote + um ou mais detalhes + trailer de lote.
 - Registro de detalhe é composto de um ou mais **segmentos**.
 
-## Numeração de lote (G002, pág. 82)
+## Numeração de lote (G002, pág. 95)
 
 - Header de Arquivo → `0000`
 - Primeiro lote → `0001`; demais → anterior + 1
 - Trailer de Arquivo → `9999`
 - Número de lote **não pode se repetir** dentro do arquivo.
 
-## Numeração de registro no lote (G038, pág. 88)
+## Numeração de registro no lote (G038, pág. 103)
 
 Posições 9-13 de todo segmento de detalhe. Sequência numérica crescente, **reinicializada em
 `00001` a cada novo lote**. Cada segmento conta como um registro (um pagamento com segmentos A+B
 ocupa dois sequenciais).
 
-## Tipo de registro (G003, pág. 82) — posição 8
+## Tipo de registro (G003, pág. 95) — posição 8
 
 | Valor | Registro |
 |---|---|
@@ -73,7 +76,7 @@ ocupa dois sequenciais).
 | `5` | Trailer de Lote |
 | `9` | Trailer de Arquivo |
 
-## Segmentos por modalidade (pág. 9)
+## Segmentos por modalidade (pág. 20)
 
 | Lote / Produto | Remessa | Retorno |
 |---|---|---|
@@ -89,7 +92,7 @@ ocupa dois sequenciais).
 ⚠️ **A linha do Pix agrega DUAS formas de lançamento, e ler "J obrigatório" como valendo para as
 duas manda emitir um registro que não cabe.** A seção do manual se chama _"Pagamentos PIX
 (Transferência PIX e Pagamento QRCODE)"_ — ela cobre `45` **e** `47` de uma vez, e a tabela da
-pág. 9 não as separa.
+pág. 20 não as separa.
 
 O que o golden do banco mostra para a forma **`45` (Pix Transferência)**, medido em 01/09/2026 sobre
 `GOLDEN_TEST_MULTIPAG_PIX_240`: o arquivo tem **6 registros** — header de arquivo, header de lote,
@@ -104,18 +107,18 @@ como _"URL para QR-Code Dinâmico ou Chave Pix para QR-Code Estático"_. O J e o
 ## Totalizadores
 
 **Trailer de Lote:**
-- Posições 18-23 — Quantidade de Registros do Lote (G057, pág. 89): somatória dos registros de
+- Posições 18-23 — Quantidade de Registros do Lote (G057, pág. 105): somatória dos registros de
   tipo 1, 2, 3, 4 e 5. Ou seja, **header de lote + todos os detalhes + trailer de lote**.
-- Posições 24-41 — Somatória dos Valores (P007, pág. 106): soma dos valores de crédito dos
+- Posições 24-41 — Somatória dos Valores (P007, pág. 132): soma dos valores de crédito dos
   registros de detalhe com segmento `A`.
-- Posições 42-59 — Somatória de Quantidade de Moedas (G058, pág. 89): soma das quantidades de
+- Posições 42-59 — Somatória de Quantidade de Moedas (G058, pág. 105): soma das quantidades de
   moeda dos detalhes com segmento `A` ou `J`.
 
 **Trailer de Arquivo:**
-- Posições 18-23 — Quantidade de Lotes (G049, pág. 88): somatória dos registros de tipo 1.
-- Posições 24-29 — Quantidade de Registros do Arquivo (G056, pág. 89): somatória dos registros de
+- Posições 18-23 — Quantidade de Lotes (G049, pág. 104): somatória dos registros de tipo 1.
+- Posições 24-29 — Quantidade de Registros do Arquivo (G056, pág. 105): somatória dos registros de
   tipo 0, 1, 3, 5 e 9.
-- Posições 30-35 — Quantidade de Contas para Conciliação (G037, pág. 88): registros de tipo 1 com
+- Posições 30-35 — Quantidade de Contas para Conciliação (G037, pág. 103): registros de tipo 1 com
   Tipo de Operação `E`. Zeros nas demais modalidades.
 
 ## Datas e horas

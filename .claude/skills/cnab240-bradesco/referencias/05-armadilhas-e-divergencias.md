@@ -4,8 +4,8 @@ O manual Multipag Bradesco se contradiz em vários pontos. Cada item abaixo é u
 verificada entre a tabela de layout e a tabela de ocorrências G059, ou um erro de implementação
 observado em campo.
 
-Fonte: Nº 4008.523.687, **Versão 08** – julho/2025. ⚠️ Páginas citadas abaixo vieram de edição
-anterior; localize por [`00-indice-campos.md`](./00-indice-campos.md).
+Fonte: Nº 4008.523.687, **Versão 08** – julho/2025. **Páginas reancoradas em 01/09/2026** (#924) e
+cobradas por `tests/cleanup/cnab-reference-pages.test.ts`.
 
 **Regra de ouro: quando a tabela de layout divergir do G059, o G059 vence.** É ele que o validador
 do banco implementa. E acima dos dois está o **Validador Universal do banco**, que já recusou campo
@@ -17,7 +17,7 @@ aderente ao PDF — quando ele discordar, ele manda.
 
 **Sintoma:** arquivo estruturalmente perfeito, totais fechando, rejeitado sem explicação clara.
 
-**A contradição:** na tabela de layout do Segmento B (pág. 19), as Informações 10/11/12 não levam
+**A contradição:** na tabela de layout do Segmento B (pág. 25), as Informações 10/11/12 não levam
 asterisco de obrigatoriedade. Mas o G059 tem **cinco códigos de rejeição dedicados** a esse bloco:
 
 | Cód. | Campo | Posições |
@@ -37,12 +37,12 @@ disparam as críticas.
 
 **A contradição:**
 
-- **G009 (pág. 82)**: "Dígito Verificador da Agência […] Campo Não Obrigatório – Informação
+- **G009 (pág. 95)**: "Dígito Verificador da Agência […] Campo Não Obrigatório – Informação
   Opcional".
-- **G059 `AG` (pág. 90)**: "o dígito da agência **deve ser informado na posição 58**".
-- **G059 `AM` (pág. 90)**: mesma exigência para a posição **29** do Segmento A (agência do
+- **G059 `AG` (pág. 107)**: "o dígito da agência **deve ser informado na posição 58**".
+- **G059 `AM` (pág. 107)**: mesma exigência para a posição **29** do Segmento A (agência do
   favorecido).
-- **G059 `HD` (pág. 92)**: repete a exigência da posição 58.
+- **G059 `HD` (pág. 111)**: repete a exigência da posição 58.
 
 **Regra:** preencher DV da agência nas posições 58 (header de arquivo e de lote) e 29 (segmento A).
 Campo Alfa — se o DV for `0`, enviar `0`; se a agência realmente não tiver DV, enviar branco.
@@ -52,7 +52,7 @@ Nunca zero por padrão sem confirmar.
 
 ## 3. Quantidade da Moeda zerada
 
-**G059 `AQ` (pág. 90)** descreve a crítica como "quantidade de moeda não numérica **ou zerada**",
+**G059 `AQ` (pág. 107)** descreve a crítica como "quantidade de moeda não numérica **ou zerada**",
 referindo-se ao segmento A, posições 105-119.
 
 Na prática, pagamentos em BRL costumam passar com o campo zerado. Mas o texto normativo é esse.
@@ -67,7 +67,7 @@ moeda estiver correto, testar `000000000100000` (= 1,00000, campo com 10 inteiro
 **A contradição:**
 
 - Tabela de layout (págs. 10 e 17): Código do Convênio no Banco ocupa **33-52** (20 posições).
-- G059 `HB` e `HC` (pág. 92): mandam verificar o convênio nas posições **33 a 38**.
+- G059 `HB` e `HC` (pág. 111): mandam verificar o convênio nas posições **33 a 38**.
 
 **Interpretação:** o código de convênio efetivo do Bradesco vive nas 6 primeiras posições do campo;
 o restante é preenchimento. Alinhamento à esquerda com brancos à direita (campo Alfa).
@@ -111,7 +111,7 @@ Duas armadilhas ao reprocessar o mesmo arquivo:
   Precisa ser único por compromisso.
 - **`HG` / `HH`**: lote duplicado ou fora de sequência na mesma data de transmissão.
 
-Some a isso o **G018 (pág. 83)**: o NSA (header de arquivo, 158-163) deve evoluir a cada header de
+Some a isso o **G018 (pág. 97)**: o NSA (header de arquivo, 158-163) deve evoluir a cada header de
 arquivo. Contador persistente, nunca valor fixo.
 
 ---
@@ -139,7 +139,7 @@ em **brancos**.
 
 ## 8. Campo Alfa preenchido com zeros
 
-Violação da regra de alinhamento da pág. 10, e nem sempre tem código de ocorrência dedicado — o
+Violação da regra de alinhamento da pág. 14, e nem sempre tem código de ocorrência dedicado — o
 arquivo pode ser aceito e o pagamento sair errado.
 
 Campos Alfa que costumam ser preenchidos com zeros por engano: Convênio (33-52), Nosso Número
@@ -199,7 +199,8 @@ por extenso, e foi essa lacuna que a suposição do espelhamento tentou preenche
 
 ## 10. Literal `PIX` fora do lugar
 
-As posições 172-174 do header de arquivo só recebem `PIX` na modalidade Pix (G021, pág. 83).
+As posições 172-174 do header de arquivo só recebem `PIX` na modalidade Pix (G021, pág. 15 — a
+tabela-delta do header; a descrição do campo está na pág. 97).
 Em TED, DOC ou crédito em conta, vão em **branco**. E lotes Pix devem vir em arquivo separado das
 demais formas de pagamento.
 
