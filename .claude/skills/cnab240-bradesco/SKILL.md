@@ -48,6 +48,27 @@ códigos de recusa dedicados (`AU`, `AV`, `AW`, `AX`, `AY`). Endereço em branco
 Validador Universal e o layout discordarem, quem manda é o validador — registre a divergência,
 não escolha o texto mais bonito.
 
+### A hierarquia completa, do mais forte ao mais fraco
+
+| # | Fonte | O que ela responde |
+| :-- | :--- | :--- |
+| 1 | **Laudo do Validador Universal** ([#804](https://github.com/ERP-Bem-Comum/core-api/issues/804)) | o que o banco **recusa**, com a mensagem literal |
+| 2 | **Golden do banco** (`GOLDEN_TEST_MULTIPAG_*`) | que forma o banco **espera** — posição, presença, domínio estrutural |
+| 3 | **Tabela G059** do manual | crítica de recusa documentada |
+| 4 | **Tabela de layout** do manual | largura, formato, obrigatoriedade nominal |
+| 5 | Referências deste diretório | onde procurar no manual — **mapa, nunca território** |
+
+**Os goldens valem como verdade** — decisão do dono do repositório em 01/09/2026, sobre os arquivos
+que a P.O. forneceu em 29/08. Onde um golden e o manual divergem, a lacuna é do manual: a câmara
+`009` da forma `45` (Pix) está no golden e **não ocorre uma única vez** no PDF.
+
+⚠️ **Mas o golden é norma sobre a FORMA, não sobre a ESCOLHA.** Ele diz que forma o banco espera;
+não diz que valor este pagador deve escrever, porque essa pergunta é do negócio de quem paga. O
+golden de TED traz `P011 = 00010` (_"Repasses da Lei 8727"_) onde este repositório escreve `00005`
+(_"Pagamento a Fornecedor"_, decisão da P.O. na [#813](https://github.com/ERP-Bem-Comum/core-api/issues/813))
+— e aqui **o código está certo e o golden não**. Copiar valor de negócio do golden produz arquivo
+que passa em qualquer validador declarando ao Banco Central a finalidade errada.
+
 ## Mapa das referências
 
 | Arquivo | Quando abrir |
