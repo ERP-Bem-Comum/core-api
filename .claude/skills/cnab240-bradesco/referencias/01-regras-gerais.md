@@ -79,12 +79,27 @@ ocupa dois sequenciais).
 |---|---|---|
 | Crédito em C/C, Cheque, OP, DOC, Pagamento com Autenticação | A (obrig.), B (obrig.), C (opc.), 5 (opc.) | idem |
 | Pagamento de Títulos de Cobrança | J (obrig.), 5 (opc.) | idem |
-| **Pix** | A (obrig.), B (obrig.), J (obrig.), 5 (opc.) | idem |
+| **Pix** ⚠️ | A (obrig.), B (obrig.), J (obrig.), 5 (opc.) | idem |
 | Pagamento de Contas e Tributos com Código de Barras | O (obrig.), W (opc.*), Z (opc.), B (opc.), 5 (opc.) | idem |
 | Bloqueto Eletrônico | — | G (obrig.), H (opc.), Y (opc.) |
 | Alegação do Pagador | Y (obrig.) | Y (obrig.) |
 
 \* Segmento W é obrigatório para pagamento de FGTS nos convênios 0181 e 0182.
+
+⚠️ **A linha do Pix agrega DUAS formas de lançamento, e ler "J obrigatório" como valendo para as
+duas manda emitir um registro que não cabe.** A seção do manual se chama _"Pagamentos PIX
+(Transferência PIX e Pagamento QRCODE)"_ — ela cobre `45` **e** `47` de uma vez, e a tabela da
+pág. 9 não as separa.
+
+O que o golden do banco mostra para a forma **`45` (Pix Transferência)**, medido em 01/09/2026 sobre
+`GOLDEN_TEST_MULTIPAG_PIX_240`: o arquivo tem **6 registros** — header de arquivo, header de lote,
+Segmento A, Segmento B, trailer de lote, trailer de arquivo. Trailer de lote conta `000004`.
+**Não há Segmento J nem J-52.**
+
+O que sustenta a leitura: o Segmento J exige Código de Barras em 18-61 (`G063`, obrigatório), e um
+Pix por chave não tem código de barras; e `G102` — a chave de endereçamento do J-52 — é descrito
+como _"URL para QR-Code Dinâmico ou Chave Pix para QR-Code Estático"_. O J e o J-52 pertencem ao
+**QR-Code (`47`)**, que está fora do escopo do repositório por decisão da P.O. (14/08 e 23/08/2026).
 
 ## Totalizadores
 
@@ -108,10 +123,19 @@ ocupa dois sequenciais).
 - Datas: formato `DDMMAAAA` (G016, G044, G068, P003, P009).
 - Horas: formato `HHMMSS` (G017).
 
-## Modalidade Pix — regra estrutural (G021, pág. 83)
+## Modalidade Pix — regra estrutural (G021, pág. 15)
 
 > As novas formas de lançamento Pix, obrigatoriamente, deverão ser enviadas em **arquivos
 > separados** das demais formas de pagamento.
 > No header do Arquivo posições 172 à 174 deverá conter a literal `PIX` em caixa alta.
 
 Fora da modalidade Pix, as posições 172-174 vão em **branco**.
+
+Era "pág. 83" aqui até 01/09/2026 — número de outra edição. A regra está na **pág. 15**, logo
+abaixo do layout do header de arquivo, e o campo `172-174` é uma **variante do header**, não três
+posições do reservado do banco: ver `G021` em [`03-dominios-campos.md`](./03-dominios-campos.md).
+
+Corroboração independente do "arquivo separado", que não depende do PDF: os dois goldens do banco.
+O de Pix traz `[PIX]` em 172-174 e **um só lote**, forma `45`. O de TED/transferência/boleto traz
+172-174 em **branco** e **três lotes** de formas mistas (`01`, `41`, `31`) no mesmo arquivo — ou
+seja, formas mistas convivem; o que não convive com elas é o Pix.

@@ -50,8 +50,7 @@ const PAYMENT_INDICATOR_DEFAULT = '01'; // P014
 // ─── Câmara centralizadora (P001, Segmento A, colunas 018-020) ────────────────────────────────
 //
 // A câmara NÃO é escolha de quem monta o arquivo, nem atributo do favorecido: é FUNÇÃO DA FORMA DE
-// LANÇAMENTO. Duas leituras independentes do manual dizem a mesma coisa, e é a coincidência delas
-// que sustenta esta tabela:
+// LANÇAMENTO. Duas leituras independentes do manual sustentam as formas de TED:
 //
 //   · a nota (2) da descrição de G029 (p. 101) tabula forma → câmara, e lista `03`, `41` e `43`
 //     como as formas que transitam por câmara de TED;
@@ -59,16 +58,38 @@ const PAYMENT_INDICATOR_DEFAULT = '01'; // P014
 //     outras modalidades**, citando exatamente as colunas 018 a 020 do Segmento A.
 //
 // Crédito em conta corrente (`01`) não transita por câmara alguma — o crédito não sai do banco. Por
-// isso não há default aqui: um valor por omissão só pode acertar UMA das duas modalidades, e a que
-// ele errar produz registro que o próprio banco recusa (#751).
+// isso não há default aqui: um valor por omissão só pode acertar UMA das modalidades, e a que ele
+// errar produz registro que o próprio banco recusa (#751).
+//
+// ⚠️ O PIX É A EXCEÇÃO QUE O MANUAL NÃO ESCREVE, e é por isso que esta nota existe. A forma `45`
+// transita pelo SPI (`009`) — e nada disso está no PDF: a nota (2) tabula apenas `03`/`41`/`43`,
+// a descrição de P001 (p. 132) enumera só `018` e `888`, e a string `009` NÃO OCORRE UMA ÚNICA VEZ
+// no manual inteiro. Quem o sustenta é o golden do banco (`GOLDEN_TEST_MULTIPAG_PIX_240`, 29/08/2026):
+// forma `45` no header de lote, `009` em 018-020 do Segmento A. Os goldens valem como verdade por
+// decisão do dono do repositório (01/09/2026), e a hierarquia está na skill `cnab240-bradesco`
+// §"A hierarquia completa" — laudo do validador > golden > G059 > tabela de layout.
+//
+// **Não "corrigir" este `009` para `000` lendo a nota (2).** A lacuna é do manual, está registrada
+// em `referencias/03-dominios-campos.md`, e o valor errado aqui só aparece depois de transmitido
+// (#890 achado 2) — o `remittance-inspector.ts` não pega, porque não é defeito de forma.
 const CLEARING_TED = '018'; // P001 (p. 132) — TED (STR, CIP)
+const CLEARING_PIX = '009'; // SPI — golden do banco; ausente do manual
 const CLEARING_NONE = '000'; // G059, ocorrência 'AK' (p. 107) — zeros fora das formas de TED
 const TED_LAUNCH_FORMS: ReadonlySet<string> = new Set(['03', '41', '43']);
 
-// Total sobre o domínio de G029, de propósito: uma forma nova entra pelo `else` e sai com zeros,
-// que é o que o manual manda para tudo que não é TED — nunca herdando a câmara da forma anterior.
-export const clearingHouseFor = (launchForm: string): string =>
-  TED_LAUNCH_FORMS.has(launchForm) ? CLEARING_TED : CLEARING_NONE;
+// Exportada porque o emissor de PIX (#838) precisa da MESMA constante para derivar o perfil do
+// lote: duas literais `'45'` divergiriam no dia em que uma delas mudasse, e a divergência sairia
+// como arquivo cuja câmara não corresponde à forma — exatamente o defeito da #751.
+export const LAUNCH_PIX_TRANSFER = '45'; // G029 — Pix Transferência (p. 100)
+
+// Total sobre o domínio de G029, de propósito: uma forma nova entra pelo último `return` e sai com
+// zeros, que é o que o manual manda para tudo que não é TED nem PIX — nunca herdando a câmara da
+// forma anterior.
+export const clearingHouseFor = (launchForm: string): string => {
+  if (TED_LAUNCH_FORMS.has(launchForm)) return CLEARING_TED;
+  if (launchForm === LAUNCH_PIX_TRANSFER) return CLEARING_PIX;
+  return CLEARING_NONE;
+};
 
 // ─── Finalidade da TED (P011, Segmento A, colunas 220-224) ────────────────────────────────────
 //

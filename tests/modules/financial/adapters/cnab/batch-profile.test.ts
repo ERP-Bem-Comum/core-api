@@ -130,16 +130,109 @@ describe('Perfil de lote — a forma da transferência sai do banco do favorecid
 describe('Câmara centralizadora — função da forma, não escolha de quem monta (#751)', () => {
   // CA4. A tabela do manual (nota (2) de G029, p. 101) lista só as formas de TED; a ocorrência 'AK'
   // de G059 (p. 107) cobre o resto com zeros. Não há default a herdar: a função é TOTAL.
-  it('as formas de TED transitam pela câmara, e só elas', () => {
+  it('as formas de TED transitam pela câmara de TED', () => {
     for (const tedForm of ['03', '41', '43']) assert.equal(clearingHouseFor(tedForm), '018');
-    for (const other of ['01', '05', '30', '31', '45'])
-      assert.equal(clearingHouseFor(other), '000');
+    for (const other of ['01', '05', '30', '31']) assert.equal(clearingHouseFor(other), '000');
+  });
+
+  // #890, achado 2 — este caso assertava `45` → `000` até 01/09/2026, e era ele que fixava o defeito.
+  //
+  // O manual NÃO sustenta o `009`: a nota (2) do G029 tabula só as formas de TED, a descrição de
+  // P001 (p. 132) enumera só `018` e `888`, e a string `009` não ocorre uma única vez no PDF. Quem
+  // sustenta é o golden do banco (`GOLDEN_TEST_MULTIPAG_PIX_240`, 29/08/2026), que vale como verdade
+  // por decisão do dono do repositório. As três asserções ficam JUNTAS de propósito: separá-las
+  // deixaria alguém "corrigir" a do PIX lendo o manual, sem ver as outras duas ao lado.
+  it('a forma de PIX transita pelo SPI, e as vizinhas não mudam por causa dela', () => {
+    assert.equal(clearingHouseFor('45'), '009');
+    assert.equal(clearingHouseFor('41'), '018');
+    assert.equal(clearingHouseFor('01'), '000');
   });
 
   // Uma forma nova sai com zeros — nunca herdando a câmara da forma anterior, que é o modo de falha
   // que o default produzia.
   it('forma desconhecida sai com zeros, não com a câmara da forma vizinha', () => {
     assert.equal(clearingHouseFor('99'), '000');
+  });
+
+  // O domínio completo de G029 (p. 100-101). Serve à propriedade abaixo — as três formas de TED e a
+  // de PIX são as únicas com câmara; todas as outras são zeros, e nenhuma delas é caso especial.
+  const G029_DOMAIN = [
+    '01',
+    '02',
+    '03',
+    '04',
+    '05',
+    '10',
+    '11',
+    '16',
+    '17',
+    '18',
+    '19',
+    '20',
+    '21',
+    '22',
+    '23',
+    '24',
+    '25',
+    '26',
+    '27',
+    '30',
+    '31',
+    '40',
+    '41',
+    '43',
+    '44',
+    '45',
+    '47',
+    '50',
+    '70',
+    '71',
+    '72',
+    '73',
+    '99',
+  ] as const;
+
+  // A totalidade da função está afirmada em três comentários do `batch-profile.ts` e, até aqui, era
+  // provada por NENHUM teste: os casos acima cobrem 9 das 33 formas do G029, escolhidas a dedo. Foi
+  // essa lacuna que deixou o `45` sair errado — ele não estava entre as 9, e quando entrou, entrou
+  // com o valor errado (#890, achado 2).
+  //
+  // A tabela abaixo é DELIBERADAMENTE uma segunda escrita da que vive no `batch-profile.ts`. Derivá-la
+  // do código faria o teste concordar consigo mesmo e não verificar nada; escrevê-la à parte é o que
+  // faz uma alteração no emissor precisar de uma alteração aqui, visível no mesmo diff.
+  const CLEARING_BY_FORM: ReadonlyMap<string, string> = new Map([
+    ['03', '018'], // DOC/TED
+    ['41', '018'], // TED outra titularidade
+    ['43', '018'], // TED mesma titularidade
+    ['45', '009'], // Pix Transferência — SPI, do golden do banco
+  ]);
+
+  // Partição: a pertinência é decidida por UM lugar só, e as 33 formas passam por ele. Uma forma
+  // nova que ganhe câmara sem entrar no mapa reprova aqui; uma que perca, também.
+  it('exatamente as formas de TED e a de PIX têm câmara — as outras 29 são zeros', () => {
+    for (const form of G029_DOMAIN) {
+      const expected = CLEARING_BY_FORM.get(form) ?? '000';
+      assert.equal(clearingHouseFor(form), expected, `forma ${form}`);
+    }
+  });
+
+  // Invariante, e ele pega uma classe que a partição não pega: valor FORA do domínio de P001. Foi
+  // assim que um `988` (contra o `888` do manual, p. 132) viveu meses numa tabela de referência —
+  // um dígito errado produz arquivo bem-formado que o banco recusa, e o `remittance-inspector.ts`
+  // não vê, porque não é defeito de forma.
+  //
+  // As entradas fora do domínio de G029 estão aqui de propósito: totalidade que só vale para o
+  // domínio conhecido não é totalidade, e o `launchForm` chega como `string`.
+  it('devolve sempre um código do domínio de P001, para qualquer entrada', () => {
+    const P001_DOMAIN: ReadonlySet<string> = new Set(['018', '009', '000']);
+
+    for (const form of [...G029_DOMAIN, '', '  ', '4', '045', 'XX', '999', '45 ']) {
+      const clearing = clearingHouseFor(form);
+      assert.ok(
+        P001_DOMAIN.has(clearing),
+        `forma '${form}' devolveu '${clearing}', fora do domínio de P001`,
+      );
+    }
   });
 });
 

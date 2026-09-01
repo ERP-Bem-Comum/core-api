@@ -56,10 +56,26 @@ Fixo `089`. Composto de versão (2 dígitos) + release (1 dígito).
 
 `01600` (1600 BPI) ou `06250` (6250 BPI).
 
-## G021 — Identificação Header modalidade Pix (pos. 172-174)
+## G021 — Identificação Header modalidade Pix (pos. 172-174) — pág. 15
 
 Literal `PIX` em caixa alta, **exclusivamente** na modalidade Pix.
 Lotes Pix devem vir em **arquivo separado** das demais formas de pagamento.
+
+⚠️ **O header do arquivo Pix é uma VARIANTE, não o header normal com três posições preenchidas.**
+A pág. 15 traz duas tabelas: o header padrão, onde `G021` é "Para Uso Reservado do Banco" em
+**172-191** (20 posições), e — abaixo de _"Para contratos que ainda efetuam pagamentos via PIX, em
+arquivo separado dos demais serviços e modalidades"_ — a variante Pix, em que o campo se parte:
+
+| Campo | Posições | Conteúdo |
+| :--- | :--- | :--- |
+| `22.0` Header de identificação Pix | **172-174** | literal `PIX`, Alfa |
+| `22.1` Reservado Banco | **175-191** | 17 posições, não 20 |
+
+Quem escrever `PIX` em 172-174 sem encurtar o campo seguinte produz registro de 243 posições, ou
+come três posições do reservado da empresa. Confirmado no golden do banco (`..._PIX_240`, 29/08/2026).
+
+A descrição de campos (pág. 97) define `G021` só como "Para Uso Reservado do Banco" — o uso Pix
+**não** está lá. Procurar o segundo significado na descrição de campos não o encontra.
 
 ## G025 — Tipo de Serviço (header lote, pos. 10-11)
 
@@ -105,14 +121,47 @@ Para pagamento a fornecedor, tributos e pagamento de títulos: fixo **`C`**.
 | `72` Depósito Judicial em Poupança | `73` Extrato de Conta Investimento |
 | `99` Cadastro de favorecidos (exclusivo Bradesco) | |
 
-### Correspondência obrigatória Forma × Câmara (nota 2 do G029, pág. 86)
+### Correspondência obrigatória Forma × Câmara (Seg. A, 18-20)
 
-| Forma de Lançamento | Câmara Centralizadora (Seg. A, 18-20) |
-|---|---|
-| `03` (DOC/TED) | `018` ou `700` |
-| `41` / `43` (TED) | `018` |
-| `45` (Pix) | `009` |
-| demais modalidades | zeros |
+| Forma de Lançamento | Câmara | Fonte |
+|---|---|---|
+| `03` (DOC/TED) | `018` (ou `700`, ver P001) | nota (2) do G029, **pág. 101** |
+| `41` / `43` (TED) | `018` | nota (2) do G029, **pág. 101** |
+| **`45` (Pix)** | **`009`** | **golden do banco — o manual NÃO diz** |
+| demais modalidades | zeros | G059 ocorrência `AK`, pág. 107 |
+
+> ⚠️ **A linha do Pix não vem do manual — vem do golden, e o golden é norma aqui.**
+> A nota (2) do G029 (pág. 101, verificada na página renderizada em 01/09/2026) tabula **apenas**
+> `03 018 / 41/43 018`. A descrição de `P001` (pág. 132) enumera só `018` e `888`. E `009` **não
+> ocorre uma única vez** no PDF inteiro — `pdftotext … | grep 009` volta vazio.
+>
+> O que sustenta o `009` é o **golden `GOLDEN_TEST_MULTIPAG_PIX_240`** (29/08/2026): forma `45` no
+> header de lote, `[009]` nas posições 18-20 do Segmento A. **Decisão do dono do repositório
+> (Gabriel, 01/09/2026): os goldens vieram de fonte confiável e valem como verdade.** Não é
+> hipótese pendente de validador — `clearingHouseFor('45')` devolvendo `000` é defeito
+> ([#890](https://github.com/ERP-Bem-Comum/core-api/issues/890) achado 2), e a divergência com o
+> manual é lacuna **do manual**.
+>
+> O registro da divergência fica porque ele é o que impede a próxima pessoa de "corrigir" o `009`
+> de volta para `000` lendo a nota (2) — não porque a questão esteja aberta.
+
+### Os goldens são norma sobre a FORMA, não sobre a ESCOLHA
+
+Esta é a demarcação que a decisão de 01/09/2026 **não** revoga, e ignorá-la produz o próximo defeito.
+
+O golden responde _"que forma o banco espera?"_ — posição, presença, largura, domínio estrutural,
+quais segmentos existem, o que sai zerado e o que sai em branco. **Não** responde _"que valor este
+pagador deve escrever?"_, porque essa pergunta é do negócio de quem paga, não do banco.
+
+A evidência de que a distinção é real está no arquivo irmão. No
+`GOLDEN_TEST_MULTIPAG_TED_TRANSFERENCIA_BOLETO`, o lote de TED sai com `P011 = 00010`, que o
+Dicionário de Domínios do SPB resolve como _"Repasses da Lei 8727"_ — e o emissor deste repositório
+escreve `00005`, _"Pagamento a Fornecedor"_ (`bun …/dominios/dominio.ts FinlddIF 5`), por decisão da
+P.O. registrada na [#813](https://github.com/ERP-Bem-Comum/core-api/issues/813). **O código está
+certo e o golden não**, porque ali o golden só exercitava o campo.
+
+Trocar `00005` por `00010` "porque o golden faz assim" declararia ao Banco Central a finalidade
+errada num arquivo que passa em qualquer validador — exatamente o modo de falha que a #813 fechou.
 
 ## G030 — Versão do Layout do Lote (header lote, pos. 14-16)
 
@@ -212,15 +261,24 @@ TXID é opcional no QR-Code Estático e limitado a 30 posições.
 
 ---
 
-## P001 — Código da Câmara Centralizadora (segmento A, pos. 18-20)
+## P001 — Código da Câmara Centralizadora (segmento A, pos. 18-20) — pág. 132
 
-| Valor | Significado |
-|---|---|
-| `018` | TED (STR, CIP) |
-| `700` | DOC (COMPE) |
-| `988` | TED usando ISPB da instituição destinatária — **obriga** preencher o Código ISPB no segmento B (233-240) |
-| `009` | Pix (SPI) |
-| zeros | demais modalidades |
+| Valor | Significado | Fonte |
+|---|---|---|
+| `018` | TED (STR, CIP) | descrição de campos, pág. 132 |
+| `888` | TED usando ISPB da instituição destinatária — **obriga** preencher o Código ISPB no segmento B (233-240) | descrição de campos, pág. 132 |
+| `700` | DOC (COMPE) — ⚠️ ver abaixo | histórico de versões, pág. 139 |
+| `009` | Pix (SPI) — ⚠️ ausente do manual | golden do banco, ver G029 |
+| zeros | demais modalidades | G059 ocorrência `AK`, pág. 107 |
+
+> ⚠️ Era **`988`** aqui até 01/09/2026, e o manual diz **`888`** — corrigido contra a pág. 132
+> renderizada. Um dígito errado num campo de três posições produz arquivo bem-formado que o banco
+> recusa, e o `remittance-inspector.ts` não pega, porque não é defeito de forma.
+>
+> O `700` **não está** na descrição de campos da pág. 132: aparece só no histórico de versões
+> (pág. 139), junto das alterações da modalidade **DOC — descontinuada em fev/2024** (ver `P005`
+> abaixo, campo extinto pela mesma descontinuidade). Tratar como provavelmente **removido**, não
+> como valor emitível, até que um golden ou o validador diga o contrário.
 
 ## P005 — Complemento do Tipo de Serviço (segmento A, pos. 218-219) — ⚠️ CAMPO EXTINTO
 
