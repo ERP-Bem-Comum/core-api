@@ -198,6 +198,7 @@ import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts'
 import { createDocumentReader } from '../document-reader/create-document-reader.ts';
 import * as DocumentIdVo from '../../domain/shared/document-id.ts';
 import { parseAwsS3Env } from '#src/modules/contracts/public-api/index.ts';
+import { decideDocumentStorage } from '../storage/document-storage-decision.ts';
 import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
 import { bulkUpdateDueDate } from '../../application/use-cases/bulk-update-due-date.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
@@ -731,13 +732,26 @@ const buildMemoryPools = (
   };
 };
 
-// #62: storage do comprovante no driver mysql — S3 se o env estiver configurado, senão in-memory
-// (boot não quebra sem S3; o deploy real provê as credenciais via env/IAM Role).
+// #62: storage do comprovante no driver mysql. Quem decide o desfecho é `decideDocumentStorage` —
+// em produção, configuração ausente ou recusada derruba o boot (a política do #516); fora dela
+// degrada para memória, mas com aviso que nomeia o campo.
+//
+// Em produção isto não muda o comportamento observável: `buildContractsHttpDeps` (server.ts:207)
+// usa o mesmo parser, faz `throw` incondicional e roda antes daqui. O que muda é a razão deixar de
+// depender dessa ordem — ver o docblock de `document-storage-decision.ts`.
 const buildDocumentStorage = (): SourceFileStoragePort => {
-  const s3 = parseAwsS3Env(process.env);
-  return s3.ok
-    ? createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' })
-    : createInMemorySourceFileStorage();
+  const decision = decideDocumentStorage(parseAwsS3Env(process.env), process.env);
+  switch (decision.kind) {
+    case 's3':
+      return createS3SourceFileStorage({ s3: decision.config, keyPrefix: 'financial-documents' });
+    case 'memory':
+      process.stderr.write(`${decision.warning}\n`);
+      return createInMemorySourceFileStorage();
+    case 'refuse':
+      // `throw` é o contrato local desta composição para configuração que não permite subir — o
+      // mesmo que `buildMysqlPools` faz com pool que não abre.
+      throw new Error(decision.error);
+  }
 };
 
 // Bucket da VAN — envs `VAN_S3_*` PRÓPRIAS, nunca o singleton `S3_*`: é outro bucket, possivelmente
