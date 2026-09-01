@@ -13,6 +13,8 @@ import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
+import { mysqlTestConnectionString } from '../support/mysql-conn.ts';
+
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 const SERVER = resolve(REPO_ROOT, 'src', 'server.ts');
 const EX_CONFIG = 78;
@@ -21,19 +23,37 @@ const EX_CONFIG = 78;
 const BOOT_TIMEOUT_MS = 20_000;
 
 /**
- * Produção com os 7 módulos em `memory` explícito (válido — FR-007 da spec 037) e as 3 base URLs
- * de e-mail presentes, para que o boot ULTRAPASSE os dois guards anteriores e alcance o de chave.
- * Sem isso o processo sairia 78 pelo motivo errado e o teste seria um falso-verde.
+ * Os 7 módulos configurados e as 3 base URLs de e-mail presentes, para que o boot ULTRAPASSE os
+ * dois guards anteriores e alcance o de chave. Sem isso o processo sairia 78 pelo motivo errado e o
+ * teste seria um falso-verde.
+ *
+ * ⚠️ Este fixture declarava `driver: 'memory'` até o **ADR-0068**, que retirou `memory` do domínio
+ * de `X_DRIVER` — o boot passou a sair 78 na guarda de persistência, antes de olhar a chave, e o
+ * caso virou falso-VERMELHO. Agora declara `mysql` com endereço sintético, e isso é suficiente:
+ * `readModuleDriverConfigs` valida PRESENÇA, e o primeiro `connect` só acontece em
+ * `buildAuthHttpDeps` (`server.ts:178`), depois do guard que este arquivo mede. O banco não precisa
+ * existir; se um dia o boot passar a conectar mais cedo, é este comentário que explica o vermelho.
  */
+// Pelo helper, e não por literal: `tests/cleanup/mysql-test-port-single-source.test.ts` cobra que
+// nenhum teste fixe host:porta do MySQL por conta própria. O banco não precisa existir — o que
+// importa é a URL estar PRESENTE, porque é só isso que a guarda de persistência verifica.
+const DB_SINTETICO = mysqlTestConnectionString({ database: 'core_boot_guard' });
+
 const PROD_ENV_SEM_CHAVE: Readonly<Record<string, string>> = {
   NODE_ENV: 'production',
-  AUTH_DRIVER: 'memory',
-  CONTRACTS_DRIVER: 'memory',
-  PARTNERS_DRIVER: 'memory',
-  PROGRAMS_DRIVER: 'memory',
-  FINANCIAL_DRIVER: 'memory',
-  BUDGET_PLANS_DRIVER: 'memory',
-  REPORTS_DRIVER: 'memory',
+  AUTH_DRIVER: 'mysql',
+  AUTH_DATABASE_URL: DB_SINTETICO,
+  CONTRACTS_DRIVER: 'mysql',
+  CONTRACTS_DATABASE_URL: DB_SINTETICO,
+  PARTNERS_DRIVER: 'mysql',
+  PARTNERS_DATABASE_URL: DB_SINTETICO,
+  PROGRAMS_DRIVER: 'mysql',
+  PROGRAMS_DATABASE_URL: DB_SINTETICO,
+  FINANCIAL_DRIVER: 'mysql',
+  FINANCIAL_DATABASE_URL: DB_SINTETICO,
+  BUDGET_PLANS_DRIVER: 'mysql',
+  BUDGET_PLANS_DATABASE_URL: DB_SINTETICO,
+  REPORTS_DRIVER: 'mysql',
   AUTH_RESET_BASE_URL: 'https://app.example.org/reset-password',
   AUTH_ACTIVATION_BASE_URL: 'https://app.example.org/activate',
   PARTNERS_SELF_REGISTRATION_BASE_URL: 'https://app.example.org/self-registration',

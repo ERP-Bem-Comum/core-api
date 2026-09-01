@@ -21,5 +21,8 @@ export type {
 } from '../adapters/http/composition.ts';
 export { PROGRAM_PERMISSION } from './permissions.ts';
 export type { ProgramPermission } from './permissions.ts';
+// `ProgramsLogoConfigResult` deixou de existir com o ADR-0068: a leitura não devolve mais
+// "config talvez ausente + avisos", e sim `Result<LogoS3Config, string[]>` — ou a configuração
+// está completa, ou o boot não segue. O tipo do sucesso é `LogoS3Config`, já exportado pelo adapter
+// de storage; não há forma intermediária a nomear.
 export { readProgramsLogoConfig } from '../adapters/http/logo-storage-config.ts';
-export type { ProgramsLogoConfigResult } from '../adapters/http/logo-storage-config.ts';
