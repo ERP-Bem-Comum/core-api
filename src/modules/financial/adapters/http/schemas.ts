@@ -344,6 +344,17 @@ export const documentResponseSchema = z
           })
           .strict()
           .nullable(),
+        // A inscrição do favorecido, que o Segmento J-52 do boleto exige (#891). Entra no schema
+        // porque `readPayeeBank` passou a projetá-la, e este objeto é `.strict()`: campo que o DTO
+        // carrega e o schema não declara NÃO some da resposta — o `serializerCompiler` do
+        // `fastify-zod-openapi` roda `safeParse` na saída, falha com `unrecognized_keys` e o
+        // `ResponseSerializationError` cai no branch default do error handler. O sintoma é **500 na
+        // rota inteira**, não campo faltando, e ele aparece longe da causa.
+        //
+        // ⚠️ Comprimento, e NENHUM padrão de caractere: desde 07/2026 a inscrição de pessoa jurídica
+        // aceita letras (ADR-0044). Um `[0-9]{14}` aqui recusaria cadastro legítimo na SAÍDA — 500
+        // outra vez, agora contra o parceiro que está certo.
+        document: z.string().max(14).nullable(),
       })
       .strict()
       .nullable(),
@@ -1475,6 +1486,10 @@ const payoutGapSchema = z
       'payee-agency',
       'payee-account-number',
       'payee-account-digit',
+      // #891: a inscrição que o Segmento J-52 exige do boleto. Entra no enum pelo mesmo motivo que
+      // `check-digit-mismatch` entrou — o domínio produzir um campo que o schema não lista faria a
+      // resposta ser recusada na serialização, com 500 no lugar do pré-voo.
+      'payee-document',
       'payment-detail',
     ]),
     // `check-digit-mismatch` (#734) entra aqui porque o enum é o contrato publicado no OpenAPI: o

@@ -19,12 +19,19 @@ export type VanRoute = 'pix' | 'transfer' | 'billet' | 'tax-guide';
 // e o que a recusa carrega no lugar de um slug genérico.
 // Não há `payee-agency-digit`: o DV da agência é declarado opcional pelo layout (G009), então
 // nunca é lacuna. Ver `payee-account.ts` §readAgency.
+//
+// `payee-document` nasce do Segmento J-52 (#891), que identifica sacado e cedente POR INSCRIÇÃO. Até
+// ele, o nome do favorecido era adorno no boleto — o dinheiro segue o código de barras — e o emissor
+// gravava `?? ''` sem consequência. Com o J-52 deixou de ser verdade: sem a inscrição não há registro
+// a emitir, só posições em branco, que é arquivo bem-formado divergindo do modelo do banco em
+// silêncio.
 export type PayoutField =
   | 'pix-key'
   | 'payee-bank-code'
   | 'payee-agency'
   | 'payee-account-number'
   | 'payee-account-digit'
+  | 'payee-document'
   | 'payment-detail';
 
 // `missing` pede preenchimento; `unmappable` e `malformed` pedem CORREÇÃO do que já está lá. A
@@ -71,6 +78,12 @@ export type PayeePaymentTarget = Readonly<{
   accountNumber: string | null;
   checkDigit: string | null;
   pixKey: PayeePixKey | null;
+  // A inscrição (CPF/CNPJ) do favorecido, para o Segmento J-52 do boleto (#891). Opaca aqui: o
+  // payout decide APTIDÃO, e para isso basta haver inscrição — quem valida o formato é `partners`,
+  // pelo VO do kernel. Copiar a validação para cá duplicaria vocabulário que já tem dono, e a cópia
+  // envelheceria: desde 07/2026 o CNPJ pode conter letras (ADR-0044), e um `\d{14}` escrito aqui
+  // recusaria inscrição legítima.
+  document: string | null;
 }>;
 
 export type PayoutCandidate = Readonly<{

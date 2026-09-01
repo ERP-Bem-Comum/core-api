@@ -110,6 +110,23 @@ const readBarcode = (raw: string | null, route: VanRoute): RouteDataCheck => {
   return incomplete(route, immutable([immutable({ field: 'payment-detail' as const, reason })]));
 };
 
+// A pendência de INSCRIÇÃO do favorecido no boleto, ou `null` quando não há pendência.
+//
+// Devolve `null` — e não um `ready` — de propósito: quem responde "está apto" é a checagem do código
+// de barras, logo adiante. Se esta função devolvesse aptidão, haveria duas funções afirmando o mesmo
+// desfecho por caminhos diferentes, e a que fosse consultada primeiro venceria por acidente de
+// ordem. Aqui ela só sabe dizer o que FALTA.
+//
+// ⚠️ Favorecido ausente e favorecido com inscrição em branco caem no MESMO motivo, e é a resposta
+// certa para o operador: nos dois casos o que ele faz é ir ao cadastro completar a inscrição.
+// Distingui-los exigiria um motivo que descreve o encanamento ("o parceiro não resolveu") em vez do
+// que ele precisa fazer — e `payee` nulo aqui também é o que `document.ts` passa de propósito, o que
+// tornaria a distinção uma armadilha para o próximo a ler.
+const readBilletPayee = (
+  candidate: PayoutCandidate,
+): Extract<RouteDataCheck, { status: 'incomplete' }> | null =>
+  isBlank(candidate.payee?.document ?? null) ? missingField('billet', 'payee-document') : null;
+
 const checkRouteData = (candidate: PayoutCandidate, route: VanRoute): RouteDataCheck => {
   switch (route) {
     // A chave é o destino inteiro: o arquivo não olha agência nem conta. Conta completa NÃO
@@ -130,10 +147,33 @@ const checkRouteData = (candidate: PayoutCandidate, route: VanRoute): RouteDataC
       return parts.ok ? ready(route) : incomplete(route, parts.error);
     }
 
-    // O dinheiro segue o código de barras, não o favorecido: um fornecedor sem nenhum dado bancário
-    // paga normalmente por boleto. É o que sustenta a decisão da P.O. de não bloquear o lote — e o
-    // Segmento J confirma na fonte, por não ter campo algum de agência ou conta do favorecido.
-    case 'billet':
+    // O dinheiro segue o código de barras, não a CONTA do favorecido: um fornecedor sem nenhum dado
+    // bancário paga normalmente por boleto. É o que sustenta a decisão da P.O. de não bloquear o
+    // lote — e o Segmento J confirma na fonte, por não ter campo algum de agência ou conta.
+    //
+    // ⚠️ MAS O BOLETO PASSOU A DEPENDER DA INSCRIÇÃO, e a distinção é fina: continua não olhando a
+    // CONTA, e passou a olhar QUEM É. O Segmento J-52 (#891) identifica sacado e cedente por
+    // CPF/CNPJ, e sem ele não há registro a emitir — só posições em branco. O emissor já recusa por
+    // isso; sem esta linha, o pré-voo aprovaria e a recusa voltaria a chegar no último clique, que é
+    // a divergência que a #837 fechou.
+    //
+    // A guia fica FORA da exigência de propósito: o J-52 é registro de título de COBRANÇA, e escrever
+    // no domínio uma exigência que o layout não faz para aquela rota seria inventar norma. Hoje é
+    // inócuo — a guia não tem emissor —, e é justamente por ser inócuo que a tentação de "já deixar
+    // igual" precisa ser recusada por escrito.
+    // ACUMULA, não para no primeiro: quem tem boleto sem código de barras E sem inscrição precisa
+    // ver as duas pendências de uma vez. Uma volta ao cadastro por vez é a experiência que
+    // `decomposePayeeAccount` já recusa para a conta, e não há razão para o boleto ser diferente.
+    // O código de barras vem antes por ser dado DO TÍTULO; a inscrição, do cadastro.
+    case 'billet': {
+      const barcode = readBarcode(candidate.paymentDetail, route);
+      const payeeGap = readBilletPayee(candidate);
+      if (payeeGap === null) return barcode;
+
+      const barcodeGaps = barcode.status === 'incomplete' ? barcode.gaps : [];
+      return incomplete(route, immutable([...barcodeGaps, ...payeeGap.gaps]));
+    }
+
     case 'tax-guide':
       return readBarcode(candidate.paymentDetail, route);
   }

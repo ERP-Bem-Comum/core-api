@@ -20,12 +20,25 @@ const EMPTY_TARGET: PayeePaymentTarget = {
   accountNumber: null,
   checkDigit: null,
   pixKey: null,
+  document: null,
 };
+
+// A inscrição que o Segmento J-52 exige do boleto (#891), OPACA de propósito.
+//
+// Um valor que não se parece com CPF/CNPJ prova o que importa: a régua decide aptidão e só pergunta
+// se HÁ inscrição — quem valida formato é `partners`, pelo VO do kernel, e desde 07/2026 o CNPJ pode
+// conter letras (ADR-0044). Um documento bem-formado aqui convidaria a próxima pessoa a supor que a
+// régua o valida. E mantém dado de cadastro fora de fixture, num repositório público.
+const PAYEE_DOCUMENT = 'inscricao-opaca';
 
 const target = (patch: Partial<PayeePaymentTarget>): PayeePaymentTarget => ({
   ...EMPTY_TARGET,
   ...patch,
 });
+
+// Favorecido que satisfaz a rota de boleto: basta a inscrição, nenhum dado bancário. É a fixture que
+// separa "sem banco" de "sem identidade" — o boleto tolera o primeiro e recusa o segundo.
+const billetPayee = (): PayeePaymentTarget => target({ document: PAYEE_DOCUMENT });
 
 // Conta estruturada COMPLETA: o único arranjo que o segmento A aceita sem inventar campo.
 //
@@ -164,17 +177,38 @@ describe('checkPayoutReadiness — boleto e guia dependem do código de barras, 
     ['Boleto', 'billet'],
     ['GuiaRecolhimento', 'tax-guide'],
   ] as const) {
+    // O BOLETO exige a inscrição do favorecido (Segmento J-52, #891); a GUIA, não. A assimetria é do
+    // layout e não do cadastro: o J-52 é registro de título de COBRANÇA, e o Segmento O — o da guia —
+    // não tem campo de inscrição algum. Carimbar a exigência nas duas seria inventar norma, e o
+    // parâmetro do loop é justamente o que mantém as duas rotas medindo coisas diferentes.
+    const forRoute = (t: PayeePaymentTarget): PayeePaymentTarget =>
+      route === 'billet' ? target({ ...t, document: PAYEE_DOCUMENT }) : t;
+
     it(`aceita o código de barras de ${paymentMethod} com favorecido sem banco`, () => {
-      const r = checkPayoutReadiness(candidate({ paymentMethod, paymentDetail: BARCODE }));
+      const r = checkPayoutReadiness(
+        candidate({ paymentMethod, paymentDetail: BARCODE, payee: forRoute(EMPTY_TARGET) }),
+      );
       assert.equal(r.status, whenDataIsGood(route));
     });
 
     it(`recusa ${paymentMethod} sem código de barras`, () => {
-      const r = checkPayoutReadiness(candidate({ paymentMethod, payee: fullAccount() }));
+      const r = checkPayoutReadiness(candidate({ paymentMethod, payee: forRoute(fullAccount()) }));
       assert.equal(r.status, 'incomplete');
+      // UM campo só: com a inscrição presente, a única lacuna é o código de barras. Se este assert
+      // passar a ver dois, é sinal de que a exigência do J-52 vazou para a rota errada.
       assert.deepEqual(fieldsOf(r), ['payment-detail']);
     });
   }
+
+  // A contraprova da assimetria acima, e a razão de ela existir: sem inscrição, o BOLETO acusa —
+  // e acusa NOMEANDO O CAMPO, para o operador saber que a correção é no cadastro do favorecido.
+  it('recusa Boleto cujo favorecido não tem inscrição, mesmo com o código de barras certo', () => {
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'Boleto', paymentDetail: BARCODE, payee: EMPTY_TARGET }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['payee-document']);
+  });
 
   it('trata código de barras em branco como ausente', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: '   ' }));
@@ -185,7 +219,9 @@ describe('checkPayoutReadiness — boleto e guia dependem do código de barras, 
   // Aceita o dado com a pontuação que o cadastro às vezes guarda — o campo do arquivo é numérico.
   it('ignora pontuação no código de barras', () => {
     const dotted = '23791.23450 00001.500001 23456.789012 3 45678901234';
-    const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: dotted }));
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'Boleto', paymentDetail: dotted, payee: billetPayee() }),
+    );
     assert.equal(r.status, 'ready');
   });
 
@@ -194,7 +230,7 @@ describe('checkPayoutReadiness — boleto e guia dependem do código de barras, 
   // hipótese: 1 dos 20 boletos do dump de produção do legado está nesse formato.
   it('aprova a linha digitável de cobrança, que a régua converte para código de barras', () => {
     const r = checkPayoutReadiness(
-      candidate({ paymentMethod: 'Boleto', paymentDetail: DIGITABLE_LINE }),
+      candidate({ paymentMethod: 'Boleto', paymentDetail: DIGITABLE_LINE, payee: billetPayee() }),
     );
     assert.equal(r.status, 'ready');
   });

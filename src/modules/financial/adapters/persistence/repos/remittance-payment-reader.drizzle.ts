@@ -106,6 +106,11 @@ const toPaymentData = (
             accountNumber: contractor.bankAccount?.accountNumber ?? null,
             checkDigit: contractor.bankAccount?.checkDigit ?? null,
             pixKey: contractor.pixKey,
+            // A inscrição que o Segmento J-52 exige do boleto (#891). Passa à régua PELO MESMO
+            // caminho que o pré-voo usa — é o que faz as duas verem o mesmo cadastro e chegarem ao
+            // mesmo veredito. Omiti-la aqui devolveria a divergência pela porta dos fundos: o
+            // pré-voo cobraria a inscrição e a geração não.
+            document: contractor.document,
           },
   });
   // ⚠️ `no-issuer` ATRAVESSA de propósito, e é o que faz a CA2 da #837 valer: a rota tem todos os
@@ -129,6 +134,9 @@ const toPaymentData = (
         accountNumber: contractor?.bankAccount?.accountNumber ?? null,
         checkDigit: contractor?.bankAccount?.checkDigit ?? null,
         pixKey: null,
+        // `null` porque a decomposição da CONTA não olha a inscrição — este é o mesmo desenho do
+        // `pixKey` acima, que também é irrelevante aqui e por isso não é transportado.
+        document: null,
       });
       // Inalcançável: `ready` na rota de transferência JÁ significa que a decomposição passou. Fica
       // explícito porque as duas chamadas são independentes — se um dia divergirem, o erro aqui é

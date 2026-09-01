@@ -104,9 +104,16 @@ describe('composePayeeBank — os quatro payeeKind entram (#708/CA5)', () => {
         ),
     };
     // Distinguir "sem cadastro" de "não li" é o ponto: os dois viravam `null` antes.
+    //
+    // ⚠️ A INSCRIÇÃO VEM MESMO SEM DESTINO BANCÁRIO, e não é acidente do fixture — é o caso de
+    // negócio do boleto. Quem paga por boleto não tem agência nem conta no arquivo: o dinheiro segue
+    // o código de barras, e o que o Segmento J-52 exige é QUEM É (#891). Um bloco que trouxesse
+    // `document: null` junto com o resto faria o pré-voo recusar por inscrição faltando justamente o
+    // fornecedor que está com o cadastro completo para a rota que ele usa.
     assert.deepEqual(await composePayeeBank(port, { kind: 'act', id: 'p-1' }), {
       bankAccount: null,
       pixKey: null,
+      document: base.document,
     });
   });
 });

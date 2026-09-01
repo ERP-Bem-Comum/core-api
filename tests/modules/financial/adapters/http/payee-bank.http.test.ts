@@ -207,14 +207,22 @@ describe('financial/http — dados bancários do favorecido no GET /:id (#255)',
       assert.deepEqual(body.payeeBank, {
         bankAccount: { bank: '341', agency: '1234-5', accountNumber: '99887', checkDigit: '6' },
         pixKey: null,
+        // A inscrição atravessa o bloco desde o Segmento J-52 (#891). Ela já vinha do port — o que
+        // faltava era o bloco projetá-la, e o pré-voo enxergá-la.
+        document: '99999999000199',
       });
     } finally {
       await h.teardown();
     }
   });
 
-  // Favorecido sem destino cadastrado continua devolvendo o bloco com os dois campos nulos — o
+  // Favorecido sem destino cadastrado continua devolvendo o bloco com os campos bancários nulos — o
   // que distingue "não tem cadastro" de "não sei ler", que era exatamente o que se perdia antes.
+  //
+  // ⚠️ A INSCRIÇÃO VEM MESMO ASSIM, e é o caso de negócio do boleto: quem paga por boleto não usa
+  // agência nem conta — o dinheiro segue o código de barras —, e o que o Segmento J-52 exige é QUEM
+  // É (#891). Zerar a inscrição junto com o resto faria o pré-voo recusar justamente o favorecido
+  // cujo cadastro está completo para a rota que ele usa.
   it('CA5: favorecido financier SEM destino → bloco presente, campos nulos', async () => {
     const h = await buildWithPort(
       portReturning(null, {
@@ -233,7 +241,11 @@ describe('financial/http — dados bancários do favorecido no GET /:id (#255)',
     );
     try {
       const body = await createAndGet(h, { payeeKind: 'financier' });
-      assert.deepEqual(body.payeeBank, { bankAccount: null, pixKey: null });
+      assert.deepEqual(body.payeeBank, {
+        bankAccount: null,
+        pixKey: null,
+        document: '99999999000199',
+      });
     } finally {
       await h.teardown();
     }
