@@ -33,6 +33,8 @@ import {
 import {
   paymentRecords,
   segmentJ,
+  segmentJ52,
+  type BilletParty,
   type CnabSegmentError,
   type Payee,
   type PayeeAddress,
@@ -84,6 +86,17 @@ export type BilletPayment = Readonly<{
   route: 'billet';
   barcode: string;
   beneficiaryName: string;
+  // A INSCRIÇÃO de quem emitiu o título, que o Segmento J-52 exige em 076-091 (#891). O nome
+  // sozinho não identifica o cedente para o banco.
+  //
+  // ⚠️ OBRIGATÓRIOS: sem `?`, sem default — e a ausência do opcional é a decisão, não um descuido.
+  // É o quinto caso que a rule `cnab.md` enumera: `address?: PayeeAddress`, logo acima, não produz
+  // valor errado, produz SILÊNCIO — ninguém tem o que passar, o `?? ''` vira branco em 100% das
+  // remessas (#858), e o adapter compila perfeitamente sem o dado que o layout exige. Um
+  // `beneficiaryDocument?` com `?? ''` reproduziria exatamente isso num registro novo. Aqui o
+  // compilador cobra quem esquecer, e a guarda de `segmentJ52` cobra quem passar vazio.
+  beneficiaryDocumentType: '1' | '2';
+  beneficiaryDocument: string;
   dueDate: Date;
   paymentDate: Date;
   valueCents: number;
@@ -209,6 +222,14 @@ type BatchContext = Readonly<{
   batchNumber: number;
   firstRecordNumber: number;
   launchForm: string; // G029 do lote
+  // Quem PAGA — o SACADO do Segmento J-52 (#891). Vem do envelope, não do pagamento: é a mesma
+  // empresa para todo título do arquivo, e derivá-la aqui do `cedente` do input é o que impede um
+  // chamador de afirmar um pagador diferente do que o header do arquivo declara.
+  //
+  // ⚠️ O nome do campo é `payer` e não `cedente` DE PROPÓSITO. Nesta base `cedente` é a empresa
+  // dona do arquivo; no vocabulário de cobrança do J-52 essa mesma empresa é o **Sacado**, e
+  // "Cedente" é quem recebe. Reusar a palavra aqui faria o campo apontar para o bloco errado.
+  payer: BilletParty;
 }>;
 
 // Os registros de detalhe de UM pagamento, na rota dele. O sequencial do registro no lote (G038)
@@ -246,8 +267,13 @@ const detailsOf = (
         ...(payment.message !== undefined ? { message: payment.message } : {}),
       });
 
+    // O boleto é o PAR J + J-52, e a ordem é a do layout: o J-52 complementa o J imediatamente
+    // anterior (#891). O manual declara o J-52 "Obrigatório para pagamentos de títulos de Cobrança
+    // independente do valor" (p. 33) — emitir só o J produz arquivo que o trailer fecha, o inspetor
+    // aprova e o modelo do banco não reconhece. É a mesma relação que o par A+B tem na
+    // transferência, e por isso mora aqui, junto: quem emite um emite o outro, sem rota alternativa.
     case 'billet': {
-      const record = segmentJ({
+      const j = segmentJ({
         bankCode,
         batchNumber,
         recordNumber: firstRecordNumber,
@@ -261,7 +287,28 @@ const detailsOf = (
         ...(payment.surchargeCents !== undefined ? { surchargeCents: payment.surchargeCents } : {}),
         yourNumber,
       });
-      return record.ok ? ok([record.value]) : record;
+      if (!j.ok) return j;
+
+      const j52 = segmentJ52({
+        bankCode,
+        batchNumber,
+        // O sequencial do lote é do REGISTRO, não do pagamento: o J-52 é uma linha inteira e ocupa
+        // o número seguinte, como o Segmento B ocupa depois do A. Errar isto emite dois registros
+        // com o mesmo sequencial e o banco recusa o lote.
+        recordNumber: firstRecordNumber + 1,
+        payer: batch.payer,
+        // O nome do cedente é o MESMO que o Segmento J grava em 062-091 — mesmo campo `G013`, mesmo
+        // participante, mesmo pagamento. Passar os dois da mesma origem é o que garante que não
+        // divirjam dentro do par.
+        beneficiary: {
+          documentType: payment.beneficiaryDocumentType,
+          document: payment.beneficiaryDocument,
+          name: payment.beneficiaryName,
+        },
+      });
+      if (!j52.ok) return j52;
+
+      return ok([j.value, j52.value]);
     }
 
     // Inalcançável na prática — o perfil já recusou a rota antes de chegar aqui. Fica explícito
@@ -415,6 +462,12 @@ export const buildRemittanceFile = (
           batchNumber,
           firstRecordNumber: details.length + 1,
           launchForm: batch.profile.launchForm,
+          // O SACADO do J-52 é a empresa do envelope — a mesma que o header do arquivo declara.
+          payer: {
+            documentType: input.cedente.documentType,
+            document: input.cedente.document,
+            name: input.cedente.companyName,
+          },
         },
         yourNumber,
       );

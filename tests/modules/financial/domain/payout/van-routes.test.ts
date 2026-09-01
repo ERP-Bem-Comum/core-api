@@ -55,6 +55,15 @@ const BARCODE = '23791234500000150000123456789012345678901234';
 // FORMA. Usar `237` faria esta prova depender da aritmética do DV, que não é o assunto dela.
 const PAYEE_BANK = '001';
 
+// A inscrição que o Segmento J-52 exige do boleto (#891). Opaca: a régua pergunta se HÁ inscrição,
+// não se ela é válida — quem valida formato é `partners`.
+//
+// ⚠️ Ela entra no payload de `billet` porque "cadastro completo" mudou de significado quando o J-52
+// entrou. Sem ela, este arquivo mediria a bicondicional com uma fixture incompleta: o pré-voo
+// recusaria por falta de documento e o emissor aceitaria, e a falha diria "as réguas discordam"
+// quando o defeito seria da fixture. É a mesma armadilha do slug de erro, um andar acima.
+const PAYEE_DOCUMENT = 'inscricao-opaca';
+
 // O par de fixtures COMPLETAS de cada rota: o que o cadastro precisa ter, e o que o emissor precisa
 // receber. "Completo" aqui significa completo o bastante para os outros dois slugs de erro não
 // dispararem — banco legível na transferência, três dígitos iniciais válidos no boleto.
@@ -71,6 +80,7 @@ const PAYLOADS: Readonly<
         accountNumber: null,
         checkDigit: null,
         pixKey: { keyType: 'email', key: 'a@b.com' },
+        document: PAYEE_DOCUMENT,
       },
     },
     profiled: { route: 'pix' },
@@ -85,12 +95,28 @@ const PAYLOADS: Readonly<
         accountNumber: '123456',
         checkDigit: '0',
         pixKey: null,
+        document: PAYEE_DOCUMENT,
       },
     },
     profiled: { route: 'transfer', payeeBankCode: PAYEE_BANK },
   },
+  // ⚠️ O boleto DEIXOU de aceitar `payee: null` (#891). Sem dado bancário continua pagando — o
+  // dinheiro segue o código de barras —, mas o Segmento J-52 identifica o cedente por inscrição, e
+  // sem ela não há registro a emitir. É a única fixture desta lista que mudou de forma por causa do
+  // layout, e não do emissor.
   billet: {
-    candidate: { paymentMethod: 'Boleto', paymentDetail: BARCODE, payee: null },
+    candidate: {
+      paymentMethod: 'Boleto',
+      paymentDetail: BARCODE,
+      payee: {
+        bank: null,
+        agency: null,
+        accountNumber: null,
+        checkDigit: null,
+        pixKey: null,
+        document: PAYEE_DOCUMENT,
+      },
+    },
     profiled: { route: 'billet', barcode: BARCODE },
   },
   'tax-guide': {
@@ -192,7 +218,14 @@ describe('rotas com emissor — a régua do pré-voo e a do emissor são a mesma
     const semChave = checkPayoutReadiness({
       paymentMethod: 'PIX',
       paymentDetail: null,
-      payee: { bank: null, agency: null, accountNumber: null, checkDigit: null, pixKey: null },
+      payee: {
+        bank: null,
+        agency: null,
+        accountNumber: null,
+        checkDigit: null,
+        pixKey: null,
+        document: null,
+      },
     });
 
     assert.equal(semChave.status, 'incomplete');

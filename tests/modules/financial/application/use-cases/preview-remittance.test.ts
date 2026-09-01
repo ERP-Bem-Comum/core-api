@@ -27,12 +27,18 @@ import { createRemittanceBatchPlanner } from '#src/modules/financial/adapters/cn
 // Um cadastro `ready` no pré-voo precisa ser um cadastro que o banco aceitaria — na Modalidade 01 os
 // dígitos são validados por ele. Fixture com DV inventado descrevia como apto um título que a
 // remessa perderia.
+// A inscrição que o Segmento J-52 exige do boleto (#891), OPACA de propósito: a régua só pergunta se
+// HÁ inscrição — quem valida formato é `partners`. Um documento bem-formado aqui sugeriria validação
+// que não existe, e poria dado de cadastro em fixture num repositório público.
+const PAYEE_DOCUMENT = 'inscricao-opaca';
+
 const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',
   agency: '1234-5',
   accountNumber: '123456',
   checkDigit: '0',
   pixKey: null,
+  document: PAYEE_DOCUMENT,
 };
 
 const PIX_KEY_ONLY: PayeePaymentTarget = {
@@ -41,6 +47,7 @@ const PIX_KEY_ONLY: PayeePaymentTarget = {
   accountNumber: null,
   checkDigit: null,
   pixKey: { keyType: 'email', key: 'a@b.com' },
+  document: PAYEE_DOCUMENT,
 };
 
 // Ausência por `null`. ⚠️ Este arranjo é IMPOSSÍVEL para `supplier` e para `act` com repasse:
@@ -53,6 +60,7 @@ const NO_DESTINATION_NULLS: PayeePaymentTarget = {
   accountNumber: null,
   checkDigit: null,
   pixKey: null,
+  document: null,
 };
 
 // Ausência por string vazia — a forma que a ETL de fato gravou.
@@ -62,6 +70,7 @@ const NO_DESTINATION_BLANKS: PayeePaymentTarget = {
   accountNumber: '',
   checkDigit: '',
   pixKey: { keyType: 'email', key: '' },
+  document: '',
 };
 
 const row = (over: Partial<RemittancePreviewRow>): RemittancePreviewRow => ({

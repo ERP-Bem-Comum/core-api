@@ -106,6 +106,11 @@ const toPaymentData = (
             accountNumber: contractor.bankAccount?.accountNumber ?? null,
             checkDigit: contractor.bankAccount?.checkDigit ?? null,
             pixKey: contractor.pixKey,
+            // A inscrição que o Segmento J-52 exige do boleto (#891). Passa à régua PELO MESMO
+            // caminho que o pré-voo usa — é o que faz as duas verem o mesmo cadastro e chegarem ao
+            // mesmo veredito. Omiti-la aqui devolveria a divergência pela porta dos fundos: o
+            // pré-voo cobraria a inscrição e a geração não.
+            document: contractor.document,
           },
   });
   // ⚠️ `no-issuer` ATRAVESSA de propósito, e é o que faz a CA2 da #837 valer: a rota tem todos os
@@ -129,6 +134,9 @@ const toPaymentData = (
         accountNumber: contractor?.bankAccount?.accountNumber ?? null,
         checkDigit: contractor?.bankAccount?.checkDigit ?? null,
         pixKey: null,
+        // `null` porque a decomposição da CONTA não olha a inscrição — este é o mesmo desenho do
+        // `pixKey` acima, que também é irrelevante aqui e por isso não é transportado.
+        document: null,
       });
       // Inalcançável: `ready` na rota de transferência JÁ significa que a decomposição passou. Fica
       // explícito porque as duas chamadas são independentes — se um dia divergirem, o erro aqui é
@@ -167,14 +175,31 @@ const toPaymentData = (
       // campo de 44, que desloca todo o resto do registro.
       if (!barcode.ok) return err('remittance-payment-incomplete');
 
+      // O CEDENTE do título deixou de ser informativo (#891).
+      //
+      // Enquanto o boleto emitia só o Segmento J, o nome era adorno — `contractor?.name ?? ''` — e
+      // o comentário que estava aqui dizia a verdade: o dinheiro segue o código de barras, não o
+      // nome. O Segmento J-52 muda o fato, não a opinião: o manual o declara obrigatório para
+      // título de cobrança (p. 33) e ele identifica sacado e cedente por INSCRIÇÃO. Sem o
+      // favorecido resolvido não há registro a emitir — só um bloco de 56 posições em branco, que é
+      // arquivo bem-formado divergindo do modelo do banco em silêncio.
+      //
+      // Recusar aqui, e não no montador, é o que preserva o contrato tudo-ou-nada do cabeçalho: o
+      // título sai da seleção ANTES de o NSA ser alocado, em vez de derrubar a remessa inteira
+      // depois de queimar um número de sequência que não volta.
+      if (contractor === null) return err('remittance-payment-incomplete');
+      const beneficiaryDocument = cleanDocument(contractor.document);
+      if (beneficiaryDocument === '') return err('remittance-payment-incomplete');
+
       return ok({
         payableId: row.payableId,
         documentId: row.documentId,
         route: 'billet',
         barcode: barcode.value,
-        // Nome do CEDENTE do título: quem recebe. Sem favorecido resolvido o campo sai vazio — ele
-        // é informativo, e o dinheiro segue o código de barras, não o nome.
-        beneficiaryName: contractor?.name ?? '',
+        // Nome e inscrição do CEDENTE do título: quem emitiu e recebe.
+        beneficiaryName: contractor.name,
+        beneficiaryDocumentType: documentTypeOf(beneficiaryDocument),
+        beneficiaryDocument,
         dueDate: paymentDate,
         valueCents,
         paymentDate,

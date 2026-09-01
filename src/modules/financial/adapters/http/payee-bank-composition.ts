@@ -25,9 +25,18 @@ import type { PayeeKind } from '../../domain/document/types.ts';
 
 const DEFAULT_TIMEOUT_MS = 2_000;
 
+// ⚠️ O `document` entrou aqui pelo Segmento J-52 (#891), e a ausência dele era uma DIVERGÊNCIA
+// SILENCIOSA: `readPayeeBank` já tinha o `PayeeContractor` inteiro em mãos e projetava a inscrição
+// fora. A geração enxergava o documento e podia recusar por ele; o pré-voo, alimentado por este
+// bloco, era cego — e título que o pré-voo aprova e o arquivo recusa é exatamente a doença da #837.
+// Não era régua discordando: era uma das duas recebendo menos entrada que a outra.
+//
+// `string | null` porque o bloco pode existir com a inscrição em branco — cadastro incompleto, que o
+// operador corrige — e isso é diferente de não haver favorecido, que é o bloco `null` inteiro.
 export type PayeeBankBlock = Readonly<{
   bankAccount: BankAccount | null;
   pixKey: PixKey | null;
+  document: string | null;
 }>;
 
 const withTimeout = async <T>(p: Promise<T>, ms: number, onTimeout: T): Promise<T> => {
@@ -139,7 +148,11 @@ export const readPayeeBank = async (
   if (!contractor.ok) return contractor;
   if (contractor.value === null) return okResult(null);
 
-  return okResult({ bankAccount: contractor.value.bankAccount, pixKey: contractor.value.pixKey });
+  return okResult({
+    bankAccount: contractor.value.bankAccount,
+    pixKey: contractor.value.pixKey,
+    document: contractor.value.document,
+  });
 };
 
 /**

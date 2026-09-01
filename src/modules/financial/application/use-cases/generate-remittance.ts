@@ -181,6 +181,16 @@ export const generateRemittance =
           return err('cedente-convenio-missing');
         case 'cnab-convenio-overflow':
           return err('cedente-convenio-too-long');
+        // Converge para o erro de DADO FALTANDO, e não para `remittance-build-failed` (#891). A
+        // distinção é a mesma que o bloco do convênio faz acima: o que o operador precisa ler é
+        // "falta cadastro", e a tela é a do pré-voo — que já mostra QUAIS títulos não saem. Mandá-lo
+        // para `build-failed` diria "defeito do emissor", que é o chamado errado.
+        //
+        // Chegar aqui significa que o reader deixou passar: ele recusa o título sem inscrição do
+        // favorecido ANTES de alocar NSA. Esta é a rede de segurança contra um chamador novo, não o
+        // caminho normal — e é por isso que o vocabulário do operador é o mesmo dos dois lados.
+        case 'cnab-billet-party-unidentified':
+          return err('remittance-payments-unavailable');
         case 'cnab-translation-failed':
           return err('remittance-build-failed');
       }
