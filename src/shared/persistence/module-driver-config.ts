@@ -1,15 +1,30 @@
 /**
- * Guarda de boot da configuracao de persistencia dos 7 modulos (issue #456).
+ * Guarda de boot da configuracao de persistencia dos 7 modulos (issues #456 e #799, ADR-0068).
  *
  * Os incidentes #374 (tabelas bgp_* servidas vazias com o banco cheio) e #444 (relatorios vazios
  * com HTTP 200) tiveram a mesma causa: `env['X_DRIVER'] === 'mysql' ? mysql : memory`, repetido em
  * 7 pontos do `server.ts`. Nesse ternario, qualquer valor diferente de "mysql" — ausente, vazio ou
- * com typo — vira memoria, calado. Aqui a decisao e tomada UMA vez, com relatorio completo: em
- * producao configuracao ausente/invalida derruba o boot; fora de producao degrada para memoria
- * com um aviso que nomeia o modulo.
+ * com typo — vira memoria, calado. Aqui a decisao e tomada UMA vez, com relatorio completo.
  *
- * Molde: `src/shared/http/email-link-base-urls.ts` (#331/#332) — acumula em `string[]` e so
- * retorna `err(errors)` no fim, para que o operador conserte tudo num deploy so (FR-005).
+ * POLITICA (ADR-0068, 31/08/2026): configuracao ausente ou recusada derruba o boot em TODO
+ * ambiente, local inclusive. Nao ha mais degradacao para memoria, e `memory` deixou de ser um valor
+ * aceito de `X_DRIVER` — o unico e "mysql".
+ *
+ * Por que sem excecao de ambiente: em homologacao e producao as envs sao postas A MAO, na console
+ * da AWS, por quem opera a infraestrutura. Degradar ali nao protege ninguem — o sinal nao chega a
+ * quem poderia corrigir. E local que degrada deixa de espelhar hml/prod, que e exatamente como um
+ * defeito de configuracao sobrevive ate o deploy.
+ *
+ * ⚠️ O ADR-0068 REVOGA o FR-007, que dizia que `memory` declarado sobe em producao "sem falhar e
+ * sem exigir configuracao adicional". Nao ha mais como declara-lo.
+ *
+ * O adapter em memoria NAO morreu: ele segue existindo como double de teste, injetado por parametro
+ * em `build<Modulo>HttpDeps({ driver: 'memory' })`. Isso e outra fronteira — esta aqui le ambiente,
+ * aquela recebe argumento. Confundir as duas foi o que produziu a estimativa errada de 179 arquivos
+ * (Inquiry-0034).
+ *
+ * Molde: `src/shared/http/email-link-base-urls.ts` (#331/#332) — acumula os erros e so devolve
+ * `err` no fim, para que o operador conserte tudo num deploy so (FR-005).
  *
  * Fora desta guarda por decisao registrada (FR-008): endereco de replica de leitura
  * (`*_READER_URL`, ADR-0026) e composicao de programa em contratos (ADR-0032) — as duas sao
@@ -21,28 +36,23 @@
  */
 
 import { combine, err, ok, type Result } from '#src/shared/primitives/result.ts';
-import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
 /**
- * A relacao "mysql => tem endereco" e uniao discriminada, nao campo opcional: o estado `mysql`
- * sem `connectionString` e irrepresentavel, e por isso nao precisa ser checado de novo adiante.
+ * Uma variante so, e e o ponto do ADR-0068: a leitura de ambiente nao tem como produzir
+ * configuracao volatil. O estado `mysql` sem `connectionString` continua irrepresentavel.
  */
-export type ModuleDriverConfig =
-  | Readonly<{ driver: 'memory' }>
-  | Readonly<{ driver: 'mysql'; connectionString: string }>;
+export type ModuleDriverConfig = Readonly<{ driver: 'mysql'; connectionString: string }>;
 
 /** O modulo somente-leitura nao tem endereco proprio: consome quatro, resolvidos por cascata. */
-export type ReportsDriverConfig =
-  | Readonly<{ driver: 'memory' }>
-  | Readonly<{
-      driver: 'mysql';
-      partnersUrl: string;
-      financialUrl: string;
-      contractsUrl: string;
-      budgetPlansUrl: string;
-    }>;
+export type ReportsDriverConfig = Readonly<{
+  driver: 'mysql';
+  partnersUrl: string;
+  financialUrl: string;
+  contractsUrl: string;
+  budgetPlansUrl: string;
+}>;
 
 export type ModuleDriverMap = Readonly<{
   auth: ModuleDriverConfig;
@@ -54,23 +64,14 @@ export type ModuleDriverMap = Readonly<{
   reports: ReportsDriverConfig;
 }>;
 
-export type ModuleDriverConfigs = Readonly<{
-  modules: ModuleDriverMap;
-  /** Canal separado do de erros: degradacao aceita fora de producao ainda precisa ser visivel. */
-  warnings: readonly string[];
-}>;
-
 type ModuleSpec = Readonly<{ name: string; driverVar: string; urlVar: string }>;
 
 type ReportsSourceSpec = Readonly<{ overrideVar: string; sourceVar: string }>;
 
-type Diagnostics = Readonly<{ errors: readonly string[]; warnings: readonly string[] }>;
-
-type Resolution<TConfig> = Diagnostics & Readonly<{ config: TConfig }>;
-
 /**
- * O que o operador declarou no campo de driver. `memory` e valor de primeira classe — ate hoje
- * era so "qualquer coisa != mysql", o que tornava o typo indistinguivel da intencao.
+ * O que o operador declarou no campo de driver. `memory` tem variante PROPRIA mesmo tendo virado
+ * erro: a mensagem que ele merece nao e "valor invalido" — quem escreveu `memory` nao errou de
+ * digitacao, escreveu o que ate ontem funcionava, e precisa saber para onde aquele caminho foi.
  */
 type DriverDeclaration =
   | Readonly<{ kind: 'mysql' }>
@@ -78,9 +79,7 @@ type DriverDeclaration =
   | Readonly<{ kind: 'absent' }>
   | Readonly<{ kind: 'invalid'; value: string }>;
 
-const ACCEPTED_DRIVERS = ['mysql', 'memory'] as const;
-
-const ACCEPTED_DRIVERS_TEXT = ACCEPTED_DRIVERS.map((driver) => `"${driver}"`).join(' ou ');
+const ACCEPTED_DRIVERS_TEXT = '"mysql"';
 
 /** Nome do modulo em kebab-case, igual ao da pasta em `src/modules/` e ao da matriz de ambiente. */
 const MODULE_SPECS = {
@@ -123,15 +122,6 @@ const REPORTS_SOURCE_SPECS = {
   },
 } as const satisfies Readonly<Record<string, ReportsSourceSpec>>;
 
-/**
- * No ramo de ERRO esta config e descartada — o `Result` sai `err` e o `server.ts` encerra. Ela
- * existe para que o mapa dos 7 modulos seja sempre completo; nao e, em hipotese alguma, o fallback
- * silencioso que causou #374/#444.
- */
-const MEMORY: Readonly<{ driver: 'memory' }> = { driver: 'memory' };
-
-const NO_DIAGNOSTICS: Diagnostics = { errors: [], warnings: [] };
-
 /** Variavel presente porem vazia conta como AUSENTE — nunca como valor invalido. */
 const readVar = (env: Env, name: string): string | undefined => {
   const value = env[name];
@@ -167,84 +157,54 @@ const echoableDriverValue = (value: string): string =>
     : `(nao exibido — ${String(value.length)} caracteres fora do formato de driver)`;
 
 // FR-010 (Uncle Bob, Codigo Limpo p. 107): cada mensagem nomeia a FONTE (o modulo) e a OPERACAO
-// que falhou (a variavel). "driver mysql exige partnersUrl" — o texto de hoje — reprova nas duas.
+// que falhou (a variavel). "driver mysql exige partnersUrl" — o texto de antes — reprovava nas duas.
 const missingDriverError = (spec: Readonly<{ name: string; driverVar: string }>): string =>
-  `${spec.name}: ${spec.driverVar} nao configurada — obrigatoria em producao ` +
-  `(valores aceitos: ${ACCEPTED_DRIVERS_TEXT})`;
+  `${spec.name}: ${spec.driverVar} nao configurada — obrigatoria em TODO ambiente ` +
+  `(unico valor aceito: ${ACCEPTED_DRIVERS_TEXT})`;
 
 const invalidDriverError = (
   spec: Readonly<{ name: string; driverVar: string }>,
   value: string,
 ): string =>
   `${spec.name}: ${spec.driverVar} com valor invalido ${echoableDriverValue(value)} — ` +
-  `valores aceitos: ${ACCEPTED_DRIVERS_TEXT}`;
+  `unico valor aceito: ${ACCEPTED_DRIVERS_TEXT}`;
+
+/**
+ * Mensagem propria para quem declarou `memory` — o valor que a politica retirou (ADR-0068). Ela
+ * diz para onde o caminho foi, porque a alternativa (recusar como "valor invalido") manda o
+ * operador procurar um typo que nao existe.
+ */
+const memoryDriverError = (spec: Readonly<{ name: string; driverVar: string }>): string =>
+  `${spec.name}: ${spec.driverVar}=memory nao e mais aceito (ADR-0068) — o adapter em memoria ` +
+  `existe so como double de teste. Para rodar sem MySQL, suba o banco pelo orquestrador local.`;
 
 const missingUrlError = (spec: ModuleSpec): string =>
   `${spec.name}: ${spec.urlVar} nao configurada — obrigatoria quando ${spec.driverVar} e "mysql"`;
 
-const missingDriverWarning = (spec: Readonly<{ name: string; driverVar: string }>): string =>
-  `${spec.name}: ${spec.driverVar} nao configurada — usando memory ` +
-  `(dado volatil, perdido no restart)`;
-
-const invalidDriverWarning = (
-  spec: Readonly<{ name: string; driverVar: string }>,
-  value: string,
-): string =>
-  `${spec.name}: ${spec.driverVar} com valor invalido ${echoableDriverValue(value)} — ` +
-  `usando memory (valores aceitos: ${ACCEPTED_DRIVERS_TEXT})`;
-
-/**
- * `memory` declarado em producao sobe (FR-007 e explicito: "sem falhar e sem exigir configuracao
- * adicional") — mas nao pode subir MUDO. O projeto ja decidiu essa exata classe ("estado declarado,
- * porem perigoso") no ADR-0052, e decidiu gritando: `server.ts` avisa em banner que o RBAC em
- * `bypass` NAO pode ser silencioso. Persistencia volatil perde mais que autorizacao desligada —
- * perde o trabalho do usuario. Este aviso tambem e o herdeiro do alarme pontual do PR #488, que a
- * regra compartilhada absorveu. Distingue DECLARADO de degradado: o texto nomeia a declaracao.
- */
-const declaredMemoryWarning = (spec: Readonly<{ name: string; driverVar: string }>): string =>
-  `${spec.name}: ${spec.driverVar}=memory DECLARADO em producao — a API NAO le o MySQL ` +
-  `(dado volatil, perdido no restart)`;
-
 const resolveModule = (
   env: Env,
   spec: ModuleSpec,
-  isProduction: boolean,
-): Resolution<ModuleDriverConfig> => {
+): Result<ModuleDriverConfig, readonly string[]> => {
   const declaration = readDriver(env, spec.driverVar);
   switch (declaration.kind) {
     case 'mysql': {
       const url = readVar(env, spec.urlVar);
-      // Endereco obrigatorio em QUALQUER ambiente quando o driver e "mysql" (matriz, OBR-M).
+      // Endereco obrigatorio quando o driver e "mysql" (matriz, OBR-M) — e agora ele e o unico.
       return url === undefined
-        ? { config: MEMORY, errors: [missingUrlError(spec)], warnings: [] }
-        : { config: { driver: 'mysql', connectionString: url }, ...NO_DIAGNOSTICS };
+        ? err([missingUrlError(spec)])
+        : ok({ driver: 'mysql', connectionString: url });
     }
     case 'memory':
-      // Intencao declarada (FR-007): sobe em qualquer ambiente, sem erro. Em producao, com aviso.
-      return isProduction
-        ? { config: MEMORY, errors: [], warnings: [declaredMemoryWarning(spec)] }
-        : { config: MEMORY, ...NO_DIAGNOSTICS };
+      return err([memoryDriverError(spec)]);
     case 'absent':
-      return isProduction
-        ? { config: MEMORY, errors: [missingDriverError(spec)], warnings: [] }
-        : { config: MEMORY, errors: [], warnings: [missingDriverWarning(spec)] };
+      return err([missingDriverError(spec)]);
     case 'invalid':
       // Quem digitou "mysqll" quis dizer "mysql": cobrar tambem o endereco fecha os dois defeitos
-      // no mesmo deploy (US2-2). Fora de producao a regra segue permissiva, so que nao mais calada.
-      return isProduction
-        ? {
-            config: MEMORY,
-            errors: [
-              invalidDriverError(spec, declaration.value),
-              ...(readVar(env, spec.urlVar) === undefined ? [missingUrlError(spec)] : []),
-            ],
-            warnings: [],
-          }
-        : {
-            config: MEMORY,
-            errors: [],
-            warnings: [invalidDriverWarning(spec, declaration.value)],
-          };
+      // no mesmo deploy (US2-2).
+      return err([
+        invalidDriverError(spec, declaration.value),
+        ...(readVar(env, spec.urlVar) === undefined ? [missingUrlError(spec)] : []),
+      ]);
   }
 };
 
@@ -268,9 +228,9 @@ const resolveReportsSource = (env: Env, spec: ReportsSourceSpec): Result<string,
 
 const resolveReportsSources = (env: Env): Result<ReportsDriverConfig, readonly string[]> => {
   // `combine` acumula os erros das quatro fontes antes de abortar — a fonte que falta deixa de
-  // interromper sozinha o boot, como faz hoje `reports/.../composition.ts` (4 throws, exit 1).
-  // Argumentos de tipo explicitos: o erro `E` so aparece dentro do mapped type do parametro,
-  // posicao de onde o compilador nao consegue inferi-lo (cai em `unknown`).
+  // interromper sozinha o boot. Argumentos de tipo explicitos: o erro `E` so aparece dentro do
+  // mapped type do parametro, posicao de onde o compilador nao consegue inferi-lo (cai em
+  // `unknown`).
   const sources = combine<[string, string, string, string], string>([
     resolveReportsSource(env, REPORTS_SOURCE_SPECS.partners),
     resolveReportsSource(env, REPORTS_SOURCE_SPECS.financial),
@@ -282,78 +242,52 @@ const resolveReportsSources = (env: Env): Result<ReportsDriverConfig, readonly s
   return ok({ driver: 'mysql', partnersUrl, financialUrl, contractsUrl, budgetPlansUrl });
 };
 
-const resolveReports = (env: Env, isProduction: boolean): Resolution<ReportsDriverConfig> => {
+const resolveReports = (env: Env): Result<ReportsDriverConfig, readonly string[]> => {
   const spec = { name: REPORTS_NAME, driverVar: REPORTS_DRIVER_VAR };
   const declaration = readDriver(env, REPORTS_DRIVER_VAR);
   switch (declaration.kind) {
-    case 'mysql': {
-      const sources = resolveReportsSources(env);
-      return sources.ok
-        ? { config: sources.value, ...NO_DIAGNOSTICS }
-        : { config: MEMORY, errors: sources.error, warnings: [] };
-    }
+    case 'mysql':
+      return resolveReportsSources(env);
     case 'memory':
-      return isProduction
-        ? { config: MEMORY, errors: [], warnings: [declaredMemoryWarning(spec)] }
-        : { config: MEMORY, ...NO_DIAGNOSTICS };
+      return err([memoryDriverError(spec)]);
     case 'absent':
-      return isProduction
-        ? { config: MEMORY, errors: [missingDriverError(spec)], warnings: [] }
-        : { config: MEMORY, errors: [], warnings: [missingDriverWarning(spec)] };
+      return err([missingDriverError(spec)]);
     case 'invalid': {
-      if (!isProduction) {
-        return {
-          config: MEMORY,
-          errors: [],
-          warnings: [invalidDriverWarning(spec, declaration.value)],
-        };
-      }
       const sources = resolveReportsSources(env);
-      return {
-        config: MEMORY,
-        errors: [invalidDriverError(spec, declaration.value), ...(sources.ok ? [] : sources.error)],
-        warnings: [],
-      };
+      return err([
+        invalidDriverError(spec, declaration.value),
+        ...(sources.ok ? [] : sources.error),
+      ]);
     }
   }
 };
 
-export const readModuleDriverConfigs = (
-  env: Env,
-): Result<ModuleDriverConfigs, readonly string[]> => {
-  const isProduction = isProductionEnv(env);
-
-  const auth = resolveModule(env, MODULE_SPECS.auth, isProduction);
-  const contracts = resolveModule(env, MODULE_SPECS.contracts, isProduction);
-  const partners = resolveModule(env, MODULE_SPECS.partners, isProduction);
-  const programs = resolveModule(env, MODULE_SPECS.programs, isProduction);
-  const financial = resolveModule(env, MODULE_SPECS.financial, isProduction);
-  const budgetPlans = resolveModule(env, MODULE_SPECS.budgetPlans, isProduction);
-  const reports = resolveReports(env, isProduction);
-
+export const readModuleDriverConfigs = (env: Env): Result<ModuleDriverMap, readonly string[]> => {
   // Ordem estavel (a dos modulos) para que a saida seja previsivel e testavel por igualdade.
-  const diagnostics: readonly Diagnostics[] = [
-    auth,
-    contracts,
-    partners,
-    programs,
-    financial,
-    budgetPlans,
-    reports,
-  ];
-  const errors = diagnostics.flatMap((entry) => entry.errors);
-  if (errors.length > 0) return err(errors);
+  const resolved = combine<
+    [
+      ModuleDriverConfig,
+      ModuleDriverConfig,
+      ModuleDriverConfig,
+      ModuleDriverConfig,
+      ModuleDriverConfig,
+      ModuleDriverConfig,
+      ReportsDriverConfig,
+    ],
+    readonly string[]
+  >([
+    resolveModule(env, MODULE_SPECS.auth),
+    resolveModule(env, MODULE_SPECS.contracts),
+    resolveModule(env, MODULE_SPECS.partners),
+    resolveModule(env, MODULE_SPECS.programs),
+    resolveModule(env, MODULE_SPECS.financial),
+    resolveModule(env, MODULE_SPECS.budgetPlans),
+    resolveReports(env),
+  ] as const);
 
-  return ok({
-    modules: {
-      auth: auth.config,
-      contracts: contracts.config,
-      partners: partners.config,
-      programs: programs.config,
-      financial: financial.config,
-      budgetPlans: budgetPlans.config,
-      reports: reports.config,
-    },
-    warnings: diagnostics.flatMap((entry) => entry.warnings),
-  });
+  // `combine` agrupa por modulo (`readonly string[][]`); o operador quer uma lista so.
+  if (!resolved.ok) return err(resolved.error.flat());
+
+  const [auth, contracts, partners, programs, financial, budgetPlans, reports] = resolved.value;
+  return ok({ auth, contracts, partners, programs, financial, budgetPlans, reports });
 };

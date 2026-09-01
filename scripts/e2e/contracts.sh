@@ -43,12 +43,14 @@ MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/cor
 
 # Servidor real em background (applyMigrations:false — schema já provisionado). Semeia o operador
 # RBAC (CORE_API_E2E=1 + AUTH_SEED_JSON). Dual-pool: writer=root, reader=readonly_bi (SELECT-only).
-AUTH_DRIVER=mysql \
-  AUTH_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
-  CONTRACTS_DRIVER=mysql \
-  CONTRACTS_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
-  CONTRACTS_READER_URL='mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:3306/core' \
-  S3_REGION=us-east-1 \
+#
+# Os SETE módulos vêm do helper (ADR-0068): o boot exige todos, e antes os cinco não citados aqui
+# subiam em memória sem aviso.
+DB='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
+  RO='mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:3306/core' \
+  source scripts/e2e/server-env.sh
+
+S3_REGION=us-east-1 \
   S3_BUCKET=contracts-documents \
   S3_ACCESS_KEY_ID=dev-access-key \
   S3_SECRET_ACCESS_KEY=dev-secret-key-min-8-chars \

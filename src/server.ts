@@ -61,10 +61,13 @@ import {
   buildFinancialHttpDeps,
   buildVanSandboxPlugin,
 } from '#src/modules/financial/public-api/http.ts';
+// `parseE2eBudgetPlansSeed` NÃO é mais importado aqui: ele só era consumido pelo ramo `memory` do
+// `buildBudgetPlansHttpDeps`, que o ADR-0068 tornou inalcançável por configuração. Nenhum script de
+// E2E declarava `BUDGET_PLANS_SEED_JSON` — o caminho existia e nunca foi exercitado. A função segue
+// exportada pela `public-api` e coberta por dois testes, para quando o seed voltar a ter chamador.
 import {
   budgetPlansHttpPlugin,
   buildBudgetPlansHttpDeps,
-  parseE2eBudgetPlansSeed,
 } from '#src/modules/budget-plans/public-api/http.ts';
 import { reportsHttpPlugin, buildReportsHttpDeps } from '#src/modules/reports/public-api/http.ts';
 
@@ -90,8 +93,9 @@ const main = async (): Promise<void> => {
     process.exitCode = 78;
     return;
   }
-  const modules = drivers.value.modules;
-  for (const warning of drivers.value.warnings) process.stderr.write(`server: ${warning}\n`);
+  // Sem loop de warnings: sob o ADR-0068 a guarda não degrada mais, então ou ela devolve o mapa
+  // completo, ou o boot já terminou acima. Configuração parcial deixou de ser um estado.
+  const modules = drivers.value;
 
   // Seed RBAC via env — inerte fora de E2E/dev (guarda dupla CORE_API_E2E + AUTH_SEED_JSON).
   const authSeed = parseE2eAuthSeed(process.env);
@@ -130,10 +134,10 @@ const main = async (): Promise<void> => {
     return;
   }
   for (const warning of jwtKeys.value.warnings) process.stderr.write(`server: ${warning}\n`);
-  // #516: storage de logo do programs. Ausente ou pela metade em produção → boot falha (EX_CONFIG)
-  // em vez de subir com store volátil, que aceitava o upload e perdia o arquivo no restart —
-  // exatamente o que produção e QA faziam, sem nenhuma pista. Fora de produção segue em memória,
-  // com aviso. Credenciais ausentes NÃO são erro: é a provider chain do IAM Role no ECS.
+  // #516 + ADR-0068: storage de logo do programs. Ausente ou pela metade → boot falha (EX_CONFIG)
+  // em TODO ambiente, em vez de subir com store volátil, que aceitava o upload e perdia o arquivo
+  // no restart — exatamente o que produção e QA faziam, sem nenhuma pista. Credenciais ausentes
+  // seguem NÃO sendo erro: é a provider chain do IAM Role no ECS, e essa exceção não é degradação.
   // Lido aqui, e não junto do `buildProgramsHttpDeps` lá embaixo, pela mesma razão do #515: depois
   // de `buildAuthHttpDeps` (o primeiro handle do boot) `exitCode` + `return` deixa de ser seguro.
   const programsLogo = readProgramsLogoConfig(process.env);
@@ -142,7 +146,6 @@ const main = async (): Promise<void> => {
     process.exitCode = 78;
     return;
   }
-  for (const warning of programsLogo.value.warnings) process.stderr.write(`server: ${warning}\n`);
   // ADR-0052 — modo do RBAC. `bypass` desliga a autorização por permissão (todo autenticado é
   // super-usuário). NÃO pode ser silencioso: um banner gritante no boot torna o estado inconfundível.
   //
@@ -175,10 +178,14 @@ const main = async (): Promise<void> => {
         '"bypass" no composition root (decisão do dono, #634). A env não tem efeito até isso sair.\n',
     );
   }
+  // Os `driver: 'mysql'` daqui para baixo são literais, e não mais derivados de um ternário sobre a
+  // env: sob o ADR-0068 a guarda só devolve `mysql`, e o ESLint (`no-unnecessary-condition`) recusa
+  // a comparação que sobrou. A variante `'memory'` continua existindo em cada
+  // `<Módulo>CompositionConfig` — mas só alcançável por injeção em teste, nunca por configuração.
   const authDeps = await buildAuthHttpDeps({
-    driver: modules.auth.driver,
+    driver: 'mysql',
     rbacMode,
-    ...(modules.auth.driver === 'mysql' ? { connectionString: modules.auth.connectionString } : {}),
+    connectionString: modules.auth.connectionString,
     ...(authSeed !== undefined ? { seed: authSeed } : {}),
     ...(sensitiveRateLimit !== undefined ? { sensitiveRateLimit } : {}),
     ...(resetBaseUrl !== undefined ? { resetBaseUrl } : {}),
@@ -191,7 +198,7 @@ const main = async (): Promise<void> => {
   // programa é opcional, ADR-0032). Fechado no graceful shutdown.
   const programs = modules.programs;
   let programsReadPort: ProgramsReadPort | undefined = undefined;
-  if (programs.driver === 'mysql') {
+  {
     const portR = await buildProgramsReadPort({ connectionString: programs.connectionString });
     if (portR.ok) programsReadPort = portR.value;
     else
@@ -204,77 +211,48 @@ const main = async (): Promise<void> => {
   // fora da guarda de propósito (#456 FR-008), ausente → reusa o writer, single-node.
   const contracts = modules.contracts;
   const contractsReaderUrl = process.env['CONTRACTS_READER_URL'];
-  const contractsDeps = await buildContractsHttpDeps(
-    contracts.driver === 'mysql'
-      ? {
-          driver: 'mysql',
-          writerUrl: contracts.connectionString,
-          ...(contractsReaderUrl !== undefined ? { readerUrl: contractsReaderUrl } : {}),
-          ...(programsReadPort !== undefined ? { programReadPort: programsReadPort } : {}),
-        }
-      : {
-          driver: 'memory',
-          ...(programsReadPort !== undefined ? { programReadPort: programsReadPort } : {}),
-        },
-  );
+  const contractsDeps = await buildContractsHttpDeps({
+    driver: 'mysql',
+    writerUrl: contracts.connectionString,
+    ...(contractsReaderUrl !== undefined ? { readerUrl: contractsReaderUrl } : {}),
+    ...(programsReadPort !== undefined ? { programReadPort: programsReadPort } : {}),
+  });
 
   // RW split (ADR-0026) do módulo partners: o writer vem da guarda; PARTNERS_READER_URL = réplica
   // OPCIONAL, também fora da guarda (#456 FR-008) — ausente → reusa o writer.
   const partners = modules.partners;
   const partnersReaderUrl = process.env['PARTNERS_READER_URL'];
-  const partnersDeps = await buildPartnersHttpDeps(
-    partners.driver === 'mysql'
-      ? {
-          driver: 'mysql',
-          writerUrl: partners.connectionString,
-          ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
-          // campo legado PT do partners — rename rastreado na issue #333
-          ...(autocadastroBaseUrl !== undefined ? { autocadastroBaseUrl } : {}),
-        }
-      : {
-          driver: 'memory',
-          // campo legado PT do partners — rename rastreado na issue #333
-          ...(autocadastroBaseUrl !== undefined ? { autocadastroBaseUrl } : {}),
-        },
-  );
+  const partnersDeps = await buildPartnersHttpDeps({
+    driver: 'mysql',
+    writerUrl: partners.connectionString,
+    ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
+    // campo legado PT do partners — rename rastreado na issue #333
+    ...(autocadastroBaseUrl !== undefined ? { autocadastroBaseUrl } : {}),
+  });
 
   // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019),
-  // decidido lá em cima com fail-fast (#516); `config` ausente aqui só acontece fora de produção,
-  // e já saiu com aviso. Mesma connection string do read port acima.
-  const programsLogoConfig = programsLogo.value.config;
-  const programsDeps = await buildProgramsHttpDeps(
-    programs.driver === 'mysql'
-      ? ({
-          driver: 'mysql',
-          writerUrl: programs.connectionString,
-          ...(programsLogoConfig !== undefined ? { logo: programsLogoConfig } : {}),
-        } satisfies ProgramsCompositionConfig)
-      : ({
-          driver: 'memory',
-          ...(programsLogoConfig !== undefined ? { logo: programsLogoConfig } : {}),
-        } satisfies ProgramsCompositionConfig),
-  );
+  // decidido lá em cima com fail-fast (#516 + ADR-0068) — a configuração chega sempre completa,
+  // porque o boot não teria seguido em caso contrário. Mesma connection string do read port acima.
+  const programsDeps = await buildProgramsHttpDeps({
+    driver: 'mysql',
+    writerUrl: programs.connectionString,
+    logo: programsLogo.value,
+  } satisfies ProgramsCompositionConfig);
 
   // Módulo financial (spec 009, fatia 1) → /api/v2/financial. Greenfield V2 (plugin direto).
   const financial = modules.financial;
-  const financialDeps = await buildFinancialHttpDeps(
-    financial.driver === 'mysql'
-      ? { driver: 'mysql', writerUrl: financial.connectionString }
-      : { driver: 'memory' },
-  );
+  const financialDeps = await buildFinancialHttpDeps({
+    driver: 'mysql',
+    writerUrl: financial.connectionString,
+  });
 
   // Módulo budget-plans (BGP-PLAN-CRUD, issue #315) → /api/v2/budget-plans. Greenfield V2
   // (plugin direto). Uma connection string: bgp_* + read ports prg_*/par_* (ADR-0014).
   const budgetPlans = modules.budgetPlans;
-  // Seed de catálogo via env — inerte fora de E2E/dev (guarda dupla CORE_API_E2E +
-  // BUDGET_PLANS_SEED_JSON). Malformado sob a flag → boot falha (o throw propaga p/ main().catch).
-  // Só o ramo memory consome; o mysql lê prg_*/par_* real.
-  const budgetPlansSeed = parseE2eBudgetPlansSeed(process.env);
-  const budgetPlansDeps = await buildBudgetPlansHttpDeps(
-    budgetPlans.driver === 'mysql'
-      ? { driver: 'mysql', connectionString: budgetPlans.connectionString }
-      : { driver: 'memory', ...(budgetPlansSeed !== undefined ? { seed: budgetPlansSeed } : {}) },
-  );
+  const budgetPlansDeps = await buildBudgetPlansHttpDeps({
+    driver: 'mysql',
+    connectionString: budgetPlans.connectionString,
+  });
 
   // Módulo reports (épico Relatórios #114) → /api/v2/reports. Greenfield V2 (plugin direto).
   // Read-only, sem writer próprio — lê projeções via public-api (ADR-0006/0014): REP-1 (#238) do
