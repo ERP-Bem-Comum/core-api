@@ -70,15 +70,23 @@ const PAYEE_DOCUMENT = 'inscricao-opaca';
 const PAYLOADS: Readonly<
   Record<VanRoute, Readonly<{ candidate: PayoutCandidate; profiled: ProfiledPayment }>>
 > = {
+  // ⚠️ O PIX ganhou o bloco bancário na #838, e é a segunda fixture desta lista a mudar de forma por
+  // causa do LAYOUT e não do emissor — o mesmo motivo do boleto logo abaixo. O Segmento A do golden
+  // traz banco, agência, DV, conta e DV do favorecido preenchidos, e o manual (p. 39) marca os
+  // quatro como obrigatórios; a chave endereça no SPI, o Segmento A identifica a conta.
+  //
+  // Sem esta mudança, o arquivo mediria a bicondicional com fixture incompleta: o pré-voo recusaria
+  // por falta de conta e o emissor aceitaria, e a falha diria "as réguas discordam" quando o defeito
+  // seria da fixture. É exatamente a armadilha que o comentário do `PAYEE_DOCUMENT` descreve.
   pix: {
     candidate: {
       paymentMethod: 'PIX',
       paymentDetail: null,
       payee: {
-        bank: null,
-        agency: null,
-        accountNumber: null,
-        checkDigit: null,
+        bank: PAYEE_BANK,
+        agency: '1234-5',
+        accountNumber: '123456',
+        checkDigit: '0',
         pixKey: { keyType: 'email', key: 'a@b.com' },
         document: PAYEE_DOCUMENT,
       },
@@ -214,24 +222,23 @@ describe('rotas com emissor — a régua do pré-voo e a do emissor são a mesma
   // Invertida, a ordem esconderia a pendência de cadastro atrás de um `no-issuer` temporário — e ela
   // reapareceria inteira no dia em que o emissor entrasse, sem ninguém ter sido avisado enquanto
   // havia tempo de corrigir.
+  // ⚠️ O CASO ERA MEDIDO COM PIX até a #838, e a troca para a GUIA não é cosmética: o Pix ganhou
+  // emissor, então usá-lo aqui deixaria de exercitar "rota sem emissor" — o teste passaria a medir
+  // outra coisa e continuaria verde, que é o pior desfecho possível para um caso deste.
+  //
+  // A guia é a única rota sem emissor que restou, e restou por decisão de escopo da P.O. (23/08),
+  // não por atraso: o dado que falta a ela é o código de barras.
   it('rota sem emissor E sem dado aponta o dado que falta, não a ausência de emissor', () => {
-    const semChave = checkPayoutReadiness({
-      paymentMethod: 'PIX',
+    const semCodigoDeBarras = checkPayoutReadiness({
+      paymentMethod: 'GuiaRecolhimento',
       paymentDetail: null,
-      payee: {
-        bank: null,
-        agency: null,
-        accountNumber: null,
-        checkDigit: null,
-        pixKey: null,
-        document: null,
-      },
+      payee: null,
     });
 
-    assert.equal(semChave.status, 'incomplete');
+    assert.equal(semCodigoDeBarras.status, 'incomplete');
     assert.deepEqual(
-      semChave.status === 'incomplete' ? semChave.gaps.map((g) => g.field) : [],
-      ['pix-key'],
+      semCodigoDeBarras.status === 'incomplete' ? semCodigoDeBarras.gaps.map((g) => g.field) : [],
+      ['payment-detail'],
       'a lacuna de cadastro tem de sobreviver à ausência de emissor: ela não caduca, a outra sim',
     );
   });

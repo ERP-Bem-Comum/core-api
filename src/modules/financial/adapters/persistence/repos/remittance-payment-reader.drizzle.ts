@@ -206,10 +206,66 @@ const toPaymentData = (
       });
     }
 
-    // Rotas contratadas ainda sem emissor. Viajam com valor e data para o montador recusá-las com
+    case 'pix': {
+      // O Pix precisa da chave E do bloco bancário (#838), e a segunda metade é a que surpreende:
+      // o Segmento A do golden traz banco, agência, DV, conta e DV do favorecido preenchidos, com o
+      // layout marcando os quatro como obrigatórios (p. 39). A decisão da P.O. de 13/08 — "Pix paga
+      // por chave, não olha agência ou conta" — descreve o negócio, não o arquivo.
+      //
+      // A decomposição passa pelo MESMO caminho do pré-voo, como a transferência e o boleto já
+      // fazem, e é isso que impede as duas réguas de divergirem: `checkPayoutReadiness` chama
+      // `decomposePayeeAccount` para a rota `pix` desde esta mesma mudança.
+      const parts = decomposePayeeAccount({
+        bank: contractor?.bankAccount?.bank ?? null,
+        agency: contractor?.bankAccount?.agency ?? null,
+        accountNumber: contractor?.bankAccount?.accountNumber ?? null,
+        checkDigit: contractor?.bankAccount?.checkDigit ?? null,
+        // A chave NÃO participa da decomposição da conta — são dois dados independentes do mesmo
+        // favorecido, e é o mesmo desenho que a transferência usa ao passar `null` aqui.
+        pixKey: null,
+        document: null,
+      });
+
+      // Inalcançável pelo caminho normal: `ready` na rota `pix` já significa que a chave existe e
+      // que a decomposição passou. Fica explícito porque as duas chamadas são independentes — e
+      // porque recusar aqui tira o título da seleção ANTES de o NSA ser alocado, que é a mesma razão
+      // pela qual o boleto recusa neste ponto e não no montador.
+      if (!parts.ok || contractor === null) return err('remittance-payment-incomplete');
+
+      const pixKey = contractor.pixKey?.key ?? '';
+      const pixKeyType = contractor.pixKey?.keyType ?? '';
+      if (pixKey === '' || pixKeyType === '') return err('remittance-payment-incomplete');
+
+      const document = cleanDocument(contractor.document);
+      if (document === '') return err('remittance-payment-incomplete');
+
+      return ok({
+        payableId: row.payableId,
+        documentId: row.documentId,
+        route: 'pix',
+        payee: {
+          name: contractor.name,
+          documentType: documentTypeOf(document),
+          document,
+          bankCode: parts.value.bankCode,
+          agency: parts.value.agency,
+          agencyDigit: parts.value.agencyDigit,
+          accountNumber: parts.value.accountNumber,
+          accountDigit: parts.value.accountDigit,
+        },
+        pixKey,
+        // Viaja CRU, no vocabulário de `partners`. Quem traduz para o domínio `G100` é o adapter de
+        // CNAB — traduzir aqui poria conhecimento de layout num reader de persistência.
+        pixKeyType,
+        valueCents,
+        paymentDate,
+      });
+    }
+
+    // A rota contratada que não tem emissor. Viaja com valor e data para o montador recusá-la com
     // nome próprio (`remittance-launch-form-unsupported`) — o que o operador precisa ler não é
-    // "dado faltando", é "o arquivo ainda não emite esta forma".
-    case 'pix':
+    // "dado faltando", é "o arquivo não emite esta forma". E, para a guia, não emite por decisão de
+    // escopo da P.O. (23/08), não por atraso.
     case 'tax-guide':
       return ok({
         payableId: row.payableId,

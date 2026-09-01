@@ -113,7 +113,11 @@ describe('Tradutor Multipag — cada recusa chega com nome próprio', () => {
   // substituiu o ternário preserva o mapeamento, não o reescreve.
   it('mantém o nome próprio da rota sem emissor', () => {
     const r = translate({
-      payments: [{ route: 'pix', valueCents: 100, paymentDate: new Date(Date.UTC(2026, 7, 12)) }],
+      // `tax-guide`, e não `pix`: desde a #838 o Pix TEM emissor, e usá-lo aqui mediria a rota
+      // errada — o teste passaria a exercitar a montagem, não a recusa que ele existe para fixar.
+      payments: [
+        { route: 'tax-guide', valueCents: 100, paymentDate: new Date(Date.UTC(2026, 7, 12)) },
+      ],
     });
     assert.ok(isErr(r));
     assert.equal(r.error, 'cnab-launch-form-unsupported');

@@ -109,10 +109,14 @@ describe('Planejador de lotes — o que NÃO entra em lote algum', () => {
   // ⚠️ O VALOR viaja junto com a contagem, e não é redundância. Sem ele, o operador soma os lotes,
   // compara com o total da seleção, vê que não fecha e não sabe QUANTO ficou de fora — a tela
   // levantaria a dúvida sem oferecer a resposta. A #804 pede uma tela cujos totais fechem.
+  //
+  // ⚠️ A rota do caso era `pix` e passou a ser `tax-guide` (#838). O Pix ganhou emissor, então ele
+  // agora forma lote — usá-lo aqui mediria o planejamento, não a exclusão, e o teste continuaria
+  // verde afirmando outra coisa.
   it('contabiliza rota sem emissor com o valor que ficou de fora', () => {
     const result = plan([
       transfer('341', 100_00),
-      { route: 'pix', payeeBankCode: null, barcode: null, valueCents: 70_00 },
+      { route: 'tax-guide', payeeBankCode: null, barcode: null, valueCents: 70_00 },
     ]);
 
     assert.equal(result.batches.length, 1);
