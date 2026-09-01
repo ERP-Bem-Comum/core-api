@@ -488,6 +488,14 @@ describe('paidPayablesResponseSchema — .strict() (#384)', () => {
     valueCents: '1000',
     dueDate: '2026-08-01',
     paymentMethod: 'PIX',
+    // #268 (dentro da M2): a classificação vigente volta na leitura, com `kind` para a tela saber
+    // quem pode ser fonte de reclassificação (RN-M2-11).
+    kind: 'Parent',
+    programRef: null,
+    budgetPlanRef: null,
+    costCenterRef: null,
+    categoryRef: null,
+    subcategoryRef: null,
   };
 
   const fixture = { items: [paidPayableFixture] };
@@ -523,6 +531,8 @@ describe('transactionReconciliationResponseSchema — .strict() (#384)', () => {
     differenceCents: null,
     items: [itemFixture],
     category: null,
+    // #268: os 5 refs vigentes ao lado do rótulo. `null` quando não há título de onde tirá-los.
+    taxonomy: null,
   };
 
   it('fixture válido é aceito (regressão)', () => {

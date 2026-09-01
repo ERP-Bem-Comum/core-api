@@ -22,9 +22,11 @@ import {
 } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzlePlannedAmountsReader } from '../adapters/persistence/repos/planned-amounts-read.drizzle.ts';
 import { createDrizzlePlanLabelsReader } from '../adapters/persistence/repos/plan-labels-read.drizzle.ts';
+import { createDrizzleTaxonomyPathReader } from '../adapters/persistence/repos/taxonomy-path-read.drizzle.ts';
 import { ProgramCatalogFromPrograms } from '../adapters/catalog/program-catalog.from-programs.ts';
 import type { PlannedAmountsReadPort } from '../application/ports/planned-amounts-read.ts';
 import type { PlanLabelsReadPort } from '../application/ports/plan-labels-read.ts';
+import type { TaxonomyPathReadPort } from '../application/ports/taxonomy-path-read.ts';
 
 export type {
   PlannedAmountsReadPort,
@@ -33,9 +35,15 @@ export type {
   BudgetPlansReadError,
 } from '../application/ports/planned-amounts-read.ts';
 export type { PlanLabelsReadPort } from '../application/ports/plan-labels-read.ts';
+// M2 (RN-M2-09/10): o `financial` valida o caminho da taxonomia por aqui, sem conhecer `bgp_*`.
+export type {
+  TaxonomyPathReadPort,
+  TaxonomyPathRow,
+} from '../application/ports/taxonomy-path-read.ts';
 
 export type BudgetPlansReadPort = PlannedAmountsReadPort &
   PlanLabelsReadPort &
+  TaxonomyPathReadPort &
   Readonly<{
     close: () => Promise<void>;
   }>;
@@ -71,10 +79,12 @@ export const buildBudgetPlansReadPort = async (
 
   const reader = createDrizzlePlannedAmountsReader(handle);
   const labelsReader = createDrizzlePlanLabelsReader(handle, programCatalog);
+  const taxonomyReader = createDrizzleTaxonomyPathReader(handle);
 
   return ok({
     ...reader,
     ...labelsReader,
+    ...taxonomyReader,
     close: async () => {
       await programsPort.close();
       await handle.close();

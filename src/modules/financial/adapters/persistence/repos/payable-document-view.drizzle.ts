@@ -46,11 +46,15 @@ export const createDrizzlePayableDocumentView = (
           .select({
             payableId: finPayables.id,
             documentId: finDocuments.id,
+            kind: finPayables.kind,
             supplierRef: finDocuments.supplierRef,
             documentNumber: finDocuments.documentNumber,
             dueDate: finDocuments.dueDate,
             categoryRef: finDocuments.categoryRef,
             costCenterRef: finDocuments.costCenterRef,
+            budgetPlanRef: finDocuments.budgetPlanRef,
+            subcategoryRef: finDocuments.subcategoryRef,
+            programRef: finDocuments.programRef,
             competencia: finDocuments.competencia,
             payeeKind: finDocuments.payeeKind,
           })

@@ -25,6 +25,7 @@ import type { PaidPayableView } from '#src/modules/financial/application/ports/p
 import { confirmReconciliation } from '#src/modules/financial/application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '#src/modules/financial/application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '#src/modules/financial/application/use-cases/search-paid-payables.ts';
+import { m2DepsStub } from '../../../../support/reconciliation-m2-deps.ts';
 
 const WHEN = new Date('2024-05-20T12:00:00.000Z');
 const clock = { now: (): Date => WHEN };
@@ -104,6 +105,14 @@ const paidViewOf = (valueCents: number): PaidPayableView => ({
   valueCents,
   dueDate: new Date('2024-05-30T00:00:00.000Z'),
   paymentMethod: 'PIX',
+  // #268: taxonomia de volta na leitura. Sem classificação nestes casos — o que se exercita aqui é
+  // a máquina da conciliação, não a M2.
+  kind: 'Parent',
+  programRef: null,
+  budgetPlanRef: null,
+  costCenterRef: null,
+  categoryRef: null,
+  subcategoryRef: null,
 });
 // #127: os eventos são encaminhados PARA DENTRO do repo (`confirm`/`undo`), não mais a um outbox
 // separado. O fake captura o que o use-case passa no 3º argumento — prova o threading dos eventos.
@@ -149,6 +158,8 @@ const confirmDeps = (
   cedenteStore: fakeCedente(account),
   periods: openPeriods,
   clock,
+  // M2: inertes — nenhum caso desta suíte manda `taxonomy` no input.
+  ...m2DepsStub,
 });
 
 describe('financial/application/use-cases/confirm-reconciliation', () => {

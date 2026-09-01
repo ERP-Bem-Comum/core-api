@@ -65,6 +65,7 @@ import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 import { describeDriverError } from '../../../../../shared/persistence/driver-error.ts';
 import { withDeadlockRetry } from '../../../../../shared/persistence/retry-on-deadlock.ts';
 import { sameRowSet, taxLikeKey, payableKey } from './child-rows-diff.ts';
+import { makeVersionConflict, isVersionConflict } from './version-conflict.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
 
 // Wrapper de segurança: captura qualquer exceção de I/O ou violação de
@@ -83,26 +84,9 @@ const safe = async <T>(
   }
 };
 
-// Sentinela interna: distingue conflito de versão (semântico) de falha de infra no catch.
-// Usa Symbol único para identificação sem `class` (regra no-restricted-syntax do projeto).
-const VERSION_CONFLICT_SYMBOL = Symbol('version-conflict');
-
-type VersionConflictSentinel = Error & Readonly<{ [VERSION_CONFLICT_SYMBOL]: true }>;
-
-const makeVersionConflict = (
-  documentId: string,
-  expectedVersion: number,
-): VersionConflictSentinel => {
-  const e = new Error(
-    `version-conflict:${documentId}:expected:${expectedVersion}`,
-  ) as VersionConflictSentinel;
-  (e as unknown as Record<symbol, boolean>)[VERSION_CONFLICT_SYMBOL] = true;
-  return e;
-};
-
-const isVersionConflict = (cause: unknown): cause is VersionConflictSentinel =>
-  cause instanceof Error &&
-  (cause as unknown as Record<symbol, unknown>)[VERSION_CONFLICT_SYMBOL] === true;
+// Sentinela de conflito de versão: extraída para `version-conflict.ts` quando a reclassificação da
+// M2 (#893) passou a escrever `fin_documents` por outro adapter. Símbolo único compartilhado — dois
+// símbolos distintos fariam cada arquivo reconhecer só a própria sentinela.
 
 // `MySql2Database` expõe interface mutável internamente. Handle é read-only
 // do ponto de vista deste módulo — não mutamos o objeto em si.

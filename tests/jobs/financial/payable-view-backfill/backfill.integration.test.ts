@@ -19,6 +19,9 @@ import { readPayableBackfillRecords } from '#src/jobs/financial/payable-view-bac
 import { backfillPayableViews } from '#src/jobs/financial/payable-view-backfill/backfill.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
+// #894: recência que o backfill carimba. Fixo, porque estes casos não exercitam ordenação.
+const BACKFILL_AT = new Date('2026-01-01T00:00:00.000Z');
+
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[payable-view-backfill:e2e] MYSQL_INTEGRATION nao definido — pulando.\n');
 } else {
@@ -79,11 +82,11 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.equal(rec.status, 'Open');
 
       const store = createDrizzlePayableViewStore(handle, ClockReal());
-      const result = await backfillPayableViews(source.value.records, store);
+      const result = await backfillPayableViews(source.value.records, store, BACKFILL_AT);
       assert.equal(result.ok, true);
 
       // idempotência no banco: rerodar não duplica.
-      await backfillPayableViews(source.value.records, store);
+      await backfillPayableViews(source.value.records, store, BACKFILL_AT);
 
       const list = await store.list();
       assert.equal(list.ok, true);

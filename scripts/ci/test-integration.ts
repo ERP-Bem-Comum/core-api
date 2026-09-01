@@ -160,6 +160,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/van-return-match-reader.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
+    // M2: reclassificação da taxonomia na conciliação (atomicidade + cascata ao fin_payable_view).
+    'tests/modules/financial/adapters/persistence/reconciliation-reclassify.drizzle-mysql.test.ts',
     // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
     // 'PartiallyReconciled' (19 chars). RED por errno 1406 (varchar(16) curta) até o widen p/ varchar(24).
     'tests/modules/financial/adapters/persistence/payable-status-width.drizzle-mysql.test.ts',
