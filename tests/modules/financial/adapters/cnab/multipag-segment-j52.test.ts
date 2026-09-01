@@ -81,7 +81,7 @@ describe('Multipag — Segmento J-52 (identificação do sacado e do cedente)', 
    *
    *   · 015 é `G004` "Uso Exclusivo FEBRABAN/CNAB", default Brancos no layout;
    *   · 016-017 é `*C004` "Código de Movimento Remessa" — dicionário de COBRANÇA, cujo domínio
-   *     (manual p. 118) enumera **'09' = Protestar**.
+   *     (manual p. 80) enumera **'09' = Protestar**.
    *
    * Propagar a política do #805 para cá emitiria arquivo bem-formado mandando PROTESTAR o título
    * que se está pagando, e nenhum inspetor de forma pegaria. O golden grava `00` — que sequer consta

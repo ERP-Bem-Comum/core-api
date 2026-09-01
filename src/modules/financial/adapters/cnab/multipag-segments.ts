@@ -405,7 +405,7 @@ const J52_OPTIONAL_RECORD_ID = '52'; // G067, colunas 018-019 — default '52' n
 // forma.
 //
 // ⚠️ NÃO é o `G061` do Segmento J, apesar de ocupar as MESMAS colunas 016-017 daquele registro. São
-// campos distintos de dicionários distintos, e o domínio do C004 (p. 118) torna a confusão cara:
+// campos distintos de dicionários distintos, e o domínio do C004 (p. 80) torna a confusão cara:
 //
 //   · `09` — o valor que o J grava em 016-017, "Inclusão do Registro Detalhe Bloqueado" (#805) —
 //     no domínio do C004 significa **'09' = Protestar**. Propagar a instrução do J para cá por
