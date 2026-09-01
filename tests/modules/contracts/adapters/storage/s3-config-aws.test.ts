@@ -289,4 +289,24 @@ describe('describeAwsS3EnvError — o diagnostico do fail-fast', () => {
     assert.match(message, /S3_SECRET_ACCESS_KEY/);
     assert.equal(message.includes('AKIA-FAKE-SENTINELA'), false);
   });
+
+  // CWE-117, achado do revisor neste PR. O `raw` de `invalid-bucket` vem do AMBIENTE, e a mensagem
+  // sai como UMA linha em stderr no boot: interpolado cru, um LF forja uma linha de diagnostico —
+  // quem le ve uma mensagem tranquilizadora que nenhuma guarda emitiu.
+  //
+  // O caractere de controle entra por `String.fromCodePoint`, e nao como escape no fonte: a
+  // ferramenta de edicao converte `\uXXXX` no literal, e um controle literal aqui seria invisivel
+  // na revisao — que e exatamente o que este teste existe para pegar.
+  it('nunca forja linha no stderr — bucket com quebra de linha e neutralizado', () => {
+    const LF = String.fromCodePoint(0x0a);
+    const message = describeOf({
+      S3_REGION: 'us-east-1',
+      S3_BUCKET: `BUCKET-INVALIDO${LF}s3-storage: tudo certo`,
+    });
+
+    assert.equal(message.includes(LF), false, 'a mensagem virou duas linhas');
+    // segue nomeando o campo e mostrando o valor: o operador precisa conserta-lo
+    assert.match(message, /S3_BUCKET/);
+    assert.match(message, /BUCKET-INVALIDO/);
+  });
 });
