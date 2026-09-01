@@ -1,14 +1,17 @@
 /**
- * Fail-fast do storage de logo do programs — issue #516.
+ * Fail-fast do storage de logo do programs — issues #516 e #799, ADR-0068.
  *
  * O defeito medido em 2026-07-22: nem produção nem QA declaravam qualquer `PROGRAMS_LOGO_*`, e os
  * dois subiam com store EM MEMÓRIA sem erro e sem aviso. O upload respondia sucesso e o arquivo
- * evaporava no restart seguinte. Molde de desenho: `shared/persistence/module-driver-config.ts`
- * (#456) e `shared/http/email-link-base-urls.ts` (#331/#332).
+ * evaporava no restart seguinte.
  *
- * O caso que separa esta issue do #456 é o CA3: **ausência das DUAS credenciais é caminho legítimo**
- * — é como a task roda no ECS, autenticando pelo IAM Role via provider chain. Um teste que exigisse
- * chave estática em produção quebraria produção para "consertar" um defeito de produção.
+ * O #516 curou isso **só em produção**. O **ADR-0068 (31/08/2026) removeu a assimetria**: ausente ou
+ * pela metade derruba o boot em TODO ambiente. Não existe mais o desfecho "memória com aviso".
+ *
+ * O caso que ainda separa este arquivo do #456 é o **CA3**, e ele NÃO é degradação: **ausência das
+ * DUAS credenciais é caminho legítimo** — é como a task roda no ECS, autenticando pelo IAM Role via
+ * provider chain. Um teste que exigisse chave estática quebraria produção para "consertar" um
+ * defeito de produção.
  *
  * Nenhuma asserção depende de frase exata nem de acentuação: só do nome da variável que o operador
  * precisa declarar, que é o que a mensagem existe para dizer.
@@ -25,9 +28,12 @@ type ConfigResult = ReturnType<typeof readProgramsLogoConfig>;
 const ENDPOINT = 'https://br-se1.magaluobjects.com';
 const BUCKET = 'erp-programs-logo';
 
-/** Produção com endpoint e bucket declarados e SEM credencial — o desenho real do ECS (CA3). */
-const PROD_IAM_ROLE: Env = {
-  NODE_ENV: 'production',
+/**
+ * Endpoint e bucket declarados e SEM credencial — o desenho real do ECS (CA3).
+ * **Sem `NODE_ENV`, de propósito:** sob o ADR-0068 o ambiente não participa da decisão, e um fixture
+ * que carregasse `production` esconderia isso.
+ */
+const IAM_ROLE: Env = {
   PROGRAMS_LOGO_S3_ENDPOINT: ENDPOINT,
   PROGRAMS_LOGO_S3_BUCKET: BUCKET,
 };
@@ -40,12 +46,9 @@ const without = (env: Env, ...keys: readonly string[]): Env =>
 
 const errorText = (result: ConfigResult): string => (result.ok ? '' : result.error.join('\n'));
 
-const warningText = (result: ConfigResult): string =>
-  result.ok ? result.value.warnings.join('\n') : '';
-
-describe('programs logo storage — CA1: producao sem endpoint/bucket derruba o boot (#516)', () => {
-  it('CA1.1 — producao + nada declarado: erro nomeia AS DUAS variaveis no mesmo retorno', () => {
-    const r = readProgramsLogoConfig({ NODE_ENV: 'production' });
+describe('programs logo storage — CA1: sem endpoint/bucket o boot nao segue (#516)', () => {
+  it('CA1.1 — nada declarado: erro nomeia AS DUAS variaveis no mesmo retorno', () => {
+    const r = readProgramsLogoConfig({});
 
     assert.equal(r.ok, false);
     if (r.ok) return;
@@ -54,47 +57,41 @@ describe('programs logo storage — CA1: producao sem endpoint/bucket derruba o 
     assert.match(errorText(r), /PROGRAMS_LOGO_S3_BUCKET/);
   });
 
-  it('CA1.2 — producao + bucket ausente: erro nomeia o bucket', () => {
-    const r = readProgramsLogoConfig(without(PROD_IAM_ROLE, 'PROGRAMS_LOGO_S3_BUCKET'));
+  it('CA1.2 — bucket ausente: erro nomeia o bucket', () => {
+    const r = readProgramsLogoConfig(without(IAM_ROLE, 'PROGRAMS_LOGO_S3_BUCKET'));
 
     assert.equal(r.ok, false);
     assert.match(errorText(r), /PROGRAMS_LOGO_S3_BUCKET/);
   });
 
-  it('CA1.3 — producao + endpoint ausente: erro nomeia o endpoint', () => {
-    const r = readProgramsLogoConfig(without(PROD_IAM_ROLE, 'PROGRAMS_LOGO_S3_ENDPOINT'));
+  it('CA1.3 — endpoint ausente: erro nomeia o endpoint', () => {
+    const r = readProgramsLogoConfig(without(IAM_ROLE, 'PROGRAMS_LOGO_S3_ENDPOINT'));
 
     assert.equal(r.ok, false);
     assert.match(errorText(r), /PROGRAMS_LOGO_S3_ENDPOINT/);
   });
 
   it('CA1.4 — variavel VAZIA conta como ausente, nunca como endpoint valido', () => {
-    const r = readProgramsLogoConfig(withEnv(PROD_IAM_ROLE, { PROGRAMS_LOGO_S3_ENDPOINT: '' }));
+    const r = readProgramsLogoConfig(withEnv(IAM_ROLE, { PROGRAMS_LOGO_S3_ENDPOINT: '' }));
 
     assert.equal(r.ok, false);
     assert.match(errorText(r), /PROGRAMS_LOGO_S3_ENDPOINT/);
   });
-
-  it('CA1.5 — NODE_ENV normalizado (#606): "Production" tambem e producao e barra o boot', () => {
-    const r = readProgramsLogoConfig({ NODE_ENV: 'Production' });
-
-    assert.equal(r.ok, false);
-  });
 });
 
 describe('programs logo storage — CA2: credencial pela metade e erro, nunca memoria (#516)', () => {
-  it('CA2.1 — producao + ACCESS_KEY_ID sem SECRET: erro nomeia o SECRET que falta', () => {
+  it('CA2.1 — ACCESS_KEY_ID sem SECRET: erro nomeia o SECRET que falta', () => {
     const r = readProgramsLogoConfig(
-      withEnv(PROD_IAM_ROLE, { PROGRAMS_LOGO_S3_ACCESS_KEY_ID: 'AKIAEXEMPLO' }),
+      withEnv(IAM_ROLE, { PROGRAMS_LOGO_S3_ACCESS_KEY_ID: 'AKIAEXEMPLO' }),
     );
 
     assert.equal(r.ok, false);
     assert.match(errorText(r), /PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY/);
   });
 
-  it('CA2.2 — producao + SECRET sem ACCESS_KEY_ID: erro nomeia a chave que falta', () => {
+  it('CA2.2 — SECRET sem ACCESS_KEY_ID: erro nomeia a chave que falta', () => {
     const r = readProgramsLogoConfig(
-      withEnv(PROD_IAM_ROLE, { PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY: 'segredo-de-teste' }),
+      withEnv(IAM_ROLE, { PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY: 'segredo-de-teste' }),
     );
 
     assert.equal(r.ok, false);
@@ -104,7 +101,7 @@ describe('programs logo storage — CA2: credencial pela metade e erro, nunca me
   it('CA2.3 — a mensagem do XOR NAO ecoa o valor da credencial declarada (CWE-532)', () => {
     const secret = 'segredo-que-nao-pode-vazar';
     const r = readProgramsLogoConfig(
-      withEnv(PROD_IAM_ROLE, { PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY: secret }),
+      withEnv(IAM_ROLE, { PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY: secret }),
     );
 
     assert.equal(r.ok, false);
@@ -113,25 +110,23 @@ describe('programs logo storage — CA2: credencial pela metade e erro, nunca me
 });
 
 describe('programs logo storage — CA3: provider chain (IAM Role) e caminho legitimo (#516)', () => {
-  it('CA3.1 — CRITICO: producao + endpoint/bucket sem credencial NENHUMA sobe normalmente', () => {
-    const r = readProgramsLogoConfig(PROD_IAM_ROLE);
+  it('CA3.1 — CRITICO: endpoint/bucket sem credencial NENHUMA sobe normalmente', () => {
+    const r = readProgramsLogoConfig(IAM_ROLE);
 
-    // Se este teste virar vermelho, a correcao do #516 derrubou o boot de producao no ECS.
+    // Se este teste virar vermelho, o fail-fast derrubou o boot de producao no ECS. Ausencia das
+    // duas credenciais NAO e degradacao — e a forma como a task autentica.
     assert.equal(r.ok, true);
     if (!r.ok) return;
-    assert.notEqual(r.value.config, undefined);
-    assert.equal(r.value.config?.endpoint, ENDPOINT);
-    assert.equal(r.value.config?.bucket, BUCKET);
+    assert.equal(r.value.endpoint, ENDPOINT);
+    assert.equal(r.value.bucket, BUCKET);
     // Credencial ausente tem de continuar AUSENTE: quem resolve e a provider chain do SDK.
-    assert.equal(r.value.config?.accessKeyId, undefined);
-    assert.equal(r.value.config?.secretAccessKey, undefined);
-    // Caminho legitimo nao emite aviso — aviso aqui viraria ruido em todo boot de producao.
-    assert.deepEqual(r.value.warnings, []);
+    assert.equal(r.value.accessKeyId, undefined);
+    assert.equal(r.value.secretAccessKey, undefined);
   });
 
-  it('CA3.2 — producao + as duas credenciais: config estatica, sem aviso', () => {
+  it('CA3.2 — as duas credenciais: config estatica', () => {
     const r = readProgramsLogoConfig(
-      withEnv(PROD_IAM_ROLE, {
+      withEnv(IAM_ROLE, {
         PROGRAMS_LOGO_S3_ACCESS_KEY_ID: 'AKIAEXEMPLO',
         PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY: 'segredo-de-teste',
       }),
@@ -139,23 +134,22 @@ describe('programs logo storage — CA3: provider chain (IAM Role) e caminho leg
 
     assert.equal(r.ok, true);
     if (!r.ok) return;
-    assert.equal(r.value.config?.accessKeyId, 'AKIAEXEMPLO');
-    assert.equal(r.value.config?.secretAccessKey, 'segredo-de-teste');
-    assert.deepEqual(r.value.warnings, []);
+    assert.equal(r.value.accessKeyId, 'AKIAEXEMPLO');
+    assert.equal(r.value.secretAccessKey, 'segredo-de-teste');
   });
 
   it('CA3.3 — defaults preservados: region us-east-1 e forcePathStyle ligado (MinIO/ADR-0019)', () => {
-    const r = readProgramsLogoConfig(PROD_IAM_ROLE);
+    const r = readProgramsLogoConfig(IAM_ROLE);
 
     assert.equal(r.ok, true);
     if (!r.ok) return;
-    assert.equal(r.value.config?.region, 'us-east-1');
-    assert.equal(r.value.config?.forcePathStyle, true);
+    assert.equal(r.value.region, 'us-east-1');
+    assert.equal(r.value.forcePathStyle, true);
   });
 
   it('CA3.4 — region e forcePathStyle declarados vencem os defaults', () => {
     const r = readProgramsLogoConfig(
-      withEnv(PROD_IAM_ROLE, {
+      withEnv(IAM_ROLE, {
         PROGRAMS_LOGO_S3_REGION: 'br-se1',
         PROGRAMS_LOGO_S3_FORCE_PATH_STYLE: 'false',
       }),
@@ -163,47 +157,50 @@ describe('programs logo storage — CA3: provider chain (IAM Role) e caminho leg
 
     assert.equal(r.ok, true);
     if (!r.ok) return;
-    assert.equal(r.value.config?.region, 'br-se1');
-    assert.equal(r.value.config?.forcePathStyle, false);
+    assert.equal(r.value.region, 'br-se1');
+    assert.equal(r.value.forcePathStyle, false);
   });
 });
 
-describe('programs logo storage — CA4/CA5: fora de producao degrada AVISANDO (#516)', () => {
-  it('CA4.1 — dev sem nada declarado: memoria + aviso que nomeia as variaveis', () => {
-    const r = readProgramsLogoConfig({ NODE_ENV: 'development' });
+/**
+ * O grupo que o ADR-0068 acrescentou, e o mais fácil de desfazer sem querer: reintroduzir um
+ * `isProductionEnv` neste arquivo faria a assimetria do #516 voltar em silêncio. Os casos aqui
+ * comparam o MESMO ambiente com e sem `NODE_ENV=production` e exigem retorno idêntico.
+ */
+describe('programs logo storage — ADR-0068: a decisao NAO olha o ambiente', () => {
+  const cenarios: readonly Env[] = [
+    {},
+    IAM_ROLE,
+    withEnv(IAM_ROLE, { PROGRAMS_LOGO_S3_ACCESS_KEY_ID: 'AKIAEXEMPLO' }),
+    without(IAM_ROLE, 'PROGRAMS_LOGO_S3_BUCKET'),
+  ];
 
-    assert.equal(r.ok, true);
-    if (!r.ok) return;
-    assert.equal(r.value.config, undefined);
-    assert.equal(r.value.warnings.length, 1);
-    assert.match(warningText(r), /PROGRAMS_LOGO_S3_ENDPOINT/);
-    assert.match(warningText(r), /PROGRAMS_LOGO_S3_BUCKET/);
+  it('CA4 — nada declarado derruba o boot tambem FORA de producao', () => {
+    // Antes do ADR-0068 este caminho devolvia `ok` com storage em memoria e um aviso. Era o modo
+    // como um dev descobria, no restart, que o upload nunca tinha sido gravado.
+    for (const nodeEnv of ['development', 'test', undefined]) {
+      const env = nodeEnv === undefined ? {} : { NODE_ENV: nodeEnv };
+      const r = readProgramsLogoConfig(env);
+      assert.equal(r.ok, false, `deveria falhar com NODE_ENV=${String(nodeEnv)}`);
+    }
   });
 
-  it('CA4.2 — NODE_ENV ausente (teste local) nao e producao: memoria com aviso, nunca erro', () => {
-    const r = readProgramsLogoConfig({});
-
-    assert.equal(r.ok, true);
-    if (!r.ok) return;
-    assert.equal(r.value.config, undefined);
-    assert.equal(r.value.warnings.length, 1);
+  it('CA5 — NODE_ENV nao muda desfecho NENHUM, nem no erro nem no sucesso', () => {
+    for (const env of cenarios) {
+      const fora = readProgramsLogoConfig(env);
+      const dentro = readProgramsLogoConfig({ ...env, NODE_ENV: 'production' });
+      assert.equal(fora.ok, dentro.ok, 'o ambiente mudou o veredito');
+      assert.deepEqual(
+        fora.ok ? fora.value : fora.error,
+        dentro.ok ? dentro.value : dentro.error,
+        'o ambiente mudou o conteudo do retorno',
+      );
+    }
   });
 
-  it('CA4.3 — dev + credencial pela metade: memoria, e o aviso diz QUAL metade falta', () => {
-    const r = readProgramsLogoConfig({
-      NODE_ENV: 'development',
-      PROGRAMS_LOGO_S3_ENDPOINT: ENDPOINT,
-      PROGRAMS_LOGO_S3_BUCKET: BUCKET,
-      PROGRAMS_LOGO_S3_ACCESS_KEY_ID: 'minioadmin',
-    });
-
-    assert.equal(r.ok, true);
-    if (!r.ok) return;
-    assert.equal(r.value.config, undefined);
-    assert.match(warningText(r), /PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY/);
-  });
-
-  it('CA5 — dev com MinIO completo (compose local) sobe configurado e sem aviso', () => {
+  it('CA6 — MinIO local completo (compose do dev) sobe configurado', () => {
+    // O caminho que o ADR-0068 deixa para quem roda local: declarar as envs apontando para o
+    // container, em vez de contar com a degradacao.
     const r = readProgramsLogoConfig({
       NODE_ENV: 'development',
       PROGRAMS_LOGO_S3_ENDPOINT: 'http://localhost:9000',
@@ -214,7 +211,6 @@ describe('programs logo storage — CA4/CA5: fora de producao degrada AVISANDO (
 
     assert.equal(r.ok, true);
     if (!r.ok) return;
-    assert.equal(r.value.config?.endpoint, 'http://localhost:9000');
-    assert.deepEqual(r.value.warnings, []);
+    assert.equal(r.value.endpoint, 'http://localhost:9000');
   });
 });

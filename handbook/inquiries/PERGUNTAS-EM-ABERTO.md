@@ -11,10 +11,10 @@
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 12 de 34 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0034](./0034-in-memory-fora-de-local-custo-na-piramide.md)
-- **Total de perguntas em aberto:** **57**
+- **Inquiries cobertas:** 11 de 34 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md)
+- **Total de perguntas em aberto:** **53**
 
-As demais 22 estão `decided` (18), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
+As demais 23 estão `decided` (19), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 
 <!-- END:generated -->
@@ -36,7 +36,6 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
 | [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | **Nada — o gatilho de fechamento está cumprido.** Falta decidir se vira `decided` | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 0 |
 | [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | P.O. — a forma da recusa na tela; as 4 saídas já estão decididas | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
-| [0034](#inquiry-0034--in-memory-fora-de-local-o-custo-na-pirâmide) | `open` | Dono do repo — escolher A ou B, agora com o custo medido | A issue [#799](https://github.com/ERP-Bem-Comum/core-api/issues/799); o ADR da política de env, que revoga o FR-007 do #456; as duas guardas que hoje degradam fora de produção (#456 e #516) | 4 |
 
 ---
 
@@ -360,34 +359,6 @@ valer nesta branch**, onde o #814 já está integrado.
       nunca o dado.**
 - [ ] **S4.** `withDeadlockRetry` no `remittance-repository` — rede, não correção. ⚠️ A política atual é
       `maxAttempts: 3` **sem jitter**: duas transações que colidiram no mesmo instante voltam juntas.
-
----
-
-## Inquiry-0034 — In-memory fora de LOCAL: o custo na pirâmide
-
-> **Origem:** [`0034-in-memory-fora-de-local-custo-na-piramide.md`](./0034-in-memory-fora-de-local-custo-na-piramide.md) §4 e §5
-> **Aberta em:** 2026-08-31 · **Destinatário:** Gabriel (decisão A ou B)
-> **Por que importa:** a política de env fixada em 31/08 (fail-fast em toda variável usada; in-memory só
-> LOCAL, via orquestrador) responde a #799 e obriga a mexer nas guardas do #456 e do #516. O tamanho do
-> trabalho depende de qual fronteira ela alcança — e a estimativa que circulava (179 arquivos de teste)
-> media a fronteira errada.
-
-**Bloqueador para fechar:** a escolha entre A e B. O caminho técnico de A está mapeado e cabe num PR; o
-de B custa 179 arquivos migrados para integração e faz o `pnpm test` exigir Docker.
-
-- [ ] **S1.** Decisão **A** (fail-fast só na fronteira de env, `ModuleDriverConfig` perde a variante
-      `memory`) ou **B** (remover `driver: 'memory'` também dos seis tipos por módulo). Medido em
-      `dev@01bbf477`: `ModuleDriverConfig` tem **1** consumidor de produção (`server.ts:87`); os 179
-      arquivos entram pela **outra** fronteira, por parâmetro de `build<Módulo>HttpDeps`. Fechar a env
-      fecha a única porta que hml e produção usam — B não protege nada além disso.
-- [ ] **S2.** ADR da política, **revogando o FR-007** do #456 — hoje `X_DRIVER=memory` declarado sobe em
-      produção com aviso, e o requisito está citado literalmente em `module-driver-config.ts:197`. Sob a
-      política nova ele passa a derrubar o boot: é revogação deliberada, não pode ficar implícita.
-- [ ] **S3.** Aplicar a régua nas duas guardas: `shared/persistence/module-driver-config.ts` (#456) e
-      `modules/programs/adapters/http/logo-storage-config.ts` (#516), as duas hoje degradando fora de
-      produção. Fail-fast vale **também em LOCAL** (decidido em 31/08).
-- [ ] **S4.** Fechar **#799** citando o ADR — a pergunta dela ("estender o fail-fast além da produção?")
-      está respondida.
 
 ---
 

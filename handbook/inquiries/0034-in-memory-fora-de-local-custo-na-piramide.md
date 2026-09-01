@@ -1,19 +1,19 @@
 ---
 inquiry: 0034
 title: 'Eliminar o in-memory fora de LOCAL — o custo na pirâmide de testes, e por que a estimativa de 179 arquivos estava errada'
-state: open
+state: decided
 opened: 2026-08-31
 last_reviewed: 2026-08-31
 ---
 
 # Inquiry-0034: Eliminar o in-memory fora de LOCAL — o custo na pirâmide de testes
 
-- **Status:** Open
+- **Status:** Decided
 - **Opened:** 2026-08-31
-- **Closed/Decided:** —
+- **Closed/Decided:** 2026-08-31 — alternativa **A**, escolhida pelo dono com o custo medido na mesa
 - **Opened by:** Gabriel (sessão assistida, worktree `failfast-799`)
 - **Asked to:** time interno
-- **Impact:** ADR (a política de env) + arquitetura da suíte de testes
+- **Impact:** [ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md) + arquitetura da suíte de testes
 
 ---
 
@@ -174,21 +174,39 @@ resolvida em silêncio.
 
 ## 5. Decisão final
 
-**PENDENTE** — aguarda o dono escolher entre A e B, agora com o custo real medido. A recomendação é
-**A**, com a revogação do FR-007 registrada em ADR.
+**Alternativa A**, escolhida pelo dono em 31/08/2026 com o custo medido na mesa, e **executada no
+mesmo PR**. Fail-fast também em LOCAL, decidido junto.
 
-O bloqueador é só a escolha: o caminho técnico de A está mapeado e cabe em um PR.
+Registrada no **[ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md)**, que
+revoga o FR-007 do #456 e fecha a #799.
+
+### O que a execução acrescentou ao que esta inquiry previa
+
+Duas consequências não apareceram na análise e só a implementação expôs:
+
+1. **O `server.ts` tinha sete ternários `driver === 'mysql' ? … : memory` que viraram código morto**
+   — e não foi julgamento que os removeu: o ESLint (`no-unnecessary-condition`) recusa a comparação
+   assim que o tipo perde a variante. O gate mecânico decidiu o escopo.
+2. **Os quatro scripts de E2E dependiam da degradação.** Declaravam entre 1 e 4 drivers dos 7 (o
+   `auth.sh`, apenas um) e nenhum declarava `PROGRAMS_LOGO_S3_*`; os demais módulos subiam em
+   memória, calados. Com a política, nenhum subiria. Corrigidos por um helper único
+   (`scripts/e2e/server-env.sh`), para que o quinto script não nasça com o mesmo buraco.
+
+O primeiro é o custo previsto; o segundo **não estava previsto** e é a evidência mais direta do
+problema que a política existe para resolver: quatro smokes mediam, havia meses, um servidor
+meio configurado — e passavam.
 
 ---
 
 ## 6. Saídas (outputs concretos)
 
-- [ ] Decisão A ou B pelo dono
-- [ ] ADR novo: política de env fail-fast em todo ambiente, revogando o FR-007 do #456
-- [ ] `module-driver-config.ts`: env ausente/inválida derruba em todo ambiente; `memory` deixa de ser valor aceito de `X_DRIVER`
-- [ ] `logo-storage-config.ts` (#516): mesma régua
-- [ ] Fechar **#799** citando o ADR
-- [ ] Corrigir a memória de trabalho que trata os 179 como custo de matar o driver
+- [x] Decisão A ou B pelo dono — **A**, 31/08/2026
+- [x] ADR novo: [ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md), revogando o FR-007 do #456
+- [x] `module-driver-config.ts`: env ausente/inválida derruba em todo ambiente; `memory` deixa de ser valor aceito de `X_DRIVER`
+- [x] `logo-storage-config.ts` (#516): mesma régua
+- [x] Os 4 scripts de E2E passam a declarar os 7 módulos, via `scripts/e2e/server-env.sh`
+- [x] Fechar **#799** citando o ADR
+- [x] Corrigir a memória de trabalho que trata os 179 como custo de matar o driver
 
 ---
 
