@@ -193,4 +193,20 @@ describe('describeVanS3ConfigError — o diagnóstico do fail-fast', () => {
     assert.match(message, /VAN_S3_SECRET_ACCESS_KEY/);
     assert.equal(message.includes('AKIAEXEMPLO'), false);
   });
+
+  // CWE-117, irmão do caso 16 da guarda dos 7 drivers: o valor vem do AMBIENTE, e a mensagem sai
+  // como uma linha em stderr. Interpolado cru, um `\n` forja uma linha inteira — quem lê o boot vê
+  // uma mensagem tranquilizadora que ninguém emitiu. Achado do revisor no PR #916; a régua existia
+  // de um lado e não tinha sido aplicada aqui.
+  it('nunca forja linha no stderr — valor com quebra de linha e neutralizado', () => {
+    const message = describe_({
+      ...base,
+      VAN_S3_FORCE_PATH_STYLE: 'talvez\nvan-storage: tudo certo',
+    });
+
+    assert.equal(message.includes('\n'), false, 'a mensagem virou duas linhas');
+    // segue nomeando o campo e mostrando o começo do valor: o operador precisa consertá-lo
+    assert.match(message, /VAN_S3_FORCE_PATH_STYLE/);
+    assert.match(message, /talvez/);
+  });
 });
