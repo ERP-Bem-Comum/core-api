@@ -17,6 +17,8 @@ import {
   clearingHouseFor,
   tedPurposeFor,
   complementPurposeFor,
+  fileGroupFor,
+  pixIdentificationFor,
   type BatchProfileError,
   type CnabBatchProfile,
   type ProfiledPayment,
@@ -140,6 +142,12 @@ export type RemittanceFileError =
   | CnabRecordError
   | BatchProfileError
   | 'remittance-without-payments'
+  // Seleção que mistura modalidades que o manual manda em arquivos SEPARADOS (pág. 15: o Pix vai em
+  // arquivo próprio). Recusa em vez de repartir, e a escolha é deliberada: este montador monta UM
+  // arquivo, e reparti-lo aqui produziria N arquivos com um NSA só — o mesmo número sequencial em
+  // dois arquivos distintos, que é retransmissão aos olhos do banco. Quem reparte é quem consegue
+  // alocar um NSA por arquivo, e isso vive no use case. Ver `planRemittanceFiles`.
+  | 'remittance-mixed-file-modalities'
   // Um componente da referência de G064 não coube na sua largura (#752, CA5). Recusar é a única
   // saída: truncar colapsaria duas referências distintas na mesma string, e o casamento do retorno
   // apontaria para o título errado — sem nada indicando que houve truncamento.
@@ -404,6 +412,59 @@ const groupIntoBatches = (
   return ok(order.map((key) => byKey.get(key) as Batch));
 };
 
+// ─── A partição multi-arquivo (CA4 da #838) ────────────────────────────────────────────────────
+//
+// Quais pagamentos vão em QUAL arquivo, sem montar arquivo nenhum. Devolve as posições de entrada
+// agrupadas — nunca os pagamentos —, e a escolha é deliberada: o chamador já os tem, e devolver
+// cópias abriria a porta para as duas listas divergirem. A posição é também o que ele usa para casar
+// as referências de G064 com os `documentId` que só ele conhece.
+//
+// ⚠️ SEPARADA DA MONTAGEM porque a alocação de NSA fica no meio das duas. Cada arquivo consome seu
+// próprio NSA — é o Número Sequencial do ARQUIVO, e dois arquivos com o mesmo número são, para o
+// banco, o mesmo arquivo transmitido duas vezes. Mas o NSA vem do banco de dados, sob lock, e esta
+// camada é pura (ADR-0006). Então quem sabe repartir não sabe alocar, e quem aloca não sabe
+// repartir: a partição precede a montagem, e o use case costura as duas.
+//
+// A ordem é a de PRIMEIRA APARIÇÃO de cada grupo na seleção, pela mesma razão que rege
+// `groupIntoBatches`: uma ordenação implícita faria dois arquivos com a mesma seleção saírem em
+// ordem diferente, e o operador confere contra o primeiro.
+export type RemittanceFilePlan = Readonly<{
+  // As posições de ENTRADA dos pagamentos deste arquivo, em ordem crescente.
+  paymentIndices: readonly number[];
+}>;
+
+export const planRemittanceFiles = (
+  payments: readonly RemittancePayment[],
+  cedenteBankCode: string,
+): Result<readonly RemittanceFilePlan[], RemittanceFileError> => {
+  if (payments.length === 0) return err('remittance-without-payments');
+
+  const order: string[] = [];
+  const byGroup = new Map<string, number[]>();
+
+  for (const [inputIndex, payment] of payments.entries()) {
+    // O perfil é derivado com a MESMA função do montador. Uma segunda derivação aqui faria a
+    // partição repartir por um critério e o arquivo sair por outro — e o defeito só apareceria como
+    // um arquivo de Pix com um lote de TED dentro, que o banco recusa inteiro.
+    const profile = batchProfileFor(profiledOf(payment), cedenteBankCode);
+    // Rota sem emissor aborta a partição inteira, e não só o arquivo dela: é a mesma postura de
+    // `groupIntoBatches`, e pelo mesmo motivo. Repartir e deixar um dos arquivos falhar adiante
+    // pagaria parte dos fornecedores e silenciaria o resto — com NSA já queimado no meio.
+    if (!profile.ok) return profile;
+
+    const group = fileGroupFor(profile.value.launchForm);
+    const indices = byGroup.get(group);
+    if (indices === undefined) {
+      order.push(group);
+      byGroup.set(group, [inputIndex]);
+    } else {
+      indices.push(inputIndex);
+    }
+  }
+
+  return ok(order.map((group) => ({ paymentIndices: byGroup.get(group) as readonly number[] })));
+};
+
 export const buildRemittanceFile = (
   input: RemittanceFileInput,
 ): Result<RemittanceFile, RemittanceFileError> => {
@@ -414,11 +475,32 @@ export const buildRemittanceFile = (
   const batches = groupIntoBatches(input.payments, input.cedente.bankCode);
   if (!batches.ok) return batches;
 
+  // ─── Um arquivo, UM grupo de modalidade ───────────────────────────────────────────────────────
+  //
+  // O grupo é derivado dos lotes, como tudo mais neste montador: a forma sai do conteúdo, e o grupo
+  // sai da forma. O primeiro lote define o grupo do arquivo e os demais têm de concordar.
+  //
+  // Recusar a divergência — em vez de repartir aqui, ou de escolher o grupo do primeiro lote e
+  // seguir — é o que torna o arquivo misto IMPOSSÍVEL de emitir por esquecimento. Uma régua que só
+  // descrevesse a partição deixaria o caminho aberto para quem não a chamasse, e o arquivo misto é
+  // bem-formado: ele passa no inspetor, o banco o aceita na entrada e recusa o processamento
+  // inteiro depois. É a diferença entre documentar a regra e cobrá-la.
+  const firstBatch = batches.value[0];
+  if (firstBatch === undefined) return err('remittance-without-payments');
+
+  const fileGroup = fileGroupFor(firstBatch.profile.launchForm);
+  if (batches.value.some((b) => fileGroupFor(b.profile.launchForm) !== fileGroup)) {
+    return err('remittance-mixed-file-modalities');
+  }
+
   const header = fileHeader({
     cedente: input.cedente,
     bankName: input.bankName,
     nsa: input.nsa,
     generatedAt: input.generatedAt,
+    // A identificação de Pix (172-174) é do ARQUIVO, e por isso deriva do grupo e não da forma de
+    // um lote: um arquivo tem um grupo só, mas pode ter várias formas.
+    pixIdentification: pixIdentificationFor(fileGroup),
   });
   if (!header.ok) return header;
 

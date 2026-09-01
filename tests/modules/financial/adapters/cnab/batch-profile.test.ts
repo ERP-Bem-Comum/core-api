@@ -8,6 +8,9 @@ import {
   clearingHouseFor,
   tedPurposeFor,
   complementPurposeFor,
+  fileGroupFor,
+  pixIdentificationFor,
+  LAUNCH_PIX_TRANSFER,
   type ProfiledPayment,
 } from '#src/modules/financial/adapters/cnab/batch-profile.ts';
 
@@ -355,5 +358,63 @@ describe('Perfil de lote — as rotas que ainda não têm emissor', () => {
       assert.ok(isErr(r), `esperava erro para ${route}`);
       assert.equal(r.error, 'remittance-launch-form-unsupported');
     }
+  });
+});
+
+/**
+ * A régua da partição multi-arquivo (CA4 da #838).
+ *
+ * O manual (pág. 15) manda o Pix "em arquivo separado dos demais serviços e modalidades". As demais
+ * formas CONVIVEM — o golden de TED tem `01`, `41` e `31` no mesmo arquivo —, então a régua é um
+ * agrupamento, não um predicado de exclusividade.
+ */
+describe('Perfil de lote — a forma que exige arquivo próprio', () => {
+  it('põe o Pix num grupo só dele', () => {
+    assert.notEqual(fileGroupFor(LAUNCH_PIX_TRANSFER), fileGroupFor('41'));
+  });
+
+  // A prova que importa não é "o Pix é separado" — é "o resto NÃO é". Uma régua que partisse por
+  // forma quebraria em três o arquivo que o golden de TED mostra inteiro, e cada pedaço seria um
+  // arquivo válido que ninguém pediu.
+  it('mantém no MESMO grupo as formas que o golden de TED traz num arquivo só', () => {
+    const [creditForm, tedForm, billetOtherForm] = ['01', '41', '31'];
+    const groups = new Set([creditForm, tedForm, billetOtherForm].map(fileGroupFor));
+    assert.equal(groups.size, 1);
+  });
+
+  // Total sobre G029: forma desconhecida cai no grupo comum. Partir por omissão quebraria em dois os
+  // arquivos mistos que o banco JÁ aceita — dano pago sem ter lido nada no manual.
+  it('põe forma desconhecida no grupo comum, nunca num arquivo próprio', () => {
+    for (const unknownForm of ['00', '99', '03', '43']) {
+      assert.equal(fileGroupFor(unknownForm), fileGroupFor('41'), unknownForm);
+    }
+  });
+});
+
+/**
+ * G021, header de arquivo, 172-174 — medido nos goldens do banco em 01/09/2026.
+ */
+describe('Perfil de lote — identificação de Pix no header de arquivo', () => {
+  it('declara a literal PIX no arquivo de Pix', () => {
+    assert.equal(pixIdentificationFor(fileGroupFor(LAUNCH_PIX_TRANSFER)), 'PIX');
+  });
+
+  // `null`, e não string vazia: significa "este arquivo NÃO tem o campo", com a mesma semântica de
+  // `tedPurposeFor`. Quem escreve a linha é que traduz `null` em brancos.
+  it('devolve null — e não string vazia — fora do arquivo de Pix', () => {
+    for (const form of ['01', '41', '31', '30', '99']) {
+      assert.equal(pixIdentificationFor(fileGroupFor(form)), null, form);
+    }
+  });
+
+  // ⚠️ A régua e a literal têm de concordar: um arquivo cujo grupo é o do Pix e cujo header sai em
+  // branco é bem-formado e some no meio dos demais. É a ligação entre as duas funções que este teste
+  // fixa — nenhuma delas sozinha a garante.
+  it('só declara PIX para o grupo que a partição separa', () => {
+    const pixGroup = fileGroupFor(LAUNCH_PIX_TRANSFER);
+    const otherGroup = fileGroupFor('41');
+
+    assert.notEqual(pixIdentificationFor(pixGroup), null);
+    assert.equal(pixIdentificationFor(otherGroup), null);
   });
 });

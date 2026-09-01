@@ -49,7 +49,13 @@ const line = (r: ReturnType<typeof fileHeader>): string => {
 
 describe('Multipag — Header de Arquivo (tipo 0)', () => {
   const record = line(
-    fileHeader({ cedente: CEDENTE, bankName: 'BRADESCO', nsa: 42, generatedAt: AT }),
+    fileHeader({
+      cedente: CEDENTE,
+      bankName: 'BRADESCO',
+      nsa: 42,
+      generatedAt: AT,
+      pixIdentification: null,
+    }),
   );
 
   it('tem exatamente 240 posições', () => {
@@ -88,6 +94,7 @@ describe('Multipag — Header de Arquivo (tipo 0)', () => {
       bankName: 'BRADESCO',
       nsa: 42,
       generatedAt: AT,
+      pixIdentification: null,
     });
     assert.ok(isErr(r));
     // O erro tem nome PRÓPRIO, e não um `numeric-field-*` emprestado: o convênio é campo Alfa, e
@@ -105,6 +112,7 @@ describe('Multipag — Header de Arquivo (tipo 0)', () => {
       bankName: 'BRADESCO',
       nsa: 42,
       generatedAt: AT,
+      pixIdentification: null,
     });
     assert.ok(isErr(r));
     assert.equal(r.error, 'convenio-field-empty');
@@ -127,8 +135,66 @@ describe('Multipag — Header de Arquivo (tipo 0)', () => {
     assert.equal(at(record, 164, 166), '089');
   });
 
+  // ── Identificação de Pix (G021, 172-174) — CA4 da #838 ────────────────────────────────────────
+  //
+  // O campo 22 se PARTE em duas (pág. 15): 172-174 identificação + 175-191 reservado ao banco. O
+  // emissor escrevia `blanks(20)` num bloco só — aderente ao arquivo não-Pix por ACIDENTE, porque
+  // ali as duas metades são brancas. A fronteira só aparece quando uma delas é preenchida.
+  //
+  // As duas asserções medidas nos goldens do banco (01/09/2026): o de Pix traz [PIX] em 172-174 e
+  // 17 brancos em 175-191; o de TED traz brancos nos dois trechos.
+  //
+  // ⚠️ Este par de testes é o que impede a regressão cara: escrever `PIX` sem encurtar a metade
+  // vizinha produz registro de 243 posições, e a asserção de comprimento é a testemunha honesta.
+  it('deixa 172-191 em branco no arquivo que não é de Pix', () => {
+    assert.equal(at(record, 172, 174), '   ');
+    assert.equal(at(record, 175, 191), ' '.repeat(17));
+    assert.equal(record.length, 240);
+  });
+
+  it('escreve PIX em 172-174 e mantém 17 brancos em 175-191 no arquivo de Pix', () => {
+    const pixRecord = line(
+      fileHeader({
+        cedente: CEDENTE,
+        bankName: 'BRADESCO',
+        nsa: 42,
+        generatedAt: AT,
+        pixIdentification: 'PIX',
+      }),
+    );
+
+    assert.equal(at(pixRecord, 172, 174), 'PIX');
+    assert.equal(at(pixRecord, 175, 191), ' '.repeat(17));
+    // O registro NÃO cresceu: 17 e não 20 na metade reservada é a diferença entre 240 e 243.
+    assert.equal(pixRecord.length, 240);
+  });
+
+  // O resto do header não sabe que o arquivo é de Pix: a identificação é o ÚNICO campo que muda.
+  // Sem esta prova, uma variante que também mexesse em densidade, versão de layout ou convênio
+  // passaria despercebida — e o arquivo de Pix é o que menos gente confere a olho.
+  it('não muda mais nada do header por ser arquivo de Pix', () => {
+    const pixRecord = line(
+      fileHeader({
+        cedente: CEDENTE,
+        bankName: 'BRADESCO',
+        nsa: 42,
+        generatedAt: AT,
+        pixIdentification: 'PIX',
+      }),
+    );
+
+    assert.equal(at(pixRecord, 1, 171), at(record, 1, 171));
+    assert.equal(at(pixRecord, 175, 240), at(record, 175, 240));
+  });
+
   it('recusa NSA que não cabe em 6 dígitos, em vez de truncar', () => {
-    const r = fileHeader({ cedente: CEDENTE, bankName: 'BRADESCO', nsa: 1234567, generatedAt: AT });
+    const r = fileHeader({
+      cedente: CEDENTE,
+      bankName: 'BRADESCO',
+      nsa: 1234567,
+      generatedAt: AT,
+      pixIdentification: null,
+    });
     assert.ok(isErr(r));
     assert.equal(r.error, 'numeric-field-overflow');
   });
@@ -257,7 +323,15 @@ describe('Multipag — o envelope fecha sobre si mesmo', () => {
   it('a contagem declarada bate com as linhas efetivamente emitidas', () => {
     const detailCount = 2;
     const records = [
-      line(fileHeader({ cedente: CEDENTE, bankName: 'BRADESCO', nsa: 1, generatedAt: AT })),
+      line(
+        fileHeader({
+          cedente: CEDENTE,
+          bankName: 'BRADESCO',
+          nsa: 1,
+          generatedAt: AT,
+          pixIdentification: null,
+        }),
+      ),
       line(batchHeader({ cedente: CEDENTE, batchNumber: 1, profile: TRANSFER_PROFILE })),
       ...Array.from({ length: detailCount }, () => 'x'.repeat(240)),
       line(
