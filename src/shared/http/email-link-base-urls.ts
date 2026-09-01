@@ -10,6 +10,7 @@
 
 import { err, ok, type Result } from '#src/shared/primitives/result.ts';
 import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
+import { echoEnvValue } from '#src/shared/runtime/env-echo.ts';
 
 const FIELDS = [
   ['resetBaseUrl', 'AUTH_RESET_BASE_URL'],
@@ -45,7 +46,15 @@ export const readEmailLinkBaseUrls = (
       continue;
     }
     if (!isAbsoluteHttpUrl(value)) {
-      errors.push(`${name} deve ser URL absoluta http(s), valor atual: "${value}"`);
+      // `echoEnvValue` e nao interpolacao crua (CWE-117): o valor vem do ambiente, e esta mensagem
+      // sai como UMA linha em stderr no boot — um `\n` nela forjaria uma linha de diagnostico.
+      //
+      // Sanitizar BASTA aqui, e a escolha e deliberada (issue #918). O campo e uma base URL que vai
+      // no corpo de um e-mail, entao o valor e publico por proposito; e ele so e ecoado no ramo em
+      // que NAO passou por `isAbsoluteHttpUrl`, logo nao ha `user:pass@host` estruturado a vazar.
+      // Onde o valor PODE ser o segredo, a regra e outra — ecoar so o que tem FORMA esperada, como
+      // `echoableDriverValue` faz na guarda dos drivers. Ver o docblock de `env-echo.ts`.
+      errors.push(`${name} deve ser URL absoluta http(s), valor atual: "${echoEnvValue(value)}"`);
       continue;
     }
     urls[field] = value;
