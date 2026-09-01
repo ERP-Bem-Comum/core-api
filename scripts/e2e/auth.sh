@@ -31,9 +31,14 @@ MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/cor
   node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
 
 # Servidor real em background (applyMigrations:false — schema já provisionado acima).
-AUTH_DRIVER=mysql \
-  AUTH_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
-  PORT=3100 \
+#
+# Os SETE módulos são declarados pelo helper, e não só o `auth`: sob o ADR-0068 o boot exige a
+# configuração de todos, porque o `server.ts` compõe todos. Antes, os seis não citados aqui subiam
+# em memória sem aviso — este smoke media um servidor meio configurado e não tinha como saber.
+DB='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
+  source scripts/e2e/server-env.sh
+
+PORT=3100 \
   LOG_LEVEL=warn \
   node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts &
 SRV=$!
