@@ -108,7 +108,18 @@ const toPaymentData = (
             pixKey: contractor.pixKey,
           },
   });
-  if (readiness.status !== 'ready') return err('remittance-payment-incomplete');
+  // ⚠️ `no-issuer` ATRAVESSA de propósito, e é o que faz a CA2 da #837 valer: a rota tem todos os
+  // dados, o que falta é emissor. Quem nomeia essa recusa é `batchProfileFor`, com
+  // `remittance-launch-form-unsupported` — e a mensagem dela ("forma ainda não emitida no arquivo,
+  // retire-o da seleção") é a MESMA que o pré-voo mostrou. Traduzi-la aqui em
+  // `remittance-payment-incomplete` mandaria o operador procurar cadastro que não falta, com uma
+  // mensagem diferente da que ele acabou de ler na tela — a divergência que a issue fechou.
+  //
+  // A negação é a forma segura da condição: status novo que ninguém previu cai na recusa, não na
+  // passagem. Quem passa está enumerado; quem não está, não passa.
+  if (readiness.status !== 'ready' && readiness.status !== 'no-issuer') {
+    return err('remittance-payment-incomplete');
+  }
 
   switch (readiness.route) {
     case 'transfer': {

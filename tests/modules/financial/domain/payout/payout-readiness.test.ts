@@ -4,11 +4,13 @@ import { strict as assert } from 'node:assert';
 import { isOk } from '#src/shared/index.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
+import { hasRemittanceIssuer } from '#src/modules/financial/domain/payout/van-routes.ts';
 import type {
   PayeePaymentTarget,
   PayoutCandidate,
   PayoutGap,
   PayoutReadiness,
+  VanRoute,
 } from '#src/modules/financial/domain/payout/types.ts';
 import type { PaymentMethod } from '#src/modules/financial/domain/document/types.ts';
 
@@ -55,6 +57,19 @@ const fieldsOf = (r: PayoutReadiness): readonly string[] => gapsOf(r).map((g) =>
 const reasonFor = (r: PayoutReadiness, field: string): string | undefined =>
   gapsOf(r).find((g) => g.field === field)?.reason;
 
+// O desfecho esperado QUANDO O CADASTRO ESTÁ BOM — `ready` se a rota tem emissor, `no-issuer` se
+// não tem (#837).
+//
+// ⚠️ Derivado de `hasRemittanceIssuer`, e NÃO escrito à mão em cada caso, por duas razões que se
+// somam. A primeira: os casos abaixo medem LEITURA DE CADASTRO — que a chave basta, que a linha
+// digitável converte, que a pontuação não atrapalha. Fixar `'ready'` neles os faria medir também
+// "existe emissor", e eles quebrariam no dia em que o emissor de Pix entrasse, sem defeito algum. A
+// segunda, e é a que importa mais: derivar da fonte mantém a asserção EXATA. `notEqual(status,
+// 'incomplete')` passaria por ser cego — e `no-issuer` só é alcançável depois de o dado ser aceito,
+// porque a régua julga cadastro primeiro. Então afirmar o desfecho exato já prova que o dado passou.
+const whenDataIsGood = (route: VanRoute): 'ready' | 'no-issuer' =>
+  hasRemittanceIssuer(route) ? 'ready' : 'no-issuer';
+
 describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo exige', () => {
   // O reenquadramento da P.O. (issue #708): elegibilidade é por forma do título, não por
   // "favorecido com banco completo". Boleto e PIX não olham a conta estruturada.
@@ -85,14 +100,14 @@ describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo e
 });
 
 describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
-  it('aprova PIX com chave mesmo sem nenhum dado bancário', () => {
+  it('aceita a chave de PIX mesmo sem nenhum dado bancário', () => {
     const r = checkPayoutReadiness(
       candidate({
         paymentMethod: 'PIX',
         payee: target({ pixKey: { keyType: 'email', key: 'a@b.com' } }),
       }),
     );
-    assert.equal(r.status, 'ready');
+    assert.equal(r.status, whenDataIsGood('pix'));
   });
 
   // O `keyType` NÃO participa da decisão de aptidão — ele viaja para quem emite o registro. Um
@@ -103,7 +118,7 @@ describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
       const r = checkPayoutReadiness(
         candidate({ paymentMethod: 'PIX', payee: target({ pixKey: { keyType, key: 'x' } }) }),
       );
-      assert.equal(r.status, 'ready', keyType);
+      assert.equal(r.status, whenDataIsGood('pix'), keyType);
     }
   });
 
@@ -145,10 +160,13 @@ const DIGITABLE_LINE = '23791234546789012345767890123457512340000015000'; // 47
 const TAX_GUIDE_LINE = '836500000010500012345673890123456786901234567898'; // 48
 
 describe('checkPayoutReadiness — boleto e guia dependem do código de barras, não do favorecido', () => {
-  for (const paymentMethod of ['Boleto', 'GuiaRecolhimento'] as const) {
-    it(`aprova ${paymentMethod} com código de barras e favorecido sem banco`, () => {
+  for (const [paymentMethod, route] of [
+    ['Boleto', 'billet'],
+    ['GuiaRecolhimento', 'tax-guide'],
+  ] as const) {
+    it(`aceita o código de barras de ${paymentMethod} com favorecido sem banco`, () => {
       const r = checkPayoutReadiness(candidate({ paymentMethod, paymentDetail: BARCODE }));
-      assert.equal(r.status, 'ready');
+      assert.equal(r.status, whenDataIsGood(route));
     });
 
     it(`recusa ${paymentMethod} sem código de barras`, () => {
@@ -183,11 +201,11 @@ describe('checkPayoutReadiness — boleto e guia dependem do código de barras, 
 
   // A guia de arrecadação tem 48 e nunca foi dado errado — era um terceiro comprimento que ninguém
   // tinha mapeado, e caía em `malformed` acusando o operador de um erro que era do sistema.
-  it('aprova a linha digitável de arrecadação', () => {
+  it('converte a linha digitável de arrecadação sem acusar o operador', () => {
     const r = checkPayoutReadiness(
       candidate({ paymentMethod: 'GuiaRecolhimento', paymentDetail: TAX_GUIDE_LINE }),
     );
-    assert.equal(r.status, 'ready');
+    assert.equal(r.status, whenDataIsGood('tax-guide'));
   });
 
   // CA2 — o comprimento está certo e o dado é numérico; o que falhou foi UM dígito. `malformed`
