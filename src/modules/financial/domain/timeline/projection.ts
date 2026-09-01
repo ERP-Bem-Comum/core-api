@@ -1,7 +1,10 @@
 import type { Money } from '../../../../shared/kernel/money.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { Document } from '../document/types.ts';
+import type { DocumentId } from '../shared/document-id.ts';
+import type { PayableId } from '../shared/payable-id.ts';
 import type { DocumentEvent } from '../document/events.ts';
+import type { DocumentTaxonomy } from '../document/document.ts';
 import type { Payable, Payables } from '../payable/types.ts';
 import type { FieldChange, FinancialTimelineEntry } from './types.ts';
 
@@ -49,6 +52,60 @@ export const diffDocument = (before: Document | null, after: Document): readonly
 
 const allPayables = (p: Payables | null): readonly Payable[] =>
   p === null ? [] : [p.parent, ...p.children];
+
+// ─── M2: trilha da reclassificação (RN-M2-07) ────────────────────────────────
+
+const taxonomySnapshot = (t: DocumentTaxonomy): Readonly<Record<string, string | null>> => ({
+  programRef: t.programRef,
+  budgetPlanRef: t.budgetPlanRef,
+  costCenterRef: t.costCenterRef,
+  categoryRef: t.categoryRef,
+  subcategoryRef: t.subcategoryRef,
+});
+
+export type ProjectReclassificationInput = Readonly<{
+  eventId: string;
+  documentId: DocumentId;
+  before: DocumentTaxonomy;
+  after: DocumentTaxonomy;
+  // Pai + filhos de retenção: TODOS registram o de→para, porque a classificação de todos mudou.
+  payableIds: readonly PayableId[];
+  actor: UserRef | null;
+  occurredAt: Date;
+}>;
+
+// M2/RN-M2-07: quem, quando, de→para — no pai e nos filhos afetados.
+//
+// Projetor PRÓPRIO, e não um campo a mais em `documentSnapshot`, por uma razão de leitura: a
+// taxonomia é do documento, mas a pergunta que a auditoria faz é "por que ESTE imposto está sob
+// ESTE projeto?". A resposta tem de estar na trilha DO TÍTULO de retenção, senão quem abre o filho
+// vê a classificação ter mudado e nenhum registro do ato. Emitir uma entry por título é o que torna
+// a cascata auditável do lado em que ela é observada.
+//
+// `changes` vazio → nenhuma entry (invariante 6: reclassificar para o mesmo valor não deixa rastro
+// de mudança que não houve). Quem chama não precisa checar antes.
+export const projectReclassification = (
+  input: ProjectReclassificationInput,
+): readonly FinancialTimelineEntry[] => {
+  const changes = diffSnapshots(taxonomySnapshot(input.before), taxonomySnapshot(input.after));
+  if (changes.length === 0) return [];
+
+  const base = {
+    eventId: input.eventId,
+    documentId: input.documentId,
+    // `DocumentSaved` é o marco honesto: a reclassificação É um save do documento, e é o literal que
+    // o CHECK `ck_fin_tl_event_type` já aceita. Um tipo novo custaria migration e não diria mais.
+    eventType: 'DocumentSaved' as const,
+    occurredAt: input.occurredAt,
+    actor: input.actor,
+    changes,
+  };
+
+  return [
+    { ...base, target: { kind: 'Document' as const, id: input.documentId } },
+    ...input.payableIds.map((id) => ({ ...base, target: { kind: 'Payable' as const, id } })),
+  ];
+};
 
 export type ProjectEntryInput = Readonly<{
   eventId: string;

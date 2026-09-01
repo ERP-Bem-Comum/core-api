@@ -424,6 +424,13 @@ export const paidPayablesToDto = (views: readonly PaidPayableView[]): PaidPayabl
     valueCents: String(v.valueCents),
     dueDate: v.dueDate.toISOString().slice(0, 10),
     paymentMethod: v.paymentMethod,
+    // #268: taxonomia vigente + `kind` (fonte × alvo da reclassificação — RN-M2-11).
+    kind: v.kind === 'Child' ? ('Child' as const) : ('Parent' as const),
+    programRef: v.programRef,
+    budgetPlanRef: v.budgetPlanRef,
+    costCenterRef: v.costCenterRef,
+    categoryRef: v.categoryRef,
+    subcategoryRef: v.subcategoryRef,
   })),
 });
 
@@ -502,6 +509,8 @@ export const transactionReconciliationToDto = (
   r: Reconciliation,
   reconciledByName: string | null = null,
   category: string | null = null,
+  // #268: os 5 refs vigentes. `null` quando não há de onde tirá-los (conciliação sem título).
+  taxonomy: TransactionReconciliationResponseDto['taxonomy'] = null,
 ): TransactionReconciliationResponseDto => ({
   id: String(r.id),
   transactionId: String(r.transactionId),
@@ -516,6 +525,7 @@ export const transactionReconciliationToDto = (
     reconciledValueCents: String(i.reconciledValueCents),
   })),
   category,
+  taxonomy,
 });
 
 /**

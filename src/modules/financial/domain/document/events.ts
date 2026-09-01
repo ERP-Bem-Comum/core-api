@@ -29,6 +29,11 @@ export type DocumentSaved = Readonly<{
   categoryRef: string | null;
   // #446 (REP-3 / Slice B): Plano Orçamentário carimbado no documento (#502) — flui até fin_payable_view.
   budgetPlanRef: string | null;
+  // M2/RN-M2-12: a folha da árvore (#502) viaja com as outras quatro. A coluna
+  // `fin_payable_view.subcategory_ref` e o índice dela existem desde o #502, mas o evento não a
+  // carregava — a projeção gravava `null` em toda linha, e o relatório agrupado por subcategoria
+  // via um balde vazio. É o mesmo descarte do #505, um nível acima: no contrato do evento.
+  subcategoryRef: string | null;
   costCenterRef: string | null;
   programRef: string | null;
   // #239: conta-débito (de qual conta cedente o pagamento sai) — p/ o widget "Últimos pagamentos".

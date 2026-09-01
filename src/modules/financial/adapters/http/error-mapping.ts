@@ -81,6 +81,13 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   // Remessa (#736): título não-`Approved` na seleção. É conflito com o estado do documento (ainda
   // não aprovado), não dado malformado — 409, como o contrato original previa.
   'document-not-approved',
+  // M2 (RN-M2-11 · M2-7): reclassificar sem título LÍQUIDO na seleção. É 409, e não 400, porque o
+  // pedido está bem-formado — o que não serve é a SELEÇÃO: o imposto retido é alvo da cascata, e
+  // corrigir significa incluir o título normal, não corrigir o corpo da requisição.
+  'reclassification-requires-parent-payable',
+  // M2 (RN-M2-11): a reclassificação entrou por um título de retenção. Mesmo conflito, um nível
+  // abaixo — o domínio recusa quando o id de origem não é o do pai.
+  'reclassification-source-not-parent',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -94,6 +101,11 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'empty-content',
   // Conciliação: id malformado.
   'reconciliation-id-invalid',
+  // M2 (RN-M2-09/10 · M2-9/M2-10): os 5 refs não formam caminho existente e ATIVO da árvore do plano.
+  // É 400 e não 409: o pedido descreve uma classificação que não existe — dado inválido, não conflito
+  // com o estado do recurso. Cobre também o nó desativado entre a leitura da tela e o confirm, porque
+  // do ponto de vista de quem envia os dois são a mesma coisa: refazer a seleção.
+  'taxonomy-path-invalid',
   // Período (US6): range/id/format inválidos.
   'invalid-period-range',
   'reconciliation-period-id-invalid',
@@ -122,6 +134,9 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'bank-statement-repository-failure',
   // Conciliação.
   'reconciliation-repository-failure',
+  // M2: a árvore do plano não respondeu. É indisponibilidade do `budget-plans`, não dado inválido —
+  // recusar com 400 mandaria o operador corrigir uma seleção que estava certa.
+  'taxonomy-path-read-unavailable',
   'payable-view-failure',
   'cedente-account-store-unavailable',
   'cedente-account-history-unavailable',
@@ -162,12 +177,6 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Acompanhamento de remessa (#728): repositório de leitura indisponível → 503 (tentar de novo é a
   // ação certa; não é culpa do operador).
   'remittance-repository-unavailable',
-  // #634/#792: a geração recusa enquanto o RBAC estiver em bypass. 503 e não 403 porque não é o
-  // requisitante que está proibido — é o servidor que não deve oferecer esta operação nesta
-  // configuração. Entra aqui, e não num `reply.send` próprio na guarda, para que o envelope seja o
-  // mesmo de todo 5xx do módulo: `code: 'internal'`, mensagem genérica, `requestId` presente, slug
-  // real só no log. Era a única exceção a essa política no `financial`.
-  'remittance-disabled-under-rbac-bypass',
   // Quarentena do retorno (#753): a tabela não respondeu. Sem esta linha o erro cairia no default
   // 422 — "regra de negócio inválida" —, mandando o operador procurar defeito num dado que está
   // certo, enquanto o problema é o banco.
@@ -343,6 +352,14 @@ const SLUG_MESSAGES: Record<string, string> = {
   'manual-entry-classification-required':
     'Informe categoria e centro de custo para conciliar (obrigatório, exceto em transferência, aplicação e resgate).',
   'empty-batch': 'Informe ao menos uma transação para o lote.',
+  // Reclassificação da taxonomia na conciliação (M2).
+  'taxonomy-path-invalid':
+    'A classificação informada não corresponde a um caminho válido e ativo do plano orçamentário: refaça a seleção (Programa → Plano → Centro de Custo → Categoria → Subcategoria).',
+  'reclassification-requires-parent-payable':
+    'Para reclassificar, selecione o título líquido: os títulos de imposto recebem a classificação por cascata.',
+  'reclassification-source-not-parent':
+    'A classificação só pode ser editada pelo título líquido — o imposto retido a recebe por cascata.',
+  'taxonomy-path-read-unavailable': 'Erro ao consultar a árvore do plano orçamentário.',
   // Período (US6).
   'period-has-pending-transactions':
     'O período tem transações pendentes: concilie ou justifique todas antes de fechar.',

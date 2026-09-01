@@ -38,6 +38,7 @@ import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapte
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
 import { confirmReconciliation } from '#src/modules/financial/application/use-cases/confirm-reconciliation.ts';
 import { getTransactionReconciliation } from '#src/modules/financial/application/use-cases/get-transaction-reconciliation.ts';
+import { m2DepsStub } from '../../../../support/reconciliation-m2-deps.ts';
 
 const WRITER = 'reconciliation:write,reconciliation:read';
 const READER = 'reconciliation:read';
@@ -70,11 +71,16 @@ const fitidOf = (raw: string) => {
 const docRow = (payableId: string, categoryRef: string | null) => ({
   payableId,
   documentId: String(DocumentId.generate()),
+  // M2/#268: `kind` + os 5 níveis na row.
+  kind: 'Parent',
   supplierRef: null,
   documentNumber: '43545',
   dueDate: null,
   categoryRef,
   costCenterRef: null,
+  budgetPlanRef: null,
+  subcategoryRef: null,
+  programRef: null,
   competencia: null,
   payeeKind: null,
 });
@@ -161,6 +167,8 @@ const buildHandle = async (
   const deps = {
     ...base,
     confirmReconciliation: confirmReconciliation({
+      // M2: inertes — esta suíte não exercita a reclassificação.
+      ...m2DepsStub,
       reconciliationRepo: reconRepo,
       payables: payableView,
       statements: statementRepo,
@@ -169,10 +177,19 @@ const buildHandle = async (
       clock: ClockReal(),
     }),
     getTransactionReconciliation: getTransactionReconciliation({ reconciliationRepo: reconRepo }),
-    // Novo dep (fatia 2) — o handler passa a usá-lo. strip-types ignora o tipo até o W1.
-    resolveTitleCategoryRef: async (pid: string) => {
+    // #268: o dep da fatia 2 devolvia SÓ a categoria; agora devolve o caminho inteiro — é dele que a
+    // tela tira os ids para reabrir o "Editar" na classificação vigente.
+    resolveTitleTaxonomy: async (pid: string) => {
       const r = await payableDocView.findByPayableIds([pid]);
-      return r.ok ? (r.value[0]?.categoryRef ?? null) : null;
+      const row = r.ok ? r.value[0] : undefined;
+      if (row === undefined) return null;
+      return {
+        programRef: row.programRef,
+        budgetPlanRef: row.budgetPlanRef,
+        costCenterRef: row.costCenterRef,
+        categoryRef: row.categoryRef,
+        subcategoryRef: row.subcategoryRef,
+      };
     },
   };
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });

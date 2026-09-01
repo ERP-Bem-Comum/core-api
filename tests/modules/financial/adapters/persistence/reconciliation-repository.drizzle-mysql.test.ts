@@ -37,6 +37,8 @@ import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente
 import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { createDrizzlePayableDocumentView } from '#src/modules/financial/adapters/persistence/repos/payable-document-view.drizzle.ts';
+import { noTaxonomyPaths } from '#tests/support/reconciliation-m2-deps.ts';
 
 const fitidOf = (raw: string) => {
   const f = Fitid.fromNative(raw);
@@ -161,6 +163,11 @@ if (!process.env['MYSQL_INTEGRATION']) {
       clock: ClockReal(),
       outbox: createInMemoryOutbox().port,
       expectedCounterpartStore: createDrizzleExpectedCounterpartStore(handle),
+      // M2: os casos deste arquivo não mandam `taxonomy`. A reclassificação contra MySQL real tem
+      // suíte própria (`reconciliation-reclassify.drizzle-mysql.test.ts`).
+      documents: createDrizzleDocumentRepository(handle),
+      payableDocs: createDrizzlePayableDocumentView(handle),
+      taxonomyPaths: noTaxonomyPaths,
     });
 
     it('CA11: confirm grava e flipa título+transação na mesma tx; undo reverte tudo', async () => {

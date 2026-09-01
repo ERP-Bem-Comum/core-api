@@ -10,6 +10,10 @@ import { strict as assert } from 'node:assert';
 import { applyPayableEvent } from '#src/modules/financial/application/use-cases/apply-payable-event.ts';
 import { createInMemoryPayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.in-memory.ts';
 
+// #894: instante do evento — o guard de recência do read-model o exige. Valor fixo: estes casos
+// não exercitam ordenação, e um `new Date()` por chamada tornaria o teste dependente do relógio.
+const OCCURRED_AT = new Date('2026-01-01T00:00:00.000Z');
+
 const DOC = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const SUP = '11111111-1111-4111-8111-111111111111';
 const ACC = '99999999-9999-4999-8999-999999999999';
@@ -42,7 +46,11 @@ describe('financial/application — read-model recent-payments (#239)', () => {
   it('CA1: DocumentSaved grava debitAccountRef; PayableManuallyPaid grava status=Paid + paidAt', async () => {
     const store = createInMemoryPayableViewStore();
     const deps = { store };
-    await applyPayableEvent(deps)({ eventType: 'DocumentSaved', payload: documentSaved('p1') });
+    await applyPayableEvent(deps)({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload: documentSaved('p1'),
+    });
 
     const rowAfter = async () => {
       const l = await store.list();
@@ -53,6 +61,7 @@ describe('financial/application — read-model recent-payments (#239)', () => {
 
     await applyPayableEvent(deps)({
       eventType: 'PayableManuallyPaid',
+      occurredAt: OCCURRED_AT,
       payload: paidEvent('p1', '2026-06-20T12:00:00.000Z'),
     });
     const row = await rowAfter();
@@ -69,13 +78,22 @@ describe('financial/application — read-model recent-payments (#239)', () => {
       ['p2', '2026-06-25T00:00:00.000Z'],
       ['p3', '2026-06-18T00:00:00.000Z'],
     ] as const) {
-      await applyPayableEvent(deps)({ eventType: 'DocumentSaved', payload: documentSaved(pid) });
+      await applyPayableEvent(deps)({
+        eventType: 'DocumentSaved',
+        occurredAt: OCCURRED_AT,
+        payload: documentSaved(pid),
+      });
       await applyPayableEvent(deps)({
         eventType: 'PayableManuallyPaid',
+        occurredAt: OCCURRED_AT,
         payload: paidEvent(pid, day),
       });
     }
-    await applyPayableEvent(deps)({ eventType: 'DocumentSaved', payload: documentSaved('p4') });
+    await applyPayableEvent(deps)({
+      eventType: 'DocumentSaved',
+      occurredAt: OCCURRED_AT,
+      payload: documentSaved('p4'),
+    });
 
     const recent = await store.listRecentPaid(2);
     assert.equal(recent.ok, true);

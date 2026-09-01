@@ -111,11 +111,16 @@ const makeManualEntry = (type: ManualEntryType, over: Partial<ManualEntry> = {})
 const docRow = (payableId: string, over: Partial<PayableDocumentRow> = {}): PayableDocumentRow => ({
   payableId,
   documentId: `doc-${payableId}`,
+  // M2/#268: `kind` + os 5 níveis na row. O export Nibo não os usa — declarados para o shape.
+  kind: 'Parent',
   supplierRef: 'sup-1',
   documentNumber: 'NF-123',
   dueDate: new Date('2026-03-10T00:00:00.000Z'),
   categoryRef: 'cat-1',
   costCenterRef: 'cc-1',
+  budgetPlanRef: null,
+  subcategoryRef: null,
+  programRef: null,
   competencia: '2026-03',
   payeeKind: 'supplier',
   ...over,

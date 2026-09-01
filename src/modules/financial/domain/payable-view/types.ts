@@ -64,6 +64,9 @@ export type PayableView = Readonly<{
   categoryRef: string | null;
   // #446 (REP-3 / Slice B): Plano Orçamentário — permite ao REP-3 agrupar por Plano Orçamentário.
   budgetPlanRef: string | null;
+  // M2/RN-M2-12: folha da árvore do plano (#502). A coluna e o índice existiam desde o #502; o que
+  // faltava era o dado chegar até aqui.
+  subcategoryRef: string | null;
   costCenterRef: string | null;
   programRef: string | null;
   valueCents: number; // centavos (convenção Money do codebase — bigint(mode:'number'))
