@@ -194,6 +194,16 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 | 128-226 | 99 | Se iniciação `01`/`02`/`04`: **chave Pix**. Se `05`: tipo de conta em 128-129 (`01` corrente, `02` pagamento, `03` poupança), resto em brancos | Alfa |
 | 233-240 | 8 | Código ISPB do PSP do recebedor | Num |
 
+⚠️ **`G100` é campo Alfa de 3 posições com domínio de 2 dígitos — o preenchimento é `04 `, não
+`004`.** Alfa alinha à esquerda com brancos à direita (regra geral desta skill), e o golden do banco
+confirma: `[04 ]` em 15-17. Zero-padding à esquerda aqui é o reflexo errado de tratar um domínio
+numérico como campo Num, e produz uma forma de iniciação que não existe no domínio.
+
+Medido no golden `GOLDEN_TEST_MULTIPAG_PIX_240` (01/09/2026), lote de forma `45`: `33-67` em
+brancos (TXID é opcional e saiu vazio), `68-127` com texto livre, `128-226` com a chave alinhada à
+esquerda, `233-240` com o ISPB do PSP. O `P012` (UG SIAPE, 227-232) saiu **zerado**, não em brancos
+— apesar de o layout marcá-lo Num sem obrigatoriedade.
+
 ---
 
 ## Segmento C — Complemento Opcional (Tipo 3) — pág. 20
