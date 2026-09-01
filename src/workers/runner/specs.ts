@@ -9,6 +9,7 @@
 // o(s) `runLoop` passando `abortSignal: signal` — o run.ts do runner cuida do SIGTERM/SIGINT.
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import { echoEnvValue } from '#src/shared/runtime/env-echo.ts';
 import type { PoolRegistry } from '#src/shared/persistence/pool-registry.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { runLoop as runGenericLoop } from '#src/shared/outbox/index.ts';
@@ -367,7 +368,9 @@ export const buildVanStatusScanSpec: SpecBuilder = (registry, env) => {
     const detail =
       vanConfig.error.tag === 'missing-env'
         ? `${vanConfig.error.field} ausente`
-        : `${vanConfig.error.field} inválido (${vanConfig.error.raw})`;
+        : // `echoEnvValue` porque o valor vem do AMBIENTE e este `err` termina em stderr, uma linha
+          // por spec: interpolado cru, um `\n` forja uma linha de diagnóstico (CWE-117).
+          `${vanConfig.error.field} inválido (${echoEnvValue(vanConfig.error.raw)})`;
     return err(`van-status-scan: config S3 da VAN — ${detail}`);
   }
 
@@ -418,7 +421,9 @@ export const buildVanReturnScanSpec: SpecBuilder = (registry, env) => {
     const detail =
       vanConfig.error.tag === 'missing-env'
         ? `${vanConfig.error.field} ausente`
-        : `${vanConfig.error.field} inválido (${vanConfig.error.raw})`;
+        : // `echoEnvValue` porque o valor vem do AMBIENTE e este `err` termina em stderr, uma linha
+          // por spec: interpolado cru, um `\n` forja uma linha de diagnóstico (CWE-117).
+          `${vanConfig.error.field} inválido (${echoEnvValue(vanConfig.error.raw)})`;
     return err(`van-return-scan: config S3 da VAN — ${detail}`);
   }
 
