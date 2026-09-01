@@ -197,8 +197,7 @@ import { createInMemorySourceFileStorage } from '../storage/source-file-storage.
 import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts';
 import { createDocumentReader } from '../document-reader/create-document-reader.ts';
 import * as DocumentIdVo from '../../domain/shared/document-id.ts';
-import { parseAwsS3Env } from '#src/modules/contracts/public-api/index.ts';
-import { decideDocumentStorage } from '../storage/document-storage-decision.ts';
+import { parseAwsS3Env, describeAwsS3EnvError } from '#src/modules/contracts/public-api/index.ts';
 import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
 import { bulkUpdateDueDate } from '../../application/use-cases/bulk-update-due-date.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
@@ -732,26 +731,20 @@ const buildMemoryPools = (
   };
 };
 
-// #62: storage do comprovante no driver mysql. Quem decide o desfecho é `decideDocumentStorage` —
-// em produção, configuração ausente ou recusada derruba o boot (a política do #516); fora dela
-// degrada para memória, mas com aviso que nomeia o campo.
+// #62: storage do comprovante no driver mysql. FAIL-FAST, sem fallback: env lida é env obrigatória,
+// em TODO ambiente. Em homologação e produção elas são postas à mão, na console da AWS, por quem
+// opera a infraestrutura — cair para memória ali não é degradar, é esconder um erro de configuração
+// humana de quem tem como corrigi-lo, aceitando o upload do comprovante e perdendo-o no restart.
 //
-// Em produção isto não muda o comportamento observável: `buildContractsHttpDeps` (server.ts:207)
-// usa o mesmo parser, faz `throw` incondicional e roda antes daqui. O que muda é a razão deixar de
-// depender dessa ordem — ver o docblock de `document-storage-decision.ts`.
+// O ternário anterior (`s3.ok ? s3 : inMemory`) só não produzia dano porque
+// `buildContractsHttpDeps` (`server.ts:207`) usa o MESMO parser, faz `throw`, e roda antes daqui —
+// o comportamento correto vinha da ordem de composição de outro módulo, não desta linha.
 const buildDocumentStorage = (): SourceFileStoragePort => {
-  const decision = decideDocumentStorage(parseAwsS3Env(process.env), process.env);
-  switch (decision.kind) {
-    case 's3':
-      return createS3SourceFileStorage({ s3: decision.config, keyPrefix: 'financial-documents' });
-    case 'memory':
-      process.stderr.write(`${decision.warning}\n`);
-      return createInMemorySourceFileStorage();
-    case 'refuse':
-      // `throw` é o contrato local desta composição para configuração que não permite subir — o
-      // mesmo que `buildMysqlPools` faz com pool que não abre.
-      throw new Error(decision.error);
-  }
+  const s3 = parseAwsS3Env(process.env);
+  // `throw` é o contrato local desta composição para configuração que não permite subir — o mesmo
+  // que `buildMysqlPools` faz com pool que não abre.
+  if (!s3.ok) throw new Error(describeAwsS3EnvError(s3.error));
+  return createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' });
 };
 
 // Bucket da VAN — envs `VAN_S3_*` PRÓPRIAS, nunca o singleton `S3_*`: é outro bucket, possivelmente

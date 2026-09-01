@@ -25,6 +25,7 @@ import { strict as assert } from 'node:assert';
 import {
   awsS3Config,
   parseAwsS3Env,
+  describeAwsS3EnvError,
 } from '#src/modules/contracts/adapters/storage/s3-config-aws.ts';
 import { createBucketName } from '#src/modules/contracts/application/ports/document-storage.types.ts';
 
@@ -248,5 +249,44 @@ describe('parseAwsS3Env — IAM Role (issue #244)', () => {
     } else {
       assert.fail(`esperado missing-env S3_ACCESS_KEY_ID; obtido: ${JSON.stringify(r)}`);
     }
+  });
+});
+
+// O erro derruba o boot em TODO ambiente, e esta mensagem e a ultima coisa que quem opera ve antes
+// disso. Ela e o diagnostico inteiro: sem o nome do campo, o operador sabe que nao subiu e nao sabe
+// o que preencher. Os dois consumidores (contracts e financial) usam esta mesma funcao.
+describe('describeAwsS3EnvError — o diagnostico do fail-fast', () => {
+  const describeOf = (env: NodeJS.ProcessEnv): string => {
+    const r = parseAwsS3Env(env);
+    if (r.ok) {
+      assert.fail(`esperado err; obtido ok: ${JSON.stringify(r)}`);
+    }
+    return describeAwsS3EnvError(r.error);
+  };
+
+  it('nomeia o campo ausente e diz que ele vale em todo ambiente', () => {
+    const message = describeOf({ S3_REGION: 'us-east-1' });
+    assert.match(message, /S3_BUCKET/);
+    assert.match(message, /todo ambiente/);
+  });
+
+  it('nomeia o bucket recusado e a razao da recusa', () => {
+    const message = describeOf({ S3_REGION: 'us-east-1', S3_BUCKET: 'UPPERCASE-INVALID' });
+    assert.match(message, /S3_BUCKET/);
+    assert.match(message, /UPPERCASE-INVALID/);
+  });
+
+  // CWE-532: a mensagem sai em stderr no boot, e o coletor de log tem audiencia maior e retencao
+  // mais longa que o secret store. O XOR de credencial e a unica variante que toca campo sensivel —
+  // e sai como `missing-env`, que carrega so o NOME. Este teste e a guarda dessa propriedade: se
+  // alguma variante passar a devolver `raw` de credencial, ele fica vermelho.
+  it('nunca ecoa credencial — o XOR nomeia o campo sem revelar o valor presente', () => {
+    const message = describeOf({
+      S3_REGION: 'us-east-1',
+      S3_BUCKET: 'contracts-documents',
+      S3_ACCESS_KEY_ID: 'AKIA-FAKE-SENTINELA',
+    });
+    assert.match(message, /S3_SECRET_ACCESS_KEY/);
+    assert.equal(message.includes('AKIA-FAKE-SENTINELA'), false);
   });
 });

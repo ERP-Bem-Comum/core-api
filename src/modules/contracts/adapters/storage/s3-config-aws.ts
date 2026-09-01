@@ -61,6 +61,22 @@ export type AwsS3EnvError =
   | Readonly<{ tag: 'missing-env'; field: string }>
   | Readonly<{ tag: 'invalid-bucket'; raw: string; error: BucketNameError }>;
 
+// Diagnostico legivel para quem opera o boot. Toda env lida por este parser e OBRIGATORIA em todo
+// ambiente — quem consome derruba o processo, e esta e a mensagem que sai antes de ele morrer. Em
+// PT sem acentuacao: o stderr do boot antecede qualquer garantia de encoding do coletor de log.
+//
+// Mora aqui, e nao em cada consumidor, porque o dono do tipo e quem sabe descrever suas variantes —
+// e sao dois os consumidores (`contracts` e `financial`), que antes formatavam o mesmo erro de dois
+// jeitos, um deles ecoando so a `tag`.
+//
+// Sobre ecoar o valor recusado (CWE-532): das duas variantes, so `invalid-bucket` carrega `raw`, e
+// ele e o nome do bucket — nao e credencial. O XOR de chave/secret sai como `missing-env`, que
+// carrega so o NOME do campo.
+export const describeAwsS3EnvError = (error: AwsS3EnvError): string =>
+  error.tag === 'missing-env'
+    ? `s3-storage: ${error.field} nao configurada — obrigatoria em todo ambiente`
+    : `s3-storage: S3_BUCKET com valor invalido "${error.raw}" (${error.error})`;
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 const LOCAL_HOST_PATTERN = /(?:localhost|127\.0\.0\.1|0\.0\.0\.0)/;
