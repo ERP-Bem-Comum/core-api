@@ -36,7 +36,7 @@ name: core-api-dev
 #
 # x-app-build  — bloco build+image comum a TODOS os services da imagem
 #                core-api (http, workers, jobs).
-# x-worker-base — base para os 3 workers consolidados por grupo (restart+hardening+net+dep).
+# x-worker-base — base para os 4 workers consolidados por grupo (restart+hardening+net+dep).
 # x-job-base  — base para jobs one-shot (no restart, hardening máximo).
 # ─────────────────────────────────────────────────────────────────────────────
 
