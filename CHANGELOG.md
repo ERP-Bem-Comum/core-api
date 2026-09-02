@@ -6,6 +6,45 @@ a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é reg
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·
 versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
+## [1.0.0-rc.2] — 2026-09-01
+
+### Adicionado
+
+- **financial:** emissor de PIX por chave — par A+B na forma 45 ([#936](https://github.com/ERP-Bem-Comum/core-api/pull/936))
+- **financial:** ISPB do favorecido por de-para embarcada do Bacen ([#934](https://github.com/ERP-Bem-Comum/core-api/pull/934))
+- **financial:** partição multi-arquivo do Pix + G021 no header (#838, CA4) ([#929](https://github.com/ERP-Bem-Comum/core-api/pull/929))
+- **financial:** emissor do Segmento J-52 + pré-voo da inscrição do favorecido ([#928](https://github.com/ERP-Bem-Comum/core-api/pull/928))
+- **shared:** FAIL-FAST em toda env, em todo ambiente — ADR-0068, fecha #799 ([#917](https://github.com/ERP-Bem-Comum/core-api/pull/917))
+- **financial:** M2 — reclassificar a taxonomia (5 níveis) na conciliação, com cascata aos impostos ([#889](https://github.com/ERP-Bem-Comum/core-api/pull/889))
+
+### Corrigido
+
+- **harness:** reancora as páginas das referências do CNAB na Versão 08 + gate ([#932](https://github.com/ERP-Bem-Comum/core-api/pull/932))
+- **financial:** unifica as réguas do pré-voo e do emissor da remessa ([#925](https://github.com/ERP-Bem-Comum/core-api/pull/925))
+- **financial:** o storage do comprovante passa a fail-fast, sem fallback ([#916](https://github.com/ERP-Bem-Comum/core-api/pull/916))
+- **financial:** o storage da VAN passa a fail-fast, sem fallback ([#914](https://github.com/ERP-Bem-Comum/core-api/pull/914))
+- **harness:** as skills param de mandar seguir o que foi removido em 2026-08-06 ([#907](https://github.com/ERP-Bem-Comum/core-api/pull/907))
+- **financial:** a linha digitável vira código de barras — e a emissão grava os 44 ([#884](https://github.com/ERP-Bem-Comum/core-api/pull/884))
+- **security:** remove credencial e endereço interno do .mcp.json versionado ([#883](https://github.com/ERP-Bem-Comum/core-api/pull/883))
+
+### Alterado
+
+- PIX no CNAB (#920 #921), gate de credencial (#887) e workflows do Claude Code ([#922](https://github.com/ERP-Bem-Comum/core-api/pull/922))
+- **financial:** remove o slug órfão da guarda de RBAC bypass no mapa de erros ([#908](https://github.com/ERP-Bem-Comum/core-api/pull/908))
+
+### Interno
+
+- **handbook:** debate do parecer externo — errata do CASCADE e a hipótese das fronteiras culturais ([#935](https://github.com/ERP-Bem-Comum/core-api/pull/935))
+- **handbook:** mede o ambiente de dados — inquiry 0035, o Drizzle 1.0 na 0026 e o laudo das 8 frentes ([#933](https://github.com/ERP-Bem-Comum/core-api/pull/933))
+- **cleanup:** gate impede que valor de env seja ecoado cru em mensagem (CWE-117) — fecha #918 ([#919](https://github.com/ERP-Bem-Comum/core-api/pull/919))
+
+### Não classificado
+
+1 merge(s) do range sem linha de mensagem convencional no corpo —
+listados aqui para que a ausência seja visível, e não deduzida:
+
+- `72aad9cd` — Merge branch 'main' into dev
+
 ## [1.0.0-rc.1] — 2026-08-25
 
 ### ⚠️ Mudanças incompatíveis
