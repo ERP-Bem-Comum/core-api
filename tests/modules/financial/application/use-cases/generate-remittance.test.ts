@@ -2,7 +2,10 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk, ok, err } from '#src/shared/index.ts';
-import { generateRemittance } from '#src/modules/financial/application/use-cases/generate-remittance.ts';
+import {
+  generateRemittance,
+  type GeneratedRemittanceFile,
+} from '#src/modules/financial/application/use-cases/generate-remittance.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.in-memory.ts';
 import { createInMemoryVanStorage } from '#src/modules/financial/adapters/van/van-storage.in-memory.ts';
@@ -104,18 +107,34 @@ const input = (
   payableIds: docs,
 });
 
+// O ÚNICO arquivo de uma geração que só produz um — e assere que é um só, em vez de pegar o
+// primeiro e calar sobre o resto.
+//
+// ⚠️ A asserção de contagem é o que dá valor ao helper. Todos os cenários deste arquivo usam rotas
+// que compartilham arquivo (transferência e boleto convivem — o golden de TED tem `01`, `41` e `31`
+// juntos), então uma partição que os separasse por engano seria um defeito. Um `files[0]` cru
+// esconderia isso: os asserts seguintes passariam sobre o primeiro arquivo, e o segundo — que não
+// devia existir — não seria olhado por ninguém.
+const onlyFile = (out: Readonly<{ files: readonly GeneratedRemittanceFile[] }>) => {
+  assert.equal(out.files.length, 1, 'esperava uma geração de arquivo único');
+  const file = out.files[0];
+  assert.ok(file !== undefined);
+  return file;
+};
+
 describe('generateRemittance — caminho feliz', () => {
   it('gera o arquivo, registra a remessa e o deposita na fila de saída', async () => {
     const s = await setup();
     const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
 
     assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
-    assert.equal(r.value.nsa, 1);
-    assert.equal(r.value.objectKey, `saida/${r.value.fileName}`);
-    assert.equal(r.value.totalCents, 3000);
-    assert.equal(r.value.lineCount, 8); // header arq + header lote + 2×(A+B) + trailer lote + trailer arq
+    const file = onlyFile(r.value);
+    assert.equal(file.nsa, 1);
+    assert.equal(file.objectKey, `saida/${file.fileName}`);
+    assert.equal(file.totalCents, 3000);
+    assert.equal(file.lineCount, 8); // header arq + header lote + 2×(A+B) + trailer lote + trailer arq
 
-    const stored = await s.storage.getText(r.value.objectKey);
+    const stored = await s.storage.getText(file.objectKey);
     assert.ok(isOk(stored));
     assert.deepEqual(inspectRemittanceFile(stored.value), [], 'arquivo depositado é bem formado');
   });
@@ -125,7 +144,7 @@ describe('generateRemittance — caminho feliz', () => {
     const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isOk(r));
 
-    const saved = await s.remittances.findById(r.value.remittanceId);
+    const saved = await s.remittances.findById(onlyFile(r.value).remittanceId);
     assert.ok(isOk(saved) && saved.value !== null);
     assert.equal(saved.value.status, 'Queued');
 
@@ -161,7 +180,7 @@ describe('generateRemittance — a chave de casamento do retorno (#752)', () => 
     const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isOk(r));
 
-    const saved = await s.remittances.findById(r.value.remittanceId);
+    const saved = await s.remittances.findById(onlyFile(r.value).remittanceId);
     assert.ok(isOk(saved) && saved.value !== null);
 
     assert.equal(saved.value.payables.length, s.docs.length);
@@ -175,10 +194,10 @@ describe('generateRemittance — a chave de casamento do retorno (#752)', () => 
     const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isOk(r));
 
-    const saved = await s.remittances.findById(r.value.remittanceId);
+    const saved = await s.remittances.findById(onlyFile(r.value).remittanceId);
     assert.ok(isOk(saved) && saved.value !== null);
 
-    const stored = await s.storage.getText(r.value.objectKey);
+    const stored = await s.storage.getText(onlyFile(r.value).objectKey);
     assert.ok(isOk(stored));
 
     // Toda referência persistida tem de aparecer no conteúdo transmitido. Se o casamento por índice
@@ -196,7 +215,7 @@ describe('generateRemittance — a chave de casamento do retorno (#752)', () => 
     const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isOk(r));
 
-    const saved = await s.remittances.findById(r.value.remittanceId);
+    const saved = await s.remittances.findById(onlyFile(r.value).remittanceId);
     assert.ok(isOk(saved) && saved.value !== null);
 
     const refs = saved.value.payables.map((d) => d.yourNumber);
@@ -268,10 +287,11 @@ describe('generateRemittance — o título sai da nossa alçada (#792, ADR-0065 
     // O evento responde "em qual remessa o título foi" sem obrigar o consumidor a voltar ao banco —
     // é o pré-requisito da #823. Asserir a PROPRIEDADE (aponta para a remessa que acabou de sair) e
     // não o literal, que mudaria com a fixture.
+    const file = onlyFile(r.value);
     for (const e of eventos) {
-      assert.equal(e.remittanceId, r.value.remittanceId);
-      assert.equal(e.nsa, r.value.nsa);
-      assert.equal(e.fileName, r.value.fileName);
+      assert.equal(e.remittanceId, file.remittanceId);
+      assert.equal(e.nsa, file.nsa);
+      assert.equal(e.fileName, file.fileName);
       assert.ok(e.documentId.length > 0, 'a nota de origem viaja junto: é ela que exibe a trilha');
     }
   });
@@ -330,7 +350,11 @@ describe('generateRemittance — a ordem importa mais que o resultado', () => {
       ...s.deps,
       remittances: {
         ...s.remittances,
-        save: async () => Promise.resolve(err('remittance-repository-unavailable' as const)),
+        // `saveAll`, e não `save`: a geração passou a gravar as N remessas num ato só (CA4 da #838).
+        // Sobrescrever `save` deixaria este teste VERDE por não interceptar nada — o use case não o
+        // chama mais, a gravação real aconteceria, e o assert de "nada no bucket" falharia por um
+        // motivo que não é o que o teste descreve.
+        saveAll: async () => Promise.resolve(err('remittance-repository-unavailable' as const)),
       },
     };
 
@@ -415,7 +439,7 @@ describe('generateRemittance — um arquivo, um dia (#712)', () => {
     // O próximo envio legítimo tem de receber o NSA 1 — prova de que nada foi consumido.
     const ok2 = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isOk(ok2), `esperava ok, veio ${isErr(ok2) ? ok2.error : '?'}`);
-    assert.equal(ok2.value.nsa, 1);
+    assert.equal(onlyFile(ok2.value).nsa, 1);
   });
 
   // Mesmo dia civil com horários diferentes emite o MESMO campo DDMMAAAA — recusar aqui rejeitaria
@@ -442,10 +466,15 @@ describe('generateRemittance — um arquivo, um dia (#712)', () => {
 });
 
 describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
-  // PIX e guia são rotas que a P.O. contratou e o emissor ainda não cobre. Enquanto não cobre, a
-  // recusa tem de ser explícita: emiti-las pelo perfil de transferência mandaria ao banco um
+  // A guia é a rota que a P.O. contratou e o arquivo não emite — e desde 23/08 isso é DECISÃO DE
+  // ESCOPO, não atraso: imposto retido pago por guia permanece fora da remessa. A recusa tem de ser
+  // explícita porque a alternativa, emiti-la pelo perfil de transferência, mandaria ao banco um
   // pagamento bem-formado para a operação errada.
-  const readerWithRoute = (route: 'pix' | 'tax-guide'): RemittancePaymentReader => ({
+  //
+  // ⚠️ O PIX SAIU DAQUI na #838, e o parâmetro deixou de ser união por isso. Reintroduzi-lo faria
+  // este bloco medir a montagem em vez da recusa — e passaria a falhar por uma razão que não é a que
+  // ele existe para vigiar.
+  const readerWithRoute = (route: 'tax-guide'): RemittancePaymentReader => ({
     loadPayments: async (ids) =>
       Promise.resolve(
         ok(
@@ -463,7 +492,7 @@ describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
   });
 
   it('recusa com erro próprio, distinto de dado faltando', async () => {
-    for (const route of ['pix', 'tax-guide'] as const) {
+    for (const route of ['tax-guide'] as const) {
       const s = await setup();
       const r = await generateRemittance({ ...s.deps, payments: readerWithRoute(route) })(
         input(s.cedenteAccountId, s.docs),
@@ -482,7 +511,7 @@ describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
     let uploads = 0;
     const deps = {
       ...s.deps,
-      payments: readerWithRoute('pix'),
+      payments: readerWithRoute('tax-guide'),
       storage: {
         ...s.storage,
         putRemittance: async (name: string, content: string) => {

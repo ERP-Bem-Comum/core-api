@@ -68,7 +68,7 @@ o melhor da validação de input e os melhores patterns de contrato.
 
 ## Workflow como validador (dupla com fastify-server-expert)
 
-1. Ler os schemas/dto/plugin tocados + o ADR-0027 (citar) + o teste de borda (W0).
+1. Ler os schemas/dto/plugin tocados + o ADR-0027 (citar) + o teste de borda.
 2. Rodar o checklist A–E. Confirmar com `pnpm run typecheck`/`lint` se já há red (não corrigir — reportar).
 3. Entregar **REVIEW** markdown PT-BR: veredito (APPROVED / CHANGES-REQUESTED) + achados Blocker/Major/Minor com
    `arquivo:linha`, risco e correção sugerida (em prosa, para o `fastify-server-expert` aplicar). Se não houver
@@ -99,3 +99,9 @@ conversas. Use-o para acumular o que só se aprende trabalhando neste repositór
 envelhece igual a doc duplicada.
 
 Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.
+
+---
+
+## Changelog
+
+- **2026-08-31** — O passo 1 do workflow deixa de qualificar o teste de borda como "(W0)": as waves foram removidas do projeto em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).

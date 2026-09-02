@@ -424,6 +424,13 @@ export const paidPayablesToDto = (views: readonly PaidPayableView[]): PaidPayabl
     valueCents: String(v.valueCents),
     dueDate: v.dueDate.toISOString().slice(0, 10),
     paymentMethod: v.paymentMethod,
+    // #268: taxonomia vigente + `kind` (fonte × alvo da reclassificação — RN-M2-11).
+    kind: v.kind === 'Child' ? ('Child' as const) : ('Parent' as const),
+    programRef: v.programRef,
+    budgetPlanRef: v.budgetPlanRef,
+    costCenterRef: v.costCenterRef,
+    categoryRef: v.categoryRef,
+    subcategoryRef: v.subcategoryRef,
   })),
 });
 
@@ -502,6 +509,8 @@ export const transactionReconciliationToDto = (
   r: Reconciliation,
   reconciledByName: string | null = null,
   category: string | null = null,
+  // #268: os 5 refs vigentes. `null` quando não há de onde tirá-los (conciliação sem título).
+  taxonomy: TransactionReconciliationResponseDto['taxonomy'] = null,
 ): TransactionReconciliationResponseDto => ({
   id: String(r.id),
   transactionId: String(r.transactionId),
@@ -516,6 +525,7 @@ export const transactionReconciliationToDto = (
     reconciledValueCents: String(i.reconciledValueCents),
   })),
   category,
+  taxonomy,
 });
 
 /**
@@ -591,6 +601,7 @@ export const remittancePreviewToDto = (
   })),
   readyCount: preview.readyCount,
   blockedCount: preview.blockedCount,
+  noIssuerCount: preview.noIssuerCount,
   outOfVanCount: preview.outOfVanCount,
   notFoundCount: preview.notFoundCount,
   notApprovedCount: preview.notApprovedCount,
@@ -607,20 +618,27 @@ export const remittancePreviewToDto = (
 });
 
 /**
- * Serializa o resultado da geração (#720).
+ * Serializa o resultado da geração (#720, e a partição multi-arquivo da CA4 da #838).
  *
  * O NSA vai no corpo de propósito: é o número que identifica a remessa junto ao banco e o que o
- * operador cita ao abrir chamado. Sem ele, a única forma de descobri-lo seria abrir o arquivo.
+ * operador cita ao abrir chamado. Sem ele, a única forma de descobri-lo seria abrir o arquivo. Com
+ * N arquivos, cada um tem o SEU — e é por isso que ele vive dentro de cada item, não no topo.
+ *
+ * ⚠️ `files` é lista mesmo quando tem um elemento só, e a uniformidade é deliberada: um corpo que
+ * mudasse de forma conforme a seleção obrigaria o consumidor a tratar dois contratos, e o caso de um
+ * arquivo é o comum — seria o testado, enquanto o de dois seria o quebrado.
  */
 export const generatedRemittanceToDto = (
   out: GenerateRemittanceOutput,
 ): GenerateRemittanceResponseDto => ({
-  remittanceId: String(out.remittanceId),
-  fileName: out.fileName,
-  objectKey: out.objectKey,
-  nsa: out.nsa,
-  totalCents: String(out.totalCents),
-  lineCount: out.lineCount,
+  files: out.files.map((f) => ({
+    remittanceId: String(f.remittanceId),
+    fileName: f.fileName,
+    objectKey: f.objectKey,
+    nsa: f.nsa,
+    totalCents: String(f.totalCents),
+    lineCount: f.lineCount,
+  })),
 });
 
 /**

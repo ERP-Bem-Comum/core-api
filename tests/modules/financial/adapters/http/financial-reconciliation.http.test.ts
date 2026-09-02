@@ -38,6 +38,7 @@ import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/
 import { confirmReconciliation } from '#src/modules/financial/application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '#src/modules/financial/application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '#src/modules/financial/application/use-cases/search-paid-payables.ts';
+import { m2DepsStub } from '../../../../support/reconciliation-m2-deps.ts';
 
 const WRITER = 'reconciliation:write,reconciliation:read';
 const READER = 'reconciliation:read';
@@ -165,6 +166,8 @@ before(async () => {
     ...base,
     listStatementTransactions: statementRepo.listTransactions,
     confirmReconciliation: confirmReconciliation({
+      // M2: inertes — esta suíte não exercita a reclassificação.
+      ...m2DepsStub,
       reconciliationRepo: reconRepo,
       payables: payableView,
       statements: statementRepo,

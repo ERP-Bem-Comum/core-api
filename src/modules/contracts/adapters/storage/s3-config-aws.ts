@@ -25,6 +25,7 @@
  */
 
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import { echoEnvValue } from '../../../../shared/runtime/env-echo.ts';
 import {
   createBucketName,
   type BucketName,
@@ -60,6 +61,31 @@ export type AwsS3ConfigInput = Readonly<{
 export type AwsS3EnvError =
   | Readonly<{ tag: 'missing-env'; field: string }>
   | Readonly<{ tag: 'invalid-bucket'; raw: string; error: BucketNameError }>;
+
+// Diagnostico legivel para quem opera o boot. Toda env lida por este parser e OBRIGATORIA em todo
+// ambiente — quem consome derruba o processo, e esta e a mensagem que sai antes de ele morrer. Em
+// PT sem acentuacao: o stderr do boot antecede qualquer garantia de encoding do coletor de log.
+//
+// Mora aqui, e nao em cada consumidor, porque o dono do tipo e quem sabe descrever suas variantes —
+// e sao dois os consumidores (`contracts` e `financial`), que antes formatavam o mesmo erro de dois
+// jeitos, um deles ecoando so a `tag`.
+//
+// Sobre ecoar o valor recusado, e sao DOIS riscos distintos que dividem o mesmo nome:
+//
+//   - CWE-532 (credencial em log): das duas variantes, so `invalid-bucket` carrega `raw`, e ele e o
+//     nome do bucket — nao e credencial. O XOR de chave/secret sai como `missing-env`, que carrega
+//     so o NOME do campo. Variante nova que devolva `raw` de campo sensivel precisa de guarda de
+//     FORMA, e sanitizar nao serve para isso (ver o docblock de `echoEnvValue`).
+//   - CWE-117 (log forging): o valor vem do AMBIENTE e pode conter quebra de linha. Interpolado
+//     cru, forja uma linha inteira no stderr do boot — quem le ve uma mensagem que ninguem emitiu.
+//     `echoEnvValue` fecha isso, e e a mesma regua do caso 16 da guarda dos 7 drivers.
+//
+// A funcao mora aqui, junto do tipo, e nao em cada consumidor: sao DOIS (`contracts` e
+// `financial`), e a correcao num lugar so cobre os dois.
+export const describeAwsS3EnvError = (error: AwsS3EnvError): string =>
+  error.tag === 'missing-env'
+    ? `s3-storage: ${error.field} nao configurada — obrigatoria em todo ambiente`
+    : `s3-storage: S3_BUCKET com valor invalido "${echoEnvValue(error.raw)}" (${error.error})`;
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

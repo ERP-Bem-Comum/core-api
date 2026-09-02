@@ -77,10 +77,16 @@ Quando comparar escolas/abordagens, este projeto oferece evidência empírica de
 | **Detroit/Chicago vs London/Mockist** | Detroit — fakes injetáveis (InMemory) e VOs reais, sem mocks de mock framework | Adapters `*.in-memory.ts` em `src/modules/contracts/adapters/`; testes consomem InMemory diretamente |
 | **Pirâmide vs Trophy vs Diamond** | Pirâmide com forte ênfase em unit (domínio puro + use case) + camada fina de E2E pela CLI | `tests/modules/contracts/domain/` (unit) + `tests/cli/` (E2E) |
 | **TDD vs BDD vs ATDD** | TDD para domínio/aplicação; BDD-style markdown na fronteira CLI (`tests/bdd/contracts.bdd.md`) | `tests/bdd/QA-REPORT.md` + cenários executados pela QA contra a CLI |
-| **Test-first vs Test-after** | Test-first obrigatório para código não-trivial (W0 RED → W1 GREEN) | Timestamps de criação dos `.test.ts` precedem os de produção em todos os tickets — auditável via `stat -f "%SB"` |
-| **Cobertura vs Qualidade** | Sem threshold numérico; cada ticket prova **cobertura por critério de aceite** | Cada `000-request.md` lista critérios (`- [ ]`) que viram `it()` no W0 — ex.: `CTR-STORAGE-PORT/` declara 39 critérios, entrega 64 `it()` |
+| **Test-first vs Test-after** | Test-first para código não-trivial: o teste que falha primeiro é o que prova que ele testa algo | Timestamps de criação dos `.test.ts` precedem os de produção — auditável via `stat -f "%SB"` |
+| **Cobertura vs Qualidade** | Sem threshold numérico; prova-se **cobertura por critério de aceite** | Cada critério de aceite (`- [ ]`) da issue vira um `it()`, e o caminho de erro conta como critério |
 | **Property-based testing** | Não adotado ainda (overhead > ganho na fase atual); reservado para `Money.add/subtract` e `Period.contains` se aparecer regressão | Caso adote: roda no mesmo `node:test` via `fast-check` (não instalado hoje) |
 | **Suite de contrato parametrizada** (consumida por múltiplos adapters) | Adotado — adapter InMemory e adapter real rodam o mesmo conjunto de cenários | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts`, `tests/modules/contracts/application/ports/document-storage.contract.ts` (sufixos `.suite.ts` e `.contract.ts` **não são** auto-descobertos pelo runner — são funções fábrica) |
 | **Runner: `node:test` vs Jest vs Vitest** | `node:test` nativo + `--experimental-strip-types` — zero deps, zero transpiler | `package.json` `"test": "node --test --experimental-strip-types --no-warnings 'tests/**/*.test.ts'"` |
 
-Referências cross-projeto: [`../../../CLAUDE.md`](../../../CLAUDE.md), [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/), `.claude/.pipeline/CTR-STORAGE-PORT/` (caso recente com 55 testes RED-first + 9 cenários parametrizados de contrato).
+Referências cross-projeto: [`../../../CLAUDE.md`](../../../CLAUDE.md), [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/), [`../../rules/testing.md`](../../rules/testing.md) (contrato de isolamento e as quatro naturezas de arquivo de teste).
+
+---
+
+## Changelog
+
+- **2026-08-31:** As posições de test-first e cobertura deixam de se apoiar nas waves e no `000-request.md` do ticket, e a referência cross-projeto deixa de apontar para `.claude/.pipeline/CTR-STORAGE-PORT/` — os três removidos em 2026-08-06. A tese não mudou; a evidência passou a ser o critério de aceite da issue. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).

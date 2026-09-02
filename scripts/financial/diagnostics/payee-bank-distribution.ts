@@ -144,6 +144,9 @@ const tallyTable = async (
       accountNumber: row.accountNumber,
       checkDigit: row.checkDigit,
       pixKey: null,
+      // A decomposição da conta não olha inscrição nem chave PIX — os dois entram nulos pela mesma
+      // razão, e este diagnóstico mede distribuição de BANCO.
+      document: null,
     });
 
     if (!decomposed.ok) {

@@ -40,6 +40,7 @@ import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapte
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
 import { confirmReconciliation } from '#src/modules/financial/application/use-cases/confirm-reconciliation.ts';
 import { searchPaidPayables } from '#src/modules/financial/application/use-cases/search-paid-payables.ts';
+import { m2DepsStub } from '../../../../support/reconciliation-m2-deps.ts';
 
 const WRITER = 'reconciliation:write,reconciliation:read';
 const TEST_USER_ID = '99999999-9999-4999-8999-999999999999';
@@ -173,6 +174,8 @@ before(async () => {
   const deps = {
     ...base,
     confirmReconciliation: confirmReconciliation({
+      // M2: inertes — esta suíte não exercita a reclassificação.
+      ...m2DepsStub,
       reconciliationRepo: reconRepo,
       payables: payableView,
       statements: statementRepo,

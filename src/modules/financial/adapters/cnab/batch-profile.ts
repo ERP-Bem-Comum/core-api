@@ -14,6 +14,7 @@
 // decide a forma, e a forma decide a câmara (`clearingHouseFor`). Enquanto ela foi um opcional com
 // default, o default valeu para TODOS os pagamentos — inclusive os que o banco recusa (#751).
 import { ok, err, type Result } from '../../../../shared/primitives/result.ts';
+import { hasRemittanceIssuer, type RouteWithIssuer } from '../../domain/payout/van-routes.ts';
 
 // O mínimo que decide o perfil. O montador passa o pagamento inteiro; aqui só interessa o que
 // participa da decisão — e é por isso que o boleto declara o código de barras: é dele que sai o
@@ -50,8 +51,7 @@ const PAYMENT_INDICATOR_DEFAULT = '01'; // P014
 // ─── Câmara centralizadora (P001, Segmento A, colunas 018-020) ────────────────────────────────
 //
 // A câmara NÃO é escolha de quem monta o arquivo, nem atributo do favorecido: é FUNÇÃO DA FORMA DE
-// LANÇAMENTO. Duas leituras independentes do manual dizem a mesma coisa, e é a coincidência delas
-// que sustenta esta tabela:
+// LANÇAMENTO. Duas leituras independentes do manual sustentam as formas de TED:
 //
 //   · a nota (2) da descrição de G029 (p. 101) tabula forma → câmara, e lista `03`, `41` e `43`
 //     como as formas que transitam por câmara de TED;
@@ -59,16 +59,38 @@ const PAYMENT_INDICATOR_DEFAULT = '01'; // P014
 //     outras modalidades**, citando exatamente as colunas 018 a 020 do Segmento A.
 //
 // Crédito em conta corrente (`01`) não transita por câmara alguma — o crédito não sai do banco. Por
-// isso não há default aqui: um valor por omissão só pode acertar UMA das duas modalidades, e a que
-// ele errar produz registro que o próprio banco recusa (#751).
+// isso não há default aqui: um valor por omissão só pode acertar UMA das modalidades, e a que ele
+// errar produz registro que o próprio banco recusa (#751).
+//
+// ⚠️ O PIX É A EXCEÇÃO QUE O MANUAL NÃO ESCREVE, e é por isso que esta nota existe. A forma `45`
+// transita pelo SPI (`009`) — e nada disso está no PDF: a nota (2) tabula apenas `03`/`41`/`43`,
+// a descrição de P001 (p. 132) enumera só `018` e `888`, e a string `009` NÃO OCORRE UMA ÚNICA VEZ
+// no manual inteiro. Quem o sustenta é o golden do banco (`GOLDEN_TEST_MULTIPAG_PIX_240`, 29/08/2026):
+// forma `45` no header de lote, `009` em 018-020 do Segmento A. Os goldens valem como verdade por
+// decisão do dono do repositório (01/09/2026), e a hierarquia está na skill `cnab240-bradesco`
+// §"A hierarquia completa" — laudo do validador > golden > G059 > tabela de layout.
+//
+// **Não "corrigir" este `009` para `000` lendo a nota (2).** A lacuna é do manual, está registrada
+// em `referencias/03-dominios-campos.md`, e o valor errado aqui só aparece depois de transmitido
+// (#890 achado 2) — o `remittance-inspector.ts` não pega, porque não é defeito de forma.
 const CLEARING_TED = '018'; // P001 (p. 132) — TED (STR, CIP)
+const CLEARING_PIX = '009'; // SPI — golden do banco; ausente do manual
 const CLEARING_NONE = '000'; // G059, ocorrência 'AK' (p. 107) — zeros fora das formas de TED
 const TED_LAUNCH_FORMS: ReadonlySet<string> = new Set(['03', '41', '43']);
 
-// Total sobre o domínio de G029, de propósito: uma forma nova entra pelo `else` e sai com zeros,
-// que é o que o manual manda para tudo que não é TED — nunca herdando a câmara da forma anterior.
-export const clearingHouseFor = (launchForm: string): string =>
-  TED_LAUNCH_FORMS.has(launchForm) ? CLEARING_TED : CLEARING_NONE;
+// Exportada porque o emissor de PIX (#838) precisa da MESMA constante para derivar o perfil do
+// lote: duas literais `'45'` divergiriam no dia em que uma delas mudasse, e a divergência sairia
+// como arquivo cuja câmara não corresponde à forma — exatamente o defeito da #751.
+export const LAUNCH_PIX_TRANSFER = '45'; // G029 — Pix Transferência (p. 100)
+
+// Total sobre o domínio de G029, de propósito: uma forma nova entra pelo último `return` e sai com
+// zeros, que é o que o manual manda para tudo que não é TED nem PIX — nunca herdando a câmara da
+// forma anterior.
+export const clearingHouseFor = (launchForm: string): string => {
+  if (TED_LAUNCH_FORMS.has(launchForm)) return CLEARING_TED;
+  if (launchForm === LAUNCH_PIX_TRANSFER) return CLEARING_PIX;
+  return CLEARING_NONE;
+};
 
 // ─── Finalidade da TED (P011, Segmento A, colunas 220-224) ────────────────────────────────────
 //
@@ -158,6 +180,61 @@ const PAYEE_ACCOUNT_TYPE_CHECKING = 'CC'; // Conta Corrente — `PP` seria Poupa
 export const complementPurposeFor = (launchForm: string): string | null =>
   TED_LAUNCH_FORMS.has(launchForm) ? PAYEE_ACCOUNT_TYPE_CHECKING : null;
 
+// ─── A forma que exige ARQUIVO próprio (partição multi-arquivo, CA4 da #838) ───────────────────
+//
+// Quarta função a derivar da forma de lançamento, e a primeira que decide algo acima do registro: o
+// manual (pág. 15) exige que o Pix vá "em arquivo separado dos demais serviços e modalidades". Sem
+// esta régua, uma seleção mista produz um arquivo bem-formado que o banco recusa inteiro.
+//
+// ⚠️ NÃO é "cada forma no seu arquivo", e o golden prova o contrário: o de TED traz `01`, `41` e `31`
+// nos três lotes do MESMO arquivo. Formas convivem; o que não convive com elas é o Pix. Por isso a
+// função é um agrupamento — e não um predicado "esta forma é exclusiva?" —, que erraria por excesso
+// de partição no dia em que houvesse duas modalidades exclusivas entre si mas não entre elas.
+//
+// Total sobre G029, como as três irmãs acima: forma nova cai no grupo comum. Uma forma desconhecida
+// que de fato exigisse arquivo próprio produziria arquivo recusado — mas o caminho oposto (partir por
+// omissão) quebraria em dois os arquivos mistos que o banco JÁ aceita, e é o dano que se paga sem ter
+// lido nada no manual.
+//
+// ⚠️ ESTA É UMA PROPRIEDADE DO LAYOUT, E NÃO O ESTADO DA IMPLEMENTAÇÃO — a nota existe porque a fonte
+// errada está a um import de distância e responde a uma pergunta *parecida*. `hasRemittanceIssuer`
+// (`domain/payout/van-routes.ts`, #837) responde "esta rota tem emissor?", que hoje é `não` para o Pix
+// e vira `sim` quando a #838 destravar. A pergunta daqui é outra: "esta forma exige arquivo próprio?"
+// — e para o Pix a resposta é `sim` HOJE e continua `sim` DEPOIS de ele ganhar emissor.
+//
+// Derivar a partição daquela régua faria a partição DESAPARECER exatamente no dia em que ela passasse
+// a ter efeito prático, sem que uma linha mudasse aqui. O arquivo misto resultante é o que o banco
+// recusa, e ninguém lembraria por quê. É a sexta reincidência do padrão que `.claude/rules/cnab.md`
+// registra em §"Parâmetro opcional é o defeito": uma fonte que responde perto do que se perguntou.
+//
+// ⚠️ VIVE AQUI, e não no montador, pela razão que mudou `batchKeyFor` de casa na #804: DOIS
+// consumidores — o montador, que reparte o arquivo, e o pré-voo, que precisa dizer na tela quantos
+// arquivos saem. Uma segunda cópia faria a tela descrever um arquivo e o banco receber outro.
+const FILE_GROUP_DEFAULT = 'default';
+const FILE_GROUP_PIX = 'pix';
+
+export const fileGroupFor = (launchForm: string): string =>
+  launchForm === LAUNCH_PIX_TRANSFER ? FILE_GROUP_PIX : FILE_GROUP_DEFAULT;
+
+// G021, header de ARQUIVO, colunas 172-174 — a literal que declara o arquivo como sendo de Pix.
+//
+// Deriva do GRUPO, não da forma, e a diferença é a que importa: o campo é do arquivo, e um arquivo
+// tem um grupo só, enquanto pode ter várias formas (o golden de TED tem `01`, `41` e `31`). Derivá-lo
+// da forma obrigaria quem escreve o header a eleger uma das formas do arquivo como representante —
+// escolha que não existe no layout e que daria resultado diferente conforme a ordem dos lotes.
+//
+// `null` com a mesma semântica de `tedPurposeFor`: "este arquivo NÃO tem o campo", e as posições saem
+// em branco. Quem escreve a linha é que traduz `null` em brancos.
+//
+// ⚠️ MEDIDO nos dois goldens em 01/09/2026, e é o que sustenta as três posições — o manual descreve o
+// campo 22 partido (22.0 identificação em 172-174, 22.1 reservado em 175-191), mas quem prova a
+// literal é o arquivo do banco: golden de Pix traz [PIX] em 172-174 e 17 brancos em 175-191; golden
+// de TED traz brancos nos dois. Ver `remittance-file.ts`, que emitia `blanks(20)` no trecho inteiro.
+const PIX_FILE_IDENTIFICATION = 'PIX';
+
+export const pixIdentificationFor = (fileGroup: string): string | null =>
+  fileGroup === FILE_GROUP_PIX ? PIX_FILE_IDENTIFICATION : null;
+
 // Os três primeiros dígitos do código de barras são o banco emissor do título (Carta-Circular Bacen
 // 2.926) — é o que separa liquidação de título do próprio banco de título de outro banco.
 //
@@ -215,13 +292,36 @@ export const batchKeyFor = (
   return `${launchForm}${BATCH_KEY_SEPARATOR}${payeeBank ?? String(payeeBankCode)}`;
 };
 
+// O pagamento cuja rota TEM emissor, estreitado pelo mesmo `RouteWithIssuer` que o pré-voo consulta.
+//
+// O predicado é sobre o PAGAMENTO inteiro, e não sobre `payment.route`: um type predicate aplicado a
+// uma propriedade não estreita o objeto que a contém — só checagem direta do discriminante faz isso.
+// Escrito sobre a propriedade, o `switch` abaixo continuaria vendo as quatro variantes e exigiria os
+// `case` de `pix` e `tax-guide` de volta, que é a duplicação que a #837 remove.
+type IssuablePayment = Extract<ProfiledPayment, { route: RouteWithIssuer }>;
+
+const isIssuable = (payment: ProfiledPayment): payment is IssuablePayment =>
+  hasRemittanceIssuer(payment.route);
+
 // Transferência e boleto são as rotas com emissor. PIX e tributo ainda não têm — e o certo, até
 // terem, é a recusa nomeada: emiti-los pelo perfil de transferência mandaria ao banco um pagamento
 // bem-formado para a operação errada, usando dados que aquela rota sequer consulta.
+//
+// ⚠️ A LISTA DE ROTAS SUPORTADAS NÃO ESTÁ MAIS AQUI. Ela vive em `domain/payout/van-routes.ts`,
+// consultada por este guard e por `checkPayoutReadiness` — uma fonte, dois consumidores (#837). O
+// arranjo desfaz a divergência que fazia o pré-voo aprovar a Guia de Recolhimento e a geração
+// recusá-la no último clique, e é o que garante que ligar uma rota lá ligue os DOIS lados.
+//
+// ⚠️ E é por isso que o `switch` abaixo cobre duas variantes, não quatro: ele é exaustivo sobre
+// `IssuablePayment`. No dia em que `'pix'` entrar naquele array, este `switch` deixa de ser
+// exaustivo e **o typecheck quebra apontando para cá** — o compilador dizendo onde o emissor de Pix
+// falta. É a rede que impede o Pix de sair pelo perfil de transferência, que é o defeito da #751.
 export const batchProfileFor = (
   payment: ProfiledPayment,
   cedenteBankCode: string,
 ): Result<CnabBatchProfile, BatchProfileError> => {
+  if (!isIssuable(payment)) return err('remittance-launch-form-unsupported');
+
   switch (payment.route) {
     case 'transfer': {
       // Sem banco do favorecido não há forma a derivar — e o caminho por omissão custaria caro nos
@@ -258,8 +358,29 @@ export const batchProfileFor = (
       });
     }
 
-    case 'pix':
-    case 'tax-guide':
-      return err('remittance-launch-form-unsupported');
+    case 'pix': {
+      // Forma FIXA, sem derivação — e é a única das três rotas assim. A transferência escolhe entre
+      // crédito interno e TED conforme o banco do favorecido; o boleto, entre próprio banco e outro
+      // banco conforme o emissor do título. O Pix não tem essa bifurcação: o SPI é o mesmo trilho
+      // para todo recebedor, inclusive quando ele é correntista do Bradesco. Não há aqui o par de
+      // erros `payee-bank-unreadable`/`billet-bank-unreadable` porque não há banco a ler — o que
+      // endereça o pagamento é a chave, e ela não vive no perfil do lote.
+      //
+      // ⚠️ `BATCH_LAYOUT_PAYMENTS` (`045`), e NÃO uma versão própria. A CA1 da issue pedia "a versão
+      // de layout da seção de PIX", supondo seção separada — a medição desfaz a suposição: o header
+      // de lote da pág. 23 é o mesmo para "Pagamento Fornecedor / TED / DOC / Pix"
+      // (`referencias/02-layout-registros.md:69,79`). Quem tem versão própria é a seção de COBRANÇA,
+      // com `040`. Inventar um terceiro valor produziria header que o banco recusa.
+      //
+      // O que separa o Pix dos demais não é a versão do lote — é o ARQUIVO, e essa régua é
+      // `fileGroupFor`, entregue na CA4. As duas coisas foram confundidas na leitura original da
+      // issue, e vale a nota porque a confusão é atraente: as duas soam como "o Pix é diferente".
+      return ok({
+        serviceType: SERVICE_SUPPLIER_PAYMENT,
+        launchForm: LAUNCH_PIX_TRANSFER,
+        batchLayoutVersion: BATCH_LAYOUT_PAYMENTS,
+        paymentIndicator: PAYMENT_INDICATOR_DEFAULT,
+      });
+    }
   }
 };

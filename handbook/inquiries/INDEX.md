@@ -9,13 +9,13 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 6 | quem trabalha nela |
+| `open` | 7 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
-| `decided` | 18 | ninguém — fechada |
+| `decided` | 19 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **33**.
+Total: **35**.
 
 ---
 
@@ -29,6 +29,7 @@ Total: **33**.
 | [0030](./0030-deadman-switch-nunca-vigiou.md) | O dead-man's switch que nunca vigiou — o ADR-0042 sai do código sem ser superado | 2026-08-17 |  |
 | [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) | A reserva que trava o vão antes do registro — deadlock 1213 na emissão concorrente de remessa | 2026-08-21 |  |
 | [0032](./0032-titulo-remetido-fronteira-do-agregado.md) | Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock | 2026-08-23 |  |
+| [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) | Duas normas que a medição contradiz — migration "sempre gerada" e a proibição global de ODKU | 2026-09-01 |  |
 
 ---
 
@@ -66,6 +67,7 @@ Total: **33**.
 | [0024](./0024-adr-format-for-llm-agents.md) | Inquiry 0024 — ADR como contexto de agente: o que o campo convergiu, e onde estamos fora |  |  |
 | [0029](./0029-linter-type-aware-sob-typescript-7.md) | Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado | 2026-08-06 | 2026-08-06 |
 | [0033](./0033-cnab-multipag-bisseccao-validador.md) | O que o Bradesco realmente exige — bisseção de 18 remessas contra o Validador Universal | 2026-08-25 |  |
+| [0034](./0034-in-memory-fora-de-local-custo-na-piramide.md) | Eliminar o in-memory fora de LOCAL — o custo na pirâmide de testes, e por que a estimativa de 179 arquivos estava errada | 2026-08-31 |  |
 
 ---
 

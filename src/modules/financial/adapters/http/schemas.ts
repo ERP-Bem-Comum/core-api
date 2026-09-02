@@ -344,6 +344,17 @@ export const documentResponseSchema = z
           })
           .strict()
           .nullable(),
+        // A inscrição do favorecido, que o Segmento J-52 do boleto exige (#891). Entra no schema
+        // porque `readPayeeBank` passou a projetá-la, e este objeto é `.strict()`: campo que o DTO
+        // carrega e o schema não declara NÃO some da resposta — o `serializerCompiler` do
+        // `fastify-zod-openapi` roda `safeParse` na saída, falha com `unrecognized_keys` e o
+        // `ResponseSerializationError` cai no branch default do error handler. O sintoma é **500 na
+        // rota inteira**, não campo faltando, e ele aparece longe da causa.
+        //
+        // ⚠️ Comprimento, e NENHUM padrão de caractere: desde 07/2026 a inscrição de pessoa jurídica
+        // aceita letras (ADR-0044). Um `[0-9]{14}` aqui recusaria cadastro legítimo na SAÍDA — 500
+        // outra vez, agora contra o parceiro que está certo.
+        document: z.string().max(14).nullable(),
       })
       .strict()
       .nullable(),
@@ -554,6 +565,28 @@ export const confirmReconciliationBodySchema = z.object({
       note: z.string().min(1).max(500).optional(),
     })
     .optional(),
+  // M2 (RN-M2-03/04): reclassificação da taxonomia aplicada ao(s) título(s) LÍQUIDO(s) desta
+  // conciliação e cascateada aos títulos de retenção dos mesmos documentos (decisão A da P.O.).
+  //
+  // ⚠️ O BLOCO é opcional; os 5 refs DENTRO dele não são. Um caminho parcial não identifica nó algum
+  // na árvore do plano (ADR-0051) e não é validável contra ela — aceitá-lo seria gravar exatamente o
+  // "caminho morto" que o M2-10 manda recusar. O front já tem os 5 nos selects em cascata: ao trocar
+  // só a subcategoria (M2-2), reenvia os outros quatro inalterados.
+  taxonomy: z
+    .object({
+      programRef: z.uuid(),
+      budgetPlanRef: z.uuid(),
+      costCenterRef: z.uuid(),
+      categoryRef: z.uuid(),
+      subcategoryRef: z.uuid(),
+    })
+    .meta({
+      description:
+        'Reclassificação dos 5 níveis (Programa → Plano → Centro de Custo → Categoria → Subcategoria). ' +
+        'Aplicada ao título líquido e cascateada aos títulos de retenção do mesmo documento. ' +
+        'Os 5 refs devem formar um caminho existente e ativo do plano; caso contrário a conciliação é recusada.',
+    })
+    .optional(),
 });
 
 export type ConfirmReconciliationBody = z.infer<typeof confirmReconciliationBodySchema>;
@@ -592,6 +625,16 @@ const paidPayableSchema = z
     valueCents: z.string(),
     dueDate: z.string(),
     paymentMethod: z.string(),
+    // #268 (dentro da M2): a classificação vigente de volta na leitura — a coluna CATEGORIA da aba
+    // "Buscar/Criar vários" mostrava "—" porque a API nunca a devolveu, não porque faltasse o dado.
+    // `kind` diz quem pode ser FONTE de reclassificação: o botão "Editar" só habilita com 'Parent'
+    // na seleção (RN-M2-11).
+    kind: z.enum(['Parent', 'Child']),
+    programRef: z.string().nullable(),
+    budgetPlanRef: z.string().nullable(),
+    costCenterRef: z.string().nullable(),
+    categoryRef: z.string().nullable(),
+    subcategoryRef: z.string().nullable(),
   })
   .strict();
 
@@ -1080,6 +1123,19 @@ export const transactionReconciliationResponseSchema = z
     // Categoria do lançamento manual, resolvida server-side (ref → nome). null = sem categoria ou
     // conciliação sem lançamento manual (título real fica p/ fatia 2).
     category: z.string().nullable(),
+    // #268 (dentro da M2): os 5 refs VIGENTES da conciliação, de volta na leitura. `category` acima
+    // continua sendo o NOME (rótulo de tela) e não substitui isto: a tela precisa dos ids para
+    // reabrir o "Editar" já posicionado na classificação atual (M2-2 — mexer só na subcategoria).
+    taxonomy: z
+      .object({
+        programRef: z.string().nullable(),
+        budgetPlanRef: z.string().nullable(),
+        costCenterRef: z.string().nullable(),
+        categoryRef: z.string().nullable(),
+        subcategoryRef: z.string().nullable(),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 
@@ -1430,6 +1486,10 @@ const payoutGapSchema = z
       'payee-agency',
       'payee-account-number',
       'payee-account-digit',
+      // #891: a inscrição que o Segmento J-52 exige do boleto. Entra no enum pelo mesmo motivo que
+      // `check-digit-mismatch` entrou — o domínio produzir um campo que o schema não lista faria a
+      // resposta ser recusada na serialização, com 500 no lugar do pré-voo.
+      'payee-document',
       'payment-detail',
     ]),
     // `check-digit-mismatch` (#734) entra aqui porque o enum é o contrato publicado no OpenAPI: o
@@ -1454,9 +1514,12 @@ export const remittancePreviewResponseSchema = z
           // `transmitted` (#792, ADR-0065 §5): o título já saiu numa remessa. Nunca `ready` — a
           // recusa deixaria de chegar no último clique — e nunca `not-approved`, que mandaria o
           // operador aprovar o que já foi ao banco.
+          // `no-issuer` (#837): cadastro completo, rota que o arquivo ainda não emite. Distinto de
+          // `blocked` — não há campo a preencher — e de `out-of-van`, que é definitivo.
           status: z.enum([
             'ready',
             'blocked',
+            'no-issuer',
             'out-of-van',
             'not-found',
             'not-approved',
@@ -1472,6 +1535,7 @@ export const remittancePreviewResponseSchema = z
     ),
     readyCount: z.number().int().nonnegative(),
     blockedCount: z.number().int().nonnegative(),
+    noIssuerCount: z.number().int().nonnegative(),
     outOfVanCount: z.number().int().nonnegative(),
     notFoundCount: z.number().int().nonnegative(),
     notApprovedCount: z.number().int().nonnegative(),
@@ -1514,7 +1578,10 @@ export const generateRemittanceBodySchema = z
   })
   .strict();
 
-export const generateRemittanceResponseSchema = z
+// Um arquivo gerado. Passou a ser item de lista na CA4 da #838: o layout do banco manda certas
+// modalidades em arquivo separado, e uma seleção pode produzir mais de um — cada um com NSA, nome e
+// objeto no bucket próprios.
+const generatedRemittanceFileSchema = z
   .object({
     remittanceId: z.uuid(),
     fileName: z.string(),
@@ -1523,6 +1590,18 @@ export const generateRemittanceResponseSchema = z
     totalCents: centsStringSchema,
     lineCount: z.number().int().positive(),
   })
+  .strict();
+
+// ⚠️ MUDANÇA DE CONTRATO em `/api/v2` (greenfield, ADR-0033): a resposta era o arquivo; passou a ser
+// `{ files: [...] }`. Devolver o primeiro e omitir o resto faria a tela de confirmação exibir um
+// comprovante que descreve metade do que foi enfileirado — e o operador confirmaria acreditando ter
+// conferido, que é o defeito que o pré-voo existe para não cometer.
+//
+// Lista mesmo com um elemento só: um corpo que mudasse de forma conforme a seleção obrigaria o
+// consumidor a tratar dois contratos, e o caso de um arquivo — o comum — seria o testado, enquanto o
+// de dois seria o quebrado.
+export const generateRemittanceResponseSchema = z
+  .object({ files: z.array(generatedRemittanceFileSchema).min(1) })
   .strict();
 
 export type GenerateRemittanceResponseDto = z.infer<typeof generateRemittanceResponseSchema>;

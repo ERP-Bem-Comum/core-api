@@ -11,7 +11,11 @@ import type {
   TranslatedRemittance,
 } from '../../application/ports/cnab-remittance-translator.ts';
 import { buildRemittanceFileName } from './remittance-file-name.ts';
-import { buildRemittanceFile, type RemittanceFileError } from './remittance-file.ts';
+import {
+  buildRemittanceFile,
+  planRemittanceFiles,
+  type RemittanceFileError,
+} from './remittance-file.ts';
 import { inspectRemittanceFile } from './remittance-inspector.ts';
 
 // A recusa do montador traduzida para o vocabulário do port — e é um `switch` EXAUSTIVO, não um
@@ -34,17 +38,45 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     // faltando num título que está completo — o que falta é o emissor.
     case 'remittance-launch-form-unsupported':
       return 'cnab-launch-form-unsupported';
+    // Sobe com nome próprio pela mesma razão do convênio: o que falta é dado de CADASTRO, e o
+    // operador precisa ler isso, não "falhou a tradução" (#891).
+    case 'billet-party-unidentified':
+      return 'cnab-billet-party-unidentified';
+    // Mesma razão, outra rota: a chave é dado de cadastro, e o operador precisa ler que ela não cabe
+    // no campo — não "falhou a tradução" (#838).
+    case 'pix-key-unrepresentable':
+      return 'cnab-pix-key-unrepresentable';
+    // Os dois erros de TRADUÇÃO da rota Pix. Sobem nomeados pela mesma régua: um manda ao cadastro
+    // (ou à fonte do Bacen), o outro diz que o tipo da chave não existe no domínio do layout.
+    case 'payee-ispb-unknown':
+      return 'cnab-payee-ispb-unknown';
+    case 'remittance-pix-key-type-unsupported':
+      return 'cnab-pix-key-type-unsupported';
+    // `remittance-mixed-file-modalities` converge para o desfecho genérico, e é escolha, não
+    // descuido: a seleção mista NÃO deveria alcançar o montador — quem chama passa por `planFiles`,
+    // que já reparte. Chegar aqui significa que alguém montou um arquivo sem repartir antes, e não há
+    // dado a corrigir no cadastro; é o chamador que pulou uma etapa.
     case 'numeric-field-overflow':
     case 'numeric-field-invalid':
     case 'remittance-billet-bank-unreadable':
     case 'remittance-payee-bank-unreadable':
     case 'remittance-without-payments':
     case 'remittance-reference-overflow':
+    case 'remittance-mixed-file-modalities':
       return 'cnab-translation-failed';
   }
 };
 
 export const createBradescoMultipagTranslator = (): CnabRemittanceTranslator => ({
+  // A partição reusa `translateErrorFor`: as causas de recusa são as MESMAS do montador, porque a
+  // partição deriva o perfil de cada pagamento pela mesma função. Um mapeamento próprio aqui
+  // divergiria do outro no dia em que um erro novo entrasse — e o operador receberia dois nomes para
+  // o mesmo defeito conforme a etapa em que ele fosse detectado.
+  planFiles: (input) => {
+    const plan = planRemittanceFiles(input.payments, input.cedenteBankCode);
+    return plan.ok ? ok(plan.value) : err(translateErrorFor(plan.error));
+  },
+
   translate: (
     input: TranslateRemittanceInput,
   ): Result<TranslatedRemittance, CnabTranslateError> => {

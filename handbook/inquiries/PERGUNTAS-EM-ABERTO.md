@@ -7,14 +7,14 @@
 > recorte de _o que ainda falta responder_. Para contexto, fundamentação e alternativas pesadas, sempre
 > voltar à inquiry-fonte linkada em cada bloco.
 
-- **Última revisão da prosa:** 2026-08-17 (entrada da [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou); revisão anterior em 2026-08-07, reconstruída a partir do disco)
+- **Última revisão da prosa:** 2026-09-01 — sessão de debate do ambiente de dados: entrada da [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) e medição de 3 dos 4 itens do Drizzle 1.0 na [0026](#inquiry-0026--assíncrono-human-in-the-loop-drizzle-10-e-bruno--ts), com o gatilho refinado para duplo (revisões anteriores em 2026-08-17 e 2026-08-07)
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 11 de 33 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md)
-- **Total de perguntas em aberto:** **53**
+- **Inquiries cobertas:** 12 de 35 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md)
+- **Total de perguntas em aberto:** **57**
 
-As demais 22 estão `decided` (18), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
+As demais 23 estão `decided` (19), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 
 <!-- END:generated -->
@@ -36,6 +36,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
 | [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | **Nada — o gatilho de fechamento está cumprido.** Falta decidir se vira `decided` | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 0 |
 | [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | P.O. — a forma da recusa na tela; as 4 saídas já estão decididas | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
+| [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
 
 ---
 
@@ -173,7 +174,7 @@ cobrem as 119 colunas binárias dos 6 módulos. `db:generate` responde `No schem
 
 - [ ] **1.** O outbox + polling atual sustenta um fluxo **human-in-the-loop** (solicitação → e-mail → callback externo → transição de estado), ou o desenho pede fila/workflow engine? _Falta medir: latência do `runLoop`; se o callback é entrada HTTP comum e já cabe; retry e dead-letter; agendamento futuro ("reenviar em 3 dias"); coordenação multi-instância do worker de outbox._
 - [ ] **2.** Quais limitações do outbox são reais **neste** volume e quais são teóricas?
-- [ ] **3.** O `drizzle-orm@1.0.0` muda alguma premissa de (1), e o que custa em 8 módulos? _Falta medir: breaking changes em `mysql-core`; se `relations-v2` obriga reescrever repositórios; se collation ganhou suporte de primeira classe (aposentando o `customType`); estabilidade do differ do `drizzle-kit`._
+- [ ] **3.** O `drizzle-orm@1.0.0` muda alguma premissa de (1), e o que custa em 8 módulos? **Medido em 2026-09-01 — 3 dos 4 itens fechados:** o custo **não** é "8 módulos"; **6 dos 7 breaking changes obrigatórios são inertes** aqui, `relations-v2` não obriga reescrever **nada** (o repo nunca adotou o RQB v1 — zero `relations()`/`db.query.*`), e o `drizzle-kit` **não tem `1.0`**, o que torna o major inexecutável hoje. O que resta é o formato v3 da pasta de migração — 123 `.sql`, 123 snapshots, 7 journals já aplicados em produção. _Falta medir: se collation ganhou suporte de primeira classe (aposentando o `customType`), que cruza com a [0015](./0015-charset-drizzle-roadmap.md)._
 - [ ] **4.** Os 242 `.bru` cobrem algo que os 179 `inject` não cobrem, ou são camada duplicada com supply-chain próprio? _Falta medir: quanto é duplicata; o que só o servidor real pega (rede, CORS, helmet, rate-limit); o que se perde sem o app do Bruno; se as 2 exceções de supply-chain saem junto; o custo dos 17 ponteiros históricos._
 
 **Gatilhos declarados — o que destrava cada uma:**
@@ -181,7 +182,7 @@ cobrem as 119 colunas binárias dos 6 módulos. `db:generate` responde `No schem
 | Troca | Gatilho | Medível hoje? |
 | :--- | :--- | :--- |
 | (a) assíncrono | o épico de aprovação entrar no roadmap | não — seria especular sobre requisito inexistente |
-| (b) Drizzle 1.0 | `1.0.0` sair com dist-tag `latest` **e** cumprir a quarentena de 24h (`minimumReleaseAge`) | não — hoje é `1.0.0-rc.4`, alvo móvel |
+| (b) Drizzle 1.0 | **duplo (refinado em 2026-09-01):** `drizzle-orm@1.0.0` **e** `drizzle-kit@1.x` ambos em `latest`, ambos cumprida a quarentena de 24h (`minimumReleaseAge`) | não — `drizzle-orm` em `1.0.0-rc.5` (2026-08-12) e **`drizzle-kit` sem `1.0`**; sem o kit, o formato v3 de migração não existe |
 | (c) Bruno × TS | nenhum evento externo | **sim, e barato** — cruzar as rotas dos 242 `.bru` com as dos 179 `inject` responde em uma sessão |
 
 ⚠️ **A armadilha que (c) precisa evitar:** o ADR-0038 nasceu de 24 de 26 falhas serem `.bru` desalinhados com o
@@ -388,6 +389,28 @@ valer nesta branch**, onde o #814 já está integrado.
 3. Inquiry que entra em `open`/`blocked` com perguntas pendentes → adicionar bloco referenciando a fonte.
 4. Pergunta respondida antes do fechamento → marcar `[x]` e riscar o texto, preservando o registro de que existiu (ver 6.4 da [0012](#inquiry-0012--bff-api-gateway-managed-vs-fastify)).
 5. Atualizar **Última atualização** no topo.
+
+---
+
+## Inquiry-0035 — Duas normas que a medição contradiz
+
+> **Origem:** [`0035-norma-de-migration-e-proibicao-de-odku.md`](./0035-norma-de-migration-e-proibicao-de-odku.md) §2 e §5
+> **Aberta em:** 2026-09-01 · **Destinatário:** dono do repo — as duas saídas mexem em norma escrita, não em código
+> **Por que importa:** nenhuma das duas produz defeito hoje. O custo é o de toda norma ficcional — quem lê o
+> absoluto, não encontra a exceção escrita, e ou obedece contra a técnica ou desvia sem declarar. As duas têm a
+> mesma forma: uma solução real generalizada para "sempre", que a prática depois teve de contrariar por razão
+> técnica legítima.
+
+- [ ] **(a1)** Reescrever o anti-padrão nº 4 do `CLAUDE.md` — hoje _"escrever migration à mão"_ é anti-padrão, e **46 das 123 migrations (37,4 %) foram editadas à mão**, por quatro limitações medidas do gerador (ordem por dependência, `ENGINE`/`CHARSET` que o Drizzle não expõe, fusão de cláusulas para `INPLACE, LOCK=NONE`, backfill entre DDLs). A norma proposta: _"gerar sempre, editar quando necessário, e **declarar** a edição"_ — o padrão que a `contracts/0020_busy_doctor_spectrum.sql` já pratica em 15 linhas de comentário.
+- [ ] **(a2)** Se (a1) for aceita: o gate que cobra a declaração (marca de edição ⇒ comentário) entra em `tests/cleanup/`, com allowlist que nasce cheia e esvazia por fatia? _39 das 46 já têm comentário — a distância é curta._
+- [ ] **(b1)** A proibição global de `ON DUPLICATE KEY UPDATE` na camada de agregado se sustenta **por uniformidade de padrão**, mesmo sem o risco do manual? _Medido: **0 dos 47 call sites** reúnem a condição do Refman ("tables with multiple unique indexes"); 44 são sobre tabela só-PK._ Se sim, o motivo escrito em `document-repository.drizzle.ts:8-12` precisa ser corrigido — hoje ele cita o manual, e o manual não sustenta o absoluto.
+- [ ] **(b2)** Se (b1) for não: ADR novo que `supersede` a §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md), declarando a condição real (tabela com ≥ 2 uniques colidíveis no mesmo caminho de escrita). _ADR aceito não se edita._
+
+⚠️ **Correção de citação, independente da decisão:** o docblock de `document-repository.drizzle.ts` usa a numeração do Refman **8.0** — cita "§13.2.6.2" e "§15.7" (na 8.4: §15.2.7.2 e §17.7) e, em `:20`, "§15.7.2.4", que **na 8.4 é "SET RESOURCE GROUP Statement"**. O texto invocado sobrevive; a paráfrase é que omite a condição.
+
+**O que NÃO se decide aqui:** o custo do substituto de ODKU em contenção — não medido, e exige banco com dado.
+
+---
 
 > ⚠️ Este arquivo é mantido à mão e **nenhum gate o cobre** — a versão anterior ficou 3 meses divergindo do disco
 > sem que nada acusasse. Ao mexer numa inquiry `open`/`blocked`, passe aqui no mesmo commit.

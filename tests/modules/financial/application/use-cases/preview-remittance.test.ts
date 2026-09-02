@@ -27,20 +27,38 @@ import { createRemittanceBatchPlanner } from '#src/modules/financial/adapters/cn
 // Um cadastro `ready` no pré-voo precisa ser um cadastro que o banco aceitaria — na Modalidade 01 os
 // dígitos são validados por ele. Fixture com DV inventado descrevia como apto um título que a
 // remessa perderia.
+// A inscrição que o Segmento J-52 exige do boleto (#891), OPACA de propósito: a régua só pergunta se
+// HÁ inscrição — quem valida formato é `partners`. Um documento bem-formado aqui sugeriria validação
+// que não existe, e poria dado de cadastro em fixture num repositório público.
+const PAYEE_DOCUMENT = 'inscricao-opaca';
+
 const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',
   agency: '1234-5',
   accountNumber: '123456',
   checkDigit: '0',
   pixKey: null,
+  document: PAYEE_DOCUMENT,
 };
 
+// ⚠️ Cadastro Pix COMPLETO passou a incluir o bloco bancário (#838), e não só a chave: o Segmento A
+// do golden traz banco, agência, DV, conta e DV do favorecido preenchidos, com o layout (p. 39)
+// marcando os quatro como obrigatórios. A chave endereça o pagamento no SPI; o Segmento A continua
+// sendo o registro de crédito. A fixture `PIX_KEY_ONLY`, que existia aqui, virou o caso INCOMPLETO —
+// ela está logo abaixo, com esse nome.
+const PIX_COMPLETE: PayeePaymentTarget = {
+  ...BANK_ACCOUNT_ONLY,
+  pixKey: { keyType: 'email', key: 'a@b.com' },
+};
+
+// Só a chave, sem dado bancário: era o cadastro suficiente até a #838, e hoje é pendência.
 const PIX_KEY_ONLY: PayeePaymentTarget = {
   bank: null,
   agency: null,
   accountNumber: null,
   checkDigit: null,
   pixKey: { keyType: 'email', key: 'a@b.com' },
+  document: PAYEE_DOCUMENT,
 };
 
 // Ausência por `null`. ⚠️ Este arranjo é IMPOSSÍVEL para `supplier` e para `act` com repasse:
@@ -53,6 +71,7 @@ const NO_DESTINATION_NULLS: PayeePaymentTarget = {
   accountNumber: null,
   checkDigit: null,
   pixKey: null,
+  document: null,
 };
 
 // Ausência por string vazia — a forma que a ETL de fato gravou.
@@ -62,6 +81,7 @@ const NO_DESTINATION_BLANKS: PayeePaymentTarget = {
   accountNumber: '',
   checkDigit: '',
   pixKey: { keyType: 'email', key: '' },
+  document: '',
 };
 
 const row = (over: Partial<RemittancePreviewRow>): RemittancePreviewRow => ({
@@ -137,8 +157,10 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     const rows = [
       row({ payableId: 'ted-ok' }),
       row({ payableId: 'ted-sem-banco', payee: NO_DESTINATION_NULLS }),
-      row({ payableId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
+      row({ payableId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_COMPLETE }),
       row({ payableId: 'pix-sem-chave', paymentMethod: 'PIX', payee: BANK_ACCOUNT_ONLY }),
+      // O caso que a #838 criou: chave presente, cadastro bancário ausente. Antes bastava a chave.
+      row({ payableId: 'pix-sem-conta', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
       // 44 dígitos — o código de barras que o Segmento J grava (G063).
       row({
         payableId: 'boleto-ok',
@@ -146,6 +168,13 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
         paymentDetail: '23791234500000150000123456789012345678901234',
       }),
       row({ payableId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: NO_DESTINATION_NULLS }),
+      // A Guia de Recolhimento é o caso que originou a #837: código de barras válido, cadastro
+      // completo, e mesmo assim não sai — porque não há emissor para a rota.
+      row({
+        payableId: 'guia-ok',
+        paymentMethod: 'GuiaRecolhimento',
+        paymentDetail: '23791234500000150000123456789012345678901234',
+      }),
       row({ payableId: 'cambio', paymentMethod: 'Cambio' }),
     ];
     const ids = rows.map((r) => r.payableId);
@@ -155,13 +184,38 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
 
     assert.equal(line(r, 'ted-ok').status, 'ready');
     assert.equal(line(r, 'ted-sem-banco').status, 'blocked');
-    assert.equal(line(r, 'pix-ok').status, 'ready');
-    assert.equal(line(r, 'pix-sem-chave').status, 'blocked');
     assert.equal(line(r, 'boleto-ok').status, 'ready');
     assert.equal(line(r, 'boleto-sem-linha').status, 'blocked');
+
+    // #838 — o Pix ganhou emissor, então cadastro completo agora sai `ready`. A linha que continua
+    // `no-issuer` é a da GUIA, e continua por decisão de escopo da P.O. (23/08), não por atraso.
+    assert.equal(line(r, 'pix-ok').status, 'ready');
+
+    // #837 — CA1. O cadastro está completo e a linha ainda assim não sai, porque não existe emissor
+    // para a rota. Antes, ela aparecia como `ready` e a recusa só chegava no clique em Gerar.
+    assert.equal(line(r, 'guia-ok').status, 'no-issuer');
+
+    // #838 — a metade nova da régua do Pix. Chave presente e cadastro bancário ausente é pendência
+    // de CADASTRO, não ausência de emissor: o operador tem o que fazer, e a tela precisa dizer o quê.
+    assert.equal(line(r, 'pix-sem-conta').status, 'blocked');
+    assert.ok(line(r, 'pix-sem-conta').missing.length > 0, 'a tela precisa apontar o campo');
+
+    // #837 — CA4. Os dois motivos coexistem e não se confundem: aqui falta a CHAVE, e o operador tem
+    // o que fazer. Achatá-lo em `no-issuer` esconderia a pendência de cadastro atrás de um
+    // impedimento temporário — e ela reapareceria inteira no dia em que o emissor entrasse.
+    assert.equal(line(r, 'pix-sem-chave').status, 'blocked');
+    assert.deepEqual(line(r, 'pix-sem-chave').missing, ['pix-key']);
+
+    // A rota VIAJA no `no-issuer`, ao contrário do `out-of-van`: é o que permite à tela dizer QUAL
+    // forma ainda não sai, em vez de um impedimento anônimo.
+    assert.equal(line(r, 'guia-ok').route, 'tax-guide');
+    assert.deepEqual(line(r, 'guia-ok').missing, [], 'não há campo a apontar: o cadastro está bom');
+
     // Fora da VAN não é "impedido": nenhum cadastro conserta, e oferecer campo a corrigir mandaria
-    // o operador a uma correção que não existe.
+    // o operador a uma correção que não existe. Nem é `no-issuer`, que é transitório — câmbio não
+    // ganha emissor porque o layout contratado não o transporta.
     assert.equal(line(r, 'cambio').status, 'out-of-van');
+    assert.equal(line(r, 'cambio').route, null);
   });
 
   // O pedido literal da P.O.: "campo faltante ESTRUTURADO (ex.: missing: ['agencyDigit'])".
@@ -199,7 +253,13 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     assert.deepEqual(line(r, 'vazio').missing, line(r, 'nulo').missing);
     assert.equal(line(r, 'vazio').status, line(r, 'nulo').status);
     // Chave PIX em branco é chave ausente — não "presente e vazia".
-    assert.deepEqual(line(r, 'pix-vazio').missing, ['pix-key']);
+    //
+    // ⚠️ A asserção era `deepEqual(missing, ['pix-key'])` e passou a ser inclusão: desde a #838 o Pix
+    // exige também o bloco bancário, então a lista traz os campos de conta junto. Fixar a lista
+    // INTEIRA aqui faria este caso quebrar a cada mudança da régua do Pix — e ele não é sobre a
+    // régua, é sobre `''` e `null` levarem ao mesmo lugar. A propriedade é a EQUIVALÊNCIA, na linha
+    // seguinte; a chave aparecer é o que prova que o branco foi lido como ausência.
+    assert.ok(line(r, 'pix-vazio').missing.includes('pix-key'));
     assert.deepEqual(line(r, 'pix-vazio').missing, line(r, 'pix-nulo').missing);
   });
 

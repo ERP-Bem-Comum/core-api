@@ -591,6 +591,21 @@ export const finPayableView = mysqlTable(
     debitAccountRef: uuidKey('debit_account_ref'),
     paidAt: date('paid_at', { mode: 'string' }),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // #894 — instante do EVENTO que escreveu esta linha (≠ `updated_at`, que é o instante da
+    // escrita). É o token do guard de recência do upsert: sem ele o `ON DUPLICATE KEY UPDATE`
+    // sobrescreve incondicionalmente, e a entrega repetida de um `DocumentSaved` antigo
+    // (at-least-once — `markFailed` devolve a linha à fila sem tirá-la da ordem) APAGA a
+    // reclassificação justamente onde os relatórios somam.
+    //
+    // Enquanto os 5 refs eram imutáveis após a criação isto não custava nada: dois `DocumentSaved`
+    // do mesmo documento diziam a mesma coisa. É a M2 que passa a produzir dois eventos com
+    // taxonomias DIFERENTES — o defeito não existia antes desta feature, e nasce com ela.
+    //
+    // Default epoch para as linhas que já existem: qualquer evento novo é mais recente que elas, que
+    // é o comportamento correto para uma linha cuja procedência não se conhece.
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 })
+      .notNull()
+      .default(sql`'1970-01-01 00:00:00.000'`),
   },
   (t) => [
     index('fin_payable_view_status_idx').on(t.status),

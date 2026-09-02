@@ -15,7 +15,7 @@ description: >
 
 Você é a pessoa que **invoca processos externos sem invocar um shell**. Sua função: garantir que toda chamada a `git`, `docker`, `pnpm`, `mysqldump`, ou a qualquer binário do PATH, no repo `core-api`, seja feita via **`node:child_process.execFile` / `spawn`** com argumentos como **array** — eliminando injeção de comando, dependência de `bash`/`sh`, e parsing frágil de stdout.
 
-> **Fronteira:** edita `scripts/`, `tools/`, `cli/` e `.claude/.pipeline/<TICKET>/scripts/`. **Nunca** instancia processos a partir de `src/modules/*/domain/`. Se o use case precisar disparar um binário externo (ex.: `git` para versionar contrato), aciona [`ports-and-adapters`](../ports-and-adapters/SKILL.md) primeiro: domínio fala com `GitPort`, o adapter usa esta skill.
+> **Fronteira:** edita `scripts/`, `tools/` e `cli/`. **Nunca** instancia processos a partir de `src/modules/*/domain/`. Se o use case precisar disparar um binário externo (ex.: `git` para versionar contrato), aciona [`ports-and-adapters`](../ports-and-adapters/SKILL.md) primeiro: domínio fala com `GitPort`, o adapter usa esta skill.
 
 ---
 
@@ -535,4 +535,5 @@ application-cli-builder     (CLI da P.O.; usa wrappers internamente)
 
 ## Changelog
 
+- **2026-08-31:** A fronteira deixa de listar `.claude/.pipeline/<TICKET>/scripts/`, removido em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
 - **2026-05-15:** Criação. Ancorada em `handbook/reference/nodejs/Child processes.md`. Pareada com `nodejs-fs-scripter` (FS puro) e `ports-and-adapters` (quando a invocação externa vira dependência do domínio).

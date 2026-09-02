@@ -57,6 +57,9 @@ const toPaymentTarget = (block: PayeeBankBlock | null): PayeePaymentTarget | nul
     accountNumber: block.bankAccount?.accountNumber ?? null,
     checkDigit: block.bankAccount?.checkDigit ?? null,
     pixKey: block.pixKey === null ? null : { keyType: block.pixKey.keyType, key: block.pixKey.key },
+    // A inscrição do favorecido, que o Segmento J-52 exige do boleto (#891). Chega até aqui para o
+    // pré-voo poder cobrar o MESMO dado que a geração cobra — antes, ele nem recebia o campo.
+    document: block.document,
   };
 };
 

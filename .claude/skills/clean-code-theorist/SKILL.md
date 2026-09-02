@@ -83,5 +83,11 @@ Quando comparar escolas, este projeto oferece evidência empírica de cada escol
 | **SOLID-S (Single Responsibility) interpretado como "1 motivo de mudança"** | Aplicado por separação de pastas: `domain/` muda só por regra de negócio; `adapters/` muda só por infra; `cli/` só por UX terminal | Layout em [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Mapa de camadas do módulo Contracts" |
 | **OO de herança vs Discriminated unions** | Discriminated unions vencem — `Amendment` é union de 4 kinds, com `switch` exaustivo (`switch-exhaustiveness-check` no ESLint) | `src/modules/contracts/domain/amendment/types.ts` |
 | **GoF Factory vs Smart constructor funcional** | Smart constructor vence — `Money.fromCents(raw): Result<Money, MoneyError>` | `src/modules/contracts/domain/shared/money.ts`, `period.ts`, `ids.ts`, `bucket-name.ts`, `storage-key.ts` |
-| **Refactor sem rede vs Refactor com testes verdes (Fowler)** | Fowler vence — pipeline W2 (review) só passa com testes verdes da W0 + W1; W3 re-roda toda a suite | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Trabalho não-trivial passa pela pipeline" |
+| **Refactor sem rede vs Refactor com testes verdes (Fowler)** | Fowler vence — o gate re-roda toda a suíte, e vermelho não fecha turno | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Política de regressão zero" |
 | **Lint como dogma vs Lint como apoio** | Apoio: `eslint-config-prettier` desliga regras de estilo (formatter resolve); typescript-eslint focado em segurança de tipos | [`../../../eslint.config.js`](../../../eslint.config.js) (ordem dos configs, com `prettierConfig` último) |
+
+---
+
+## Changelog
+
+- **2026-08-31:** O veredito de Fowler deixa de se apoiar nas waves W0/W1/W2, removidas em 2026-08-06, e passa a citar a política de regressão zero — que é a norma vigente e diz a mesma coisa. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).

@@ -17,6 +17,8 @@ import {
   clearingHouseFor,
   tedPurposeFor,
   complementPurposeFor,
+  fileGroupFor,
+  pixIdentificationFor,
   type BatchProfileError,
   type CnabBatchProfile,
   type ProfiledPayment,
@@ -32,11 +34,19 @@ import {
 } from './multipag-records.ts';
 import {
   paymentRecords,
+  pixPaymentInfo,
+  segmentA,
+  segmentBPix,
   segmentJ,
+  segmentJ52,
+  PIX_ACCOUNT_TYPE_CHECKING,
+  type BilletParty,
   type CnabSegmentError,
   type Payee,
   type PayeeAddress,
 } from './multipag-segments.ts';
+import { payeeIspbFor, type PayeeIspbError } from './payee-ispb.ts';
+import { pixInitiationFor, type PixInitiationError } from './pix-initiation.ts';
 
 // O layout não especifica o terminador de linha — nem no corpo, nem nas notas gerais. CRLF é a
 // convenção do CNAB e o destino é uma máquina Windows (o STCPCLT roda lá), então é a escolha
@@ -84,6 +94,17 @@ export type BilletPayment = Readonly<{
   route: 'billet';
   barcode: string;
   beneficiaryName: string;
+  // A INSCRIÇÃO de quem emitiu o título, que o Segmento J-52 exige em 076-091 (#891). O nome
+  // sozinho não identifica o cedente para o banco.
+  //
+  // ⚠️ OBRIGATÓRIOS: sem `?`, sem default — e a ausência do opcional é a decisão, não um descuido.
+  // É o quinto caso que a rule `cnab.md` enumera: `address?: PayeeAddress`, logo acima, não produz
+  // valor errado, produz SILÊNCIO — ninguém tem o que passar, o `?? ''` vira branco em 100% das
+  // remessas (#858), e o adapter compila perfeitamente sem o dado que o layout exige. Um
+  // `beneficiaryDocument?` com `?? ''` reproduziria exatamente isso num registro novo. Aqui o
+  // compilador cobra quem esquecer, e a guarda de `segmentJ52` cobra quem passar vazio.
+  beneficiaryDocumentType: '1' | '2';
+  beneficiaryDocument: string;
   dueDate: Date;
   paymentDate: Date;
   valueCents: number;
@@ -95,19 +116,47 @@ export type BilletPayment = Readonly<{
   // Idem `TransferPayment`: derivado no montador, nunca recebido de fora.
 }>;
 
-// As rotas que a P.O. contratou e o emissor ainda não cobre. Existem no tipo de propósito: o dado
-// chega em runtime, do reader, e o montador precisa poder RECUSÁ-LO explicitamente. Um tipo que as
-// proibisse empurraria a decisão para um `as` no chamador — e a recusa deixaria de acontecer.
+// Pagamento por chave Pix, na forma `45` (#838).
 //
-// Carregam valor e data como as demais: o título os tem havendo emissor ou não, e é o que permite
-// ao use case conferir a data única da remessa antes de saber se o arquivo sai.
+// ⚠️ CARREGA `payee` COMPLETO, e é a parte contra-intuitiva desta rota. A decisão da P.O. de 13/08
+// (#708) dizia que "PIX paga por chave, não olha agência ou conta", e isso vale para o NEGÓCIO —
+// não para o arquivo: o golden do banco (`GOLDEN_TEST_MULTIPAG_PIX_240`) traz banco, agência, DV,
+// conta e DV do favorecido preenchidos no Segmento A, e o layout (p. 39) marca os quatro com
+// asterisco de obrigatório. A chave endereça o pagamento no SPI; o Segmento A continua sendo o
+// registro de crédito, e identifica a conta. O pré-voo foi alinhado a isto em
+// `domain/payout/payout-readiness.ts`, e desalinhá-los reabre a divergência da #837.
+//
+// O `keyType` chega CRU, do vocabulário de `partners`, e é traduzido aqui — não antes. Quem conhece
+// o domínio `G100` é o adapter, e é o mesmo arranjo do ISPB: nenhum dos dois é dado do título, os
+// dois são derivados de algo que o título já carrega. Um `initiation: string` na entrada seria a
+// sexta reincidência do padrão que a rule `cnab.md` registra — um campo que o chamador só poderia
+// preencher a partir do que ele já passou.
+export type PixPayment = Readonly<{
+  route: 'pix';
+  payee: Payee;
+  pixKey: string;
+  pixKeyType: string;
+  paymentDate: Date;
+  valueCents: number;
+}>;
+
+// A rota que a P.O. contratou e o emissor não cobre. Existe no tipo de propósito: o dado chega em
+// runtime, do reader, e o montador precisa poder RECUSÁ-LO explicitamente. Um tipo que a proibisse
+// empurraria a decisão para um `as` no chamador — e a recusa deixaria de acontecer.
+//
+// ⚠️ Era `'pix' | 'tax-guide'` até a #838. A guia continua aqui, e continua por DECISÃO DE ESCOPO,
+// não por atraso: a P.O. fixou em 23/08 que imposto retido pago por guia de recolhimento permanece
+// fora da remessa. Não há release futuro que a mova daqui.
+//
+// Carrega valor e data como as demais: o título os tem havendo emissor ou não, e é o que permite ao
+// use case conferir a data única da remessa antes de saber se o arquivo sai.
 export type UnsupportedPayment = Readonly<{
-  route: 'pix' | 'tax-guide';
+  route: 'tax-guide';
   valueCents: number;
   paymentDate: Date;
 }>;
 
-export type RemittancePayment = TransferPayment | BilletPayment | UnsupportedPayment;
+export type RemittancePayment = TransferPayment | BilletPayment | PixPayment | UnsupportedPayment;
 
 export type RemittanceFileInput = Readonly<{
   cedente: CedenteHeaderData;
@@ -127,10 +176,23 @@ export type RemittanceFileError =
   | CnabRecordError
   | BatchProfileError
   | 'remittance-without-payments'
+  // Seleção que mistura modalidades que o manual manda em arquivos SEPARADOS (pág. 15: o Pix vai em
+  // arquivo próprio). Recusa em vez de repartir, e a escolha é deliberada: este montador monta UM
+  // arquivo, e reparti-lo aqui produziria N arquivos com um NSA só — o mesmo número sequencial em
+  // dois arquivos distintos, que é retransmissão aos olhos do banco. Quem reparte é quem consegue
+  // alocar um NSA por arquivo, e isso vive no use case. Ver `planRemittanceFiles`.
+  | 'remittance-mixed-file-modalities'
   // Um componente da referência de G064 não coube na sua largura (#752, CA5). Recusar é a única
   // saída: truncar colapsaria duas referências distintas na mesma string, e o casamento do retorno
   // apontaria para o título errado — sem nada indicando que houve truncamento.
-  | 'remittance-reference-overflow';
+  | 'remittance-reference-overflow'
+  // Os dois erros da tradução do Pix (#838), entrando por inteiro pela mesma razão do envelope: cada
+  // um manda o operador a um lugar diferente. `payee-ispb-unknown` diz que o banco do favorecido não
+  // está na tabela do Bacen — e a saída é atualizar a fonte, ou corrigir o código no cadastro;
+  // `remittance-pix-key-type-unsupported` diz que o tipo da chave não existe no domínio `G100`.
+  // Achatá-los em `cnab-translation-failed` mandaria abrir chamado de código nos dois casos.
+  | PayeeIspbError
+  | PixInitiationError;
 
 export type RemittanceFile = Readonly<{
   content: string;
@@ -209,6 +271,14 @@ type BatchContext = Readonly<{
   batchNumber: number;
   firstRecordNumber: number;
   launchForm: string; // G029 do lote
+  // Quem PAGA — o SACADO do Segmento J-52 (#891). Vem do envelope, não do pagamento: é a mesma
+  // empresa para todo título do arquivo, e derivá-la aqui do `cedente` do input é o que impede um
+  // chamador de afirmar um pagador diferente do que o header do arquivo declara.
+  //
+  // ⚠️ O nome do campo é `payer` e não `cedente` DE PROPÓSITO. Nesta base `cedente` é a empresa
+  // dona do arquivo; no vocabulário de cobrança do J-52 essa mesma empresa é o **Sacado**, e
+  // "Cedente" é quem recebe. Reusar a palavra aqui faria o campo apontar para o bloco errado.
+  payer: BilletParty;
 }>;
 
 // Os registros de detalhe de UM pagamento, na rota dele. O sequencial do registro no lote (G038)
@@ -246,8 +316,13 @@ const detailsOf = (
         ...(payment.message !== undefined ? { message: payment.message } : {}),
       });
 
+    // O boleto é o PAR J + J-52, e a ordem é a do layout: o J-52 complementa o J imediatamente
+    // anterior (#891). O manual declara o J-52 "Obrigatório para pagamentos de títulos de Cobrança
+    // independente do valor" (p. 33) — emitir só o J produz arquivo que o trailer fecha, o inspetor
+    // aprova e o modelo do banco não reconhece. É a mesma relação que o par A+B tem na
+    // transferência, e por isso mora aqui, junto: quem emite um emite o outro, sem rota alternativa.
     case 'billet': {
-      const record = segmentJ({
+      const j = segmentJ({
         bankCode,
         batchNumber,
         recordNumber: firstRecordNumber,
@@ -261,12 +336,99 @@ const detailsOf = (
         ...(payment.surchargeCents !== undefined ? { surchargeCents: payment.surchargeCents } : {}),
         yourNumber,
       });
-      return record.ok ? ok([record.value]) : record;
+      if (!j.ok) return j;
+
+      const j52 = segmentJ52({
+        bankCode,
+        batchNumber,
+        // O sequencial do lote é do REGISTRO, não do pagamento: o J-52 é uma linha inteira e ocupa
+        // o número seguinte, como o Segmento B ocupa depois do A. Errar isto emite dois registros
+        // com o mesmo sequencial e o banco recusa o lote.
+        recordNumber: firstRecordNumber + 1,
+        payer: batch.payer,
+        // O nome do cedente é o MESMO que o Segmento J grava em 062-091 — mesmo campo `G013`, mesmo
+        // participante, mesmo pagamento. Passar os dois da mesma origem é o que garante que não
+        // divirjam dentro do par.
+        beneficiary: {
+          documentType: payment.beneficiaryDocumentType,
+          document: payment.beneficiaryDocument,
+          name: payment.beneficiaryName,
+        },
+      });
+      if (!j52.ok) return j52;
+
+      return ok([j.value, j52.value]);
+    }
+
+    // O Pix é o par A + B, sem J — e a ausência do J é medida, não suposta: o golden da forma `45`
+    // tem 6 registros (dois headers, A, B, dois trailers), e o trailer do lote conta `000004`. A
+    // tabela da pág. 9 lista "A, B, J" para Pix porque a seção agrega as formas `45` e `47`, e o J
+    // exige código de barras — que Pix por chave não tem. O J e o J-52 daquela seção (p. 41-42) são
+    // do `47`, QR Code, fora do escopo por decisão da P.O.
+    case 'pix': {
+      // As DUAS traduções acontecem antes de montar, e as duas recusam com nome próprio em vez de
+      // cair para um valor por omissão. É a lição que este módulo pagou cinco vezes: um `?? ''` aqui
+      // produziria arquivo bem-formado com iniciação em branco ou ISPB zerado, que o
+      // `remittance-inspector.ts` aprova — não é defeito de forma — e o banco recusa depois de
+      // transmitido, quando o NSA já foi queimado.
+      const initiation = pixInitiationFor(payment.pixKeyType);
+      if (!initiation.ok) return initiation;
+
+      // O ISPB é DERIVADO do código de compensação do favorecido (#923), não recebido: o cadastro
+      // guarda o código de banco, e traduzir é trabalho de quem monta o arquivo. Recebê-lo pronto
+      // deixaria o chamador livre para passar um ISPB que não corresponde ao banco do Segmento A —
+      // dois campos do mesmo registro afirmando instituições diferentes.
+      const ispb = payeeIspbFor(payment.payee.bankCode);
+      if (!ispb.ok) return ispb;
+
+      // A Informação 2 (G031) do Segmento A: inscrição do favorecido + ISPB + tipo de conta. Mesma
+      // inscrição que o Segmento B grava em 018-032 — passar as duas da mesma origem é o que garante
+      // que não divirjam dentro do par, exatamente como o nome do cedente no par J + J-52.
+      const info = pixPaymentInfo({
+        payeeDocument: payment.payee.document,
+        payeeIspb: ispb.value,
+        accountType: PIX_ACCOUNT_TYPE_CHECKING,
+      });
+      if (!info.ok) return info;
+
+      const a = segmentA({
+        bankCode,
+        batchNumber,
+        recordNumber: firstRecordNumber,
+        payee: payment.payee,
+        paymentDate: payment.paymentDate,
+        valueCents: payment.valueCents,
+        // `009` (SPI), derivada da forma como em toda rota. O golden confirma, e o manual não a
+        // enuncia — ver a nota de `clearingHouseFor`.
+        clearingHouse: clearingHouseFor(batch.launchForm),
+        yourNumber,
+        // `null` nos dois, e o golden confirma: 220-224 e 225-226 saem em BRANCOS na forma `45`.
+        // Preenchê-los é recusa fora de TED, medido na inquiry-0033 — a mesma régua que vale para
+        // crédito em conta. Derivam da forma, não desta rota, e é por isso que a chamada é idêntica
+        // à da transferência.
+        tedPurpose: tedPurposeFor(batch.launchForm),
+        complementPurpose: complementPurposeFor(batch.launchForm),
+        message: info.value,
+      });
+      if (!a.ok) return a;
+
+      const b = segmentBPix({
+        bankCode,
+        batchNumber,
+        // O B ocupa o número seguinte ao A, como o J-52 ocupa depois do J.
+        recordNumber: firstRecordNumber + 1,
+        payee: payment.payee,
+        initiation: initiation.value,
+        pixKey: payment.pixKey,
+        payeeIspb: ispb.value,
+      });
+      if (!b.ok) return b;
+
+      return ok([a.value, b.value]);
     }
 
     // Inalcançável na prática — o perfil já recusou a rota antes de chegar aqui. Fica explícito
     // mesmo assim: um emissor novo entra por este switch, e o compilador cobra o caso.
-    case 'pix':
     case 'tax-guide':
       return err('remittance-launch-form-unsupported');
   }
@@ -357,6 +519,59 @@ const groupIntoBatches = (
   return ok(order.map((key) => byKey.get(key) as Batch));
 };
 
+// ─── A partição multi-arquivo (CA4 da #838) ────────────────────────────────────────────────────
+//
+// Quais pagamentos vão em QUAL arquivo, sem montar arquivo nenhum. Devolve as posições de entrada
+// agrupadas — nunca os pagamentos —, e a escolha é deliberada: o chamador já os tem, e devolver
+// cópias abriria a porta para as duas listas divergirem. A posição é também o que ele usa para casar
+// as referências de G064 com os `documentId` que só ele conhece.
+//
+// ⚠️ SEPARADA DA MONTAGEM porque a alocação de NSA fica no meio das duas. Cada arquivo consome seu
+// próprio NSA — é o Número Sequencial do ARQUIVO, e dois arquivos com o mesmo número são, para o
+// banco, o mesmo arquivo transmitido duas vezes. Mas o NSA vem do banco de dados, sob lock, e esta
+// camada é pura (ADR-0006). Então quem sabe repartir não sabe alocar, e quem aloca não sabe
+// repartir: a partição precede a montagem, e o use case costura as duas.
+//
+// A ordem é a de PRIMEIRA APARIÇÃO de cada grupo na seleção, pela mesma razão que rege
+// `groupIntoBatches`: uma ordenação implícita faria dois arquivos com a mesma seleção saírem em
+// ordem diferente, e o operador confere contra o primeiro.
+export type RemittanceFilePlan = Readonly<{
+  // As posições de ENTRADA dos pagamentos deste arquivo, em ordem crescente.
+  paymentIndices: readonly number[];
+}>;
+
+export const planRemittanceFiles = (
+  payments: readonly RemittancePayment[],
+  cedenteBankCode: string,
+): Result<readonly RemittanceFilePlan[], RemittanceFileError> => {
+  if (payments.length === 0) return err('remittance-without-payments');
+
+  const order: string[] = [];
+  const byGroup = new Map<string, number[]>();
+
+  for (const [inputIndex, payment] of payments.entries()) {
+    // O perfil é derivado com a MESMA função do montador. Uma segunda derivação aqui faria a
+    // partição repartir por um critério e o arquivo sair por outro — e o defeito só apareceria como
+    // um arquivo de Pix com um lote de TED dentro, que o banco recusa inteiro.
+    const profile = batchProfileFor(profiledOf(payment), cedenteBankCode);
+    // Rota sem emissor aborta a partição inteira, e não só o arquivo dela: é a mesma postura de
+    // `groupIntoBatches`, e pelo mesmo motivo. Repartir e deixar um dos arquivos falhar adiante
+    // pagaria parte dos fornecedores e silenciaria o resto — com NSA já queimado no meio.
+    if (!profile.ok) return profile;
+
+    const group = fileGroupFor(profile.value.launchForm);
+    const indices = byGroup.get(group);
+    if (indices === undefined) {
+      order.push(group);
+      byGroup.set(group, [inputIndex]);
+    } else {
+      indices.push(inputIndex);
+    }
+  }
+
+  return ok(order.map((group) => ({ paymentIndices: byGroup.get(group) as readonly number[] })));
+};
+
 export const buildRemittanceFile = (
   input: RemittanceFileInput,
 ): Result<RemittanceFile, RemittanceFileError> => {
@@ -367,11 +582,32 @@ export const buildRemittanceFile = (
   const batches = groupIntoBatches(input.payments, input.cedente.bankCode);
   if (!batches.ok) return batches;
 
+  // ─── Um arquivo, UM grupo de modalidade ───────────────────────────────────────────────────────
+  //
+  // O grupo é derivado dos lotes, como tudo mais neste montador: a forma sai do conteúdo, e o grupo
+  // sai da forma. O primeiro lote define o grupo do arquivo e os demais têm de concordar.
+  //
+  // Recusar a divergência — em vez de repartir aqui, ou de escolher o grupo do primeiro lote e
+  // seguir — é o que torna o arquivo misto IMPOSSÍVEL de emitir por esquecimento. Uma régua que só
+  // descrevesse a partição deixaria o caminho aberto para quem não a chamasse, e o arquivo misto é
+  // bem-formado: ele passa no inspetor, o banco o aceita na entrada e recusa o processamento
+  // inteiro depois. É a diferença entre documentar a regra e cobrá-la.
+  const firstBatch = batches.value[0];
+  if (firstBatch === undefined) return err('remittance-without-payments');
+
+  const fileGroup = fileGroupFor(firstBatch.profile.launchForm);
+  if (batches.value.some((b) => fileGroupFor(b.profile.launchForm) !== fileGroup)) {
+    return err('remittance-mixed-file-modalities');
+  }
+
   const header = fileHeader({
     cedente: input.cedente,
     bankName: input.bankName,
     nsa: input.nsa,
     generatedAt: input.generatedAt,
+    // A identificação de Pix (172-174) é do ARQUIVO, e por isso deriva do grupo e não da forma de
+    // um lote: um arquivo tem um grupo só, mas pode ter várias formas.
+    pixIdentification: pixIdentificationFor(fileGroup),
   });
   if (!header.ok) return header;
 
@@ -415,6 +651,12 @@ export const buildRemittanceFile = (
           batchNumber,
           firstRecordNumber: details.length + 1,
           launchForm: batch.profile.launchForm,
+          // O SACADO do J-52 é a empresa do envelope — a mesma que o header do arquivo declara.
+          payer: {
+            documentType: input.cedente.documentType,
+            document: input.cedente.document,
+            name: input.cedente.companyName,
+          },
         },
         yourNumber,
       );

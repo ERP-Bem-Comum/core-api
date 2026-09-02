@@ -50,6 +50,7 @@ import type {
   AuthUserReadPort,
   ApproverAuthorityReadPort,
 } from '#src/modules/auth/public-api/read.ts';
+import { m2DepsStub } from '../../../../support/reconciliation-m2-deps.ts';
 
 const WRITER = 'reconciliation:write,reconciliation:read';
 const READER = 'reconciliation:read';
@@ -185,6 +186,8 @@ const buildHandle = async (
     ...base,
     listStatementTransactions: statementRepo.listTransactions,
     confirmReconciliation: confirmReconciliation({
+      // M2: inertes — esta suíte não exercita a reclassificação.
+      ...m2DepsStub,
       reconciliationRepo: reconRepo,
       payables: payableView,
       statements: statementRepo,

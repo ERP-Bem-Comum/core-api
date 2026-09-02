@@ -30,7 +30,7 @@ import { DocumentRepositoryDrizzle } from '../persistence/repos/document-reposit
 import { openMysql, type MysqlHandle } from '../persistence/drivers/mysql-driver.ts';
 import { createInMemoryDocumentStorage } from '../storage/document-storage.in-memory.ts';
 import { createS3DocumentStorage } from '../storage/document-storage.s3.ts';
-import { parseAwsS3Env } from '../storage/s3-config-aws.ts';
+import { parseAwsS3Env, describeAwsS3EnvError } from '../storage/s3-config-aws.ts';
 
 import { listContracts } from '../../application/use-cases/list-contracts.ts';
 import { getContract } from '../../application/use-cases/get-contract.ts';
@@ -247,7 +247,9 @@ const buildMysqlPools = async (config: ContractsCompositionConfig): Promise<Pool
   if (!s3R.ok) {
     await writerHandle.close();
     if (readerHandle !== writerHandle) await readerHandle.close();
-    throw new Error(`contracts-composition: storage S3 mal configurado (${s3R.error.tag})`);
+    // A `tag` sozinha (`missing-env`) não diz QUAL env falta, e era a única pista que este boot
+    // dava. `describeAwsS3EnvError` nomeia o campo — mesma mensagem que o consumidor do `financial`.
+    throw new Error(`contracts-composition: ${describeAwsS3EnvError(s3R.error)}`);
   }
 
   // Contratado (ADR-0032): read port da public-api de Parceiros. Reusa o servidor MySQL

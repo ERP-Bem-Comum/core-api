@@ -3,16 +3,23 @@
 Fonte: Manual de Procedimentos Multipag Bradesco, Nº 4008.523.687, **Versão 08** – julho/2025
 (`handbook/guidelines/bradesco_guideline/jun-19-layout-multipag.pdf`).
 
-⚠️ As páginas citadas neste arquivo vieram de uma **edição anterior** e não conferem com o PDF
-acima. Localize o campo por [`00-indice-campos.md`](./00-indice-campos.md) e **confirme a posição no
-PDF** antes de escrever código: uma posição errada gera arquivo que o banco recusa sem explicar.
+**As páginas dos cabeçalhos foram reancoradas na Versão 08 em 01/09/2026** (#924), conferidas uma a
+uma contra o sumário do PDF (págs. 3-4) e, em três casos, contra a página renderizada.
+
+⚠️ **Os cabeçalhos de seção NÃO são cobrados por gate** — `cnab-reference-pages.test.ts` só alcança
+citações que trazem um código `Gxxx`/`Pxxx`, e o índice derivado não mapeia registros. Ao editar um
+`## … — pág. N` daqui, **abra o PDF**: foi por esta porta que a #891 herdou "pág. 26" para o J-52,
+que na Versão 08 é a **33** (a 26 é o Segmento C).
+
+Confirme a posição no PDF antes de escrever código: uma posição errada gera arquivo que o banco
+recusa sem explicar.
 
 `*` na coluna Obr. = campo marcado com asterisco no manual (crítica).
 **Atenção:** ausência de asterisco NÃO significa opcional. Ver `05-armadilhas-e-divergencias.md`.
 
 ---
 
-## Header de Arquivo (Tipo 0) — pág. 10
+## Header de Arquivo (Tipo 0) — pág. 15
 
 | Pos. | Tam. | Campo | Fmt | Default | Obr. | Desc. |
 |---|---|---|---|---|---|---|
@@ -44,7 +51,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Trailer de Arquivo (Tipo 9) — pág. 11
+## Trailer de Arquivo (Tipo 9) — pág. 16
 
 | Pos. | Tam. | Campo | Fmt | Default | Obr. | Desc. |
 |---|---|---|---|---|---|---|
@@ -59,7 +66,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Header de Lote — Pagamento Fornecedor / TED / DOC / Pix (Tipo 1) — pág. 17
+## Header de Lote — Pagamento Fornecedor / TED / DOC / Pix (Tipo 1) — pág. 23
 
 | Pos. | Tam. | Campo | Fmt | Default | Obr. | Desc. |
 |---|---|---|---|---|---|---|
@@ -94,7 +101,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Segmento A — Pagamento (Tipo 3) — pág. 18
+## Segmento A — Pagamento (Tipo 3) — pág. 24
 
 | Pos. | Tam. | Campo | Fmt | Default | Obr. | Desc. |
 |---|---|---|---|---|---|---|
@@ -143,7 +150,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Segmento B — Complemento do Favorecido (Tipo 3) — pág. 19
+## Segmento B — Complemento do Favorecido (Tipo 3) — pág. 25
 
 | Pos. | Tam. | Campo | Fmt | Obr. | Desc. |
 |---|---|---|---|---|---|
@@ -194,9 +201,19 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 | 128-226 | 99 | Se iniciação `01`/`02`/`04`: **chave Pix**. Se `05`: tipo de conta em 128-129 (`01` corrente, `02` pagamento, `03` poupança), resto em brancos | Alfa |
 | 233-240 | 8 | Código ISPB do PSP do recebedor | Num |
 
+⚠️ **`G100` é campo Alfa de 3 posições com domínio de 2 dígitos — o preenchimento é `04 `, não
+`004`.** Alfa alinha à esquerda com brancos à direita (regra geral desta skill), e o golden do banco
+confirma: `[04 ]` em 15-17. Zero-padding à esquerda aqui é o reflexo errado de tratar um domínio
+numérico como campo Num, e produz uma forma de iniciação que não existe no domínio.
+
+Medido no golden `GOLDEN_TEST_MULTIPAG_PIX_240` (01/09/2026), lote de forma `45`: `33-67` em
+brancos (TXID é opcional e saiu vazio), `68-127` com texto livre, `128-226` com a chave alinhada à
+esquerda, `233-240` com o ISPB do PSP. O `P012` (UG SIAPE, 227-232) saiu **zerado**, não em brancos
+— apesar de o layout marcá-lo Num sem obrigatoriedade.
+
 ---
 
-## Segmento C — Complemento Opcional (Tipo 3) — pág. 20
+## Segmento C — Complemento Opcional (Tipo 3) — pág. 26
 
 | Pos. | Tam. | Campo | Fmt | Desc. |
 |---|---|---|---|---|
@@ -222,7 +239,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Segmento 5 — Uso Bradesco (Tipo 3) — pág. 21
+## Segmento 5 — Uso Bradesco (Tipo 3) — pág. 27
 
 | Pos. | Tam. | Campo | Fmt | Desc. |
 |---|---|---|---|---|
@@ -250,7 +267,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Segmento Z — Autenticação (Tipo 3, só retorno) — pág. 22
+## Segmento Z — Autenticação (Tipo 3, só retorno) — pág. 28
 
 | Pos. | Tam. | Campo | Fmt | Desc. |
 |---|---|---|---|---|
@@ -267,7 +284,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Trailer de Lote (Tipo 5) — pág. 22
+## Trailer de Lote (Tipo 5) — pág. 29
 
 | Pos. | Tam. | Campo | Fmt | Default | Obr. | Desc. |
 |---|---|---|---|---|---|---|
@@ -284,7 +301,7 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 
 ---
 
-## Header de Lote — Pagamento de Títulos de Cobrança — pág. 24
+## Header de Lote — Pagamento de Títulos de Cobrança — pág. 31
 
 Idêntico ao header de lote de Pagamento Fornecedor, com duas diferenças:
 
@@ -294,7 +311,7 @@ Idêntico ao header de lote de Pagamento Fornecedor, com duas diferenças:
 
 ---
 
-## Segmento J — Pagamento de Títulos (Tipo 3) — pág. 25
+## Segmento J — Pagamento de Títulos (Tipo 3) — pág. 32
 
 | Pos. | Tam. | Campo | Fmt | Obr. | Desc. |
 |---|---|---|---|---|---|
@@ -322,7 +339,7 @@ Idêntico ao header de lote de Pagamento Fornecedor, com duas diferenças:
 
 ---
 
-## Segmento J-52 — Entes do Pagamento (Tipo 3) — pág. 26
+## Segmento J-52 — Entes do Pagamento (Tipo 3) — pág. 33
 
 Obrigatório para pagamento de títulos de cobrança, independentemente do valor, com transferência
 para o beneficiário.
@@ -350,7 +367,7 @@ para o beneficiário.
 
 ---
 
-## Segmento J-52 para Pix (Tipo 3) — pág. 27
+## Segmento J-52 para Pix (Tipo 3) — pág. 42
 
 Igual ao J-52 até a posição 131, depois:
 

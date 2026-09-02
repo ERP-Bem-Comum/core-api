@@ -58,7 +58,7 @@ SEED_JSON='{"users":[
   {"email":"e2e-programs@example.com","password":"Str0ng-Passphrase-2026!","permissions":["program:read","program:write","program:deactivate"]}
 ]}'
 
-echo "[e2e-all] Bootando server (auth/contracts/partners/programs = mysql)..."
+echo "[e2e-all] Bootando server (os 7 modulos em mysql — ADR-0068)..."
 DB="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core"
 RO="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core"
 
@@ -67,11 +67,12 @@ echo "[e2e-all] Aplicando migrations (job migrate)..."
 MIGRATE_DATABASE_URL="$DB" \
   node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
 
-AUTH_DRIVER=mysql AUTH_DATABASE_URL="$DB" \
-  CONTRACTS_DRIVER=mysql CONTRACTS_DATABASE_URL="$DB" CONTRACTS_READER_URL="$RO" \
-  PARTNERS_DRIVER=mysql PARTNERS_DATABASE_URL="$DB" PARTNERS_READER_URL="$RO" \
-  PROGRAMS_DRIVER=mysql PROGRAMS_DATABASE_URL="$DB" \
-  S3_ENDPOINT="http://127.0.0.1:${MINIO_API_PORT:-9000}" \
+# Os SETE módulos vêm do helper (ADR-0068). Antes, `financial`, `budget-plans` e `reports` não eram
+# declarados aqui e subiam em memória sem aviso — a coleção Bruno exercitava rotas do `financial`
+# contra um store volátil, e o que passava era um servidor meio configurado.
+S3_HOST="127.0.0.1:${MINIO_API_PORT:-9000}" source scripts/e2e/server-env.sh
+
+S3_ENDPOINT="http://127.0.0.1:${MINIO_API_PORT:-9000}" \
   S3_REGION=us-east-1 \
   S3_BUCKET=contracts-documents \
   S3_ACCESS_KEY_ID=dev-access-key \

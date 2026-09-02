@@ -55,6 +55,10 @@ const billet = (n: number, valueCents: number, issuerBank = '341'): RemittancePa
   route: 'billet',
   barcode: barcodeOf(issuerBank, n),
   beneficiaryName: `FORNECEDOR ${n}`,
+  // Inscrição do CEDENTE do título, que o Segmento J-52 exige (#891). Sintética, como a do
+  // `payee` acima — os repositórios são públicos e fixture é o caminho por onde dado real entra.
+  beneficiaryDocumentType: '2',
+  beneficiaryDocument: `9876543200011${n}`,
   dueDate: new Date(Date.UTC(2026, 7, 20)),
   paymentDate: PAYMENT_DATE,
   valueCents,
@@ -182,8 +186,13 @@ describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
     const lines = linesOf(file.content);
     const types = lines.map((l) => at(l, 8, 8)).join('');
 
-    // header de arquivo · (header de lote, A, B, trailer de lote) · (header, J, trailer) · trailer
-    assert.equal(types, '013351359');
+    // header de arquivo · (header de lote, A, B, trailer) · (header, J, J-52, trailer) · trailer
+    //
+    // As duas rotas emitem PAR de registros, e é simetria de layout, não coincidência: o crédito em
+    // conta precisa do B para o endereço do favorecido, e o título de cobrança precisa do J-52 para
+    // identificar sacado e cedente (#891). Enquanto o boleto saía sozinho, esta linha era
+    // `013351359` — um registro a menos, que o trailer fechava e o banco não reconhecia.
+    assert.equal(types, '0133513359');
     assert.equal(file.batchCount, 2);
   });
 
@@ -197,7 +206,8 @@ describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
     assert.equal(batchOf(lines[4] ?? ''), '0001'); // trailer do 1º lote
     assert.equal(batchOf(lines[5] ?? ''), '0002'); // header do 2º lote
     assert.equal(batchOf(lines[6] ?? ''), '0002'); // Segmento J
-    assert.equal(batchOf(lines[7] ?? ''), '0002'); // trailer do 2º lote
+    assert.equal(batchOf(lines[7] ?? ''), '0002'); // Segmento J-52
+    assert.equal(batchOf(lines[8] ?? ''), '0002'); // trailer do 2º lote
   });
 
   // O CA2: sem isto, o segundo lote continuaria a contagem do primeiro e o banco recusaria o
@@ -218,7 +228,10 @@ describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
     assert.equal(Number(at(transferTrailer, 18, 23)), 4); // header + A + B + trailer
     assert.equal(Number(at(transferTrailer, 24, 41)), 1500);
 
-    assert.equal(Number(at(billetTrailer, 18, 23)), 4); // header + J + J + trailer
+    // header + (J + J-52) + (J + J-52) + trailer. ⚠️ A SOMATÓRIA não muda: o J-52 não carrega valor,
+    // e contá-lo duas vezes dobraria o total do lote. É a distinção que `paymentCentsOf` faz no
+    // inspetor — registro que existe e não paga.
+    assert.equal(Number(at(billetTrailer, 18, 23)), 6);
     assert.equal(Number(at(billetTrailer, 24, 41)), 1000);
   });
 
@@ -428,8 +441,13 @@ describe('Remessa Multipag — recusas', () => {
   // O CA3. A alternativa — emitir o par de crédito em conta por omissão — produziria arquivo
   // bem-formado, aceito pelo banco, pagando pela rota errada. É a pior falha possível aqui, porque
   // não deixa rastro: nada avisa, e o dinheiro sai.
+  //
+  // ⚠️ A lista era `['pix', 'tax-guide']` até a #838, e agora tem UM elemento — não porque o caso
+  // enfraqueceu, mas porque o Pix ganhou emissor. A guia não é "a próxima da fila": ela está fora da
+  // remessa por decisão de escopo da P.O. (23/08), e não há release que a mova. Este teste passa a
+  // ser o guarda de uma rota só, e é o certo enquanto ela for a única sem emissor.
   it('recusa a remessa inteira quando um título é de rota sem emissor', () => {
-    for (const route of ['pix', 'tax-guide'] as const) {
+    for (const route of ['tax-guide'] as const) {
       const r = buildRemittanceFile({
         ...base,
         payments: [payment(1, 100), { route, valueCents: 500, paymentDate: PAYMENT_DATE }],
@@ -607,10 +625,19 @@ describe('Remessa Multipag — todo pagamento entra BLOQUEADO para liberação m
   const segmentOf = (line: string): string => at(line, 14, 14);
   const sequenceOf = (line: string): string => at(line, 9, 13);
 
-  // Os detalhes que representam um PAGAMENTO: A (transferência) e J (boleto). O B fica de fora de
-  // propósito — é o complemento de endereço do favorecido, e ali 015-017 é CNAB em branco.
+  // O J-52 grava `'J'` na coluna 014 como o J, e quem os separa é a identificação de registro
+  // opcional (G067, 018-019).
+  const isSegmentJ52 = (line: string): boolean =>
+    segmentOf(line) === 'J' && at(line, 18, 19) === '52';
+
+  // Os detalhes que representam um PAGAMENTO: A (transferência) e J (boleto). Ficam de fora, de
+  // propósito, os dois COMPLEMENTOS — o B, que traz endereço do favorecido, e o J-52, que identifica
+  // sacado e cedente (#891). Nenhum dos dois carrega a instrução: no B, 015-017 é CNAB em branco; no
+  // J-52, 016-017 é o `C004` de cobrança, campo diferente do `G061` apesar da coluna coincidir.
   const isPaymentDetail = (line: string): boolean =>
-    at(line, 8, 8) === '3' && (segmentOf(line) === 'A' || segmentOf(line) === 'J');
+    at(line, 8, 8) === '3' &&
+    !isSegmentJ52(line) &&
+    (segmentOf(line) === 'A' || segmentOf(line) === 'J');
 
   it('grava a instrução 09 em TODO detalhe de pagamento, seja transferência ou boleto', () => {
     // Duas formas na mesma seleção, logo dois lotes: sem as duas rotas no arquivo, o caso não
@@ -646,5 +673,248 @@ describe('Remessa Multipag — todo pagamento entra BLOQUEADO para liberação m
     for (const line of segmentsB) {
       assert.equal(at(line, 15, 17), '   ', `detalhe ${sequenceOf(line)}`);
     }
+  });
+
+  // O MESMO contrapeso, para o complemento do boleto (#891). O J-52 é o registro em que a
+  // "correção" preguiçosa é mais tentadora: ele grava `'J'` na coluna 014 como o J e ocupa as mesmas
+  // colunas 015-017 — e um `09` carimbado ali por simetria não seria instrução bloqueada nenhuma.
+  //
+  // ⚠️ 016-017 no J-52 é o `C004`, "Código de Movimento Remessa", cujo domínio (manual p. 80) diz
+  // **'09' = Protestar**. Quem propagasse a política do #805 para cá emitiria arquivo bem-formado
+  // mandando PROTESTAR o título que se está pagando — e nenhum inspetor de forma pegaria.
+  it('não repete a instrução do J no Segmento J-52: 015 é branco e 016-017 é o C004 zerado', () => {
+    const file = build([payment(1, 10_000), billet(2, 5_000)]);
+    const segmentsJ52 = linesOf(file.content).filter((l) => at(l, 8, 8) === '3' && isSegmentJ52(l));
+
+    assert.equal(segmentsJ52.length, 1, 'guarda contra verde por vacuidade');
+    for (const line of segmentsJ52) {
+      const where = `detalhe ${sequenceOf(line)}`;
+      assert.equal(movementOf(line), ' ', `${where}: 015 é G004 (CNAB), não o G060 do Segmento J`);
+      assert.equal(instructionOf(line), '00', `${where}: 016-017 é C004, e '09' ali é PROTESTAR`);
+    }
+  });
+});
+
+/**
+ * O par J + J-52 do boleto (#891, CA1).
+ *
+ * O manual declara o J-52 obrigatório para título de cobrança (p. 33), e o emissor gravava só o J.
+ * Estes casos medem a montagem — que os dois saem, NA ORDEM, com sequenciais consecutivos, e que o
+ * trailer do lote conta os dois. A forma do registro isolado é medida em `multipag-segment-j52`.
+ */
+describe('Remessa Multipag — boleto emite o par J + J-52 (#891)', () => {
+  const segmentOf = (line: string): string => at(line, 14, 14);
+  const isJ52 = (line: string): boolean => segmentOf(line) === 'J' && at(line, 18, 19) === '52';
+  const detailsOf = (content: string): readonly string[] =>
+    linesOf(content).filter((l) => at(l, 8, 8) === '3');
+
+  it('emite o J-52 imediatamente depois do J, com o sequencial seguinte', () => {
+    const details = detailsOf(build([billet(1, 5_000)]).content);
+
+    assert.equal(details.length, 2, 'o boleto passou a ser um PAR de registros');
+    assert.equal(segmentOf(details[0] ?? ''), 'J');
+    assert.ok(!isJ52(details[0] ?? ''), 'o primeiro é o J do pagamento, não o complemento');
+    assert.ok(isJ52(details[1] ?? ''), 'o segundo é o J-52');
+
+    assert.equal(at(details[0] ?? '', 9, 13), '00001');
+    assert.equal(at(details[1] ?? '', 9, 13), '00002');
+  });
+
+  it('mantém o par consecutivo com vários boletos no mesmo lote', () => {
+    const details = detailsOf(build([billet(1, 100), billet(2, 200), billet(3, 300)]).content);
+
+    assert.equal(details.length, 6);
+    // A alternância é o invariante: J, J-52, J, J-52, J, J-52. Um J-52 deslocado ainda produziria
+    // seis registros e um trailer fechando — a ordem é o que o banco lê.
+    assert.deepEqual(details.map(isJ52), [false, true, false, true, false, true]);
+    assert.deepEqual(
+      details.map((l) => at(l, 9, 13)),
+      ['00001', '00002', '00003', '00004', '00005', '00006'],
+    );
+  });
+
+  // ⚠️ O nome do cedente aparece em DOIS registros do mesmo pagamento — 062-091 no J e 092-131 no
+  // J-52 —, e é o mesmo campo `G013`, do mesmo participante. Se divergirem, o arquivo declara dois
+  // beneficiários para um título só, e o banco não tem como saber qual vale.
+  it('grava o mesmo nome de cedente no J e no J-52', () => {
+    const details = detailsOf(build([billet(1, 5_000)]).content);
+    const noJ52 = at(details[0] ?? '', 62, 91);
+    const noJ52Complement = at(details[1] ?? '', 92, 131);
+
+    assert.equal(noJ52.trim(), 'FORNECEDOR 1');
+    assert.equal(noJ52Complement.trim(), noJ52.trim());
+  });
+
+  // O SACADO vem do ENVELOPE, não do pagamento: é a empresa que emite a remessa, a mesma que o
+  // header do arquivo declara. Um chamador não tem como afirmá-la diferente — e é isso que se mede.
+  it('grava como sacado a empresa do header do arquivo', () => {
+    const file = build([billet(1, 5_000)]);
+    const j52 = detailsOf(file.content).find(isJ52) ?? '';
+    const fileHeader = linesOf(file.content)[0] ?? '';
+
+    assert.equal(at(j52, 20, 20), CEDENTE.documentType);
+    assert.equal(at(j52, 21, 35), CEDENTE.document.padStart(15, '0'));
+    assert.equal(at(j52, 36, 75).trim(), CEDENTE.companyName);
+    // E a inscrição é a MESMA que o header do arquivo grava em 019-032 (G006), sem reformatação.
+    assert.equal(at(fileHeader, 19, 32), CEDENTE.document);
+  });
+
+  it('o trailer do lote conta o J-52 e não soma o valor dele duas vezes', () => {
+    const lines = linesOf(build([billet(1, 700), billet(2, 300)]).content);
+    const batchTrailer = lines.find((l) => at(l, 8, 8) === '5') ?? '';
+
+    assert.equal(Number(at(batchTrailer, 18, 23)), 6, 'header + (J + J-52) × 2 + trailer');
+    assert.equal(Number(at(batchTrailer, 24, 41)), 1000, 'o J-52 não carrega valor');
+  });
+});
+
+/*
+ * O arquivo de Pix por chave, ponta a ponta (#838, CA1/CA2/CA4).
+ *
+ * ⚠️ A RÉGUA DESTE BLOCO É O GOLDEN DO BANCO, não a leitura do PDF — e a distinção não é
+ * preciosismo. Os testes de unidade dos segmentos medem o que ESTE código programou: se a forma de
+ * iniciação tivesse sido escrita como `'004'` em vez de `'04 '`, eles passariam do mesmo jeito. Só um
+ * arquivo que o banco emitiu é testemunha externa.
+ *
+ * Medido em `GOLDEN_TEST_MULTIPAG_PIX_240` (01/09/2026), fornecido pela P.O. e NÃO versionado — ele
+ * carrega convênio, conta e inscrição reais, e os repositórios são públicos. O que este arquivo
+ * guarda é a ESTRUTURA medida, nunca os valores:
+ *
+ *   6 registros · header de arquivo com `PIX` em 172-174 · header de lote `20`/`45`/`045`
+ *   Segmento A: câmara `009`, bloco bancário do favorecido PREENCHIDO, 220-224 e 225-226 em BRANCOS,
+ *               Informação 2 = inscrição(14) + ISPB(8) + `01`(2) + 16 brancos
+ *   Segmento B: `04 ` em 015-017, TXID em brancos, chave em 128-226, UG SIAPE zerada, ISPB em 233-240
+ *   trailer de lote: 000004
+ */
+describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
+  // Chave aleatória em formato UUID: 36 posições, como a do golden — e sintética, como todo o resto
+  // das fixtures deste arquivo.
+  const PIX_KEY = '00000000-0000-4000-8000-000000000000';
+
+  // ⚠️ O favorecido do Pix carrega bloco bancário COMPLETO, e é o que o golden mostra no Segmento A.
+  // Ver `PixPayment`, no montador: a chave endereça no SPI, o Segmento A identifica a conta.
+  const pix = (n: number, valueCents: number, over: Partial<Payee> = {}): RemittancePayment => ({
+    route: 'pix',
+    payee: { ...payee(n), ...over },
+    pixKey: PIX_KEY,
+    pixKeyType: 'random-key',
+    paymentDate: PAYMENT_DATE,
+    valueCents,
+  });
+
+  const buildPix = (payments: readonly RemittancePayment[]) => {
+    const r = buildRemittanceFile({ ...base, payments });
+    assert.ok(isOk(r), `esperava arquivo, veio ${isErr(r) ? r.error : '?'}`);
+    return r.value;
+  };
+
+  it('tem os 6 registros do golden — sem Segmento J', () => {
+    // O J exige código de barras (`G063`, obrigatório em 018-061), e Pix por chave não tem. O J e o
+    // J-52 da seção de Pix (p. 41-42) pertencem à forma `47`, QR Code, fora do escopo.
+    const lines = linesOf(buildPix([pix(1, 100_00)]).content);
+
+    assert.equal(lines.length, 6);
+    assert.deepEqual(
+      lines.map((l) => at(l, 8, 8)),
+      ['0', '1', '3', '3', '5', '9'],
+    );
+    assert.deepEqual(
+      lines.filter((l) => at(l, 8, 8) === '3').map((l) => at(l, 14, 14)),
+      ['A', 'B'],
+    );
+  });
+
+  it('declara o arquivo como sendo de Pix no header (G021)', () => {
+    const header = linesOf(buildPix([pix(1, 100_00)]).content)[0] ?? '';
+    assert.equal(at(header, 172, 174), 'PIX');
+  });
+
+  it('abre o lote com serviço `20`, forma `45` e layout `045`', () => {
+    // ⚠️ `045`, e não uma versão própria: o header de lote da p. 23 é o mesmo para "Pagamento
+    // Fornecedor / TED / DOC / Pix". Quem tem versão própria é a cobrança, com `040`.
+    const batchHeader = linesOf(buildPix([pix(1, 100_00)]).content)[1] ?? '';
+
+    assert.equal(at(batchHeader, 10, 11), '20');
+    assert.equal(at(batchHeader, 12, 13), '45');
+    assert.equal(at(batchHeader, 14, 16), '045');
+  });
+
+  it('o Segmento A transita pelo SPI e identifica a CONTA do favorecido', () => {
+    // A metade contra-intuitiva da rota, e a que a #708 não previa: o bloco bancário sai preenchido.
+    // Um Segmento A zerado aqui seria o defeito silencioso — arquivo bem-formado, crédito sem destino.
+    const a = linesOf(buildPix([pix(1, 100_00)]).content)[2] ?? '';
+    const p = payee(1);
+
+    assert.equal(at(a, 18, 20), '009', 'câmara do SPI');
+    assert.equal(at(a, 21, 23), p.bankCode);
+    assert.equal(at(a, 24, 28), p.agency.padStart(5, '0'));
+    assert.equal(at(a, 30, 41), p.accountNumber.padStart(12, '0'));
+  });
+
+  it('o Segmento A não leva finalidade de TED nem finalidade complementar', () => {
+    // Medido no golden: os dois em brancos na forma `45`. Preenchê-los fora de TED é recusa
+    // (inquiry-0033) — a mesma régua do crédito em conta.
+    const a = linesOf(buildPix([pix(1, 100_00)]).content)[2] ?? '';
+
+    assert.equal(at(a, 220, 224), ' '.repeat(5), 'P011');
+    assert.equal(at(a, 225, 226), ' '.repeat(2), 'P013');
+  });
+
+  it('a Informação 2 carrega inscrição, ISPB e tipo de conta, nessa ordem', () => {
+    // As 24 posições que a p. 101 especifica como `CCCCCCCCCCCCCCIIIIIIIIRR`, e as 16 restantes em
+    // branco. A ORDEM é o que não se descobre olhando o resultado: os 24 dígitos são uma corrida
+    // homogênea, e trocar ISPB de lugar com a inscrição produz um bloco que o inspetor aprova e o
+    // banco lê como outro favorecido.
+    const a = linesOf(buildPix([pix(1, 100_00)]).content)[2] ?? '';
+    const p = payee(1);
+
+    assert.equal(at(a, 178, 191), p.document.padStart(14, '0'), 'inscrição do favorecido');
+    assert.match(at(a, 192, 199), /^\d{8}$/, 'ISPB derivado do código de compensação');
+    assert.equal(at(a, 200, 201), '01', 'conta corrente — premissa da P.O., ver #817');
+    assert.equal(at(a, 202, 217), ' '.repeat(16));
+  });
+
+  it('o Segmento B carrega a chave, e não o endereço do favorecido', () => {
+    const b = linesOf(buildPix([pix(1, 100_00)]).content)[3] ?? '';
+
+    assert.equal(at(b, 15, 17), '04 ', 'chave aleatória, alinhada à esquerda');
+    assert.equal(at(b, 33, 67), ' '.repeat(35), 'TXID');
+    assert.equal(at(b, 128, 226).trimEnd(), PIX_KEY);
+    assert.equal(at(b, 227, 232), '000000', 'UG SIAPE zerada, como no golden');
+    assert.match(at(b, 233, 240), /^\d{8}$/, 'ISPB do PSP');
+  });
+
+  it('o ISPB do Segmento A e o do Segmento B são o mesmo — os dois vêm da mesma origem', () => {
+    // Dois campos do mesmo pagamento afirmando instituições diferentes seria arquivo bem-formado e
+    // incoerente. É por isso que o ISPB é DERIVADO uma vez, do código de compensação, e passado aos
+    // dois registros — em vez de recebido pronto do chamador.
+    const lines = linesOf(buildPix([pix(1, 100_00)]).content);
+    const [a, b] = [lines[2] ?? '', lines[3] ?? ''];
+
+    assert.equal(at(a, 192, 199), at(b, 233, 240));
+  });
+
+  it('o trailer do lote conta 4 registros e soma só o Segmento A', () => {
+    const lines = linesOf(buildPix([pix(1, 100_00)]).content);
+    const batchTrailer = lines.find((l) => at(l, 8, 8) === '5') ?? '';
+
+    assert.equal(Number(at(batchTrailer, 18, 23)), 4, 'header + A + B + trailer');
+    assert.equal(Number(at(batchTrailer, 24, 41)), 100_00, 'o Segmento B não carrega valor');
+  });
+
+  it('recusa a seleção que mistura Pix com outra modalidade', () => {
+    // A partição é do use case (CA4, PR #929): este montador monta UM arquivo, e reparti-lo aqui
+    // produziria N arquivos com um NSA só — retransmissão aos olhos do banco.
+    const r = buildRemittanceFile({ ...base, payments: [pix(1, 100_00), payment(2, 50_00)] });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'remittance-mixed-file-modalities');
+  });
+
+  it('recusa o favorecido cujo banco não está na tabela de ISPB, sem inventar', () => {
+    // `999` não é participante. O que não pode acontecer é sair com oito zeros: o inspetor aprova —
+    // não é defeito de forma — e o banco recusa depois de transmitido.
+    const r = buildRemittanceFile({ ...base, payments: [pix(1, 100_00, { bankCode: '999' })] });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'payee-ispb-unknown');
   });
 });

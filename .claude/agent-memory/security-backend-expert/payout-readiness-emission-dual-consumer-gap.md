@@ -1,0 +1,16 @@
+---
+name: payout-readiness-emission-dual-consumer-gap
+description: checkPayoutReadiness (pré-voo) e toPaymentData (emissão) são dois consumidores independentes da mesma régua de aptidão — mudar o que a régua aceita não propaga o valor convertido ao segundo consumidor
+metadata:
+  type: project
+---
+
+`src/modules/financial/domain/payout/payout-readiness.ts` documenta o padrão no próprio topo: "Uma pergunta que o front faz no lançamento e o gerador da remessa faz antes do arquivo: **este título sai pela VAN, e se não sai, o que falta?** Uma definição só, dois consumidores (issue #708)."
+
+Na PR #788 (branch `fix/fin-digitable-line-to-barcode-788`, auditada em 2026-08-25), `checkPayoutReadiness` passou a aceitar linha digitável de 47/48 dígitos convertendo-a para o código de barras de 44 via `resolveBarcode` (`digitable-line.ts`). Mas `PayoutReadiness` (`types.ts:86`) só carrega `{status, route}` — nunca o valor convertido. O segundo consumidor, `remittance-payment-reader.drizzle.ts` (`toPaymentData`, caso `billet`), **não chama `resolveBarcode`**: recalcula o "barcode" do zero fazendo `.replace(/\D/g,'')` no dado cru — que para 47/48 dígitos não faz a conversão nenhuma. Resultado medido: `readiness.status === 'ready'` (pré-voo aprova) mas o dado que chega à montagem do Segmento J tem comprimento errado, e só não gera arquivo com campos deslocados porque `segmentJ` (`multipag-segments.ts:325-329`) tem uma checagem de comprimento exato (`^\d{44}$`) feita por OUTRO motivo — um acidente que salva, não um controle desenhado para isso. O efeito real: `numeric-field-invalid` → `remittance-malformed-file`, **depois** do NSA já alocado (`generate-remittance.ts:133`, antes da tradução em 140-163) — queima sequência e derruba a remessa inteira (tudo-ou-nada, doc do próprio reader), pior do que o comportamento pré-#788.
+
+O autor da PR já sabia: `payout-readiness.ts:59-61` (texto novo da própria branch) diz literalmente "Quem consome esta régua para EMITIR precisa converter também... Ver remittance-payment-reader.drizzle.ts" — e o arquivo apontado não foi tocado.
+
+**Por quê:** o domínio devolve só um veredito booleano-ish (`ready`/`incomplete`) para a pergunta de aptidão; o valor computado (o dado convertido) é descartado dentro de `readBarcode`. Quando a conversão passa a ser não-trivial (deixa de ser "está no formato certo?" e passa a ser "transformo X em Y"), um consumidor que reimplementa a transformação por conta própria diverge do outro assim que a regra de conversão mudar — e a régua nova não obriga ninguém a atualizar o segundo lugar, porque os dois são chamadas independentes sem tipo compartilhado que carregue o resultado.
+
+**Como aplicar:** ao revisar qualquer PR que mexa em `payout-readiness.ts` (ou em qualquer régua de "aptidão" com dois consumidores documentados assim), perguntar explicitamente se o valor computado — não só o veredito — precisa chegar ao segundo consumidor, e grep pelos outros lugares que chamam a mesma função de conversão isoladamente (`grep -rn "\.replace(/\\D/g" src/modules/financial/`). Ver também [[remittance-payable-identity-defect]] — outro caso do mesmo gênero (dois pontos do fluxo de remessa que deveriam concordar e não foram sincronizados quando um dos dois mudou de contrato).

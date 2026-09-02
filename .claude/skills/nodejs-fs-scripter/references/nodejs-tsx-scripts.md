@@ -7,7 +7,7 @@
 ## Por que rodar `.ts` direto, sem `tsc`/`esbuild`?
 
 - **Edita-roda em segundos.** Script de manutenção raramente precisa do pipeline de build.
-- **Tipos no autor, JS na execução.** Node 24 com `--experimental-strip-types` **descarta** as anotações sem checar — o `tsc --noEmit` no W3 é quem valida tipo.
+- **Tipos no autor, JS na execução.** Node 24 com `--experimental-strip-types` **descarta** as anotações sem checar — o `tsc --noEmit` do gate é quem valida tipo.
 - **Zero artefato.** Sem `dist/`, sem `.js` versionado, sem `.map`. `git diff` mostra a verdade.
 
 ---

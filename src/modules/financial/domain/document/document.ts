@@ -21,6 +21,7 @@ import type {
   DocumentType,
   PaymentMethod,
   PayeeKind,
+  DocumentCore,
   OpenDocument,
   ApprovedDocument,
   DraftDocument,
@@ -158,6 +159,8 @@ type DocumentRefsSource = Readonly<{
   contractRef: ContractRef | null;
   categoryRef: CategoryRef | null;
   budgetPlanRef: BudgetPlanRef | null;
+  // M2/RN-M2-12: a subcategoria entra no snapshot de projeção junto com as outras quatro.
+  subcategoryRef: SubcategoryRef | null;
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   debitAccountRef: string | null;
@@ -186,6 +189,7 @@ const documentSavedEvents = (
       contractRef: document.contractRef,
       categoryRef: document.categoryRef,
       budgetPlanRef: document.budgetPlanRef,
+      subcategoryRef: document.subcategoryRef,
       costCenterRef: document.costCenterRef,
       programRef: document.programRef,
       debitAccountRef: document.debitAccountRef,
@@ -428,6 +432,96 @@ export const updatePayableDueDate = (
   );
 };
 
+// ─── M2: reclassificação da taxonomia (5 níveis) ─────────────────────────────
+
+// Os cinco níveis, sempre juntos. Nunca um subconjunto: o que o plano define é um CAMINHO
+// (Programa → Plano → Centro → Categoria → Subcategoria), e meio caminho não identifica nó
+// nenhum na árvore do ADR-0051. Ou se reclassifica para um caminho inteiro, ou não se reclassifica.
+export type DocumentTaxonomy = Readonly<{
+  programRef: ProgramRef | null;
+  budgetPlanRef: BudgetPlanRef | null;
+  costCenterRef: CostCenterRef | null;
+  categoryRef: CategoryRef | null;
+  subcategoryRef: SubcategoryRef | null;
+}>;
+
+export const taxonomyOf = (d: DocumentCore): DocumentTaxonomy => ({
+  programRef: d.programRef,
+  budgetPlanRef: d.budgetPlanRef,
+  costCenterRef: d.costCenterRef,
+  categoryRef: d.categoryRef,
+  subcategoryRef: d.subcategoryRef,
+});
+
+export const sameTaxonomy = (a: DocumentTaxonomy, b: DocumentTaxonomy): boolean =>
+  a.programRef === b.programRef &&
+  a.budgetPlanRef === b.budgetPlanRef &&
+  a.costCenterRef === b.costCenterRef &&
+  a.categoryRef === b.categoryRef &&
+  a.subcategoryRef === b.subcategoryRef;
+
+export type ReclassifyTaxonomyInput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  // O título por onde a reclassificação entrou. Existe para ser CONFERIDO, não para ser usado: a
+  // taxonomia é do documento, e quem a edita tem de ser o líquido (RN-M2-11).
+  sourcePayableId: PayableId.PayableId;
+  taxonomy: DocumentTaxonomy;
+}>;
+
+export type ReclassifyTaxonomyOutput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// M2 (RN-M2-03/04): reclassifica os 5 níveis do documento a partir do TÍTULO LÍQUIDO, e com isso
+// leva a mesma categorização aos títulos de retenção — que é o que a P.O. decidiu na decisão A (o
+// imposto figura sob o projeto do gasto original).
+//
+// ⚠️ Por que os `payables` saem daqui INTOCADOS, e por que isso É a cascata. A taxonomia nunca foi
+// atributo do título: `fin_payables` não tem coluna de taxonomia nenhuma, e os 5 refs vivem no
+// documento. Quem carrega a classificação POR TÍTULO é o read-model `fin_payable_view`, e ele é
+// alimentado por `DocumentSaved` — cujo snapshot cobre o pai E cada filho. Reemitir o evento com os
+// refs novos faz a projeção reescrever todas as linhas daquele documento de uma vez.
+//
+// A consequência que não se enxerga lendo só esta função: a invariante 2 da spec ("todo título de
+// retenção tem a mesma categorização do pai") passa a valer POR CONSTRUÇÃO. Não há estado em que
+// pai e filho divirjam, porque não há dois lugares onde a classificação possa ser escrita. Uma
+// modelagem por título — 5 colunas em `fin_payables` — daria à cascata um passo de escrita real, e
+// junto o estado que a spec proíbe: filho classificado diferente do pai, esperando alguém reparar.
+//
+// Só CATEGORIZAÇÃO cascateia. `dueDate` não é tocado aqui, e a diferença é deliberada: `editMetadata`
+// propaga vencimento a todos os títulos, mas o vencimento do imposto é independente por decisão
+// anterior (a guia de recolhimento vence quando o fisco manda, não quando o líquido vence).
+export const reclassifyTaxonomy = (
+  input: ReclassifyTaxonomyInput,
+): Result<ReclassifyTaxonomyOutput, DocumentError> => {
+  // RN-M2-11: o imposto retido é ALVO da cascata, nunca fonte. Reclassificar por um filho inverteria
+  // o sentido — o imposto passaria a ditar sob qual projeto o gasto original aparece.
+  if (input.payables.parent.id !== input.sourcePayableId) {
+    const isChild = input.payables.children.some((c) => c.id === input.sourcePayableId);
+    return err(isChild ? 'reclassification-source-not-parent' : 'payable-not-found');
+  }
+
+  const document = immutable<OpenDocument | ApprovedDocument>({
+    ...input.document,
+    programRef: input.taxonomy.programRef,
+    budgetPlanRef: input.taxonomy.budgetPlanRef,
+    costCenterRef: input.taxonomy.costCenterRef,
+    categoryRef: input.taxonomy.categoryRef,
+    subcategoryRef: input.taxonomy.subcategoryRef,
+  });
+
+  return ok(
+    immutable<ReclassifyTaxonomyOutput>({
+      document,
+      payables: input.payables,
+      events: documentSavedEvents(document, input.payables),
+    }),
+  );
+};
+
 export type UpdatePayablePaymentInput = Readonly<{
   document: OpenDocument | ApprovedDocument;
   payables: Payables;
@@ -470,10 +564,27 @@ export const updatePayablePayment = (
   // chega por composição na borda, ADR-0032). Julgá-las aqui com `payee: null` reprovaria toda
   // troca para PIX, recusando por ignorância em vez de por dado sujo. Quem as julga é o pré-voo,
   // que tem o favorecido em mãos.
+  //
+  // ⚠️ O QUE SE JULGA AQUI É A LACUNA DE `payment-detail`, e não "a régua não devolveu `ready`". A
+  // diferença decide se o operador consegue selecionar a forma de pagamento, e ela foi violada por
+  // duas mudanças independentes:
+  //
+  //   · a #837 fez a régua devolver `no-issuer` para rota sem emissor no arquivo — a Guia de
+  //     Recolhimento é exatamente esse caso, e um `!== 'ready'` recusaria o código de barras VÁLIDO
+  //     dela como se estivesse torto;
+  //   · a #891 fez o boleto exigir a INSCRIÇÃO do favorecido (Segmento J-52) — e como este agregado
+  //     chama com `payee: null` por não alcançar o cadastro, todo boleto viria `incomplete` por um
+  //     campo que ninguém aqui tem como preencher.
+  //
+  // Filtrar pelo campo é o que sobrevive às duas: esta operação valida o dado DO TÍTULO, que é o
+  // código de barras. Se a rota sai ou não na remessa, e se o cadastro do favorecido está completo,
+  // são perguntas do pré-voo — que tem o favorecido em mãos e não recusa o cadastro por elas.
   const paysByBarcode = paymentMethod === 'Boleto' || paymentMethod === 'GuiaRecolhimento';
   if (paysByBarcode) {
     const readiness = checkPayoutReadiness({ paymentMethod, paymentDetail, payee: null });
-    if (readiness.status !== 'ready') return err('payable-payment-detail-invalid');
+    const barcodeIsBad =
+      readiness.status === 'incomplete' && readiness.gaps.some((g) => g.field === 'payment-detail');
+    if (barcodeIsBad) return err('payable-payment-detail-invalid');
   }
 
   const repay = (p: Payable): Payable =>

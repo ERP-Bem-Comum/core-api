@@ -14,6 +14,7 @@ verify:
       - 'src/shared/adapters/clock-real.ts'
       - 'src/shared/observability/correlation.ts'
       - 'src/shared/ports/clock.ts'
+      - 'src/shared/runtime/env-echo.ts'
       - 'src/shared/runtime/last-resort.ts'
       - 'src/shared/runtime/node-env.ts'
       - 'src/shared/runtime/sleep.ts'

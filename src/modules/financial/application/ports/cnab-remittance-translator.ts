@@ -50,6 +50,14 @@ export type RemittanceBilletPayment = Readonly<{
   route: 'billet';
   barcode: string;
   beneficiaryName: string;
+  // A inscrição de quem emitiu o título. O boleto continua não olhando conta bancária (#708, CA5) —
+  // o dinheiro segue o código de barras —, mas o layout exige IDENTIFICAR quem recebe, e isso é
+  // outra coisa: o registro que o banco declara obrigatório para título de cobrança nomeia sacado e
+  // cedente por inscrição, não por conta (#891).
+  //
+  // Obrigatórios, sem `?`: ver o comentário em `BilletPayment`, no montador.
+  beneficiaryDocumentType: '1' | '2';
+  beneficiaryDocument: string;
   dueDate: Date;
   valueCents: number;
   paymentDate: Date;
@@ -58,11 +66,32 @@ export type RemittanceBilletPayment = Readonly<{
   surchargeCents?: number;
 }>;
 
-// As rotas contratadas que ainda não têm emissor. Existem no tipo para poderem ser RECUSADAS: o
-// dado chega do reader em runtime, e um tipo que as omitisse empurraria a decisão para um cast.
-// Valor e data viajam como nas demais — o título os tem havendo emissor ou não.
+// Pagamento por chave Pix, forma `45` (#838).
+//
+// ⚠️ CARREGA `payee` COMPLETO, e a leitura errada a evitar é concluir daí que "o Pix passou a ser uma
+// transferência". Ele não é: quem endereça o pagamento no SPI é a CHAVE, e é ela que vai no Segmento
+// B. O bloco bancário está aqui porque o Segmento A — que continua sendo o registro de crédito —
+// identifica a conta, e o golden do banco o traz preenchido, com o layout marcando os campos como
+// obrigatórios (p. 39). Duas coisas verdadeiras ao mesmo tempo, e a #708 só havia declarado uma.
+//
+// O `keyType` viaja CRU, no vocabulário de `partners`. A tradução para o domínio `G100` é do adapter
+// — a application não conhece layout —, e é o mesmo arranjo do ISPB, que nem sequer aparece aqui:
+// ele é derivado do código de compensação lá dentro.
+export type RemittancePixPayment = Readonly<{
+  route: 'pix';
+  payee: RemittancePayeeData;
+  pixKey: string;
+  pixKeyType: string;
+  valueCents: number;
+  paymentDate: Date;
+}>;
+
+// A rota contratada que não tem emissor — e a guia continua aqui por DECISÃO DE ESCOPO da P.O.
+// (23/08): imposto retido pago por guia permanece fora da remessa. Existe no tipo para poder ser
+// RECUSADA: o dado chega do reader em runtime, e um tipo que a omitisse empurraria a decisão para um
+// cast. Valor e data viajam como nas demais — o título os tem havendo emissor ou não.
 export type RemittanceUnsupportedPayment = Readonly<{
-  route: 'pix' | 'tax-guide';
+  route: 'tax-guide';
   valueCents: number;
   paymentDate: Date;
 }>;
@@ -70,6 +99,7 @@ export type RemittanceUnsupportedPayment = Readonly<{
 export type RemittancePaymentInput =
   | RemittanceTransferPayment
   | RemittanceBilletPayment
+  | RemittancePixPayment
   | RemittanceUnsupportedPayment;
 
 export type TranslateRemittanceInput = Readonly<{
@@ -112,9 +142,60 @@ export type CnabTranslateError =
   // Rota contratada que ainda não tem emissor. Erro PRÓPRIO, e não um `translation-failed`
   // genérico: a ação de quem recebe é diferente — não há dado a corrigir no cadastro, o arquivo é
   // que ainda não sabe emitir aquela forma.
-  | 'cnab-launch-form-unsupported';
+  | 'cnab-launch-form-unsupported'
+  // Título de cobrança cujo Segmento J-52 não teria como identificar quem paga ou quem recebe
+  // (#891). Erro próprio pela mesma régua do convênio: a ação é CADASTRAR o dado do favorecido, e
+  // achatá-lo em `cnab-translation-failed` mandaria o operador abrir chamado de código para um
+  // campo que só ele pode preencher.
+  | 'cnab-billet-party-unidentified'
+  // Chave Pix que não cabe no campo do Segmento B (#838). Mesma régua do anterior — é dado de
+  // CADASTRO —, e o nome próprio existe porque a alternativa é pior do que um erro genérico: sem ele
+  // a chave seria truncada e o pagamento sairia bem-formado para OUTRO recebedor.
+  | 'cnab-pix-key-unrepresentable'
+  // Os outros dois da rota Pix, e cada um manda o operador a um lugar DIFERENTE — que é a única
+  // razão pela qual três erros de uma rota só não são exagero:
+  //   · `ispb-unknown`      → o banco do favorecido não está na tabela do Bacen. A saída é atualizar
+  //                           a fonte embarcada, ou corrigir o código de compensação no cadastro.
+  //   · `key-type-unsupported` → o tipo da chave não existe no domínio `G100` do layout. Não há o que
+  //                           atualizar: ou o cadastro gravou fora do contrato, ou o layout mudou.
+  | 'cnab-payee-ispb-unknown'
+  | 'cnab-pix-key-type-unsupported';
+
+// ─── A partição em arquivos (CA4 da #838) ──────────────────────────────────────────────────────
+//
+// Uma seleção pode exigir MAIS DE UM arquivo: o layout do banco manda certas modalidades em arquivo
+// separado das demais. Qual é a régua, e quais modalidades, é conhecimento do adapter — a
+// application só precisa saber EM QUANTOS arquivos a seleção se reparte e QUAIS pagamentos vão em
+// cada um, porque é ela que aloca um NSA por arquivo e grava uma remessa por arquivo.
+//
+// ⚠️ Existe como operação SEPARADA de `translate`, e não como um `translate` que devolve N arquivos,
+// porque a alocação do NSA fica entre as duas. O NSA vem do banco, sob lock; o adapter é puro e não
+// pode alocá-lo. Sem esta separação, ou o adapter ganharia acesso ao repositório — furando o ADR-0006
+// — ou os N arquivos dividiriam um NSA, que é retransmissão aos olhos do banco.
+export type PlanRemittanceFilesInput = Readonly<{
+  // O banco do CEDENTE decide a forma de lançamento de cada título (crédito interno × transferência),
+  // e a forma decide o arquivo. Sem ele a partição não é derivável.
+  cedenteBankCode: string;
+  payments: readonly RemittancePaymentInput[];
+}>;
+
+export type RemittanceFilePlan = Readonly<{
+  // As posições dos pagamentos deste arquivo dentro de `payments`, em ordem crescente.
+  //
+  // Posições, e não os pagamentos: quem chamou já os tem, e devolver cópias criaria duas listas
+  // livres para divergir. É também por posição que a application casa cada referência de retorno com
+  // o `documentId` que só ela conhece — o mesmo casamento por índice que `yourNumbers` já exige.
+  paymentIndices: readonly number[];
+}>;
 
 export type CnabRemittanceTranslator = Readonly<{
+  // Em quantos arquivos esta seleção se reparte, e o que vai em cada um. Não monta nada e não
+  // consome NSA: é a pergunta que a application faz ANTES de alocar, justamente para saber quantos
+  // alocar.
+  planFiles: (
+    input: PlanRemittanceFilesInput,
+  ) => Result<readonly RemittanceFilePlan[], CnabTranslateError>;
+
   // Devolve o arquivo JÁ VERIFICADO. A inspeção estrutural mora do lado do adapter porque é ela que
   // conhece o layout — e porque o use case não deve poder esquecer de chamá-la antes de enfileirar
   // dinheiro.

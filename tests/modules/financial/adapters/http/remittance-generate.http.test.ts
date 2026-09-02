@@ -29,7 +29,7 @@ const TEST_USER_ID = '99999999-9999-4999-8999-999999999999';
 const URL = '/api/v2/financial/remittances';
 const DOC_A = '11111111-1111-4111-8111-111111111111';
 const DOC_B = '22222222-2222-4222-8222-222222222222';
-const DOC_PIX = '33333333-3333-4333-8333-333333333333';
+const DOC_GUIA = '33333333-3333-4333-8333-333333333333';
 // Nunca entra numa remessa bem-sucedida: é o título dos cenários que devem falhar ANTES do NSA, e
 // reusar um já preso faria o 409 mascarar o que se quer medir.
 const DOC_LIVRE = '55555555-5555-4555-8555-555555555555';
@@ -85,14 +85,18 @@ const payments = createInMemoryRemittancePaymentReader([
     route: 'billet',
     barcode: '23791234500000150000123456789012345678901234',
     beneficiaryName: 'FORNECEDOR DOIS',
+    beneficiaryDocumentType: '2',
+    beneficiaryDocument: '98765432000122',
     dueDate: PAYMENT_DATE,
     valueCents: 90_00,
     paymentDate: PAYMENT_DATE,
   },
+  // A rota sem emissor da fixture era `pix` até a #838, e virou a GUIA — que é a única que sobrou, e
+  // sobrou por decisão de escopo da P.O. (23/08), não por atraso de implementação.
   {
-    payableId: DOC_PIX,
-    documentId: DOC_PIX,
-    route: 'pix',
+    payableId: DOC_GUIA,
+    documentId: DOC_GUIA,
+    route: 'tax-guide',
     valueCents: 40_00,
     paymentDate: PAYMENT_DATE,
   },
@@ -102,6 +106,8 @@ const payments = createInMemoryRemittancePaymentReader([
     route: 'billet',
     barcode: '23791234500000200000123456789012345678901234',
     beneficiaryName: 'FORNECEDOR TRES',
+    beneficiaryDocumentType: '2',
+    beneficiaryDocument: '98765432000133',
     dueDate: PAYMENT_DATE,
     valueCents: 20_00,
     paymentDate: PAYMENT_DATE,
@@ -112,6 +118,8 @@ const payments = createInMemoryRemittancePaymentReader([
     route: 'billet',
     barcode: '23791234500000250000123456789012345678901234',
     beneficiaryName: 'FORNECEDOR QUATRO',
+    beneficiaryDocumentType: '2',
+    beneficiaryDocument: '98765432000144',
     dueDate: PAYMENT_DATE,
     valueCents: 25_00,
     paymentDate: PAYMENT_DATE,
@@ -146,7 +154,7 @@ const buildHandle = async (
     // desfecho — só apagaria a razão pela qual ele existe.
     remittanceRepo: createInMemoryRemittanceRepository({
       payableStatuses: Object.fromEntries(
-        [DOC_A, DOC_B, DOC_PIX, DOC_LIVRE].map((id) => [id, 'Approved' as const]),
+        [DOC_A, DOC_B, DOC_GUIA, DOC_LIVRE].map((id) => [id, 'Approved' as const]),
       ),
     }),
   });
@@ -229,26 +237,40 @@ describe('financial/http — POST /remittances (#720) · geração', () => {
     const res = await generate([DOC_A]);
     assert.equal(res.statusCode, 201, res.body);
 
+    // ⚠️ MUDANÇA DE CONTRATO da CA4 (#838): a resposta era o arquivo, e passou a ser `{ files: [] }`.
+    // A lista vem mesmo com um elemento só — uma seleção que não tem Pix produz um arquivo, e um
+    // corpo que mudasse de forma conforme a seleção faria o caso comum (um arquivo) ser o testado e o
+    // caso de dois, o quebrado.
     const body = res.json() as {
-      remittanceId: string;
-      fileName: string;
-      objectKey: string;
-      nsa: number;
-      totalCents: string;
-      lineCount: number;
+      files: {
+        remittanceId: string;
+        fileName: string;
+        objectKey: string;
+        nsa: number;
+        totalCents: string;
+        lineCount: number;
+      }[];
     };
-    assert.ok(body.remittanceId.length > 0);
-    assert.ok(body.fileName.length > 0);
+    // Uma seleção sem Pix não parte: `fileGroupFor` manda tudo para o grupo comum.
+    assert.equal(body.files.length, 1);
+
+    const [file] = body.files;
+    assert.ok(file);
+    assert.ok(file.remittanceId.length > 0);
+    assert.ok(file.fileName.length > 0);
     // Gravado em `saida/` — o prefixo é o que torna o arquivo visível ao agente da VAN.
-    assert.ok(body.objectKey.startsWith('saida/'), body.objectKey);
-    assert.equal(body.nsa, 1);
-    assert.equal(body.totalCents, '15000');
+    assert.ok(file.objectKey.startsWith('saida/'), file.objectKey);
+    assert.equal(file.nsa, 1);
+    assert.equal(file.totalCents, '15000');
   });
 
   it('o NSA avança a cada remessa, e não se repete', async () => {
     const res = await generate([DOC_B]);
     assert.equal(res.statusCode, 201, res.body);
-    assert.equal((res.json() as { nsa: number }).nsa, 2);
+    // O NSA é POR ARQUIVO desde a partição (#838): ele vive dentro de cada item, não no topo. Lê-lo
+    // do topo devolveria `undefined`, e um assert contra `undefined` passaria em silêncio se o
+    // esperado também fosse ausente — por isso o índice é explícito.
+    assert.equal((res.json() as { files: { nsa: number }[] }).files[0]?.nsa, 2);
   });
 
   // Documento já preso é conflito de estado, não dado inválido: incluí-lo de novo pagaria duas vezes.
@@ -260,7 +282,7 @@ describe('financial/http — POST /remittances (#720) · geração', () => {
   // CA5: o operador precisa distinguir "falta dado" de "o arquivo não emite esta forma" — não há
   // cadastro que resolva a segunda.
   it('CA5: título de rota sem emissor recusa com mensagem própria', async () => {
-    const res = await generate([DOC_PIX]);
+    const res = await generate([DOC_GUIA]);
     assert.equal(res.statusCode, 422, res.body);
 
     const body = res.json() as { error: { message: string } };
@@ -391,7 +413,11 @@ describe('financial/http — POST /remittances · conta-cedente sem convênio (#
       payload: { cedenteAccountId: accountId, payableIds: [DOC_LIVRE] },
     });
     assert.equal(res.statusCode, 201, res.body);
-    assert.equal((res.json() as { nsa: number }).nsa, 1);
+    // A resposta é `{ files: [...] }` desde a partição multi-arquivo (CA4 da #838): uma seleção pode
+    // produzir mais de um arquivo, cada um com seu NSA. Esta seleção produz um só.
+    const body = res.json() as { files: readonly { nsa: number }[] };
+    assert.equal(body.files.length, 1);
+    assert.equal(body.files[0]?.nsa, 1);
   });
 
   it('o convênio preenche uma vez: trocar é recusado com 409', async () => {

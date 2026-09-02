@@ -34,9 +34,16 @@ import type {
 // operador iria aprovar um título que já está aprovado e cujo pagamento já saiu para o banco. E
 // jamais `ready`: a recusa por `remittance-payables-already-held` chegaria no último clique, que é
 // exatamente o defeito que o pré-voo existe para evitar (CA2 da #792).
+//
+// `no-issuer` é o sexto (#837), e passa na mesma régua: manda o operador RETIRAR O TÍTULO DA
+// SELEÇÃO — lugar diferente dos outros cinco. Não é `blocked`, que o mandaria ao cadastro atrás de
+// um dado que não falta; não é `out-of-van`, que é definitivo e diria "nunca sairá" sobre uma rota
+// contratada na VAN cujo emissor só ainda não existe. Era exatamente este valor que faltava: sem
+// ele, a Guia de Recolhimento aparecia como `ready` e a recusa chegava no último clique.
 export type PreviewLineStatus =
   | 'ready'
   | 'blocked'
+  | 'no-issuer'
   | 'out-of-van'
   | 'not-found'
   | 'not-approved'
@@ -64,6 +71,10 @@ export type RemittancePreview = Readonly<{
   lines: readonly RemittancePreviewLine[];
   readyCount: number;
   blockedCount: number;
+  // #837: quantos da seleção têm cadastro completo mas rota que o arquivo ainda não emite. Contador
+  // próprio, e não somado a `blockedCount`, pela mesma razão do `transmittedCount`: a ação do
+  // operador é outra — retirar da seleção, não completar cadastro.
+  noIssuerCount: number;
   outOfVanCount: number;
   notFoundCount: number;
   notApprovedCount: number;
@@ -184,6 +195,19 @@ const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
         gaps: readiness.gaps,
         valueCents: row.valueCents,
       };
+    // A rota VIAJA, ao contrário de `out-of-van`: ela é conhecida, e é o que permite à tela dizer
+    // QUAL forma ainda não sai. `missing`/`gaps` ficam vazios porque não há campo a apontar — o
+    // cadastro está completo, e oferecer um input levaria o operador a lugar nenhum.
+    case 'no-issuer':
+      return {
+        payableId: row.payableId,
+        documentId: row.documentId,
+        status: 'no-issuer',
+        route: readiness.route,
+        missing: [],
+        gaps: [],
+        valueCents: row.valueCents,
+      };
     case 'out-of-van':
       return {
         payableId: row.payableId,
@@ -265,6 +289,7 @@ export const previewRemittance =
       lines,
       readyCount: countWhere(lines, 'ready'),
       blockedCount: countWhere(lines, 'blocked'),
+      noIssuerCount: countWhere(lines, 'no-issuer'),
       outOfVanCount: countWhere(lines, 'out-of-van'),
       notFoundCount: countWhere(lines, 'not-found'),
       notApprovedCount: countWhere(lines, 'not-approved'),

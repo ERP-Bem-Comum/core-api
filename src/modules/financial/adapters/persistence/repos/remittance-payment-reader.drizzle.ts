@@ -34,6 +34,7 @@ import type {
 } from '#src/modules/financial/domain/document/types.ts';
 import { isApprovedForRemittance } from '#src/modules/financial/domain/document/remittance-approval.ts';
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
+import { resolveBarcode } from '#src/modules/financial/domain/payout/digitable-line.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
 import type { PayeeContractor } from '../../http/payee-bank-composition.ts';
 import { finDocuments, finPayables } from '../schemas/mysql.ts';
@@ -105,9 +106,25 @@ const toPaymentData = (
             accountNumber: contractor.bankAccount?.accountNumber ?? null,
             checkDigit: contractor.bankAccount?.checkDigit ?? null,
             pixKey: contractor.pixKey,
+            // A inscrição que o Segmento J-52 exige do boleto (#891). Passa à régua PELO MESMO
+            // caminho que o pré-voo usa — é o que faz as duas verem o mesmo cadastro e chegarem ao
+            // mesmo veredito. Omiti-la aqui devolveria a divergência pela porta dos fundos: o
+            // pré-voo cobraria a inscrição e a geração não.
+            document: contractor.document,
           },
   });
-  if (readiness.status !== 'ready') return err('remittance-payment-incomplete');
+  // ⚠️ `no-issuer` ATRAVESSA de propósito, e é o que faz a CA2 da #837 valer: a rota tem todos os
+  // dados, o que falta é emissor. Quem nomeia essa recusa é `batchProfileFor`, com
+  // `remittance-launch-form-unsupported` — e a mensagem dela ("forma ainda não emitida no arquivo,
+  // retire-o da seleção") é a MESMA que o pré-voo mostrou. Traduzi-la aqui em
+  // `remittance-payment-incomplete` mandaria o operador procurar cadastro que não falta, com uma
+  // mensagem diferente da que ele acabou de ler na tela — a divergência que a issue fechou.
+  //
+  // A negação é a forma segura da condição: status novo que ninguém previu cai na recusa, não na
+  // passagem. Quem passa está enumerado; quem não está, não passa.
+  if (readiness.status !== 'ready' && readiness.status !== 'no-issuer') {
+    return err('remittance-payment-incomplete');
+  }
 
   switch (readiness.route) {
     case 'transfer': {
@@ -117,6 +134,9 @@ const toPaymentData = (
         accountNumber: contractor?.bankAccount?.accountNumber ?? null,
         checkDigit: contractor?.bankAccount?.checkDigit ?? null,
         pixKey: null,
+        // `null` porque a decomposição da CONTA não olha a inscrição — este é o mesmo desenho do
+        // `pixKey` acima, que também é irrelevante aqui e por isso não é transportado.
+        document: null,
       });
       // Inalcançável: `ready` na rota de transferência JÁ significa que a decomposição passou. Fica
       // explícito porque as duas chamadas são independentes — se um dia divergirem, o erro aqui é
@@ -144,26 +164,108 @@ const toPaymentData = (
     }
 
     case 'billet': {
-      // `ready` no boleto garante 44 dígitos — a régua já recusou linha digitável e código curto.
-      const barcode = (row.paymentDetail ?? '').replace(/\D/g, '');
+      // O G063 grava CÓDIGO DE BARRAS, e desde a #788 o cadastro aceita também a linha digitável —
+      // `ready` já não significa "o `payment_detail` são os 44 dígitos". Converter aqui é o que
+      // torna a CA4 verdadeira: os bytes que saem de uma linha digitável têm de ser IDÊNTICOS aos
+      // que sairiam do código de barras equivalente.
+      const barcode = resolveBarcode((row.paymentDetail ?? '').replace(/\D/g, ''));
+      // Inalcançável pela mesma razão da transferência: a régua chamou `resolveBarcode` e só
+      // aprovou porque a conversão passou. Fica explícito porque as duas chamadas são
+      // independentes — se um dia divergirem, o erro aqui é preferível a gravar 47 dígitos num
+      // campo de 44, que desloca todo o resto do registro.
+      if (!barcode.ok) return err('remittance-payment-incomplete');
+
+      // O CEDENTE do título deixou de ser informativo (#891).
+      //
+      // Enquanto o boleto emitia só o Segmento J, o nome era adorno — `contractor?.name ?? ''` — e
+      // o comentário que estava aqui dizia a verdade: o dinheiro segue o código de barras, não o
+      // nome. O Segmento J-52 muda o fato, não a opinião: o manual o declara obrigatório para
+      // título de cobrança (p. 33) e ele identifica sacado e cedente por INSCRIÇÃO. Sem o
+      // favorecido resolvido não há registro a emitir — só um bloco de 56 posições em branco, que é
+      // arquivo bem-formado divergindo do modelo do banco em silêncio.
+      //
+      // Recusar aqui, e não no montador, é o que preserva o contrato tudo-ou-nada do cabeçalho: o
+      // título sai da seleção ANTES de o NSA ser alocado, em vez de derrubar a remessa inteira
+      // depois de queimar um número de sequência que não volta.
+      if (contractor === null) return err('remittance-payment-incomplete');
+      const beneficiaryDocument = cleanDocument(contractor.document);
+      if (beneficiaryDocument === '') return err('remittance-payment-incomplete');
+
       return ok({
         payableId: row.payableId,
         documentId: row.documentId,
         route: 'billet',
-        barcode,
-        // Nome do CEDENTE do título: quem recebe. Sem favorecido resolvido o campo sai vazio — ele
-        // é informativo, e o dinheiro segue o código de barras, não o nome.
-        beneficiaryName: contractor?.name ?? '',
+        barcode: barcode.value,
+        // Nome e inscrição do CEDENTE do título: quem emitiu e recebe.
+        beneficiaryName: contractor.name,
+        beneficiaryDocumentType: documentTypeOf(beneficiaryDocument),
+        beneficiaryDocument,
         dueDate: paymentDate,
         valueCents,
         paymentDate,
       });
     }
 
-    // Rotas contratadas ainda sem emissor. Viajam com valor e data para o montador recusá-las com
+    case 'pix': {
+      // O Pix precisa da chave E do bloco bancário (#838), e a segunda metade é a que surpreende:
+      // o Segmento A do golden traz banco, agência, DV, conta e DV do favorecido preenchidos, com o
+      // layout marcando os quatro como obrigatórios (p. 39). A decisão da P.O. de 13/08 — "Pix paga
+      // por chave, não olha agência ou conta" — descreve o negócio, não o arquivo.
+      //
+      // A decomposição passa pelo MESMO caminho do pré-voo, como a transferência e o boleto já
+      // fazem, e é isso que impede as duas réguas de divergirem: `checkPayoutReadiness` chama
+      // `decomposePayeeAccount` para a rota `pix` desde esta mesma mudança.
+      const parts = decomposePayeeAccount({
+        bank: contractor?.bankAccount?.bank ?? null,
+        agency: contractor?.bankAccount?.agency ?? null,
+        accountNumber: contractor?.bankAccount?.accountNumber ?? null,
+        checkDigit: contractor?.bankAccount?.checkDigit ?? null,
+        // A chave NÃO participa da decomposição da conta — são dois dados independentes do mesmo
+        // favorecido, e é o mesmo desenho que a transferência usa ao passar `null` aqui.
+        pixKey: null,
+        document: null,
+      });
+
+      // Inalcançável pelo caminho normal: `ready` na rota `pix` já significa que a chave existe e
+      // que a decomposição passou. Fica explícito porque as duas chamadas são independentes — e
+      // porque recusar aqui tira o título da seleção ANTES de o NSA ser alocado, que é a mesma razão
+      // pela qual o boleto recusa neste ponto e não no montador.
+      if (!parts.ok || contractor === null) return err('remittance-payment-incomplete');
+
+      const pixKey = contractor.pixKey?.key ?? '';
+      const pixKeyType = contractor.pixKey?.keyType ?? '';
+      if (pixKey === '' || pixKeyType === '') return err('remittance-payment-incomplete');
+
+      const document = cleanDocument(contractor.document);
+      if (document === '') return err('remittance-payment-incomplete');
+
+      return ok({
+        payableId: row.payableId,
+        documentId: row.documentId,
+        route: 'pix',
+        payee: {
+          name: contractor.name,
+          documentType: documentTypeOf(document),
+          document,
+          bankCode: parts.value.bankCode,
+          agency: parts.value.agency,
+          agencyDigit: parts.value.agencyDigit,
+          accountNumber: parts.value.accountNumber,
+          accountDigit: parts.value.accountDigit,
+        },
+        pixKey,
+        // Viaja CRU, no vocabulário de `partners`. Quem traduz para o domínio `G100` é o adapter de
+        // CNAB — traduzir aqui poria conhecimento de layout num reader de persistência.
+        pixKeyType,
+        valueCents,
+        paymentDate,
+      });
+    }
+
+    // A rota contratada que não tem emissor. Viaja com valor e data para o montador recusá-la com
     // nome próprio (`remittance-launch-form-unsupported`) — o que o operador precisa ler não é
-    // "dado faltando", é "o arquivo ainda não emite esta forma".
-    case 'pix':
+    // "dado faltando", é "o arquivo não emite esta forma". E, para a guia, não emite por decisão de
+    // escopo da P.O. (23/08), não por atraso.
     case 'tax-guide':
       return ok({
         payableId: row.payableId,

@@ -46,12 +46,18 @@ docker compose up -d mysql --wait || exit 1
 MIGRATE_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
   node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
 
-# Servidor real em background (applyMigrations:false — schema já provisionado). auth=memory semeia o
-# operador RBAC (CORE_API_E2E=1 + AUTH_SEED_JSON com collaborator:read+write). contracts=memory (default).
-PARTNERS_DRIVER=mysql \
-  PARTNERS_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
-  PARTNERS_READER_URL="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
-  CORE_API_E2E=1 \
+# Servidor real em background (applyMigrations:false — schema já provisionado). O operador RBAC é
+# semeado por CORE_API_E2E=1 + AUTH_SEED_JSON (collaborator:read+write).
+#
+# ⚠️ O seed roda AGORA sobre auth=mysql, e não mais sobre memory: sob o ADR-0068 os SETE módulos são
+# obrigatórios, e o helper os declara. `applyRbacSeed` não distingue driver (`composition.ts:448`) e
+# persiste o Role antes do usuário justamente para satisfazer a FK que só existe em mysql
+# (`composition.ts:349-350`) — o caminho mysql é o mais exigente dos dois, não o mais frouxo.
+DB="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
+  RO="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
+  source scripts/e2e/server-env.sh
+
+CORE_API_E2E=1 \
   AUTH_SEED_JSON='{"users":[{"email":"e2e-rh@example.com","password":"Str0ng-Passphrase-2026!","permissions":["collaborator:read","collaborator:write"]}]}' \
   PORT=3100 \
   LOG_LEVEL=warn \
