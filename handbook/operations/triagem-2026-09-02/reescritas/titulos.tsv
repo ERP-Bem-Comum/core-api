@@ -1,0 +1,6 @@
+787	remessa Queued com arquivo no bucket e sem envelope de status não é varrida por ninguém — o descarte do #850 cobre só o caso sem arquivo
+497	dado demográfico nominal ficou sob collaborator:read e o read-sensitive não guarda mais nada — a assimetria sumiu por nivelamento, não por segregação
+407	aplicar no host de QA a consolidação de workers que já está no compose (4 grupos) — o código saiu, o rollout não
+61	Fatia 6 — falta desfazer PAGAMENTO (Paid → Approved); desfazer conciliação e aprovação já existem
+59	Fatia 4 — falta o D+1 fechar o ciclo: scan-van-returns tria e quarentena, mas nenhum caminho marca o título como Pago
+145	FIN-RECON-IMPORT-PDF-OCR — falta OCR para extrato digitalizado; PDF de texto nativo já importa por gabarito

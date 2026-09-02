@@ -1,0 +1,56 @@
+numero	acao	titulo
+943	manter	[financial] NSA é sequenciado por conta e não pelo convênio — duas contas sob o mesmo multipag repetem o número
+942	manter	[financial] gerar remessa falha com 5xx opaco numa conta-cedente válida com multipag — bloqueio em PRODUÇÃO
+931	manter	[handbook] inquiry-0032 diz que reconciliation-repository nao esta no ciclo atual — a condicao ocorreu 4 dias depois em 4ec8445e
+930	manter	[shared/persistence] a borda HTTP abre 31 pools num boot (eram 14 no Incident-0001) — piso ocioso de 62 conexoes excede max_connections
+927	manter	[shared/migrations] ADD de coluna NOT NULL sem DEFAULT em 4 tabelas de negocio, sem justificativa nem gate — falha com 3819
+926	manter	[shared/migrations] db:generate reprova o format:check em 5 dos 7 modulos — o .prettierignore isenta so contracts e auth
+906	manter	[financial] template do lote descarta 6 dos 14 campos em silencio — escopo restante do #505
+905	manter	[financial] o dominio cita 13 vezes uma spec da M2 que nao existe no repositorio
+904	manter	[financial] #268 entregue sem assercao de rota — so os schemas foram validados, com fixture null
+903	manter	[financial] os 4 slugs de erro da M2 ficaram fora do gate de error-classification
+902	manter	[financial] confirm da conciliacao fecha ciclo de deadlock com o save do documento, sem withDeadlockRetry
+901	manter	[budget-plans] financial recebe o read-port inteiro e um pool duplicado de programs — fatiar em buildTaxonomyPathReadPort
+900	manter	[financial] manual-entry e batch gravam os 5 refs sem validar o caminho na arvore do plano
+899	manter	[financial] desfazer a conciliacao nao desfaz a reclassificacao que ela carregou
+898	manter	[budget-plans] taxonomy-path-read.drizzle nao tem teste de integracao — RN-M2-09/10 so valem contra fake
+888	manter	[financial] Backfill de budget_plan_ref nos documentos orfaos — o plano E derivavel do no da arvore (fatia do #502/CA3)
+885	manter	[financial] o adapter que grava o codigo de barras nao tem teste — a conversao da linha digitavel so esta provada no dominio
+871	manter	[handbook] reconciliar o registro com o repositorio paralelo core-api-deno — ADR 0054/0055/0056 resolvem para dois documentos
+868	manter	[financial] o inspetor aprova arquivo que o banco recusa — faltam AO, AQ e AR, que sao estrutura pura
+865	manter	[financial] endereco do cedente sai em branco nas 80 posicoes do header de lote — o dado nao existe em nenhuma camada
+863	manter	[financial] CNPJ alfanumerico do FAVORECIDO e destruido por digits() — o Segmento B emite outra inscricao
+858	manter	[financial] Segmento B emite endereco do favorecido sempre em branco — o campo nao existe no port do tradutor
+856	reescrever	[financial] campos do cedente sem fonte de dado no header CNAB (nome do banco, DVs, tipo de inscricao)
+853	manter	[financial] fakes in-memory nao espelham os CHECKs do schema — titulo Paid sem paid_at passa no unitario e sai com 3819 no MySQL
+845	manter	[reports] o filtro status=Transmitted compara o status do documento e nunca casa
+844	manter	[shared] concentrar o cast de affectedRows do mysql2 num helper unico
+841	manter	[infra/tests] boot-guard infere porta abriu do SIGKILL por teto de 20s — reprova o gate sob carga sem regressao do guard
+839	reescrever	[financial/infra] sete incognitas operacionais da VAN sem dono nem ADR — transferidas da #604
+833	manter	[shared/dx] Cinco cortes de custo ocioso e atrito de dev — o grupo outbox so loga, e e o maior consumidor da stack
+830	manter	[shared/migrations] eventos_processados e criada por um journal so, mas cinco modulos dependem dela
+829	manter	[financial] outbox in-memory e so produtor — consumo do fin_outbox sem cobertura unitaria
+820	manter	[financial] a razao escrita para bloquear pagamento por DV divergente supoe uma modalidade que o piloto nao usa
+819	manter	[financial] dado bancario do cedente travado por historico nao tem via de correcao — o operador fica sem saida
+817	manter	[partners] cadastro de favorecido nao tem tipo de conta (corrente/poupanca) — dois campos do CNAB dependem dele
+816	manter	[financial] digito verificador da conta do cedente nunca e conferido — o banco recusa toda remessa daquela conta
+815	manter	[financial] emissor nao conhece credito em conta poupanca — todo favorecido do proprio banco sai como conta corrente
+810	manter	[shared/persistence] o padrao hard replace da #803 se repete em 7 pontos — auth, budget-plans e contracts
+808	reescrever	[shared/persistence] varchar de negocio sem COLLATE herda o default do servidor — provisionamento do zero quebra na migration 0050
+768	manter	[docs] documentar no handoff do front o autocadastro de colaborador e a ativacao de usuario por token
+659	manter	[financial] reader: suite local de PDFs reais falha de forma intermitente (1 em 6 rodadas)
+645	manter	[infra] integracao roda as 13 suites em PR doc-only — filtrar por path sem pendurar o required check
+643	manter	[api-collections] inscrever budget-plans no runner — 14 .bru nunca sao executados
+517	critico	[shared] scripts de e2e destroem o banco e os secrets de dev — mesma classe da #500
+514	manter	[auth] emitir e validar o claim aud no access token JWT
+507	manter	[financial] tarifa bancaria (manual sem plano) nao aparece em nenhum relatorio
+497	reescrever	[reports] assimetria de permissao: agregado sob read-sensitive, por-pessoa nominal sob read
+496	manter	[auth/rbac] sync-permissions so concede ao papel admin-sistema — permissao nova nasce inacessivel
+487	critico	[etl] plano-filho vira raiz orfa em silencio quando o pai e quarentenado (ETL de Orcamento)
+486	manter	[auth] expor resolver read-by-legacy-id na public-api de ETL
+482	manter	[partners] exigir permissao dedicada para dado sensivel em GET /collaborators
+362	manter	[financial] Alinhar minimizacao LGPD de supplierDocument entre os batch endpoints do epico #350
+360	manter	[ci] runner de integracao nao descobre jobs sozinho — 1 de 2 tests/jobs/** segue orfao
+334	manter	[notifications] tipo FromHeader proprio — brand EmailAddress carrega header From com display name
+333	manter	[partners] renomear identificadores PT autocadastro para EN (self-registration)
+329	manter	[shared/http] redigir codigo interno em respostas 5xx do sendWriteError + teto de page na paginacao

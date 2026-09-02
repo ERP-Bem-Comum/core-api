@@ -1,0 +1,189 @@
+From 94849a2db86bd8241864663f6a854081c3690481 Mon Sep 17 00:00:00 2001
+From: W0 Fixture <w0-fixture@example.com>
+Date: Tue, 18 Aug 2026 13:22:45 -0300
+Subject: [PATCH 3/4] =?UTF-8?q?fix(etl):=20plano-filho=20n=C3=A3o=20vira?=
+ =?UTF-8?q?=20raiz=20=C3=B3rf=C3=A3=20quando=20o=20pai=20n=C3=A3o=20migra?=
+ =?UTF-8?q?=20(#487)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+O ETL de Orçamento resolvia o pai com `planUuidByLegacyId.get(parentLegacyId) ?? null`. O `?? null`
+dava o MESMO desfecho para dois casos opostos: plano sem pai no legado (raiz legítima) e plano cujo
+pai foi quarentenado — este último migrava como raiz, com a hierarquia perdida e sem registro
+nenhum, contra o princípio que justifica as quatro quarentenas deste ETL.
+
+UM TERCEIRO CASO, QUE A ISSUE NÃO TINHA VISTO
+
+Consultar o mapa de uuids não bastava. Ele é pré-populado com um uuid candidato para todo plano que
+passou o mapper, ANTES de qualquer escrita — é o que permite resolver o `parentId` na topo-ordem.
+Um plano pode estar no mapa e não ter sido gravado: quando `provision` falha, `resolveOrProvision`
+devolve `uuid: null`, o mapa conserva o candidato, e o filho se ligaria a um pai que não existe no
+destino — FK órfã em vez de raiz órfã.
+
+A verificação passa a consultar `provisionedPlans`, o conjunto do que REALMENTE existe no destino.
+Uma condição cobre os três casos, e a cascata sai de graça: o filho quarentenado também não entra
+no conjunto, e a topo-ordem garante que o neto é visitado depois.
+
+A decisão saiu do meio do laço e virou `classifyParentLink`, que devolve `root | linked | orphaned`.
+Modelar os três no tipo é o que impede o achatamento de voltar por descuido — e torna o caso
+testável sem banco legado, que era o motivo de ele nunca ter tido teste.
+
+Gate verde: typecheck + format:check + lint + test (10858 pass, 0 fail).
+
+Assisted-by: Claude-Code:claude-opus-5
+---
+ scripts/etl/budget-plans/main.ts           | 62 +++++++++++++++++++++-
+ tests/etl/budget-plans/parent-link.test.ts | 50 +++++++++++++++++
+ 2 files changed, 111 insertions(+), 1 deletion(-)
+ create mode 100644 tests/etl/budget-plans/parent-link.test.ts
+
+diff --git a/scripts/etl/budget-plans/main.ts b/scripts/etl/budget-plans/main.ts
+index 3b38ff04..e0e434c2 100644
+--- a/scripts/etl/budget-plans/main.ts
++++ b/scripts/etl/budget-plans/main.ts
+@@ -227,6 +227,33 @@ const bump = (tally: EntityTally, outcome: ProvisionResult['outcome']): EntityTa
+   }
+ };
+ 
++/**
++ * Como o plano-filho se liga ao pai — os três casos que o `?? null` antigo achatava em dois.
++ *
++ * `root` e `orphaned` produziam o MESMO efeito (`parentId = null`) e significam o oposto: um é
++ * hierarquia que não existe no legado, o outro é hierarquia que existe e se perderia na migração.
++ * Separá-los no tipo é o que impede a confusão de voltar por descuido.
++ */
++export type ParentLink =
++  | Readonly<{ kind: 'root' }>
++  | Readonly<{ kind: 'linked'; parentLegacyId: number }>
++  | Readonly<{ kind: 'orphaned'; parentLegacyId: number }>;
++
++/**
++ * `provisioned` são os legacyIds que EXISTEM no destino — não os que passaram o mapper. A distinção
++ * é o ponto: um plano pode ter uuid reservado e nunca ter sido gravado (quarentenado, ou `provision`
++ * falhou), e ligar um filho a ele produz FK órfã.
++ */
++export const classifyParentLink = (
++  parentLegacyId: number | null,
++  provisioned: ReadonlySet<number>,
++): ParentLink => {
++  if (parentLegacyId === null) return { kind: 'root' };
++  return provisioned.has(parentLegacyId)
++    ? { kind: 'linked', parentLegacyId }
++    : { kind: 'orphaned', parentLegacyId };
++};
++
+ // Ordena os planos pai-antes-de-filho (a FK auto-referente exige o pai inserido). N pequeno (5).
+ const topoSortPlans = <T extends Readonly<{ legacyId: number; parentLegacyId: number | null }>>(
+   mapped: readonly T[],
+@@ -318,10 +345,42 @@ export const runBudgetPlansEtl = async (
+         input: m.value.input,
+       });
+     }
++    // Quem REALMENTE existe no destino. `planUuidByLegacyId` não serve para isto: ele é
++    // pré-populado com um uuid candidato para todo plano que passou o mapper, antes de qualquer
++    // escrita — é o que permite resolver o `parentId` na topo-ordem. Um plano pode estar nele e
++    // mesmo assim não ter sido gravado (quarentenado, ou `provision` falhou).
++    const provisionedPlans = new Set<number>();
++
+     for (const m of topoSortPlans(mappedPlans)) {
+       const id = planUuidByLegacyId.get(m.legacyId) ?? randomUUID();
++
++      // Pai declarado que não foi provisionado → o FILHO vai para a quarentena, não vira raiz.
++      //
++      // Antes disto o código fazia `planUuidByLegacyId.get(parentLegacyId) ?? null`, e o `?? null`
++      // confundia dois casos opostos: "não tem pai" (raiz legítima) e "tinha pai, e ele não
++      // migrou". O segundo produzia um plano-filho **promovido a raiz em silêncio** — hierarquia
++      // perdida sem registro nenhum, contra o princípio que justifica as quarentenas deste ETL.
++      //
++      // Consultar o conjunto de provisionados, e não o mapa de uuids, cobre três casos com uma
++      // verificação só: pai quarentenado no mapper, pai cujo `provision` falhou (o mapa guardaria
++      // um uuid que não corresponde a linha alguma — FK órfã), e a CASCATA pai→filho→neto, porque
++      // o filho quarentenado aqui também não entra no conjunto e a topo-ordem garante que o neto
++      // é visitado depois.
++      //
++      // Mesmo tratamento que o centro de custo já dá ao `budget_plan_ref` órfão, logo abaixo.
++      const link = classifyParentLink(m.parentLegacyId, provisionedPlans);
++      if (link.kind === 'orphaned') {
++        plansT = countQuarantined(plansT);
++        await sink.quarantine('budget_plans', m.legacyId, [
++          { tag: 'RequiredFieldMissing', field: 'parent_ref' },
++        ]);
++        continue;
++      }
++
++      // Raiz legítima segue com `parentId: null` — o caso que NÃO pode ser confundido com o de
++      // cima, e a razão de o tipo `ParentLink` distinguir `root` de `orphaned`.
+       const parentId =
+-        m.parentLegacyId === null ? null : (planUuidByLegacyId.get(m.parentLegacyId) ?? null);
++        link.kind === 'root' ? null : (planUuidByLegacyId.get(link.parentLegacyId) ?? null);
+       const res = await resolveOrProvision(port.plans, { ...m.input, id, parentId }, m.legacyId, {
+         table: 'budget_plans',
+         sink,
+@@ -330,6 +389,7 @@ export const runBudgetPlansEtl = async (
+       plansT = bump(plansT, res.outcome);
+       if (res.uuid !== null) {
+         planUuidByLegacyId.set(m.legacyId, res.uuid);
++        provisionedPlans.add(m.legacyId);
+         await sink.depara({ entity: 'budget_plan', legacyId: m.legacyId, newId: res.uuid });
+       }
+     }
+diff --git a/tests/etl/budget-plans/parent-link.test.ts b/tests/etl/budget-plans/parent-link.test.ts
+new file mode 100644
+index 00000000..c521e70a
+--- /dev/null
++++ b/tests/etl/budget-plans/parent-link.test.ts
+@@ -0,0 +1,50 @@
++// Plano-filho não vira raiz órfã quando o pai não migra (#487).
++//
++// O ETL fazia `planUuidByLegacyId.get(parentLegacyId) ?? null`, e o `?? null` dava o MESMO desfecho
++// para dois casos opostos: plano sem pai (raiz legítima) e plano cujo pai foi quarentenado
++// (hierarquia perdida em silêncio). `classifyParentLink` separa os dois — e um terceiro, que a
++// issue não tinha visto: o pai cujo `provision` falhou, que ficava no mapa de uuids com um id que
++// não corresponde a linha alguma no destino.
++import { describe, it } from 'node:test';
++import { strict as assert } from 'node:assert';
++
++import { classifyParentLink } from '#scripts/etl/budget-plans/main.ts';
++
++describe('classifyParentLink — raiz legítima, filho ligado e filho órfão (#487)', () => {
++  it('CA2: plano sem pai no legado é raiz legítima', () => {
++    assert.deepEqual(classifyParentLink(null, new Set()), { kind: 'root' });
++  });
++
++  it('CA2: raiz legítima continua raiz mesmo com outros planos provisionados', () => {
++    assert.deepEqual(classifyParentLink(null, new Set([10, 20])), { kind: 'root' });
++  });
++
++  it('pai provisionado → filho se liga a ele', () => {
++    assert.deepEqual(classifyParentLink(10, new Set([10])), {
++      kind: 'linked',
++      parentLegacyId: 10,
++    });
++  });
++
++  it('CA1: pai declarado que NÃO foi provisionado → órfão, nunca raiz', () => {
++    const link = classifyParentLink(10, new Set([20, 30]));
++    assert.equal(link.kind, 'orphaned');
++    // O id do pai viaja junto: sem ele, a quarentena diria "não casou" sem permitir diagnosticar.
++    assert.deepEqual(link, { kind: 'orphaned', parentLegacyId: 10 });
++  });
++
++  it('órfão e raiz são desfechos DISTINTOS — é a confusão que o `?? null` criava', () => {
++    const raiz = classifyParentLink(null, new Set());
++    const orfao = classifyParentLink(10, new Set());
++    assert.notEqual(raiz.kind, orfao.kind);
++  });
++
++  // A cascata que a topo-ordem torna possível: o pai quarentenado não entra no conjunto de
++  // provisionados, então o filho é órfão; o filho quarentenado também não entra, e o neto cai
++  // pelo mesmo caminho. Sem isto, o neto se ligaria a um pai que não existe no destino.
++  it('cascata: neto de um pai não provisionado também é órfão', () => {
++    const provisioned = new Set<number>(); // nem pai (1) nem filho (2) entraram
++    assert.equal(classifyParentLink(1, provisioned).kind, 'orphaned'); // filho
++    assert.equal(classifyParentLink(2, provisioned).kind, 'orphaned'); // neto
++  });
++});
+-- 
+2.43.0
+

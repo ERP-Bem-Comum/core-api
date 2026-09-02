@@ -1,0 +1,274 @@
+From 4121b611872839c6856c1cbb90a09c09694db452 Mon Sep 17 00:00:00 2001
+From: Gabriel Vieira Soriano Aderaldo <gabriel_aderaldo@edu.unifor.br>
+Date: Tue, 1 Sep 2026 19:43:14 -0300
+Subject: [PATCH 1/4] =?UTF-8?q?fix(financial):=20conv=C3=AAnio=20migrado?=
+ =?UTF-8?q?=20nasce=20vazio,=20e=20malformado=20aceita=20corre=C3=A7=C3=A3?=
+ =?UTF-8?q?o=20(#879)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Conta migrada nascia com `convenio: 'LEGADO'` e ficava permanentemente incapaz
+de gerar remessa, sem via de correção — nem pela tela, nem pela API. Bloqueio em
+produção, reportado pela P.O. em 25/08.
+
+A causa não é o valor escolhido: é o placeholder ter FORMA DE DADO VÁLIDO.
+`editCedenteAccount` lia qualquer convênio não-vazio como "já definido" e recusava
+a alteração; o front, coerentemente, travava o campo. A porta que a #722 abriu
+para exatamente este conserto foi fechada por uma string de sete letras.
+
+Duas mudanças, e a segunda é a que fecha a classe:
+
+- CA2 — o ETL grava `convenio: ''`. Vazio é o estado que o domínio já sabe tratar:
+  `checkCedenteRemittanceReadiness` responde `cedente-convenio-missing`, que diz ao
+  operador o que preencher e em qual tela.
+
+- CA3 — "já definido" passa a significar CONVÊNIO VÁLIDO, não string não-vazia. A
+  régua não é escrita no use case: é `checkCedenteRemittanceReadiness`, no domínio,
+  a MESMA que decide se a conta gera remessa. Uma segunda régua para o mesmo fato
+  divergiria — é o defeito que a #837 fechou do outro lado do módulo.
+
+O efeito é correto nos dois sentidos: convênio malformado ou longo demais passa a
+aceitar correção pela tela, e convênio válido continua recusando a troca. O
+invariante do #722 não afrouxa — e passou a ter teste, que não tinha.
+
+CA4 — sete casos novos, cobrindo as duas metades. O último amarra a propriedade
+que justifica a régua única: a edição aceita a correção exatamente quando a
+remessa recusaria a conta.
+
+NÃO fecha a issue. Restam o CA1 (UPDATE nas contas já migradas em produção) e o
+CA5 (confirmação da P.O.), que são operação e não têm diff.
+
+Gate: typecheck + format:check + lint + 11630 testes, 0 falhas.
+
+Refs: #879
+Assisted-by: Claude-Code:claude-opus-5
+---
+ scripts/etl/financial/mapper.ts               | 14 +++-
+ .../use-cases/edit-cedente-account.ts         | 19 ++++-
+ tests/etl/financial/mapper.test.ts            | 26 +++++-
+ .../use-cases/edit-cedente-account.test.ts    | 83 ++++++++++++++++++-
+ 4 files changed, 135 insertions(+), 7 deletions(-)
+
+diff --git a/scripts/etl/financial/mapper.ts b/scripts/etl/financial/mapper.ts
+index e4f121be..805f0999 100644
+--- a/scripts/etl/financial/mapper.ts
++++ b/scripts/etl/financial/mapper.ts
+@@ -65,8 +65,18 @@ export const mapLegacyAccountRow = (
+       agency: row.agency,
+       accountNumber: row.accountNumber,
+       accountDigit: row.dv,
+-      // D6 pendente: convênio real Bradesco não existe no legado — placeholder auditado.
+-      convenio: 'LEGADO',
++      // D6: o convênio real do Bradesco não existe no legado, e o correto é nascer VAZIO.
++      //
++      // ⚠️ Era `'LEGADO'` — um placeholder que parecia auditável e trancou toda conta migrada em
++      // PRODUÇÃO (#879). A causa não é o valor escolhido: é o placeholder ter FORMA DE DADO VÁLIDO.
++      // `editCedenteAccount` lia qualquer convênio não-vazio como "já definido" e recusava a troca; o
++      // front, coerentemente, travava o campo. Resultado: a conta não gerava remessa e não havia via
++      // de correção — nem pela tela, nem pela API. O caminho que a #722 abriu para exatamente este
++      // conserto foi fechado por uma string de sete letras.
++      //
++      // Vazio é o estado que o domínio JÁ SABE TRATAR: `checkCedenteRemittanceReadiness` responde
++      // `cedente-convenio-missing`, que diz ao operador o que preencher e em qual tela.
++      convenio: '',
+       nickname: row.name,
+       openingBalanceCents: Math.round(row.initialBalance * 100),
+       // Par coeso com cents (validação do domínio): data do saldo = criação da conta.
+diff --git a/src/modules/financial/application/use-cases/edit-cedente-account.ts b/src/modules/financial/application/use-cases/edit-cedente-account.ts
+index 3b47b16a..f49ff599 100644
+--- a/src/modules/financial/application/use-cases/edit-cedente-account.ts
++++ b/src/modules/financial/application/use-cases/edit-cedente-account.ts
+@@ -1,5 +1,6 @@
+ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+ import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
++import { checkCedenteRemittanceReadiness } from '../../domain/cedente/remittance-eligibility.ts';
+ import type { AccountType, CedenteAccount } from '../../domain/cedente/types.ts';
+ import type { CedenteAccountIdError } from '../../domain/cedente/cedente-account-id.ts';
+ import type {
+@@ -71,9 +72,25 @@ export const editCedenteAccount =
+     // recusa da remessa promete ao operador. Trocar um já preenchido é outra coisa: ele identifica o
+     // contrato junto ao banco e viaja no nome de toda remessa já transmitida — reescrevê-lo faria as
+     // remessas antigas apontarem para um convênio que a conta não declara mais.
++    //
++    // ⚠️ "JÁ DEFINIDO" É SER UM CONVÊNIO DE VERDADE, NÃO SER UMA STRING NÃO-VAZIA (#879), e a
++    // diferença custou um bloqueio em PRODUÇÃO. O ETL gravava `'LEGADO'` como placeholder; o
++    // `!== ''` o lia como convênio definido e recusava toda alteração. Nenhuma conta migrada podia
++    // gerar remessa, e nenhuma tinha conserto — a porta que a #722 abriu foi trancada por um valor
++    // que só *parecia* dado.
++    //
++    // A régua de "serve como convênio?" NÃO é escrita aqui: é `checkCedenteRemittanceReadiness`, no
++    // domínio, e é a MESMA que decide se a conta gera remessa. Uma segunda régua para o mesmo fato
++    // divergiria — e a divergência entre duas réguas de elegibilidade é exatamente o defeito que a
++    // #837 fechou do outro lado do módulo. Aqui só se pergunta a ela.
++    //
++    // O efeito é o correto nos dois sentidos: convênio malformado ou longo demais passa a ACEITAR
++    // correção pela tela (é o que o operador precisa), e convênio válido continua RECUSANDO a troca
++    // — o invariante do #722 não afrouxa.
+     const wantsConvenioChange =
+       input.convenio !== undefined && input.convenio.trim() !== found.value.convenio.trim();
+-    if (wantsConvenioChange && found.value.convenio.trim() !== '') {
++    const currentConvenioIsUsable = checkCedenteRemittanceReadiness(found.value).ok;
++    if (wantsConvenioChange && currentConvenioIsUsable) {
+       return err('cedente-convenio-already-set');
+     }
+ 
+diff --git a/tests/etl/financial/mapper.test.ts b/tests/etl/financial/mapper.test.ts
+index eae6d884..46c1477e 100644
+--- a/tests/etl/financial/mapper.test.ts
++++ b/tests/etl/financial/mapper.test.ts
+@@ -76,7 +76,7 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
+     ...over,
+   });
+ 
+-  it('mapeia Bradesco → bankCode 237, convenio placeholder D6, agência preservada (F7)', () => {
++  it('mapeia Bradesco → bankCode 237, convenio VAZIO (D6), agência preservada (F7)', () => {
+     const r = mapLegacyAccountRow(account());
+     assert.ok(r.ok);
+     assert.equal(r.value.legacyId, 1);
+@@ -84,12 +84,34 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
+     assert.equal(r.value.input.agency, '0288-7');
+     assert.equal(r.value.input.accountNumber, '12345');
+     assert.equal(r.value.input.accountDigit, '0');
+-    assert.equal(r.value.input.convenio, 'LEGADO');
++    assert.equal(r.value.input.convenio, '');
+     assert.equal(r.value.input.nickname, 'PARC');
+     assert.equal(r.value.input.openingBalanceCents, 100050);
+     assert.equal(r.value.input.openingBalanceDate, '2026-01-10');
+   });
+ 
++  // ⚠️ ESTE CASO É A #879, e o assert é sobre uma AUSÊNCIA — por isso ele precisa existir separado
++  // do caso acima, que passaria com qualquer literal.
++  //
++  // O campo saía com `'LEGADO'`: um placeholder que parecia auditável e travou toda conta migrada em
++  // PRODUÇÃO. `editCedenteAccount` lia qualquer convênio não-vazio como "já definido", recusava a
++  // troca, e o front travava o campo — conta sem remessa e sem via de correção.
++  //
++  // A causa não é o valor escolhido, é o placeholder ter FORMA DE DADO VÁLIDO. Qualquer outro texto
++  // ('PENDENTE', 'N/A', '000000') reproduz o defeito, e é isso que este caso vigia: o convênio migrado
++  // não pode ser preenchível com sentinela nenhuma. Vazio é o único estado que o domínio sabe tratar
++  // — `checkCedenteRemittanceReadiness` responde `cedente-convenio-missing`, que diz ao operador o
++  // que preencher e onde.
++  it('não inventa sentinela para o convênio ausente no legado (#879)', () => {
++    const r = mapLegacyAccountRow(account());
++    assert.ok(r.ok);
++    assert.equal(
++      r.value.input.convenio.trim(),
++      '',
++      'convênio migrado tem de nascer vazio — qualquer texto aqui tranca a conta em produção',
++    );
++  });
++
+   it('banco desconhecido → EnumUnknown bank (sem chute de código COMPE)', () => {
+     const r = mapLegacyAccountRow(account({ bank: 'BANCO X' }));
+     assert.ok(!r.ok);
+diff --git a/tests/modules/financial/application/use-cases/edit-cedente-account.test.ts b/tests/modules/financial/application/use-cases/edit-cedente-account.test.ts
+index 4158e85b..ed93907a 100644
+--- a/tests/modules/financial/application/use-cases/edit-cedente-account.test.ts
++++ b/tests/modules/financial/application/use-cases/edit-cedente-account.test.ts
+@@ -4,17 +4,21 @@ import { strict as assert } from 'node:assert';
+ import { type Result, ok } from '#src/shared/index.ts';
+ import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
+ import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
++import { checkCedenteRemittanceReadiness } from '#src/modules/financial/domain/cedente/remittance-eligibility.ts';
+ // W0 RED (019): o use-case editCedenteAccount ainda não existe.
+ import { editCedenteAccount } from '#src/modules/financial/application/use-cases/edit-cedente-account.ts';
+ 
+-const buildAccount = () => {
++// ⚠️ O default `'9999999'` tem SETE dígitos e é `cedente-convenio-too-long` para a régua da remessa
++// (máximo 6 — `remittance-eligibility.ts`). Os casos que precisam de um convênio VÁLIDO passam o
++// dele explicitamente; herdar o default ali faria o teste medir o caminho oposto ao que ele nomeia.
++const buildAccount = (convenio = '9999999') => {
+   const r = createCedente({
+     id: CedenteAccountId.generate(),
+     bankCode: '237',
+     agency: '1234',
+     accountNumber: '567890',
+     accountDigit: '1',
+-    convenio: '9999999',
++    convenio,
+     document: '12345678000190',
+   });
+   if (!r.ok) throw new Error('setup: cedente');
+@@ -63,3 +67,78 @@ describe('financial/application/edit-cedente-account (019) — W0 RED', () => {
+     assert.equal(r.ok, true);
+   });
+ });
++
++/*
++ * O convênio: PREENCHE, não TROCA — e "já preenchido" é ser um convênio DE VERDADE (#722, #879).
++ *
++ * A distinção custou um bloqueio em produção: o ETL gravava `'LEGADO'` e o use case lia qualquer
++ * string não-vazia como "já definido", recusando toda alteração. Nenhuma conta migrada podia gerar
++ * remessa, e nenhuma tinha conserto pela tela.
++ *
++ * Os dois lados são medidos aqui de propósito. Um teste só do lado que a #879 corrige deixaria o
++ * invariante do #722 sem rede — e afrouxá-lo é o modo de falha oposto, em que o convênio de uma
++ * remessa já transmitida passa a poder ser reescrito.
++ */
++describe('edit-cedente-account — o convênio preenche, mas não troca (#722/#879)', () => {
++  const editConvenio = async (account: ReturnType<typeof buildAccount>, convenio: string) =>
++    editCedenteAccount(deps(account, false) as never)({ id: String(account.id), convenio });
++
++  // ── O invariante do #722, que NÃO pode afrouxar ─────────────────────────────────────────────
++
++  it('recusa trocar um convênio VÁLIDO — ele viaja no nome de toda remessa transmitida', () => {
++    // Seis dígitos: o que a régua da remessa aceita. Reescrevê-lo faria as remessas antigas
++    // apontarem para um convênio que a conta não declara mais.
++    const account = buildAccount('123456');
++    return editConvenio(account, '654321').then((r) => {
++      assert.equal(r.ok, false);
++      if (!r.ok) assert.equal(r.error, 'cedente-convenio-already-set');
++    });
++  });
++
++  it('aceita reenviar o MESMO convênio válido — não é troca', async () => {
++    // Idempotência: o front reenvia o formulário inteiro, e um PATCH que repete o valor atual não
++    // pode ser lido como tentativa de reescrita.
++    const account = buildAccount('123456');
++    const r = await editConvenio(account, '123456');
++    assert.equal(r.ok, true);
++  });
++
++  // ── O que a #879 destrava ───────────────────────────────────────────────────────────────────
++
++  it('aceita corrigir o placeholder que o ETL gravava — é a #879', async () => {
++    const account = buildAccount('LEGADO');
++    const r = await editConvenio(account, '123456');
++    assert.equal(r.ok, true, 'conta migrada tem de ter via de correção pela tela');
++  });
++
++  it('aceita preencher o convênio VAZIO — o caminho que a #722 abriu', async () => {
++    const account = buildAccount('');
++    const r = await editConvenio(account, '123456');
++    assert.equal(r.ok, true);
++  });
++
++  it('aceita corrigir convênio LONGO demais — o operador confere com o banco', async () => {
++    // Sete dígitos passam pelo cadastro e são recusados pela remessa (`cedente-convenio-too-long`).
++    // Sem esta correção, a conta ficaria no mesmo beco do `'LEGADO'`: recusada lá, intocável aqui.
++    const account = buildAccount('9999999');
++    const r = await editConvenio(account, '999999');
++    assert.equal(r.ok, true);
++  });
++
++  // A propriedade que amarra as duas metades, e a razão de a régua ser UMA só: o use case aceita a
++  // correção exatamente quando a remessa recusa a conta. Duas réguas para o mesmo fato divergiriam —
++  // é o defeito que a #837 fechou do outro lado deste módulo.
++  it('aceita a correção exatamente quando a remessa recusaria a conta', async () => {
++    for (const convenio of ['', 'LEGADO', '9999999', 'ABC123']) {
++      const account = buildAccount(convenio);
++      const readiness = checkCedenteRemittanceReadiness({ convenio });
++      const r = await editConvenio(account, '123456');
++
++      assert.equal(
++        r.ok,
++        !readiness.ok,
++        `convênio ${JSON.stringify(convenio)}: a edição e a remessa discordam`,
++      );
++    }
++  });
++});
+-- 
+2.43.0
+

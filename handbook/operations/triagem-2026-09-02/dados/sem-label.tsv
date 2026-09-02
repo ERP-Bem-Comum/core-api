@@ -1,0 +1,17 @@
+numero	labels_propostas	titulo
+940	bug,debito-tecnico	[infra/release] o gerador do CHANGELOG sobrescreve o arquivo e apaga a seção da release anterior
+915	question (JÁ APLICADA)	[deploy] o backend de homologacao ja pegou o 04f24df8b (M2, PR #889) da dev? Automatico ou manual?
+913	bug,seguranca	[financial] autoria da trilha da reclassificacao e fail-open — e virou o unico controle depois da #897
+912	debito-tecnico	[financial] DocumentTaxonomy admite os 31 subconjuntos que o comentario acima proibe — dois papeis num tipo so
+911	bug	[financial] a escrita da reclassificacao usa o input, nao a saida do agregado — duas fontes que hoje coincidem
+910	bug,gap-contrato	[financial] typo no NOME do bloco taxonomy devolve 201 sem reclassificar — z.object em strip vs additionalProperties false
+909	bug	[financial] sentinela do fallback da categoria trocada no #889 — Partial com difference volta a perder a categoria
+836	bug	[financial] /payable-titles/counts conta os filhos de retencao — a chip diverge da tabela quando o filtro e por tipo de documento
+737	gap-contrato	[financial] /payable-titles sem busca textual — o q da #167 ficou no /documents, que o grid abandonou no #201
+678	seguranca	Nenhum workflow escaneia a imagem do core-api (o web-app tem gate Trivy bloqueante; o back, nenhum)
+626	gap-contrato	[budget-plans] cost-structure sem nivel de PROGRAMA — taxonomia Plano > Programa > Centro nao cascateia
+625	bug	Relatorio Geral (#442): /reports/generalReport nao resolve Centro/Categoria/Subcategoria (ref->nome) — devolve null com ref VALIDO
+600	bug	reports/payable-view: rascunho (Draft) nao deve ser a pagar + defasagem Approved->Open na projecao
+599	gap-contrato	reports(cashflow): expor Centro de Custo como EIXO no /reports/cashflow (hoje e so filtro — front faz fan-out N+1)
+592	gap-contrato	[reports] Analise de Pagamentos — filtrar status pelos 6 granulares (join fin_documents, paridade com #588)
+556	gap-contrato	feat(financial): retornar campos de documento do lancamento manual no detalhe da conciliacao (leitura do #370)

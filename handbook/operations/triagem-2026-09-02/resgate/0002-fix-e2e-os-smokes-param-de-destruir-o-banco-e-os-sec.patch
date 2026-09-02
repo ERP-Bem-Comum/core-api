@@ -1,0 +1,435 @@
+From b3d0d19edc193408e13f4b8312a20303f0565907 Mon Sep 17 00:00:00 2001
+From: W0 Fixture <w0-fixture@example.com>
+Date: Tue, 18 Aug 2026 13:11:17 -0300
+Subject: [PATCH 2/4] fix(e2e): os smokes param de destruir o banco e os
+ secrets do dev (#517)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Os quatro scripts de `scripts/e2e/` repetiam o padrão que a #500 já tinha corrigido no runner de
+integração: `docker compose down -v` SEM `-p` — projeto default `core-api-dev`, então o `down -v`
+removia o volume do dev — e `rm -f secrets/mysql_*.txt` SEM backup. Rodar `pnpm run test:e2e:*` ou
+`test:integration:all` custava o ambiente local de quem rodou.
+
+A lógica agora vive em `scripts/e2e/_e2e-env.sh`, num lugar só: `e2e_compose` sempre com
+`-p core-api-test` (o mesmo projeto de `scripts/ci/compose-project.ts`), e `e2e_setup`/`e2e_teardown`
+que fazem backup dos secrets preexistentes, escrevem os efêmeros e no fim restauram byte-a-byte o
+que existia — removendo o que não existia, para quem não tinha secrets continuar sem.
+
+POR QUE UM HELPER, E NÃO A CORREÇÃO REPETIDA QUATRO VEZES
+
+Foi a cópia que criou o defeito: a #500 consertou o runner e os quatro `.sh` ficaram para trás,
+porque cada um tinha a sua versão do mesmo trecho. Corrigir quatro cópias reproduziria a condição
+para a quinta divergir.
+
+`tests/scripts/e2e-scripts-non-destructive.test.ts` trava os dois lados: a propriedade estrutural
+(nenhum script chama `docker compose` direto nem apaga `secrets/` sem backup; todos carregam o
+helper; o projeto é o mesmo do runner) e o comportamento real, exercitando `e2e_setup` e
+`e2e_restore_secrets` em sandbox — inclusive o caso do sentinela do dev, que volta byte-a-byte.
+
+Provado RED→GREEN: com os scripts anteriores, 3 dos 7 casos falham.
+
+Gate verde: typecheck + format:check + lint + test (10859 pass, 0 fail).
+
+Assisted-by: Claude-Code:claude-opus-5
+---
+ scripts/e2e/_e2e-env.sh                       |  79 +++++++++++
+ scripts/e2e/auth.sh                           |  18 +--
+ scripts/e2e/bruno-all.sh                      |  18 +--
+ scripts/e2e/collaborators.sh                  |  18 +--
+ scripts/e2e/contracts.sh                      |  18 +--
+ .../e2e-scripts-non-destructive.test.ts       | 123 ++++++++++++++++++
+ 6 files changed, 238 insertions(+), 36 deletions(-)
+ create mode 100644 scripts/e2e/_e2e-env.sh
+ create mode 100644 tests/scripts/e2e-scripts-non-destructive.test.ts
+
+diff --git a/scripts/e2e/_e2e-env.sh b/scripts/e2e/_e2e-env.sh
+new file mode 100644
+index 00000000..7e43de7d
+--- /dev/null
++++ b/scripts/e2e/_e2e-env.sh
+@@ -0,0 +1,79 @@
++#!/usr/bin/env bash
++# scripts/e2e/_e2e-env.sh — ambiente efêmero dos smokes E2E, sem destruir o dev local (#517).
++#
++# Os quatro scripts de e2e repetiam, cada um por sua conta, o padrão que a #500 já tinha corrigido
++# no runner de integração: `docker compose down -v` SEM `-p` (projeto default `core-api-dev` → apaga
++# o volume do dev) e `rm -f secrets/mysql_*.txt` SEM backup (apaga os secrets do dev). Rodar
++# `pnpm run test:e2e:*` custava o ambiente local de quem rodou.
++#
++# A lógica vive AQUI, num lugar só, e não copiada quatro vezes — foi a cópia que deixou os quatro
++# para trás quando a #500 consertou o runner.
++#
++# Equivalente shell de `scripts/ci/compose-project.ts` e `scripts/ci/secrets-vault.ts`. A paridade
++# é intencional e está coberta por `tests/scripts/e2e-scripts-non-destructive.test.ts`.
++#
++# Uso, a partir da raiz do repositório:
++#   source scripts/e2e/_e2e-env.sh
++#   e2e_setup                      # backup dos secrets do dev + escrita dos de teste
++#   e2e_compose up -d mysql --wait # sempre no projeto isolado
++#   trap e2e_teardown EXIT         # derruba o projeto de teste e RESTAURA os secrets do dev
++
++# Projeto Docker isolado. O mesmo nome que o runner de integração usa
++# (`TEST_COMPOSE_PROJECT` em scripts/ci/compose-project.ts): `down -v` aqui remove o volume
++# `core-api-test_*` e nunca o `mysql-data` do dev.
++E2E_COMPOSE_PROJECT="${E2E_COMPOSE_PROJECT:-core-api-test}"
++
++# Os três secrets que os smokes sobrescrevem.
++E2E_SECRET_FILES=(
++  mysql_root_password.txt
++  mysql_app_password.txt
++  mysql_readonly_password.txt
++)
++
++E2E_SECRETS_BACKUP=""
++
++# `-p <projeto>` vem ANTES do subcomando — depois dele o docker compose o ignora em silêncio,
++# que é justamente como o `down -v` acabava no projeto do dev.
++e2e_compose() {
++  docker compose -p "$E2E_COMPOSE_PROJECT" "$@"
++}
++
++e2e_setup() {
++  E2E_SECRETS_BACKUP="$(mktemp -d)"
++  mkdir -p secrets
++
++  # Guarda o que já existia. `cp -p` preserva modo e timestamps, para o dev recuperar idêntico.
++  for f in "${E2E_SECRET_FILES[@]}"; do
++    if [ -f "secrets/$f" ]; then
++      cp -p "secrets/$f" "$E2E_SECRETS_BACKUP/$f"
++    fi
++  done
++
++  printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt
++  printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt
++  printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt
++  # 0644 e não algo mais restrito: o seed do `readonly_bi` roda como uid `mysql` e lê os arquivos
++  # via `cat` — modo mais fechado, owned pelo host, faz o seed abortar por Permission denied
++  # (mesma invariante registrada em scripts/ci/secrets-vault.ts).
++  chmod 644 secrets/mysql_*.txt
++}
++
++# Restaura o que existia; REMOVE o que não existia. Quem não tinha secrets continua sem, e quem
++# tinha recupera os seus — os dois casos que o `rm -f` cego tratava igual.
++e2e_restore_secrets() {
++  [ -n "$E2E_SECRETS_BACKUP" ] || return 0
++  for f in "${E2E_SECRET_FILES[@]}"; do
++    if [ -f "$E2E_SECRETS_BACKUP/$f" ]; then
++      cp -p "$E2E_SECRETS_BACKUP/$f" "secrets/$f"
++    else
++      rm -f "secrets/$f"
++    fi
++  done
++  rm -rf "$E2E_SECRETS_BACKUP"
++  E2E_SECRETS_BACKUP=""
++}
++
++e2e_teardown() {
++  e2e_compose down -v >/dev/null 2>&1 || true
++  e2e_restore_secrets
++}
+diff --git a/scripts/e2e/auth.sh b/scripts/e2e/auth.sh
+index a0f62a18..c3684559 100644
+--- a/scripts/e2e/auth.sh
++++ b/scripts/e2e/auth.sh
+@@ -8,23 +8,23 @@
+ # Uso: pnpm run test:e2e:auth   (NÃO faz parte do `pnpm test` — exige Docker).
+ set -uo pipefail
+ 
++# Projeto Docker isolado + backup/restore dos secrets (#517) — sem isto, o teardown apagava o
++# banco e os secrets do dev local.
++# shellcheck source=scripts/e2e/_e2e-env.sh
++source "$(dirname "$0")/_e2e-env.sh"
++
+ SRV=""
+ cleanup() {
+   [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
+-  docker compose down -v >/dev/null 2>&1 || true
+-  rm -f secrets/mysql_*.txt
++  e2e_teardown
+ }
+ trap cleanup EXIT
+ 
+-# Secrets de teste (mesmo padrão de test:integration:auth) — efêmeros, removidos no cleanup.
+-mkdir -p secrets
+-printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt
+-printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt
+-printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt
+-chmod 644 secrets/mysql_*.txt
++# Secrets de teste (mesmo padrão de test:integration:auth) — efêmeros; os do dev são restaurados.
++e2e_setup
+ 
+ # MySQL 8.4 via compose; --wait bloqueia até o healthcheck passar.
+-docker compose up -d mysql --wait || exit 1
++e2e_compose up -d mysql --wait || exit 1
+ 
+ # Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
+ MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
+diff --git a/scripts/e2e/bruno-all.sh b/scripts/e2e/bruno-all.sh
+index 18b2b46a..07a18486 100755
+--- a/scripts/e2e/bruno-all.sh
++++ b/scripts/e2e/bruno-all.sh
+@@ -19,12 +19,16 @@
+ # capturado em 0-auth persiste). Rodar pasta-a-pasta perderia o token (bug do 401).
+ set -uo pipefail
+ 
++# Projeto Docker isolado + backup/restore dos secrets (#517) — sem isto, o teardown apagava o
++# banco e os secrets do dev local.
++# shellcheck source=scripts/e2e/_e2e-env.sh
++source "$(dirname "$0")/_e2e-env.sh"
++
+ SRV=""
+ cleanup() {
+   [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
+   pkill -f 'node .*src/server.ts' 2>/dev/null || true
+-  docker compose down -v >/dev/null 2>&1 || true
+-  rm -f secrets/mysql_*.txt
++  e2e_teardown
+ }
+ trap cleanup EXIT
+ pkill -f 'node .*src/server.ts' 2>/dev/null || true
+@@ -34,19 +38,15 @@ if ! command -v bru &>/dev/null; then
+   exit 1
+ fi
+ 
+-mkdir -p secrets
+-printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt
+-printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt
+-printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt
+-chmod 644 secrets/mysql_*.txt
++e2e_setup
+ 
+ MYSQL_PORT="${MYSQL_PORT:-3307}"
+ export MYSQL_PORT
+ 
+ echo "[e2e-all] Subindo MySQL + MinIO..."
+-docker compose up -d mysql minio --wait || exit 1
++e2e_compose up -d mysql minio --wait || exit 1
+ # Cria o bucket contracts-documents (minio-bootstrap roda uma vez e sai).
+-docker compose up minio-bootstrap >/dev/null 2>&1 || true
++e2e_compose up minio-bootstrap >/dev/null 2>&1 || true
+ 
+ # Seed RBAC unificado (SEED-CONTRACT): 5 usuarios (o bare-user e2e-bare e' registrado via /register no 0-auth).
+ SEED_JSON='{"users":[
+diff --git a/scripts/e2e/collaborators.sh b/scripts/e2e/collaborators.sh
+index 7a927472..0888235a 100755
+--- a/scripts/e2e/collaborators.sh
++++ b/scripts/e2e/collaborators.sh
+@@ -15,24 +15,24 @@
+ # Uso: pnpm run test:e2e:collaborators   (NAO faz parte do `pnpm test` — exige Docker).
+ set -uo pipefail
+ 
++# Projeto Docker isolado + backup/restore dos secrets (#517) — sem isto, o teardown apagava o
++# banco e os secrets do dev local.
++# shellcheck source=scripts/e2e/_e2e-env.sh
++source "$(dirname "$0")/_e2e-env.sh"
++
+ SRV=""
+ cleanup() {
+   [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
+   pkill -f 'node .*src/server.ts' 2>/dev/null || true
+-  docker compose down -v >/dev/null 2>&1 || true
+-  rm -f secrets/mysql_*.txt
++  e2e_teardown
+ }
+ trap cleanup EXIT
+ 
+ # Limpeza preventiva: server orfao de uma run anterior responderia /health mas falharia as queries.
+ pkill -f 'node .*src/server.ts' 2>/dev/null || true
+ 
+-# Secrets de teste (mesmo padrao de test:integration:*) — efemeros, removidos no cleanup.
+-mkdir -p secrets
+-printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt
+-printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt
+-printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt
+-chmod 644 secrets/mysql_*.txt
++# Secrets de teste (mesmo padrao de test:integration:*) — efemeros; os do dev sao restaurados.
++e2e_setup
+ 
+ # Porta do host configuravel (evita conflito com um MySQL ja em 3306 — ex.: stack bemcomum-*).
+ # O compose le ${MYSQL_PORT:-3306}; as URLs abaixo usam a mesma porta. Rode com MYSQL_PORT=3307 se 3306 ocupada.
+@@ -40,7 +40,7 @@ MYSQL_PORT="${MYSQL_PORT:-3306}"
+ export MYSQL_PORT
+ 
+ # MySQL 8.4 via compose; --wait bloqueia ate o healthcheck passar.
+-docker compose up -d mysql --wait || exit 1
++e2e_compose up -d mysql --wait || exit 1
+ 
+ # Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
+ MIGRATE_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
+diff --git a/scripts/e2e/contracts.sh b/scripts/e2e/contracts.sh
+index dfd1f8e7..3dfe55f8 100644
+--- a/scripts/e2e/contracts.sh
++++ b/scripts/e2e/contracts.sh
+@@ -13,13 +13,17 @@
+ # Uso: pnpm run test:e2e:contracts   (NÃO faz parte do `pnpm test` — exige Docker).
+ set -uo pipefail
+ 
++# Projeto Docker isolado + backup/restore dos secrets (#517) — sem isto, o teardown apagava o
++# banco e os secrets do dev local.
++# shellcheck source=scripts/e2e/_e2e-env.sh
++source "$(dirname "$0")/_e2e-env.sh"
++
+ SRV=""
+ cleanup() {
+   [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
+   # Fallback: mata qualquer server.ts órfão (kill por PID pode falhar se o processo forkou/escapou).
+   pkill -f 'node .*src/server.ts' 2>/dev/null || true
+-  docker compose down -v >/dev/null 2>&1 || true
+-  rm -f secrets/mysql_*.txt
++  e2e_teardown
+ }
+ trap cleanup EXIT
+ 
+@@ -27,15 +31,11 @@ trap cleanup EXIT
+ # destruído) responderia /health mas falharia as queries — fazendo o smoke bater no processo errado.
+ pkill -f 'node .*src/server.ts' 2>/dev/null || true
+ 
+-# Secrets de teste (mesmo padrão de test:integration:*) — efêmeros, removidos no cleanup.
+-mkdir -p secrets
+-printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt
+-printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt
+-printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt
+-chmod 644 secrets/mysql_*.txt
++# Secrets de teste (mesmo padrão de test:integration:*) — efêmeros; os do dev são restaurados.
++e2e_setup
+ 
+ # MySQL 8.4 via compose; --wait bloqueia até o healthcheck passar. (MinIO não sobe — sem upload no smoke.)
+-docker compose up -d mysql --wait || exit 1
++e2e_compose up -d mysql --wait || exit 1
+ 
+ # Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
+ MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
+diff --git a/tests/scripts/e2e-scripts-non-destructive.test.ts b/tests/scripts/e2e-scripts-non-destructive.test.ts
+new file mode 100644
+index 00000000..55b616c8
+--- /dev/null
++++ b/tests/scripts/e2e-scripts-non-destructive.test.ts
+@@ -0,0 +1,123 @@
++// Os smokes de e2e não podem destruir o ambiente de dev de quem os roda (#517).
++//
++// Duas naturezas de verificação, e as duas são necessárias:
++//
++//   1. ESTRUTURAL — nenhum script volta a chamar `docker compose` sem projeto isolado nem a apagar
++//      secrets sem backup. É o que impede a regressão de voltar por cópia, que foi exatamente como
++//      ela nasceu: a #500 corrigiu o runner de integração e os quatro `.sh` ficaram para trás.
++//   2. FUNCIONAL — o backup/restore realmente devolve o que existia e remove o que não existia.
++//      Roda o shell de verdade, sem Docker: o que se prova aqui é o contrato dos secrets.
++import { describe, it } from 'node:test';
++import { strict as assert } from 'node:assert';
++import { execFileSync } from 'node:child_process';
++import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { readdirSync } from 'node:fs';
++
++const E2E_DIR = 'scripts/e2e';
++const HELPER = '_e2e-env.sh';
++
++const scriptsUnderTest = (): readonly string[] =>
++  readdirSync(E2E_DIR)
++    .filter((f) => f.endsWith('.sh') && f !== HELPER)
++    .map((f) => join(E2E_DIR, f));
++
++describe('scripts de e2e — não destroem o ambiente de dev (#517)', () => {
++  // Guarda contra verde por vacuidade: se o glob esvaziar, os testes abaixo passariam sem verificar
++  // nada. Asserta a PROPRIEDADE "há scripts a verificar", não a contagem — que muda legitimamente.
++  it('há scripts de e2e a verificar', () => {
++    assert.ok(scriptsUnderTest().length > 0, 'nenhum script encontrado em scripts/e2e/');
++  });
++
++  it('nenhum script invoca `docker compose` diretamente — todos passam pelo projeto isolado', () => {
++    for (const path of scriptsUnderTest()) {
++      const body = readFileSync(path, 'utf8');
++      assert.equal(
++        /^\s*docker\s+compose\b/m.test(body),
++        false,
++        `${path} chama 'docker compose' direto; use e2e_compose (projeto core-api-test)`,
++      );
++    }
++  });
++
++  it('nenhum script apaga secrets sem passar pelo backup', () => {
++    for (const path of scriptsUnderTest()) {
++      const body = readFileSync(path, 'utf8');
++      assert.equal(
++        /rm\s+-f\s+secrets\//.test(body),
++        false,
++        `${path} apaga secrets/ direto; use e2e_setup/e2e_teardown, que restauram os do dev`,
++      );
++    }
++  });
++
++  it('todo script carrega o helper — a lógica vive num lugar só', () => {
++    for (const path of scriptsUnderTest()) {
++      const body = readFileSync(path, 'utf8');
++      assert.ok(body.includes(HELPER), `${path} não faz source de ${HELPER}`);
++    }
++  });
++
++  // Paridade com o runner de integração: os dois derrubam o MESMO projeto. Se um mudar de nome e o
++  // outro não, volta a existir um caminho que apaga o volume errado.
++  it('o projeto do helper é o mesmo do runner de integração', () => {
++    const helper = readFileSync(join(E2E_DIR, HELPER), 'utf8');
++    const runner = readFileSync('scripts/ci/compose-project.ts', 'utf8');
++    const nameOf = (src: string): string | undefined => /core-api-test/.exec(src)?.[0];
++    assert.equal(nameOf(helper), nameOf(runner));
++    assert.equal(nameOf(helper), 'core-api-test');
++  });
++});
++
++describe('scripts de e2e — backup/restore dos secrets, exercitado de verdade', () => {
++  // Roda as funções do helper num diretório temporário. Sem Docker: `e2e_setup` e
++  // `e2e_restore_secrets` só tocam o filesystem, e é o filesystem que o dev perde quando dá errado.
++  // Devolve o sandbox para quem chamou inspecionar o resultado — e limpar depois.
++  const runInSandbox = (script: string): string => {
++    const sandbox = mkdtempSync(join(tmpdir(), 'e2e-secrets-'));
++    try {
++      mkdirSync(join(sandbox, 'secrets'), { recursive: true });
++      const helperSrc = readFileSync(join(E2E_DIR, HELPER), 'utf8');
++      writeFileSync(join(sandbox, 'helper.sh'), helperSrc);
++      writeFileSync(join(sandbox, 'run.sh'), `set -uo pipefail\nsource ./helper.sh\n${script}\n`);
++      execFileSync('bash', ['run.sh'], { cwd: sandbox, stdio: 'pipe' });
++      return sandbox;
++    } catch (e) {
++      rmSync(sandbox, { recursive: true, force: true });
++      throw e;
++    }
++  };
++
++  it('secret preexistente do dev volta byte-a-byte depois do teardown', () => {
++    const sandbox = runInSandbox(`
++      printf 'SENTINELA-DO-DEV' > secrets/mysql_root_password.txt
++      e2e_setup
++      # durante o teste, o valor é o efêmero
++      grep -q 'rootpw-migration-test-only' secrets/mysql_root_password.txt || exit 1
++      e2e_restore_secrets
++    `);
++    try {
++      const restored = readFileSync(join(sandbox, 'secrets/mysql_root_password.txt'), 'utf8');
++      assert.equal(restored, 'SENTINELA-DO-DEV');
++    } finally {
++      rmSync(sandbox, { recursive: true, force: true });
++    }
++  });
++
++  it('secret que NÃO existia antes é removido, não deixado para trás', () => {
++    const sandbox = runInSandbox(`
++      e2e_setup
++      e2e_restore_secrets
++    `);
++    try {
++      assert.equal(
++        existsSync(join(sandbox, 'secrets/mysql_root_password.txt')),
++        false,
++        'quem não tinha secrets deve continuar sem — não herdar os de teste',
++      );
++    } finally {
++      rmSync(sandbox, { recursive: true, force: true });
++    }
++  });
++});
+-- 
+2.43.0
+

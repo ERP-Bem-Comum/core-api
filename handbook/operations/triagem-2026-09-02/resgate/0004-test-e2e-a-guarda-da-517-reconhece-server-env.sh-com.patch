@@ -1,0 +1,36 @@
+From dd64e5e4bec5439cb74c69a9712546388996ae5b Mon Sep 17 00:00:00 2001
+From: triagem <test@local>
+Date: Wed, 2 Sep 2026 20:38:47 +0000
+Subject: [PATCH 4/4] =?UTF-8?q?test(e2e):=20a=20guarda=20da=20#517=20recon?=
+ =?UTF-8?q?hece=20server-env.sh=20como=20helper,=20n=C3=A3o=20como=20smoke?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ tests/scripts/e2e-scripts-non-destructive.test.ts | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/tests/scripts/e2e-scripts-non-destructive.test.ts b/tests/scripts/e2e-scripts-non-destructive.test.ts
+index 55b616c8..89fe373d 100644
+--- a/tests/scripts/e2e-scripts-non-destructive.test.ts
++++ b/tests/scripts/e2e-scripts-non-destructive.test.ts
+@@ -18,9 +18,14 @@ import { readdirSync } from 'node:fs';
+ const E2E_DIR = 'scripts/e2e';
+ const HELPER = '_e2e-env.sh';
+ 
++// Arquivos que são `source`ados por outros scripts, não executados como smoke. Não sobem stack, não
++// apagam nada e, por definição, não podem exigir de si mesmos o que exigem de quem os carrega.
++// `server-env.sh` entrou nessa natureza no b4d28e7e (ADR-0068) — depois desta guarda ser escrita.
++const HELPERS: ReadonlySet<string> = new Set([HELPER, 'server-env.sh']);
++
+ const scriptsUnderTest = (): readonly string[] =>
+   readdirSync(E2E_DIR)
+-    .filter((f) => f.endsWith('.sh') && f !== HELPER)
++    .filter((f) => f.endsWith('.sh') && !HELPERS.has(f))
+     .map((f) => join(E2E_DIR, f));
+ 
+ describe('scripts de e2e — não destroem o ambiente de dev (#517)', () => {
+-- 
+2.43.0
+
