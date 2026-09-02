@@ -18,9 +18,14 @@ import { readdirSync } from 'node:fs';
 const E2E_DIR = 'scripts/e2e';
 const HELPER = '_e2e-env.sh';
 
+// Arquivos que são `source`ados por outros scripts, não executados como smoke. Não sobem stack, não
+// apagam nada e, por definição, não podem exigir de si mesmos o que exigem de quem os carrega.
+// `server-env.sh` entrou nessa natureza no b4d28e7e (ADR-0068) — depois desta guarda ser escrita.
+const HELPERS: ReadonlySet<string> = new Set([HELPER, 'server-env.sh']);
+
 const scriptsUnderTest = (): readonly string[] =>
   readdirSync(E2E_DIR)
-    .filter((f) => f.endsWith('.sh') && f !== HELPER)
+    .filter((f) => f.endsWith('.sh') && !HELPERS.has(f))
     .map((f) => join(E2E_DIR, f));
 
 describe('scripts de e2e — não destroem o ambiente de dev (#517)', () => {
