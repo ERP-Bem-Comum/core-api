@@ -24,11 +24,27 @@ allowBuilds:
 #
 # - GHSA-4c8g-83qw-93j6: fast-uri <3.1.3 — host confusion via IDN malformado (1ª rodada)
 # - GHSA-v2hh-gcrm-f6hx: fast-uri <=3.1.3 — host confusion via '\' como delimitador (2ª)
-# - GHSA-7p8r-x3mc-p8w7: fast-uri <3.1.5 — host confusion via '\', CVSS 7.5 (3ª, VIGENTE)
-#   Transitiva de runtime por 23 caminhos, todos sob fastify (ajv-compiler) e @fastify/swagger
+# - GHSA-7p8r-x3mc-p8w7: fast-uri <3.1.5 — host confusion via '\', CVSS 7.5 (3ª)
+# - 4ª rodada, TODAS `high` e TODAS corrigidas em >=3.1.6 (publicadas em 02/09/2026, VIGENTES):
+#   - GHSA-5jgf-p345-68v8: >=3.1.3 <3.1.6 — host confusion, IDN não canonicalizado em
+#     referência scheme-relative
+#   - GHSA-f65p-4m7j-42xc: >=3.0.0 <3.1.6 — SSRF via normalização de IPv6 malformado
+#   - GHSA-fph4-wmhf-6fwf / GHSA-jqff-g426-hqxp: <3.1.6 — SSRF via percent-decoding repetido
+#     de hostname e normalização de scheme percent-encoded
+#   Transitiva de runtime por 17 caminhos, todos sob fastify (ajv-compiler) e @fastify/swagger
 #   (json-schema-resolver). Nenhum dep direto declara fast-uri: só override resolve.
 #   Exposição real BAIXA: o exploit exige usar fast-uri para validar host de URL do atacante antes
 #   de um fetch; aqui ele só resolve $id/$ref de schema que nós mesmos escrevemos.
+#
+#   ⚠️ O aviso acima se cumpriu pela QUARTA vez, e de um jeito que vale entender: o override é uma
+#   FAIXA (`>=X <4`), não um pin — mas o piso é ele próprio uma versão aceitável. Com `>=3.1.5`, a
+#   3.1.5 continuou satisfazendo a faixa, e `@fastify/swagger > json-schema-resolver` seguiu
+#   resolvendo para ela mesmo com o fastify já em 3.1.7. Faixa não EMPURRA ninguém: só proíbe o que
+#   está abaixo do piso. Expulsar a versão vulnerável exige SUBIR o piso acima dela.
+#
+#   Piso subido para 3.1.6 — a MÍNIMA que fecha as quatro. A 3.1.7 existe e o fastify 5.12.1 já a
+#   resolve, mas caiu na quarentena de `minimumReleaseAge` (publicada em 02/09 11:06 UTC); a faixa
+#   `<4` deixa ela entrar sozinha assim que amadurecer, sem exigir novo override.
 # - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial (1ª/2ª rodada)
 # - GHSA-rgw5-rvv9-x895: brace-expansion <5.0.9 — DoS por arrays intermediários sem limite,
 #   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª, VIGENTE)
@@ -51,7 +67,7 @@ allowBuilds:
 #   entre 9 e 10, validado por boot + fastify.inject do /docs (ver ticket #573).
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
-  fast-uri: '>=3.1.5 <4'
+  fast-uri: '>=3.1.6 <4'
   brace-expansion: '>=5.0.9 <6'
   find-my-way: '^9.7.0'
   '@fastify/static': '^10.1.2'
