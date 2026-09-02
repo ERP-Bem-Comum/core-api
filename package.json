@@ -1,6 +1,6 @@
 {
   "name": "core-api",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "Backend do ERP Bem Comum — modular monolith em Node.js e TypeScript, com borda HTTP em Fastify e persistência MySQL via Drizzle.",
   "license": "MIT",
   "repository": {
