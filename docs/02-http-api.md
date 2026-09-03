@@ -92,6 +92,8 @@ Contrato legado de referência (ACL): [`handbook/api_documentations/contracts/op
 
 ## 7. Histórico de entrega
 
-A borda HTTP de contratos foi entregue no épico `EPIC-CONTRACTS-HTTP` (C0-C5), com audit trail W0→W3 em
-[`.claude/.pipeline/CONTRACTS-HTTP-*/`](../.claude/.pipeline/) e fechamento em
-[`context/planning/EPIC-CONTRACTS-HTTP.md`](../context/planning/EPIC-CONTRACTS-HTTP.md).
+A borda HTTP de contratos foi entregue no épico `EPIC-CONTRACTS-HTTP` (C0–C5). O audit trail vivia em
+`.claude/.pipeline/`, removido com o pipeline em 2026-08-06, e o fechamento em
+`context/planning/EPIC-CONTRACTS-HTTP.md`, removido em 2026-09-02 (lápide em
+[`handbook/redirects.json`](../handbook/redirects.json)). O histórico permanece no git e em
+[`handbook/CHANGELOG.md`](../handbook/CHANGELOG.md).

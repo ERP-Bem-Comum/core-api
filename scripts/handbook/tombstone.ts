@@ -20,7 +20,7 @@ import { extractRelativeLinks, markdownFiles, loadRedirects } from './link-scan.
 // staged — e o commit que apaga só documentação é exatamente o que ele nunca inspecionaria.
 
 /** Onde procurar por quem cita. Documentação do handbook é citada de fora dele. */
-export const SOURCE_DIRS: readonly string[] = ['handbook', '.claude', 'context'];
+export const SOURCE_DIRS: readonly string[] = ['handbook', '.claude', 'docs'];
 
 export interface TombstoneViolation {
   /** Caminho removido, relativo à raiz. */

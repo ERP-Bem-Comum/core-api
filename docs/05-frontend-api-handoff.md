@@ -148,8 +148,8 @@ um entre `bankAccount` e `pixKey` — senão **422** `act-payment-target-require
 podem ser `null`.
 
 **No front:** o form de ACT que coletava "Vigência (Meses)" precisa coletar/derivar **duas datas**
-(`startDate` + `endDate`). Detalhes em `.claude/.pipeline/PAR-ACT-ACORDO/006-handoff/HANDOFF.md`.
-Contrato completo em §2.6.4.
+(`startDate` + `endDate`). O handoff detalhado vivia em `.claude/.pipeline/PAR-ACT-ACORDO/`, removido com
+o pipeline em 2026-08-06 — o contrato completo está em §2.6.4 deste documento, que é a fonte viva.
 
 ### 1.2 Política de senha: mínimo 8 → **12 caracteres** (OWASP 2025)
 

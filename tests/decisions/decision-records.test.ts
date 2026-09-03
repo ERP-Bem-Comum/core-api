@@ -1,7 +1,7 @@
 /**
- * Gate do formato dos registros de decisão (`context/decisions/*.yaml`).
+ * Gate do formato dos registros de decisão (`handbook/decisions/*.yaml`).
  *
- * Encodifica as guardas anti-alucinação do `context/decisions/SCHEMA.md` §4 como asserção
+ * Encodifica as guardas anti-alucinação do `handbook/decisions/SCHEMA.md` §4 como asserção
  * executável. Existe porque regra que não bloqueia não vale: sem este teste, "toda alegação carrega
  * evidência ancorada" é promessa de quem preencheu o arquivo.
  *
@@ -17,7 +17,7 @@ import { parse } from 'yaml';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(HERE, '..', '..');
-const DECISIONS_DIR = join(PROJECT_ROOT, 'context', 'decisions');
+const DECISIONS_DIR = join(PROJECT_ROOT, 'handbook', 'decisions');
 
 const REALITY_VERDICTS = [
   'holds',
