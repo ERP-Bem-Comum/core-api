@@ -241,8 +241,75 @@
     "since": "2026-08-07"
   },
   "handbook/context/decisions/SCHEMA.md": {
-    "to": "context/decisions/SCHEMA.md",
-    "reason": "O diretório context/ vive na raiz do repo, não dentro do handbook",
-    "since": "2026-08-07"
+    "to": "handbook/decisions/SCHEMA.md",
+    "reason": "O inventário de decisões saiu de context/ para handbook/decisions/ em 2026-09-02; este redirect encadeado passa a apontar direto ao destino final",
+    "since": "2026-09-02"
+  },
+
+  "context/planning/ASYNC-MESSAGING-STRATEGY.md": {
+    "to": "handbook/architecture/07-async-messaging-strategy.md",
+    "reason": "Promovido ao handbook: o ADR-0064 (aceito) ancora nele o gatilho de reavaliação do outbox; mover preservou a numeração, logo a âncora :176 segue verdadeira",
+    "since": "2026-09-02"
+  },
+  "context/planning/SHARED-STORE-AND-JOB-COORDINATION.md": {
+    "to": "handbook/architecture/08-shared-store-and-job-coordination.md",
+    "reason": "Promovido ao handbook: citado por código de produção em src/modules/contracts/adapters/persistence/repos/job-run.drizzle.ts",
+    "since": "2026-09-02"
+  },
+  "context/runbooks/local-stack-setup.md": {
+    "to": "handbook/runbooks/local-stack-setup.md",
+    "reason": "Promovido ao handbook: runbook vivo, citado por handbook/infrastructure/05-local-server-parity-env.md",
+    "since": "2026-09-02"
+  },
+
+  "context": {
+    "to": null,
+    "reason": "Diretório de trabalho de julho/2026, removido em 2026-09-02: era foto de sessão, não acervo. O que tinha citação viva foi promovido ao handbook; o resto vive no histórico do git",
+    "since": "2026-09-02"
+  },
+  "context/decisions": {
+    "to": "handbook/decisions",
+    "reason": "Inventário que amarra cada alegação de ADR a evidência ancorada em src/, validado por tests/decisions/decision-records.test.ts — mecanismo vivo, movido para o handbook junto com a remoção de context/",
+    "since": "2026-09-02"
+  },
+  "context/decisions/ADR-0018.yaml": {
+    "to": "handbook/decisions/ADR-0018.yaml",
+    "reason": "Entrada do inventário de decisões, no diretório movido",
+    "since": "2026-09-02"
+  },
+  "context/decisions/SCHEMA.md": {
+    "to": "handbook/decisions/SCHEMA.md",
+    "reason": "Esquema do inventário de decisões, no diretório movido",
+    "since": "2026-09-02"
+  },
+  "context/HARNESS-AUDIT-2026-07-31.md": {
+    "to": null,
+    "reason": "Auditoria pontual do harness em 31/07/2026; o que ela concluiu virou o ADR-0057, que é a fonte viva",
+    "since": "2026-09-02"
+  },
+  "context/planning/EPIC-CONTRACTS-HTTP.md": {
+    "to": null,
+    "reason": "Design de épico do processo de tickets, abolido em 2026-08-06 junto com o pipeline W0→W3",
+    "since": "2026-09-02"
+  },
+  "context/planning/HOMOLOGATE-DISTRIBUTED-ATOMICITY.md": {
+    "to": null,
+    "reason": "Design de épico do processo de tickets, abolido em 2026-08-06 junto com o pipeline W0→W3",
+    "since": "2026-09-02"
+  },
+  "context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md": {
+    "to": null,
+    "reason": "Relatório de spike concluído; a decisão que ele produziu vive no ADR-0048",
+    "since": "2026-09-02"
+  },
+  "context/planning/OUTBOX-MYSQL.md": {
+    "to": null,
+    "reason": "Planejamento pausado do outbox; a norma vigente é o ADR-0064, e a estratégia está em handbook/architecture/07-async-messaging-strategy.md",
+    "since": "2026-09-02"
+  },
+  "context/templates/spec.md": {
+    "to": null,
+    "reason": "Template do método spec-driven, removido com o pipeline em 2026-08-06",
+    "since": "2026-09-02"
   }
 }
