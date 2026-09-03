@@ -39,8 +39,8 @@ src/modules/<módulo>/
 O domínio declara dependências externas como **Ports** (types puros): `ContractRepository`,
 `AmendmentRepository`, `DocumentRepository`, `DocumentStorage`, `EventBus`/`OutboxPort`, `Clock`,
 `TokenIssuer`, etc. Cada port tem ≥ 2 implementações: **InMemory** (testes/CLI) e **real** (Drizzle/mysql2,
-S3, etc.). O `composition root` (CLI `cli/context.ts`; HTTP `adapters/http/composition.ts`) escolhe o
-adapter por **driver** (`memory` | `mysql`).
+S3, etc.). O `composition root` (`adapters/http/composition.ts`) escolhe o adapter por **driver**
+(`memory` | `mysql`) — a CLI embutida foi retirada pelo ADR-0037, que fixou a borda HTTP como UX primária.
 
 ## 4. Hierarquia de regras (quando duas fontes discordam)
 

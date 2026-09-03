@@ -9,13 +9,13 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 7 | quem trabalha nela |
+| `open` | 8 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
 | `decided` | 19 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **35**.
+Total: **36**.
 
 ---
 
@@ -30,6 +30,7 @@ Total: **35**.
 | [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) | A reserva que trava o vão antes do registro — deadlock 1213 na emissão concorrente de remessa | 2026-08-21 |  |
 | [0032](./0032-titulo-remetido-fronteira-do-agregado.md) | Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock | 2026-08-23 |  |
 | [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) | Duas normas que a medição contradiz — migration "sempre gerada" e a proibição global de ODKU | 2026-09-01 |  |
+| [0036](./0036-onde-a-documentacao-deve-viver.md) | Onde a documentação deve viver — o critério do `grep` e os 30 MB de handbook/reference | 2026-09-02 |  |
 
 ---
 

@@ -13,7 +13,7 @@ pnpm install --frozen-lockfile  # CI
 Node.js 24 LTS + TypeScript 6, ESM puro (`NodeNext`), zero transpilação em dev: os scripts rodam via
 `node --experimental-strip-types`.
 
-## 2. Qualidade (gate W3)
+## 2. Qualidade (gate)
 
 ```bash
 pnpm run typecheck      # tsc --noEmit (strict completo)
@@ -25,24 +25,9 @@ pnpm test               # node:test + --experimental-strip-types  (tests/**/*.te
 ```
 
 `pnpm test` roda só unit/integration em memória. Testes que exigem Docker (sufixo `.e2e.ts` ou flags de
-integração) ficam **fora** do glob — ver §6.
+integração) ficam **fora** do glob — ver §5.
 
-## 3. CLI (UX da P.O.)
-
-A CLI valida regras de negócio sem servidor, com adapters InMemory por default:
-
-```bash
-pnpm run cli:contracts -- --help
-pnpm run cli:contracts -- listar-contratos
-pnpm run cli:contracts -- listar-contratos --driver mysql \
-  --connection-string 'mysql://user:pass@127.0.0.1:3306/core'
-pnpm run cli:financial -- --help     # módulo financial (Fase 2, em construção)
-```
-
-**Drivers** (flag `--driver`): `memory` (default; state em `./cli-state.json` ou `--no-state`) ou `mysql`
-(Drizzle/mysql2; migration aplicada no boot). Ver [`.claude/rules/adapters.md`](../.claude/rules/adapters.md).
-
-## 4. Servidor HTTP
+## 3. Servidor HTTP
 
 ```bash
 pnpm run serve          # sobe Fastify (default driver memory). /docs = OpenAPI UI; /health
@@ -51,7 +36,7 @@ pnpm run serve          # sobe Fastify (default driver memory). /docs = OpenAPI 
 Env relevantes: `PORT`, `AUTH_DRIVER`/`AUTH_DATABASE_URL`, `CONTRACTS_DRIVER`/`CONTRACTS_DATABASE_URL`/
 `CONTRACTS_READER_URL` (dual-pool, ADR-0026), `S3_*` (storage, ADR-0019). Detalhes em [02](./02-http-api.md).
 
-## 5. Banco & secrets
+## 4. Banco & secrets
 
 ```bash
 pnpm run db:generate         # Drizzle Kit → migrations contracts (mysql)
@@ -64,7 +49,7 @@ MySQL 8.4 via [`compose.yaml`](../compose.yaml) (+ MinIO para storage). Isolamen
 (`__drizzle_migrations_contracts` / `__drizzle_migrations_auth`) — necessário quando dois módulos
 compartilham o DB `core`.
 
-## 6. Testes de integração & E2E (Docker)
+## 5. Testes de integração & E2E (Docker)
 
 ```bash
 pnpm run test:integration              # contracts: sobe MySQL --wait + migrations + repos Drizzle
@@ -84,35 +69,32 @@ só executam o bootstrap quando a flag correspondente está setada (`COMPOSE_INT
 `STORAGE_INTEGRATION`, …). Sem a flag a suite fica `skipped` — nunca `failed` — então `pnpm test` puro
 permanece verde mesmo com o Docker daemon vivo. Use sempre o script `test:integration:*` dedicado.
 
-## 7. Pipeline fail-first W0→W3
+## 6. Como o trabalho anda
 
-Toda mudança não-trivial em produção abre um ticket em `.claude/.pipeline/<TICKET-ID>/` e passa por 4
-waves: **W0** testes RED → **W1** implementação até GREEN → **W2** code review read-only (máx 3 rounds) →
-**W3** gate de qualidade. Disciplina: W0 RED antes de tocar `src/`.
+**Não existe pipeline W0→W3, ticket com `STATE.json`, wave nem spec-kit** — foram removidos em 2026-08-06.
+Trabalho novo não abre ticket de processo: faz a mudança, roda o gate da §2 e commita. Decisão nova vira
+ADR em `handbook/architecture/adr/`; achado fora do escopo atual vira issue no GitHub, pela skill
+[`issue-report`](../.claude/skills/issue-report/SKILL.md).
 
-```bash
-pnpm run pipeline:state init <TICKET> --size S          # cria STATE.json
-pnpm run pipeline:state wave-start <TICKET> W0 --agent tdd-strategist
-pnpm run pipeline:state wave-finish <TICKET> W0 --outcome RED --report 002-tests/REPORT.md
-pnpm run pipeline:state close <TICKET>                  # exige as 4 waves done
-pnpm run pipeline:status                                # dashboard de tickets
-pnpm run pipeline:metrics
-```
+O harness é só primitivas nativas do Claude Code — `.claude/rules/` (carregam por path), `.claude/skills/`,
+`.claude/agents/`, `.claude/hooks/` + `settings.json`. Ver [`CLAUDE.md`](../CLAUDE.md) §"Harness".
 
-`STATE.json` é canônico; `STATE.md` é gerado. Tickets fechados são histórico auditável — **não deletar**.
-Ver [`CLAUDE.md`](../CLAUDE.md) §"Pipeline" e [`.claude/skills/pipeline-maestro/`](../.claude/skills/pipeline-maestro/).
+Documentação tem gates próprios: `pnpm run docs:links` (link morto), `pnpm run docs:index` (derivados das
+inquiries) e o de lápide, que exige declarar em [`handbook/redirects.json`](../handbook/redirects.json)
+todo `.md` citado que for apagado ou movido.
 
-## 8. Estrutura do repositório (resumo)
+## 7. Estrutura do repositório (resumo)
 
 ```
 src/
 ├── server.ts                 # entrypoint HTTP (composition root)
 ├── shared/                   # kernel (VOs), http/ (app, errors, reply), primitives (Result), ports
-└── modules/<m>/              # contracts, auth, financial, notifications
-    ├── domain/ application/ adapters/ public-api/ cli/
-tests/                        # mirror de src/; *.test.ts (unit), *.e2e.ts (E2E Docker)
-handbook/                     # fonte de verdade: adr/, domain/, reference/<tech>/, …
+├── jobs/ workers/            # one-shot (sweeper, backfill) e long-running (outbox, projeções)
+└── modules/<m>/              # auth, contracts, partners, programs, financial, budget-plans, notifications
+    ├── domain/ application/ adapters/ public-api/
+tests/                        # mirror de src/; *.test.ts (unit), *.e2e.ts (E2E Docker), cleanup/ (invariantes)
+handbook/                     # acervo: architecture/adr/, decisions/, domain_questions/, inquiries/, reference/<tech>/
 docs/                         # esta documentação consolidada
-.claude/                      # rules/, skills/, agents/, .pipeline/, .planning/, hooks/
-scripts/                      # pipeline/, e2e-*.sh, setup-secrets
+.claude/                      # rules/, skills/, agents/, hooks/ + settings.json
+scripts/                      # ci/, handbook/, e2e/, setup-secrets
 ```
