@@ -37,6 +37,7 @@
     "docs:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inquiry-index.ts",
     "docs:refs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/refs.ts",
     "docs:links": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/link-scan.ts",
+    "wiki:sync": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/wiki-sync.ts",
     "cnab:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/cnab-manual-index.ts",
     "cnab:ispb": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/build-ispb-map.ts",
     "logbook": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/claude/logbook.ts",
