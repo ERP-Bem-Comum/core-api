@@ -25,9 +25,17 @@
 # é o lado certo de errar num gate.
 #
 # ─── Escape ────────────────────────────────────────────────────────────────────────────────────
-# `export SKIP_PUSH_REVIEW=1` antes do push — variável de AMBIENTE, não atribuição inline (`FOO=1 git
-# push` define a variável para o `git`, não para este processo). É deliberadamente explícito: aparece
-# no log e não é o caminho de menor resistência.
+# `touch .claude/.skip-push-review` e faça o push. O arquivo é CONSUMIDO no uso: vale uma vez.
+#
+# ⚠️ Não é variável de ambiente, e a tentativa anterior de fazê-lo assim estava quebrada em silêncio.
+# Este hook roda num processo à parte, disparado ANTES do comando: `export SKIP_PUSH_REVIEW=1` no
+# shell do push nunca chega aqui, e o estado de shell não persiste entre comandos da ferramenta Bash.
+# O hook documentava — inclusive na mensagem que o usuário lê — uma saída que não existia. Um gate
+# sem escape não é rigoroso, é quebrado: a única saída vira `--no-verify` ou desligar o hook, que é
+# exatamente o hábito que ele deveria evitar.
+#
+# O sentinela é um arquivo: o hook enxerga, o `ls` mostra, o gitignore o mantém fora do repo, e
+# consumi-lo impede que vire estado permanente esquecido.
 
 set -euo pipefail
 
@@ -41,7 +49,10 @@ if ! grep -qE 'git[[:space:]]+([^[:space:]]+[[:space:]]+)*push\b' <<<"$command";
   exit 0
 fi
 
-if [[ "${SKIP_PUSH_REVIEW:-}" == '1' ]]; then
+# Sentinela de uso único: se existe, some e o push passa desta vez.
+sentinel="${CLAUDE_PROJECT_DIR:-.}/.claude/.skip-push-review"
+if [[ -f "$sentinel" ]]; then
+  rm -f "$sentinel"
   exit 0
 fi
 
@@ -106,7 +117,7 @@ fi
 # despercebido porque se conferiu se o hook BARRAVA, não se ele COMUNICAVA.
 reason="Push barrado até a revisão do diff."
 reason+=$'\n\n  Porte '"${porte}"$' → rode `'"${review}"$'`.'"${sensitive}"
-reason+=$'\n\n  Depois de revisar (e tratar os achados), repita com `export SKIP_PUSH_REVIEW=1` antes do push.'
+reason+=$'\n\n  Depois de revisar (e tratar os achados): `touch .claude/.skip-push-review` e repita o push. O arquivo vale uma vez e some no uso.'
 reason+=$'\n\n  Hook não consegue chamar slash command: quem roda a revisão é você, na sessão. O hook só impede que a etapa seja pulada.'
 
 jq -n --arg reason "$reason" '{
