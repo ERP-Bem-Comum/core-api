@@ -358,6 +358,16 @@
     "reason": "Template órfão de um processo de ADR que nunca foi o real: os ADRs vivem em handbook/architecture/adr/. Nenhum documento o referenciava",
     "since": "2026-09-03"
   },
+  "deploy": {
+    "to": null,
+    "reason": "Continha um só arquivo, sobre a topologia de um ambiente 'QA' que não existe — os ambientes são local, homologação (Codebit) e produção. A infraestrutura sempre foi do ERP-INFRA, e o próprio README dizia que ali não havia nem deveria haver arquivo de infra",
+    "since": "2026-09-03"
+  },
+  "deploy/qa/README.md": {
+    "to": null,
+    "reason": "Registro de um drift medido em 08/2026 entre o compose da raiz (3 workers pelo #407) e o host (6 workers + caddy + web). A medição vale como história e segue no git; o documento apontava para um ambiente que mudou de nome e de dono, e nenhum arquivo o citava. O achado do Caddy sem ADR está preservado na tese T5c da inquiry 0027, e o incidente na 0002",
+    "since": "2026-09-03"
+  },
   "handbook/domain_questions/financeiro/Goal.md": {
     "to": null,
     "reason": "O nome mentia sobre o conteúdo: 112 linhas listando os documentos da pipeline core-api-sdd v2.0.0 (.specify/templates/, fases W0→W3, STATE.json) coladas num diretório de domínio, sem uma linha sobre o domínio financeiro. Aparato removido em 2026-08-06; nenhum documento o citava",
