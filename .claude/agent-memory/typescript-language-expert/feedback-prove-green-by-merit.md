@@ -9,7 +9,7 @@ Numa revisão de type system, quando `typecheck`/`lint`/testes já estão verdes
 
 Técnica que funcionou (revisão do `scripts/ci/deadman-audit.ts`, #368):
 
-- Probe de tipo isolado no scratchpad + `npx tsc --ignoreConfig --noEmit --strict --noUncheckedIndexedAccess --exactOptionalPropertyTypes --target ES2024 --module NodeNext --moduleResolution NodeNext --lib ES2024 --skipLibCheck <arquivo>`. O `--ignoreConfig` é obrigatório: sem ele o TS 6 recusa (`TS5112`) quando há `tsconfig.json` na cwd e arquivos na linha de comando.
+- Probe de tipo isolado no scratchpad + `pnpm exec tsc --ignoreConfig --noEmit --strict --noUncheckedIndexedAccess --exactOptionalPropertyTypes --target ES2024 --module NodeNext --moduleResolution NodeNext --lib ES2024 --skipLibCheck <arquivo>`. O `--ignoreConfig` é obrigatório: sem ele o TS 6 recusa (`TS5112`) quando há `tsconfig.json` na cwd e arquivos na linha de comando.
 - `type IsAny<T> = 0 extends 1 & T ? true : false` + `type Expect<T extends true> = T` para provar se um narrowing produziu `any`.
 - `// @ts-expect-error` para provar que um estado inválido é **inconstruível** na modelagem proposta.
 - Ler a **fonte da regra** em `node_modules` quando a dúvida é "o ESLint pegaria isso?" (ex.: `type-utils/dist/isUnsafeAssignment.js` mostra que `any → unknown` é explicitamente permitido, logo `no-unsafe-argument` NÃO cobre anotação `unknown` removida).

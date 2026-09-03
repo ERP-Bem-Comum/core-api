@@ -74,9 +74,9 @@ handbook/                                Source of Truth — interno ao repo
 ├── architecture/adr/                    48 ADRs aceitos (IMUTÁVEIS)
 ├── reference/<tech>/                    typescript · nodejs · drizzle · mysql · mysql2 · docker · pnpm · fastify
 │                                        · fastify-plugins · nodemailer · zod · bruno · magalu-cloud · claude-code
-├── domain/, domain_questions/, inquiries/, interviews/, research/, reviews/, operations/, …
+├── domain_questions/, inquiries/, interviews/, reviews/, specs/, runbooks/, …
 
-docs/                                    Doc consolidada IA-friendly (markdown plano) — ver também ./llms.txt
+llms.txt                                 Mapa do acervo em markdown plano, para leitura por IA
 .claude/
 ├── agents/                              Especialistas por tecnologia
 ├── skills/                              Técnicas e disciplinas aplicadas
@@ -227,7 +227,7 @@ A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` compl
 
 ### ✅ Entregue
 
-- **6 módulos** com a mesma anatomia (`domain` → `application` → `adapters` → `public-api`): `auth`, `contracts`, `financial`, `partners`, `programs`, `notifications`.
+- **8 módulos** com a mesma anatomia (`domain` → `application` → `adapters` → `public-api`): `auth`, `budget-plans`, `contracts`, `financial`, `notifications`, `partners`, `programs`, `reports`.
 - **Borda HTTP Fastify** real e versionada (`/api/v2` greenfield + `/api/v1` espelho do legado), contract-first com Zod 4 + OpenAPI 3.1 (ADR-0025/0027/0028/0033). CLI embutida **retirada** (ADR-0037).
 - **Auth & RBAC** próprios — JWT ES256 (`jose`), usuários, papéis/permissões, reset de senha, foto de perfil (ADR-0024).
 - **Financial** — títulos/payables, baixa manual, conciliação bancária, CNAB240, extrato/timeline, read-model de fornecedor.
@@ -246,9 +246,9 @@ A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` compl
 ## 📚 Documentação canônica
 
 - **Contexto do projeto:** [`CLAUDE.md`](./CLAUDE.md) (fonte única) + regras path-scoped em [`.claude/rules/`](./.claude/rules/).
-- **Doc consolidada (humanos + IA):** [`docs/`](./docs/) e [`llms.txt`](./llms.txt).
-- **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) (48 ADRs IMUTÁVEIS) + [`handbook/CHANGELOG.md`](./handbook/CHANGELOG.md).
-- **Domínio de negócio:** [`handbook/domain/`](./handbook/domain/) + [`handbook/domain_questions/`](./handbook/domain_questions/).
+- **Doc consolidada (humanos + IA):** [`llms.txt`](./llms.txt).
+- **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) — ADR aceito é IMUTÁVEL, e revogá-lo é abrir outro que o `supersedes` + [`handbook/CHANGELOG.md`](./handbook/CHANGELOG.md).
+- **Domínio de negócio:** [`handbook/domain_questions/`](./handbook/domain_questions/).
 - **Tecnologias:** [`handbook/reference/<tech>/`](./handbook/reference/) — cada uma com agente especialista próprio.
 - **Orquestrador + agentes + skills:** [`.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md).
   </content>

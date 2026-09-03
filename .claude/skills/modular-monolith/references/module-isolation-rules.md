@@ -45,7 +45,7 @@ Y **nunca** chama repo de X. Y **nunca** lê tabela de X.
 
 > Tabelas têm prefixo `ctr_*` para Contratos e `fin_*` para Financeiro ([ADR-0014](../../../../../handbook/architecture/adr/0014-mysql-database-isolation.md) §1.1). O usuário de banco `core_app` tem GRANT em ambos schemas, mas a aplicação respeita a fronteira por contrato.
 
-Mesmo no mesmo processo, **`modules/financeiro/adapters/*.ts` nunca toca tabela `ctr_*`**.
+Mesmo no mesmo processo, **`modules/financial/adapters/*.ts` nunca toca tabela `ctr_*`**.
 
 ---
 
@@ -61,10 +61,10 @@ Mesmo no mesmo processo, **`modules/financeiro/adapters/*.ts` nunca toca tabela 
 
 ---
 
-## 3. O que vai em `modules/<X>/contracts/`
+## 3. O que vai em `modules/<X>/public-api/`
 
 ```
-modules/contratos/contracts/
+modules/contracts/public-api/
 ├── index.ts              # barrel
 ├── eventos.ts            # ContratoEvento (subset PÚBLICO da discriminated union interna)
 ├── commands.ts           # ContratoCommand (se módulo aceita inbox)
@@ -93,7 +93,7 @@ test('domain/ não importa de outro módulo', () => {
   const files = globSync('src/modules/*/domain/**/*.ts');
   for (const file of files) {
     const content = readFileSync(file, 'utf-8');
-    const otherModuleImport = /from\s+['"].*modules\/(?!contratos)[^/]+\//;
+    const otherModuleImport = /from\s+['"].*modules\/(?!contracts)[^/]+\//;
     // ... assert: nenhum import de outro módulo
   }
 });
@@ -129,9 +129,9 @@ Se você fez tudo certo no monolito, a extração leva 1 sprint. Se misturou, le
 
 | ❌ Errado | ✅ Certo |
 | :--- | :--- |
-| `import { Contrato } from '../../contratos/domain/...'` em Financeiro | `import type { ContratoEvento } from '../../contratos/contracts/...'` |
+| `import { Contrato } from '../../contracts/domain/...'` em Financeiro | `import type { ContratoEvento } from '../../contracts/public-api/...'` |
 | `core.contratos_e_financeiro_resumo` (tabela compartilhada) | Cada módulo tem projeção própria; sincroniza via evento |
-| Helper compartilhado no `modules/contratos/utils/` consumido por Financeiro | Sobe para `shared/` ou `shared-kernel/` |
+| Helper compartilhado no `modules/contracts/utils/` consumido por Financeiro | Sobe para `shared/` ou `shared-kernel/` |
 | Outbox dispatcher conhecendo schema de cada módulo | Outbox transporta evento opaco; consumer faz o cast |
 | `modules/X/index.ts` exportando domain inteiro | Exporta só `contracts/` |
 | Cross-module call "só uma vezinha" | Não há "só uma vezinha" — vira hábito; faça evento |

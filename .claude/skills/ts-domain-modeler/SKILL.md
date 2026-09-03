@@ -1766,10 +1766,7 @@ ts-domain-modeler          ◄── você está aqui (modela tipos puros)
    │
    ├─► ports-and-adapters  (decide ports/contratos com infra)
    │
-   ├─► modular-monolith    (decide o que é compartilhado entre módulos)
-   │
-   └─► application-cli-builder
-        (consome o domínio para expor via CLI à P.O.)
+   └─► modular-monolith    (decide o que é compartilhado entre módulos)
 ```
 
 ---

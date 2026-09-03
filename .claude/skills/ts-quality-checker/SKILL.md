@@ -102,13 +102,8 @@ Esta skill é para quando você quer o veredito **agora**, no meio do trabalho �
 
 ## Política de regressão zero
 
-Vermelho é regressão a corrigir **agora**, tenha ou não sido causado pelo diff atual. Três saídas, e
-só três:
-
-1. **Consertar a causa.**
-2. **Corrigir o gate que classifica errado** — e **provar** o verde no caminho certo. Nunca esconder
-   atrás de `skip`.
-3. **Escalar ao humano** com causa-raiz, explicitamente.
+Norma no [`CLAUDE.md`](../../../CLAUDE.md) raiz, seção "Política de regressão zero" — **não replicada
+aqui**. Vermelho não fecha turno; as saídas aceitáveis e seus limites estão lá.
 
 ---
 

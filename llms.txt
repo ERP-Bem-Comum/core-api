@@ -12,15 +12,6 @@ e a divergência é um defeito a registrar. O `handbook/` é **acervo, não norm
 pesquisa e histórico, e também descreve coisas que nunca foram construídas.
 Idioma: prosa em PT-BR, identificadores de código/rotas/erros em EN.
 
-## Documentação consolidada
-
-- [Índice da doc](docs/README.md): mapa e estado do projeto
-- [Arquitetura & ADRs](docs/01-architecture.md): modular monolith, camadas, ports & adapters
-- [API HTTP](docs/02-http-api.md): rotas /api/v2, RBAC, dual-pool RW, OpenAPI, envelope de erro
-- [Domínio Contratos](docs/03-domain-contracts.md): agregados Contract/Amendment/Document, estados, eventos, RN
-- [Guia do dev](docs/04-dev-guide.md): comandos pnpm, drivers memory/mysql, Docker, testes/E2E
-- [Handoff para o front](docs/05-frontend-api-handoff.md): contrato consumido pelo BFF
-
 ## Fonte de verdade (handbook)
 
 - [ADRs aceitos](handbook/architecture/adr/): decisões arquiteturais imutáveis (0001–0068). ADR aceito não

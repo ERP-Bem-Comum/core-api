@@ -17,11 +17,15 @@
 
 ---
 
-## 🚦 Estado Atual
+## 🚦 Estado
 
-- 🟡 Aguardando provisionamento de **dev** (handoff entregue).
-- ⬜ Staging não provisionado.
-- ⬜ Prod não provisionado.
+Os três ambientes existem e rodam: **local**, **homologação** (Codebit) e **produção**. `dev` é a
+branch de integração; `main` é a produção.
+
+> Esta seção não repete quais são nem como estão — o estado de ambiente muda sem que ninguém venha
+> editar um README, e a versão anterior deste bloco afirmou por meses que staging e prod não estavam
+> provisionados enquanto os dois serviam tráfego. O que vale é o que está no ar; o que este diretório
+> documenta é a **planta** (ambientes, secrets, observabilidade), não o **estado**.
 
 ---
 

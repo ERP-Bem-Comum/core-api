@@ -134,7 +134,7 @@ Em ordem decrescente de autoridade:
 
 ### 🔴 Crítica (bloqueia approval)
 
-#### Issue 1 — `src/modules/contratos/domain/aditivo/aditivo.ts:42`
+#### Issue 1 — `src/modules/contracts/domain/aditivo/aditivo.ts:42`
 
 **Categoria:** A (regras absolutas do domínio)
 **Problema:** `throw new Error('aditivo invalido')` no domínio.
@@ -147,7 +147,7 @@ throw new Error('aditivo invalido');
 return err('aditivo-invalido' as const);
 ```
 
-#### Issue 2 — `src/modules/contratos/domain/contrato/contrato.ts:78`
+#### Issue 2 — `src/modules/contracts/domain/contrato/contrato.ts:78`
 
 ...
 
