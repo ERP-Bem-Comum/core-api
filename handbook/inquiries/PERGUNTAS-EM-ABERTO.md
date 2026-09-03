@@ -35,7 +35,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0028](#inquiry-0028--o-edd-da-po-m1m4--relatórios-nibo) | `open` | P.O./consultoria + spikes do TL | Escopo comercial (~470h dev + ~350h do bundle P0); M1 e M4 | 7 |
 | [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
 | [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | **Nada — o gatilho de fechamento está cumprido.** Falta decidir se vira `decided` | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 0 |
-| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | P.O. — a forma da recusa na tela; as 4 saídas já estão decididas | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
+| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu a forma da recusa na tela em 02/09; restam as 4 saídas, que são execução | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
 | [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
 
 ---
@@ -228,6 +228,13 @@ em bloco. O que trava escopo são as decisões abaixo, não o documento.
 - [ ] **D1.** Escopo real da **M2** — o override já existe e foi confirmado; falta **medir o que sobra**. _(TL)_
 - [ ] **D2.** **V-Expenses**: API, webhook ou arquivo? _Intocada — **bloqueia a M4 inteira**._ _(spike + cliente)_
 - [ ] **D3.** Fallback do regime de **Competência** quando `competencia` é nula. _(P.O.)_
+      ⚠️ **[02/09] Fato medido no front que muda o peso da escolha:** `competencia` é opcional na criação e
+      **imutável depois dela** (`document-form.view.ts` — o PATCH não a aceita; sai somente-consulta em
+      qualquer status, mesma regra do `issueDate`). Nota criada sem competência **nunca mais terá
+      competência pela tela**, então o fallback é **permanente** para o acervo existente, não uma muleta.
+      Pergunta que precede a decisão, para o TL: **existe backfill, ou o PATCH pode aceitar `competencia`
+      quando ela é nula?** Se existir, a escolha fica barata; se não, é definitiva. Opções e custos na
+      discussion #956.
 - [ ] **D4.** Mapa de **reclassificação contábil** das categorias. _(P.O./consultoria)_
 - [ ] **D5.** **Portador**: referência a colaborador/parceiro ou cadastro próprio? _Gap confirmado real._ _(TL)_
 - [ ] **D6.** Spike de **segurança do magic-link** (M1). _(TL)_
@@ -339,7 +346,11 @@ decisão editorial de promovê-la a `decided` — e as duas lacunas que restam p
 > título já foi remetido — segue sem resposta da P.O.
 
 **Bloqueador para fechar:** as quatro saídas abaixo já estão **decididas** e esperam execução, não decisão.
-O que ainda espera terceiro é a forma da recusa na tela. A decisão de base de 23/08 — a Fatia B esperar o
+~~O que ainda espera terceiro é a forma da recusa na tela.~~ ✅ **[02/09] A forma da recusa na tela foi
+respondida pela P.O.** — recusa antecipada por `FieldLocks` (campos financeiros somente-consulta, motivo
+visível), mensagem nomeando **qual título e em qual remessa**, e **sim** ao caminho de escape para campos
+não-financeiros (o `editMetadata` já os preserva). Texto integral em `0032-…md` §3 e na discussion #956.
+O encanamento de erro nomeado no front entrou em 02/09 (web-app#396). A decisão de base de 23/08 — a Fatia B esperar o
 merge do PR #814, para não resolver conflito à mão na região onde a ordem dos locks se decide — **deixa de
 valer nesta branch**, onde o #814 já está integrado.
 
