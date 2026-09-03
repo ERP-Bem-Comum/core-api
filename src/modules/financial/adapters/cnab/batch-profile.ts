@@ -357,5 +357,30 @@ export const batchProfileFor = (
         paymentIndicator: null,
       });
     }
+
+    case 'pix': {
+      // Forma FIXA, sem derivação — e é a única das três rotas assim. A transferência escolhe entre
+      // crédito interno e TED conforme o banco do favorecido; o boleto, entre próprio banco e outro
+      // banco conforme o emissor do título. O Pix não tem essa bifurcação: o SPI é o mesmo trilho
+      // para todo recebedor, inclusive quando ele é correntista do Bradesco. Não há aqui o par de
+      // erros `payee-bank-unreadable`/`billet-bank-unreadable` porque não há banco a ler — o que
+      // endereça o pagamento é a chave, e ela não vive no perfil do lote.
+      //
+      // ⚠️ `BATCH_LAYOUT_PAYMENTS` (`045`), e NÃO uma versão própria. A CA1 da issue pedia "a versão
+      // de layout da seção de PIX", supondo seção separada — a medição desfaz a suposição: o header
+      // de lote da pág. 23 é o mesmo para "Pagamento Fornecedor / TED / DOC / Pix"
+      // (`referencias/02-layout-registros.md:69,79`). Quem tem versão própria é a seção de COBRANÇA,
+      // com `040`. Inventar um terceiro valor produziria header que o banco recusa.
+      //
+      // O que separa o Pix dos demais não é a versão do lote — é o ARQUIVO, e essa régua é
+      // `fileGroupFor`, entregue na CA4. As duas coisas foram confundidas na leitura original da
+      // issue, e vale a nota porque a confusão é atraente: as duas soam como "o Pix é diferente".
+      return ok({
+        serviceType: SERVICE_SUPPLIER_PAYMENT,
+        launchForm: LAUNCH_PIX_TRANSFER,
+        batchLayoutVersion: BATCH_LAYOUT_PAYMENTS,
+        paymentIndicator: PAYMENT_INDICATOR_DEFAULT,
+      });
+    }
   }
 };

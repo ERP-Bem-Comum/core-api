@@ -92,7 +92,7 @@ verificado e não é:
 
 ## 5. Toda alegação verificável carrega o comando que a verifica
 
-Regra 5 do [`../INDEX.md`](../INDEX.md). `reality.evidence` registra o que foi encontrado **e quando**;
+Regra 5 do `context/INDEX.md`. `reality.evidence` registra o que foi encontrado **e quando**;
 `reality.verify` é o comando que qualquer pessoa (ou o CI) roda para re-checar. Evidência sem comando
 envelhece em silêncio — foi o mecanismo exato da regra fantasma de read/write split.
 
@@ -114,7 +114,7 @@ módulo aceita `readerUrl` opcional" — e esse sim vira RED estático.
 
 ### `enforced_by` — o que já é mecânico não vira texto
 
-Regra 1 do [`../INDEX.md`](../INDEX.md): se teste, `eslint`, `tsc`, `semgrep` ou hook já garantem, a
+Regra 1 do `context/INDEX.md`: se teste, `eslint`, `tsc`, `semgrep` ou hook já garantem, a
 alegação **não** precisa virar diretiva escrita — a verificação é a documentação. `enforced_by` lista
 o caminho desses mecanismos, e o gate confere que cada um existe de fato no repo.
 
@@ -324,7 +324,7 @@ ninguém re-rodou depois. É exatamente o que `reality.verify` existe para imped
 
 ## 14. Pendência conhecida
 
-O [`../INDEX.md`](../INDEX.md) descreve `decisions/` como "consequências operacionais" de uma norma
+O `context/INDEX.md` descreve `decisions/` como "consequências operacionais" de uma norma
 que vive imutável em `handbook/architecture/adr/`. A premissa de trabalho atual é outra — o ADR é
 evidência de intenção, não lei, e a regra vigente é a que `rule.text` fixar depois de promovida.
 Quando a canonicidade for decidida, `INDEX.md` §`decisions/` e a tabela "O que NÃO vive aqui"

@@ -1,6 +1,6 @@
 // Composition root do worker-runner (issue #407) — consolida os workers de um GRUPO num único
 // processo, compartilhando UM pool por connection-string (PoolRegistry). Substitui os 6 entrypoints
-// standalone por 3 (WORKER_GROUP=outbox|projections|email), cortando tasks Fargate e pools contra o RDS.
+// standalone por 4 (WORKER_GROUP=outbox|projections|email|van), cortando tasks Fargate e pools contra o RDS.
 //
 // Isolamento: `runWorkerGroup` roda os loops em Promise.allSettled — um worker que rejeita não
 // derruba os irmãos. Shutdown: SIGTERM/SIGINT abortam todos os loops e o registry drena os pools.

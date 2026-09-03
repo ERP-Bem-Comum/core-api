@@ -76,7 +76,7 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
     ...over,
   });
 
-  it('mapeia Bradesco → bankCode 237, convenio placeholder D6, agência preservada (F7)', () => {
+  it('mapeia Bradesco → bankCode 237, convenio VAZIO (D6), agência preservada (F7)', () => {
     const r = mapLegacyAccountRow(account());
     assert.ok(r.ok);
     assert.equal(r.value.legacyId, 1);
@@ -84,10 +84,32 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
     assert.equal(r.value.input.agency, '0288-7');
     assert.equal(r.value.input.accountNumber, '12345');
     assert.equal(r.value.input.accountDigit, '0');
-    assert.equal(r.value.input.convenio, 'LEGADO');
+    assert.equal(r.value.input.convenio, '');
     assert.equal(r.value.input.nickname, 'PARC');
     assert.equal(r.value.input.openingBalanceCents, 100050);
     assert.equal(r.value.input.openingBalanceDate, '2026-01-10');
+  });
+
+  // ⚠️ ESTE CASO É A #879, e o assert é sobre uma AUSÊNCIA — por isso ele precisa existir separado
+  // do caso acima, que passaria com qualquer literal.
+  //
+  // O campo saía com `'LEGADO'`: um placeholder que parecia auditável e travou toda conta migrada em
+  // PRODUÇÃO. `editCedenteAccount` lia qualquer convênio não-vazio como "já definido", recusava a
+  // troca, e o front travava o campo — conta sem remessa e sem via de correção.
+  //
+  // A causa não é o valor escolhido, é o placeholder ter FORMA DE DADO VÁLIDO. Qualquer outro texto
+  // ('PENDENTE', 'N/A', '000000') reproduz o defeito, e é isso que este caso vigia: o convênio migrado
+  // não pode ser preenchível com sentinela nenhuma. Vazio é o único estado que o domínio sabe tratar
+  // — `checkCedenteRemittanceReadiness` responde `cedente-convenio-missing`, que diz ao operador o
+  // que preencher e onde.
+  it('não inventa sentinela para o convênio ausente no legado (#879)', () => {
+    const r = mapLegacyAccountRow(account());
+    assert.ok(r.ok);
+    assert.equal(
+      r.value.input.convenio.trim(),
+      '',
+      'convênio migrado tem de nascer vazio — qualquer texto aqui tranca a conta em produção',
+    );
   });
 
   it('banco desconhecido → EnumUnknown bank (sem chute de código COMPE)', () => {

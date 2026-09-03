@@ -41,6 +41,17 @@ const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   document: PAYEE_DOCUMENT,
 };
 
+// ⚠️ Cadastro Pix COMPLETO passou a incluir o bloco bancário (#838), e não só a chave: o Segmento A
+// do golden traz banco, agência, DV, conta e DV do favorecido preenchidos, com o layout (p. 39)
+// marcando os quatro como obrigatórios. A chave endereça o pagamento no SPI; o Segmento A continua
+// sendo o registro de crédito. A fixture `PIX_KEY_ONLY`, que existia aqui, virou o caso INCOMPLETO —
+// ela está logo abaixo, com esse nome.
+const PIX_COMPLETE: PayeePaymentTarget = {
+  ...BANK_ACCOUNT_ONLY,
+  pixKey: { keyType: 'email', key: 'a@b.com' },
+};
+
+// Só a chave, sem dado bancário: era o cadastro suficiente até a #838, e hoje é pendência.
 const PIX_KEY_ONLY: PayeePaymentTarget = {
   bank: null,
   agency: null,
@@ -146,8 +157,10 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     const rows = [
       row({ payableId: 'ted-ok' }),
       row({ payableId: 'ted-sem-banco', payee: NO_DESTINATION_NULLS }),
-      row({ payableId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
+      row({ payableId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_COMPLETE }),
       row({ payableId: 'pix-sem-chave', paymentMethod: 'PIX', payee: BANK_ACCOUNT_ONLY }),
+      // O caso que a #838 criou: chave presente, cadastro bancário ausente. Antes bastava a chave.
+      row({ payableId: 'pix-sem-conta', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
       // 44 dígitos — o código de barras que o Segmento J grava (G063).
       row({
         payableId: 'boleto-ok',
@@ -174,10 +187,18 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     assert.equal(line(r, 'boleto-ok').status, 'ready');
     assert.equal(line(r, 'boleto-sem-linha').status, 'blocked');
 
+    // #838 — o Pix ganhou emissor, então cadastro completo agora sai `ready`. A linha que continua
+    // `no-issuer` é a da GUIA, e continua por decisão de escopo da P.O. (23/08), não por atraso.
+    assert.equal(line(r, 'pix-ok').status, 'ready');
+
     // #837 — CA1. O cadastro está completo e a linha ainda assim não sai, porque não existe emissor
-    // para a rota. Antes, estas duas apareciam como `ready` e a recusa só chegava no clique em Gerar.
-    assert.equal(line(r, 'pix-ok').status, 'no-issuer');
+    // para a rota. Antes, ela aparecia como `ready` e a recusa só chegava no clique em Gerar.
     assert.equal(line(r, 'guia-ok').status, 'no-issuer');
+
+    // #838 — a metade nova da régua do Pix. Chave presente e cadastro bancário ausente é pendência
+    // de CADASTRO, não ausência de emissor: o operador tem o que fazer, e a tela precisa dizer o quê.
+    assert.equal(line(r, 'pix-sem-conta').status, 'blocked');
+    assert.ok(line(r, 'pix-sem-conta').missing.length > 0, 'a tela precisa apontar o campo');
 
     // #837 — CA4. Os dois motivos coexistem e não se confundem: aqui falta a CHAVE, e o operador tem
     // o que fazer. Achatá-lo em `no-issuer` esconderia a pendência de cadastro atrás de um
@@ -232,7 +253,13 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     assert.deepEqual(line(r, 'vazio').missing, line(r, 'nulo').missing);
     assert.equal(line(r, 'vazio').status, line(r, 'nulo').status);
     // Chave PIX em branco é chave ausente — não "presente e vazia".
-    assert.deepEqual(line(r, 'pix-vazio').missing, ['pix-key']);
+    //
+    // ⚠️ A asserção era `deepEqual(missing, ['pix-key'])` e passou a ser inclusão: desde a #838 o Pix
+    // exige também o bloco bancário, então a lista traz os campos de conta junto. Fixar a lista
+    // INTEIRA aqui faria este caso quebrar a cada mudança da régua do Pix — e ele não é sobre a
+    // régua, é sobre `''` e `null` levarem ao mesmo lugar. A propriedade é a EQUIVALÊNCIA, na linha
+    // seguinte; a chave aparecer é o que prova que o branco foi lido como ausência.
+    assert.ok(line(r, 'pix-vazio').missing.includes('pix-key'));
     assert.deepEqual(line(r, 'pix-vazio').missing, line(r, 'pix-nulo').missing);
   });
 

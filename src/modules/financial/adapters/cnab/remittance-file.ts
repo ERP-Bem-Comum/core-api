@@ -34,13 +34,19 @@ import {
 } from './multipag-records.ts';
 import {
   paymentRecords,
+  pixPaymentInfo,
+  segmentA,
+  segmentBPix,
   segmentJ,
   segmentJ52,
+  PIX_ACCOUNT_TYPE_CHECKING,
   type BilletParty,
   type CnabSegmentError,
   type Payee,
   type PayeeAddress,
 } from './multipag-segments.ts';
+import { payeeIspbFor, type PayeeIspbError } from './payee-ispb.ts';
+import { pixInitiationFor, type PixInitiationError } from './pix-initiation.ts';
 
 // O layout não especifica o terminador de linha — nem no corpo, nem nas notas gerais. CRLF é a
 // convenção do CNAB e o destino é uma máquina Windows (o STCPCLT roda lá), então é a escolha
@@ -110,19 +116,47 @@ export type BilletPayment = Readonly<{
   // Idem `TransferPayment`: derivado no montador, nunca recebido de fora.
 }>;
 
-// As rotas que a P.O. contratou e o emissor ainda não cobre. Existem no tipo de propósito: o dado
-// chega em runtime, do reader, e o montador precisa poder RECUSÁ-LO explicitamente. Um tipo que as
-// proibisse empurraria a decisão para um `as` no chamador — e a recusa deixaria de acontecer.
+// Pagamento por chave Pix, na forma `45` (#838).
 //
-// Carregam valor e data como as demais: o título os tem havendo emissor ou não, e é o que permite
-// ao use case conferir a data única da remessa antes de saber se o arquivo sai.
+// ⚠️ CARREGA `payee` COMPLETO, e é a parte contra-intuitiva desta rota. A decisão da P.O. de 13/08
+// (#708) dizia que "PIX paga por chave, não olha agência ou conta", e isso vale para o NEGÓCIO —
+// não para o arquivo: o golden do banco (`GOLDEN_TEST_MULTIPAG_PIX_240`) traz banco, agência, DV,
+// conta e DV do favorecido preenchidos no Segmento A, e o layout (p. 39) marca os quatro com
+// asterisco de obrigatório. A chave endereça o pagamento no SPI; o Segmento A continua sendo o
+// registro de crédito, e identifica a conta. O pré-voo foi alinhado a isto em
+// `domain/payout/payout-readiness.ts`, e desalinhá-los reabre a divergência da #837.
+//
+// O `keyType` chega CRU, do vocabulário de `partners`, e é traduzido aqui — não antes. Quem conhece
+// o domínio `G100` é o adapter, e é o mesmo arranjo do ISPB: nenhum dos dois é dado do título, os
+// dois são derivados de algo que o título já carrega. Um `initiation: string` na entrada seria a
+// sexta reincidência do padrão que a rule `cnab.md` registra — um campo que o chamador só poderia
+// preencher a partir do que ele já passou.
+export type PixPayment = Readonly<{
+  route: 'pix';
+  payee: Payee;
+  pixKey: string;
+  pixKeyType: string;
+  paymentDate: Date;
+  valueCents: number;
+}>;
+
+// A rota que a P.O. contratou e o emissor não cobre. Existe no tipo de propósito: o dado chega em
+// runtime, do reader, e o montador precisa poder RECUSÁ-LO explicitamente. Um tipo que a proibisse
+// empurraria a decisão para um `as` no chamador — e a recusa deixaria de acontecer.
+//
+// ⚠️ Era `'pix' | 'tax-guide'` até a #838. A guia continua aqui, e continua por DECISÃO DE ESCOPO,
+// não por atraso: a P.O. fixou em 23/08 que imposto retido pago por guia de recolhimento permanece
+// fora da remessa. Não há release futuro que a mova daqui.
+//
+// Carrega valor e data como as demais: o título os tem havendo emissor ou não, e é o que permite ao
+// use case conferir a data única da remessa antes de saber se o arquivo sai.
 export type UnsupportedPayment = Readonly<{
-  route: 'pix' | 'tax-guide';
+  route: 'tax-guide';
   valueCents: number;
   paymentDate: Date;
 }>;
 
-export type RemittancePayment = TransferPayment | BilletPayment | UnsupportedPayment;
+export type RemittancePayment = TransferPayment | BilletPayment | PixPayment | UnsupportedPayment;
 
 export type RemittanceFileInput = Readonly<{
   cedente: CedenteHeaderData;
@@ -151,7 +185,14 @@ export type RemittanceFileError =
   // Um componente da referência de G064 não coube na sua largura (#752, CA5). Recusar é a única
   // saída: truncar colapsaria duas referências distintas na mesma string, e o casamento do retorno
   // apontaria para o título errado — sem nada indicando que houve truncamento.
-  | 'remittance-reference-overflow';
+  | 'remittance-reference-overflow'
+  // Os dois erros da tradução do Pix (#838), entrando por inteiro pela mesma razão do envelope: cada
+  // um manda o operador a um lugar diferente. `payee-ispb-unknown` diz que o banco do favorecido não
+  // está na tabela do Bacen — e a saída é atualizar a fonte, ou corrigir o código no cadastro;
+  // `remittance-pix-key-type-unsupported` diz que o tipo da chave não existe no domínio `G100`.
+  // Achatá-los em `cnab-translation-failed` mandaria abrir chamado de código nos dois casos.
+  | PayeeIspbError
+  | PixInitiationError;
 
 export type RemittanceFile = Readonly<{
   content: string;
@@ -319,9 +360,75 @@ const detailsOf = (
       return ok([j.value, j52.value]);
     }
 
+    // O Pix é o par A + B, sem J — e a ausência do J é medida, não suposta: o golden da forma `45`
+    // tem 6 registros (dois headers, A, B, dois trailers), e o trailer do lote conta `000004`. A
+    // tabela da pág. 9 lista "A, B, J" para Pix porque a seção agrega as formas `45` e `47`, e o J
+    // exige código de barras — que Pix por chave não tem. O J e o J-52 daquela seção (p. 41-42) são
+    // do `47`, QR Code, fora do escopo por decisão da P.O.
+    case 'pix': {
+      // As DUAS traduções acontecem antes de montar, e as duas recusam com nome próprio em vez de
+      // cair para um valor por omissão. É a lição que este módulo pagou cinco vezes: um `?? ''` aqui
+      // produziria arquivo bem-formado com iniciação em branco ou ISPB zerado, que o
+      // `remittance-inspector.ts` aprova — não é defeito de forma — e o banco recusa depois de
+      // transmitido, quando o NSA já foi queimado.
+      const initiation = pixInitiationFor(payment.pixKeyType);
+      if (!initiation.ok) return initiation;
+
+      // O ISPB é DERIVADO do código de compensação do favorecido (#923), não recebido: o cadastro
+      // guarda o código de banco, e traduzir é trabalho de quem monta o arquivo. Recebê-lo pronto
+      // deixaria o chamador livre para passar um ISPB que não corresponde ao banco do Segmento A —
+      // dois campos do mesmo registro afirmando instituições diferentes.
+      const ispb = payeeIspbFor(payment.payee.bankCode);
+      if (!ispb.ok) return ispb;
+
+      // A Informação 2 (G031) do Segmento A: inscrição do favorecido + ISPB + tipo de conta. Mesma
+      // inscrição que o Segmento B grava em 018-032 — passar as duas da mesma origem é o que garante
+      // que não divirjam dentro do par, exatamente como o nome do cedente no par J + J-52.
+      const info = pixPaymentInfo({
+        payeeDocument: payment.payee.document,
+        payeeIspb: ispb.value,
+        accountType: PIX_ACCOUNT_TYPE_CHECKING,
+      });
+      if (!info.ok) return info;
+
+      const a = segmentA({
+        bankCode,
+        batchNumber,
+        recordNumber: firstRecordNumber,
+        payee: payment.payee,
+        paymentDate: payment.paymentDate,
+        valueCents: payment.valueCents,
+        // `009` (SPI), derivada da forma como em toda rota. O golden confirma, e o manual não a
+        // enuncia — ver a nota de `clearingHouseFor`.
+        clearingHouse: clearingHouseFor(batch.launchForm),
+        yourNumber,
+        // `null` nos dois, e o golden confirma: 220-224 e 225-226 saem em BRANCOS na forma `45`.
+        // Preenchê-los é recusa fora de TED, medido na inquiry-0033 — a mesma régua que vale para
+        // crédito em conta. Derivam da forma, não desta rota, e é por isso que a chamada é idêntica
+        // à da transferência.
+        tedPurpose: tedPurposeFor(batch.launchForm),
+        complementPurpose: complementPurposeFor(batch.launchForm),
+        message: info.value,
+      });
+      if (!a.ok) return a;
+
+      const b = segmentBPix({
+        bankCode,
+        batchNumber,
+        // O B ocupa o número seguinte ao A, como o J-52 ocupa depois do J.
+        recordNumber: firstRecordNumber + 1,
+        payee: payment.payee,
+        initiation: initiation.value,
+        pixKey: payment.pixKey,
+        payeeIspb: ispb.value,
+      });
+      if (!b.ok) return b;
+
+      return ok([a.value, b.value]);
+    }
+
     // Inalcançável na prática — o perfil já recusou a rota antes de chegar aqui. Fica explícito
     // mesmo assim: um emissor novo entra por este switch, e o compilador cobra o caso.
-    case 'pix':
     case 'tax-guide':
       return err('remittance-launch-form-unsupported');
   }

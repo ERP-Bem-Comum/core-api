@@ -65,8 +65,18 @@ export const mapLegacyAccountRow = (
       agency: row.agency,
       accountNumber: row.accountNumber,
       accountDigit: row.dv,
-      // D6 pendente: convênio real Bradesco não existe no legado — placeholder auditado.
-      convenio: 'LEGADO',
+      // D6: o convênio real do Bradesco não existe no legado, e o correto é nascer VAZIO.
+      //
+      // ⚠️ Era `'LEGADO'` — um placeholder que parecia auditável e trancou toda conta migrada em
+      // PRODUÇÃO (#879). A causa não é o valor escolhido: é o placeholder ter FORMA DE DADO VÁLIDO.
+      // `editCedenteAccount` lia qualquer convênio não-vazio como "já definido" e recusava a troca; o
+      // front, coerentemente, travava o campo. Resultado: a conta não gerava remessa e não havia via
+      // de correção — nem pela tela, nem pela API. O caminho que a #722 abriu para exatamente este
+      // conserto foi fechado por uma string de sete letras.
+      //
+      // Vazio é o estado que o domínio JÁ SABE TRATAR: `checkCedenteRemittanceReadiness` responde
+      // `cedente-convenio-missing`, que diz ao operador o que preencher e em qual tela.
+      convenio: '',
       nickname: row.name,
       openingBalanceCents: Math.round(row.initialBalance * 100),
       // Par coeso com cents (validação do domínio): data do saldo = criação da conta.

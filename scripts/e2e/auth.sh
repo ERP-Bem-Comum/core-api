@@ -8,23 +8,23 @@
 # Uso: pnpm run test:e2e:auth   (NÃO faz parte do `pnpm test` — exige Docker).
 set -uo pipefail
 
+# Projeto Docker isolado + backup/restore dos secrets (#517) — sem isto, o teardown apagava o
+# banco e os secrets do dev local.
+# shellcheck source=scripts/e2e/_e2e-env.sh
+source "$(dirname "$0")/_e2e-env.sh"
+
 SRV=""
 cleanup() {
   [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
-  docker compose down -v >/dev/null 2>&1 || true
-  rm -f secrets/mysql_*.txt
+  e2e_teardown
 }
 trap cleanup EXIT
 
-# Secrets de teste (mesmo padrão de test:integration:auth) — efêmeros, removidos no cleanup.
-mkdir -p secrets
-printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt
-printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt
-printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt
-chmod 644 secrets/mysql_*.txt
+# Secrets de teste (mesmo padrão de test:integration:auth) — efêmeros; os do dev são restaurados.
+e2e_setup
 
 # MySQL 8.4 via compose; --wait bloqueia até o healthcheck passar.
-docker compose up -d mysql --wait || exit 1
+e2e_compose up -d mysql --wait || exit 1
 
 # Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
 MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \

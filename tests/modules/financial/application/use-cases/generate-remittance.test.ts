@@ -466,10 +466,15 @@ describe('generateRemittance — um arquivo, um dia (#712)', () => {
 });
 
 describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
-  // PIX e guia são rotas que a P.O. contratou e o emissor ainda não cobre. Enquanto não cobre, a
-  // recusa tem de ser explícita: emiti-las pelo perfil de transferência mandaria ao banco um
+  // A guia é a rota que a P.O. contratou e o arquivo não emite — e desde 23/08 isso é DECISÃO DE
+  // ESCOPO, não atraso: imposto retido pago por guia permanece fora da remessa. A recusa tem de ser
+  // explícita porque a alternativa, emiti-la pelo perfil de transferência, mandaria ao banco um
   // pagamento bem-formado para a operação errada.
-  const readerWithRoute = (route: 'pix' | 'tax-guide'): RemittancePaymentReader => ({
+  //
+  // ⚠️ O PIX SAIU DAQUI na #838, e o parâmetro deixou de ser união por isso. Reintroduzi-lo faria
+  // este bloco medir a montagem em vez da recusa — e passaria a falhar por uma razão que não é a que
+  // ele existe para vigiar.
+  const readerWithRoute = (route: 'tax-guide'): RemittancePaymentReader => ({
     loadPayments: async (ids) =>
       Promise.resolve(
         ok(
@@ -487,7 +492,7 @@ describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
   });
 
   it('recusa com erro próprio, distinto de dado faltando', async () => {
-    for (const route of ['pix', 'tax-guide'] as const) {
+    for (const route of ['tax-guide'] as const) {
       const s = await setup();
       const r = await generateRemittance({ ...s.deps, payments: readerWithRoute(route) })(
         input(s.cedenteAccountId, s.docs),
@@ -506,7 +511,7 @@ describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
     let uploads = 0;
     const deps = {
       ...s.deps,
-      payments: readerWithRoute('pix'),
+      payments: readerWithRoute('tax-guide'),
       storage: {
         ...s.storage,
         putRemittance: async (name: string, content: string) => {

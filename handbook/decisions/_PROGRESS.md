@@ -4,7 +4,7 @@ Estado da destilação dos ADRs para `context/decisions/*.yaml`. Contrato do for
 [`SCHEMA.md`](./SCHEMA.md). Gate em [`tests/decisions/decision-records.test.ts`](../../tests/decisions/decision-records.test.ts).
 
 **Extração CONCLUÍDA em 2026-07-31** — 55 de 55, sem lacuna e sem registro órfão. O que vem a seguir
-não é mais extração: é o **gate humano** da Fase 1 da [spec 040](../../specs/040-rules-match-code-reality/plan.md),
+não é mais extração: é o **gate humano** da Fase 1 da [spec 040](../specs/040-rules-match-code-reality/plan.md),
 em que o dono do repo revisa os vereditos e promove alegação a `rule.status: accepted`. Nenhuma das 293
 foi promovida — por desenho (`SCHEMA.md` §2/§3).
 
@@ -14,7 +14,7 @@ Rodar o gate ao fim de cada lote.
 **Continuação do trabalho (2026-07-31, tarde) — o hardening de `.claude/`:**
 o inventário virou insumo de uma auditoria do harness. Dois documentos novos, nenhuma decisão tomada:
 
-- [`context/HARNESS-AUDIT-2026-07-31.md`](../HARNESS-AUDIT-2026-07-31.md) — auditoria das 12 rules
+- `context/HARNESS-AUDIT-2026-07-31.md` (removido em 2026-09-02; ver lápide em `handbook/redirects.json`) — auditoria das 12 rules
   (169 afirmações: 11 falsas, 31 imprecisas, 20 órfãs, 23 redundantes), dos 15 agentes (12 mentem sobre o
   projeto) e das 44 skills (9 sem substrato). Inclui a linha do tempo de maturidade e as **10 decisões
   pendentes**, com as 4 opções da Decisão 1 já levantadas.
@@ -534,7 +534,7 @@ Coisas que só aparecem lendo mais de um registro. Nenhuma é decisão tomada �
      como `nota: o diretório <caminho>/ existe — …`, mantendo o caminho no texto. A guarda **não**
      foi afrouxada para aceitar caminho sem linha: exigir `path:linha` de arquivo é o que ela protege.
 6. **Procurar `enforced_by`** — varrer `tests/`, **`.semgrep/rules.yml`**, `eslint.config.js`,
-   `.claude/hooks/`. O que já é mecânico não vira texto (regra 1 do [`../INDEX.md`](../INDEX.md)).
+   `.claude/hooks/`. O que já é mecânico não vira texto (regra 1 do `context/INDEX.md`).
 7. **Avaliar `testability`** — qual teste falha se a regra for violada? Sem resposta ⇒
    `unfalsifiable`, e a alegação não pode ser adotada sem reescrita.
 8. **Propor `rule`** — `status: proposed` sempre. Nunca `accepted`: promover é ato do dono do repo.

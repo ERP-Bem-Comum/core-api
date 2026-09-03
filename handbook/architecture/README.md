@@ -16,6 +16,8 @@
 | 04 | [Eventos e Integração](./04-integration-events.md) | Outbox pattern, contrato de eventos, idempotência |
 | 05 | [Decisões de Runtime](./05-runtime-decisions.md) | Por que Node, e quando re-avaliar |
 | 06 | [Estratégia de Persistência](./06-persistence-strategy.md) | MySQL 8.4 único (ADR-0020), Drizzle/mysql2, mapeamentos canônicos, migrations, upsert estrito |
+| 07 | [Estratégia de Mensageria Assíncrona](./07-async-messaging-strategy.md) | Outbox-MySQL sem broker (YAGNI); §176 fixa o gatilho de reavaliação que o [ADR-0064](./adr/0064-outbox-fanout-per-consumer-progress.md) ancora |
+| 08 | [Store Compartilhado e Coordenação de Jobs](./08-shared-store-and-job-coordination.md) | Por que não Redis/etcd enquanto o core-api for single-instance; citado por `job-run.drizzle.ts` |
 
 ---
 
