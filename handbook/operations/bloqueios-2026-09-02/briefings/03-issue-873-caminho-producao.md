@@ -11,24 +11,24 @@
 
 A **#873** é P1, tem label `needs-decision`, e está escrita sobre um objeto que **não existe**.
 
-| A issue afirma | O repositório diz (medido em 02/09/2026) |
-| :--- | :--- |
-| *"A branch `go-live`, que alimenta produção, está 794 commits atrás"* | **`origin/go-live` não existe.** `git ls-remote --heads origin` lista 31 branches e nenhuma é `go-live` |
-| CA4 pede *"promoção da `go-live` até `45b74d2e`"* | promoção de uma branch inexistente |
-| — | `origin/main` está **1 commit à frente e 10 atrás** de `origin/dev`. Não 794 |
+| A issue afirma                                                        | O repositório diz (medido em 02/09/2026)                                                                |
+| :-------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
+| _"A branch `go-live`, que alimenta produção, está 794 commits atrás"_ | **`origin/go-live` não existe.** `git ls-remote --heads origin` lista 31 branches e nenhuma é `go-live` |
+| CA4 pede _"promoção da `go-live` até `45b74d2e`"_                     | promoção de uma branch inexistente                                                                      |
+| —                                                                     | `origin/main` está **1 commit à frente e 10 atrás** de `origin/dev`. Não 794                            |
 
 O `CLAUDE.md` é explícito sobre o que fazer aqui:
 
-> *"O código é a verdade sobre o que existe. (...) A divergência é um **defeito a registrar** —
-> nunca resolvida escolhendo o texto mais bonito."*
+> _"O código é a verdade sobre o que existe. (...) A divergência é um **defeito a registrar** —
+> nunca resolvida escolhendo o texto mais bonito."_
 
 E o `BLOQUEIOS.md` acrescenta o que está em jogo:
 
-> *"Isto precisa ser resolvido antes de qualquer plano de release, porque o P1 mais estrutural do
-> backlog está escrito sobre um objeto que não existe."*
+> _"Isto precisa ser resolvido antes de qualquer plano de release, porque o P1 mais estrutural do
+> backlog está escrito sobre um objeto que não existe."_
 
 **As duas saídas possíveis são:** ou a branch foi apagada e o caminho para produção mudou (e a
-pergunta vira *qual é ele hoje?*), ou ela nunca existiu com esse nome (e o número 794 mede outra
+pergunta vira _qual é ele hoje?_), ou ela nunca existiu com esse nome (e o número 794 mede outra
 coisa — provavelmente a distância entre a `dev` e o que está **implantado**, que é uma task
 definition, não uma branch).
 
@@ -46,14 +46,22 @@ definition, não uma branch).
 3. **O repositório `ERP-INFRA` está clonado ao lado**, em
    `../ERP-INFRA` (irmão do `core-api` no monorepo). É o candidato natural a conter o
    pipeline / as task definitions. **É outro repositório: leia, não escreva nele.**
-4. **A Discussion #958** — *"Homologação já pegou o 04f24df8b (M2)? E como saber qual commit está
-   em cada ambiente"* — faz exatamente esta pergunta e está sem resposta desde 31/08. O que você
+4. **A Discussion #958** — _"Homologação já pegou o 04f24df8b (M2)? E como saber qual commit está
+   em cada ambiente"_ — faz exatamente esta pergunta e está sem resposta desde 31/08. O que você
    apurar provavelmente a responde. **Não a responda por conta própria**: relate ao Gabriel que
    ela pode ser fechada com o seu achado, e deixe que ele decida (a #958 também é o item 7 da
    fila, com dono a definir).
-5. **O Tailscale está ligado** nesta máquina. Os nós `hml-erp-bem-comum` e `erp-bem-comum-qa`
-   respondem. Se puder **medir** qual versão está no ar em vez de inferir, meça — mas veja a
+5. **O Tailscale está ligado** nesta máquina. O nó de homologação e o de validação respondem.
+   Se puder **medir** qual versão está no ar em vez de inferir, meça — mas veja a
    seção de segurança abaixo antes de tocar em qualquer host.
+   <!-- Sanitizado em 03/09/2026: os dois nós eram nomeados aqui, contra a própria regra de
+        segurança deste briefing ("nada de hostname de tailnet") e contra a do repositório, que
+        é público. Descritos pelo papel; quem opera sabe quais são. -->
+
+   ⚠️ **A régua vale para este arquivo também.** A seção de segurança abaixo proíbe hostname de
+   tailnet, e a versão original desta linha o continha — o briefing violava a regra que enuncia.
+   Antes de escrever qualquer nome de máquina, releia a seção de segurança e pergunte se o papel
+   ("o nó de homologação") não basta. Quase sempre basta.
 
 ---
 
@@ -144,12 +152,12 @@ Gabriel.
 
 ### Skills e agentes a disparar
 
-| Quando | O quê | Por quê |
-| :--- | :--- | :--- |
-| **Primeiro de tudo** | skill **`inquiry`** | O acervo em `handbook/inquiries/` pode já ter investigado o caminho de release. Consultar antes de investigar do zero é o protocolo. A inquiry **0027** trata de branches/teses órfãs — provável parente desta apuração |
-| Se achar defeito fora deste escopo | skill **`issue-report`** | Anti-padrão 7 do `CLAUDE.md`: registre e siga, não conserte de passagem |
-| Se a apuração exigir varrer muitos arquivos do `ERP-INFRA` | agente **`Explore`** (breadth: *very thorough*) | Ele devolve a conclusão sem despejar os arquivos no seu contexto — e contexto curto é o que evita a compactação que derruba as rules |
-| Antes de abrir o PR | skill **`ts-quality-checker`** | Roda o gate e reporta a saída literal de cada comando |
+| Quando                                                     | O quê                                           | Por quê                                                                                                                                                                                                                 |
+| :--------------------------------------------------------- | :---------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Primeiro de tudo**                                       | skill **`inquiry`**                             | O acervo em `handbook/inquiries/` pode já ter investigado o caminho de release. Consultar antes de investigar do zero é o protocolo. A inquiry **0027** trata de branches/teses órfãs — provável parente desta apuração |
+| Se achar defeito fora deste escopo                         | skill **`issue-report`**                        | Anti-padrão 7 do `CLAUDE.md`: registre e siga, não conserte de passagem                                                                                                                                                 |
+| Se a apuração exigir varrer muitos arquivos do `ERP-INFRA` | agente **`Explore`** (breadth: _very thorough_) | Ele devolve a conclusão sem despejar os arquivos no seu contexto — e contexto curto é o que evita a compactação que derruba as rules                                                                                    |
+| Antes de abrir o PR                                        | skill **`ts-quality-checker`**                  | Roda o gate e reporta a saída literal de cada comando                                                                                                                                                                   |
 
 Não dispare especialista de domínio (Drizzle, MySQL, CNAB, Fastify) — esta tarefa não toca código.
 
