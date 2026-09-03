@@ -39,8 +39,14 @@ const git = (...args: readonly string[]): readonly string[] =>
 
 /** Os módulos e as camadas que EXISTEM, lidos do repositório versionado. */
 const tracked = git('ls-files', 'src/modules/*');
-const MODULES = new Set(tracked.map((p) => p.split('/')[2]).filter((m): m is string => m !== ''));
-const LAYERS = new Set(tracked.map((p) => p.split('/')[3]).filter((l): l is string => l !== ''));
+// ⚠️ `m !== ''` NÃO exclui `undefined`, e o type predicate mentia: um path com menos de 3 segmentos
+// punha `undefined` no Set, que passava a "existir" e aparecia na mensagem de erro. O irmão
+// `inventory-counts.test.ts` já testava contra `undefined` — a régua existia num lugar e faltava aqui.
+const seg = (p: string, i: number): string | undefined => p.split('/')[i];
+const isName = (v: string | undefined): v is string => v !== undefined && v !== '';
+
+const MODULES = new Set(tracked.map((p) => seg(p, 2)).filter(isName));
+const LAYERS = new Set(tracked.map((p) => seg(p, 3)).filter(isName));
 
 const HARNESS = [
   ...git('ls-files', '.claude/skills/**/*.md'),

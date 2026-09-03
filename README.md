@@ -12,7 +12,7 @@ Backend do ERP Bem Comum, modelado como **modular monolith**. Vários módulos d
 
 ## 🧩 Módulos
 
-Seis Bounded Contexts sob `src/modules/`, cada um com a mesma anatomia (`domain/` → `application/` → `adapters/` → `public-api/`). A comunicação cross-módulo passa **exclusivamente** por `public-api/` + eventos no Outbox (ADR-0006/0014).
+Os Bounded Contexts vivem sob `src/modules/`, cada um com a mesma anatomia (`domain/` → `application/` → `adapters/` → `public-api/`). A comunicação cross-módulo passa **exclusivamente** por `public-api/` + eventos no Outbox (ADR-0006/0014).
 
 | Módulo                                          | Responsabilidade                                                                                                                                           | Borda HTTP                                       |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -22,6 +22,8 @@ Seis Bounded Contexts sob `src/modules/`, cada um com a mesma anatomia (`domain/
 | [`partners`](./src/modules/partners/)           | Registry de parceiros — colaboradores, fornecedores, financiadores, geografia/território (soft-delete ADR-0035), ACT (ADR-0036) — ADR-0031.                | `/api/v1/{collaborators,suppliers,financiers,…}` |
 | [`programs`](./src/modules/programs/)           | Gestão de programas + logo storage S3/MinIO — spec 008, ADR-0033.                                                                                          | `/api/v1/programs`                               |
 | [`notifications`](./src/modules/notifications/) | E-mail transacional — templates + `EmailSender` (Nodemailer/Resend), **consumidor** de eventos de domínio (ADR-0010/0047).                                 | worker `email-dispatch`                          |
+| [`budget-plans`](./src/modules/budget-plans/)   | Planos orçamentários — plano, resultado realizado e estrutura de custo; taxonomia do planejável (ADR-0048/0051).                                           | `/api/v2/budget-plans`                           |
+| [`reports`](./src/modules/reports/)             | Leitura agregada sobre o que os outros módulos escreveram. **Não tem `domain/`** — é consulta, não modelo, e por isso não tem regra própria a proteger.    | `/api/v2/reports`                                |
 
 ---
 
@@ -71,7 +73,7 @@ db/drizzle/                              configs do drizzle-kit por módulo (con
 scripts/                                 ci · claude · e2e (Bruno) · etl · financial · handbook · seed · setup
 
 handbook/                                Source of Truth — interno ao repo
-├── architecture/adr/                    48 ADRs aceitos (IMUTÁVEIS)
+├── architecture/adr/                    ADRs aceitos (IMUTÁVEIS)
 ├── reference/<tech>/                    typescript · nodejs · drizzle · mysql · mysql2 · docker · pnpm · fastify
 │                                        · fastify-plugins · nodemailer · zod · bruno · magalu-cloud · claude-code
 ├── domain_questions/, inquiries/, interviews/, reviews/, specs/, runbooks/, …

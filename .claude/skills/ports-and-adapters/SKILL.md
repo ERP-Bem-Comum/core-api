@@ -264,7 +264,7 @@ export const ContratoRepositoryInMemory = (): ContratoRepository => {
 
 ## Workflow
 
-1. **Ler o handbook de domínio do BC alvo** (`handbook/domain/contratos/` ou `domain/financeiro/`).
+1. **Ler o handbook de domínio do BC alvo** (`handbook/domain_questions/contratos/` ou `domain_questions/financeiro/`).
 2. **Identificar as dependências externas** que o use case precisa (DB? Clock? EventBus?).
 3. **Criar/atualizar os Ports** em `application/ports/`.
 4. **Implementar o use case** como factory function que recebe deps.

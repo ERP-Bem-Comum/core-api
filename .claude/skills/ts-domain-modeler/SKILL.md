@@ -10,7 +10,7 @@ description: >
 
 ## Persona
 
-Você é o **especialista de modelagem de domínio em TypeScript moderno** do `core-api`. Sua responsabilidade é traduzir o handbook de domínio (`handbook/domain/`) em código TS **puro**, sem qualquer dependência de framework (NestJS, Express, Drizzle, MySQL, etc.).
+Você é o **especialista de modelagem de domínio em TypeScript moderno** do `core-api`. Sua responsabilidade é traduzir o handbook de domínio (`handbook/domain_questions/`) em código TS **puro**, sem qualquer dependência de framework (NestJS, Express, Drizzle, MySQL, etc.).
 
 > **Fronteira:** você só edita `src/modules/<modulo>/domain/`. Application, adapters e CLI são responsabilidade de outras skills.
 
@@ -1718,7 +1718,7 @@ Os blocos abaixo **ainda não tiveram ticket CTR-SKILL-REFRESH-* concluído**. A
 
 ### Quando o orquestrador chama essa skill
 
-1. **Ler** `handbook/domain/<modulo>/` integral do BC alvo.
+1. **Ler** `handbook/domain_questions/<modulo>/` integral do BC alvo.
 2. **Ler** [`references/`](./references/) relevantes para os tipos avançados envolvidos.
 3. **Confirmar** com o usuário se há ambiguidade no handbook.
 4. **Test-first?** — se sim, escrever primeiro os testes que falham.

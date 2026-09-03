@@ -35,8 +35,18 @@ const git = (...args: readonly string[]): readonly string[] =>
 
 const SOURCES = git('ls-files', 'src/*.ts', 'src/**/*.ts');
 
-/** `type XError =` / `export type XError =`, capturando o corpo até o `;`. */
-const ERROR_UNION = /\btype\s+(\w*Error)\s*=\s*([^;]+);/gsu;
+/**
+ * `type XError =` / `export type XError =`, capturando o corpo até o `;` que fecha a declaração.
+ *
+ * ⚠️ `[^;]+` parava no PRIMEIRO `;`, inclusive num `;` interno a um objeto — nove unions de `src/`
+ * ficavam truncadas (`MagaluCloudEnvError`, `EmailConfigError`, `VanS3ConfigError` entre elas). Hoje
+ * nenhuma delas mistura literal com objeto, então não havia falso resultado; mas uma union mista
+ * (`Readonly<{ tag: 'a'; … }> | 'BadCasing'`) teria o literal solto ignorado — o gate passaria verde
+ * exatamente sobre a violação que existe para pegar.
+ *
+ * O corpo agora vai até o fim da linha lógica: `;` seguido de quebra, ou fim do arquivo.
+ */
+const ERROR_UNION = /\btype\s+(\w*Error)\s*=\s*([\s\S]*?);\s*(?:\n|$)/gu;
 /**
  * Membro que é UM LITERAL INTEIRO, não um literal em algum lugar do membro.
  *

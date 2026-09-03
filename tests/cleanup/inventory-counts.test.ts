@@ -40,7 +40,12 @@ const INVENTORIES: Readonly<Record<string, () => number>> = {
   skills: () => git('ls-files', '.claude/skills/*/SKILL.md').length,
   agents: () => git('ls-files', '.claude/agents/*.md').length,
   hooks: () => git('ls-files', '.claude/hooks/*.sh').length,
-  ADRs: () => git('ls-files', 'handbook/architecture/adr/*.md').length,
+  // ⚠️ Chave em minúsculas, sempre. `claimsIn` normaliza o substantivo capturado com
+  // `.toLowerCase()`; uma chave `ADRs` nunca casaria com `'adrs'`, e o `flatMap` do gate descarta
+  // substantivo desconhecido em SILÊNCIO — o gate ficava verde sem nunca verificar nada.
+  // Custo real: `README.md` afirmou "48 ADRs" durante todo o PR que criou este arquivo, num
+  // repositório de 68, e a suíte passou. Era o caso citado no próprio docstring como motivação.
+  adrs: () => git('ls-files', 'handbook/architecture/adr/*.md').length,
   módulos: () =>
     new Set(
       git('ls-files', 'src/modules/*')
@@ -133,6 +138,19 @@ describe('INVENTORY-COUNTS — número escrito na doc canônica bate com o repos
       'contagem cravada divergiu do repositório — corrija o número, ou reescreva a frase sem ele ' +
         'se a contagem não for o que importa:\n' +
         wrong.join('\n'),
+    );
+  });
+
+  it('todo substantivo do padrão tem inventário que responde (guarda contra gate mudo)', () => {
+    // A guarda que faltava: um substantivo em `NOUNS` sem entrada correspondente em `INVENTORIES`
+    // faz o gate descartar aquelas ocorrências sem dizer nada. Foi assim que `ADRs`/`adrs` deixou o
+    // gate mudo sobre a contagem que ele mais precisava verificar.
+    const orphans = NOUNS.split('|').filter((n) => INVENTORIES[n.toLowerCase()] === undefined);
+    assert.deepEqual(
+      orphans,
+      [],
+      'substantivo do padrão sem inventário — as ocorrências dele passam sem verificação:\n' +
+        orphans.join('\n'),
     );
   });
 

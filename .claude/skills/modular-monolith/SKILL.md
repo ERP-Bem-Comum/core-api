@@ -91,7 +91,7 @@ shared/              ◄────────  modules/<qualquer>/   (módulo
   │
 shared-kernel/       ◄────────  modules/<qualquer>/   (módulos podem usar shared-kernel)
 
-modules/<X>/contracts/  ◄────  modules/<Y>/application/  (Y pode escutar eventos de X)
+modules/<X>/public-api/  ◄────  modules/<Y>/application/  (Y pode escutar eventos de X)
 
 modules/<X>/domain/     ❌    modules/<Y>/...           (X.domain NUNCA vê Y)
 modules/<X>/adapters/   ❌    modules/<Y>/...           (idem)
@@ -100,7 +100,7 @@ modules/<X>/application/ ❌   modules/<Y>/application/  (idem — comunique via
 
 ### Tabela de permissões
 
-| De \ Para | `shared/` | `shared-kernel/` | `modules/X/domain/` | `modules/X/application/` | `modules/X/adapters/` | `modules/X/contracts/` | `modules/Y/*` |
+| De \ Para | `shared/` | `shared-kernel/` | `modules/X/domain/` | `modules/X/application/` | `modules/X/adapters/` | `modules/X/public-api/` | `modules/Y/*` |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `shared/` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `shared-kernel/` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -108,13 +108,13 @@ modules/<X>/application/ ❌   modules/<Y>/application/  (idem — comunique via
 | `modules/X/application/` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (próprio) | ✅ contracts/ |
 | `modules/X/adapters/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
 | `modules/X/cli/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
-| `modules/X/contracts/` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `modules/X/public-api/` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 
 Resumo:
 
 - **Domain só vê shared + shared-kernel.**
-- **Module X pode importar de `modules/Y/contracts/`** (escutar eventos de Y). Tudo o mais de Y é proibido.
-- **`contracts/` de um módulo é pura** — só tipos + zod-like validators. Não tem regra de negócio.
+- **Module X pode importar de `modules/Y/public-api/`** (escutar eventos de Y). Tudo o mais de Y é proibido.
+- **`public-api/` de um módulo é pura** — só tipos + zod-like validators. Não tem regra de negócio.
 
 ---
 
@@ -201,10 +201,10 @@ A regra é forte: **mesmo no mesmo processo (`core-api`)**, módulos não cruzam
 Quando um arquivo é criado/movido:
 
 - [ ] Domínio só importa de `shared/` e `shared-kernel/`.
-- [ ] Application só importa do próprio módulo + `contracts/` de outros.
+- [ ] Application só importa do próprio módulo + `public-api/` de outros.
 - [ ] Adapter pode importar do próprio módulo + lib externa (mysql2, etc.).
-- [ ] `contracts/` é pasta isolada — só tipos puros, sem dependência de adapters.
-- [ ] Nenhum `import` cruza barreira sem passar por `contracts/`.
+- [ ] `public-api/` é pasta isolada — só tipos puros, sem dependência de adapters.
+- [ ] Nenhum `import` cruza barreira sem passar por `public-api/`.
 
 ---
 
@@ -228,7 +228,7 @@ Pode virar lint rule no futuro. Por enquanto, code review manual + esse `grep` n
 | Tabela `core.contratos_e_financeiro_compartilhado` | Tabela só de um módulo; outro tem projeção própria via evento |
 | Use case de Financeiro chamando repo de Contratos | Financeiro consome evento `EstadoContratualAtualizado` |
 | Helper "compartilhado" em `modules/contracts/utils.ts` reutilizado por Financeiro | Movido para `shared/` ou `shared-kernel/` |
-| `modules/X/index.ts` reexportando tudo (domain, application, adapters) | Reexporta apenas `contracts/` |
+| `modules/X/index.ts` reexportando tudo (domain, application, adapters) | Reexporta apenas `public-api/` |
 | Outbox controller compartilhado por 2 módulos sabendo schemas internos | Cada módulo publica seu evento; outbox é transporte burro |
 
 ---

@@ -28,11 +28,31 @@ const WIKI_REMOTE = 'https://github.com/ERP-Bem-Comum/core-api.wiki.git';
 const run = (cwd: string, ...args: readonly string[]): string =>
   execFileSync('git', [...args], { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
 
+const stderrOf = (e: unknown): string => {
+  const err = e as { stderr?: unknown; message?: unknown };
+  return String(err.stderr ?? err.message ?? e);
+};
+
+/**
+ * ⚠️ Um `catch` nu classificaria TODO erro como "wiki não inicializada" — falha de rede, 403 de
+ * permissão e proxy corporativo viriam com a mesma mensagem, mandando o usuário criar uma página que
+ * já existe. Diagnóstico errado com autoridade é pior que erro cru: manda consertar o que não quebrou.
+ */
 const main = (): void => {
   if (existsSync(WIKI_DIR)) {
     process.stdout.write(`atualizando ${WIKI_DIR}\n`);
-    run(WIKI_DIR, 'pull', '--ff-only');
-    process.stdout.write('wiki atualizada\n');
+    try {
+      run(WIKI_DIR, 'pull', '--ff-only');
+      process.stdout.write('wiki atualizada\n');
+    } catch (e) {
+      // Um `.wiki/` que existe mas não é repo git (clone interrompido, cópia manual) fazia o script
+      // morrer com stack trace cru — o `pull` estava fora de qualquer catch.
+      process.stderr.write(
+        `não consegui atualizar ${WIKI_DIR}:\n${stderrOf(e)}\n\n` +
+          'Se o diretório não for um clone válido, apague-o e rode de novo para clonar do zero.\n',
+      );
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -40,15 +60,20 @@ const main = (): void => {
   try {
     run(PROJECT_ROOT, 'clone', WIKI_REMOTE, '.wiki');
     process.stdout.write('wiki clonada — o Claude já a lê por Read/Grep/Glob\n');
-  } catch {
+  } catch (e) {
+    const stderr = stderrOf(e);
     // `Repository not found` na wiki quase nunca é permissão: é a wiki nunca ter sido inicializada.
     // O repo `.wiki.git` só passa a existir depois que a PRIMEIRA página é criada pela interface web.
-    process.stderr.write(
-      'wiki não encontrada.\n\n' +
-        'A wiki está habilitada no repositório, mas o repo `.wiki.git` só nasce depois que a\n' +
-        'primeira página é criada pela interface web — não há API nem comando `gh` que a crie.\n\n' +
-        'Crie uma página em https://github.com/ERP-Bem-Comum/core-api/wiki e rode de novo.\n',
-    );
+    if (/not found|não encontrado/iu.test(stderr)) {
+      process.stderr.write(
+        'wiki não encontrada.\n\n' +
+          'A wiki está habilitada no repositório, mas o repo `.wiki.git` só nasce depois que a\n' +
+          'primeira página é criada pela interface web — não há API nem comando `gh` que a crie.\n\n' +
+          'Crie uma página em https://github.com/ERP-Bem-Comum/core-api/wiki e rode de novo.\n',
+      );
+    } else {
+      process.stderr.write(`falha ao clonar a wiki:\n${stderr}\n`);
+    }
     process.exitCode = 1;
   }
 };

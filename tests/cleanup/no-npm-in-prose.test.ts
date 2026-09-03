@@ -51,6 +51,14 @@ const DATED = /\b(\d{1,2}\/\d{1,2}(\/\d{2,4})?|\d{4}-\d{2}-\d{2})\b/u;
 
 /** Forma imperativa: o que um leitor copia e cola. Nome de pacote e de registry não casam. */
 const IMPERATIVE = /\bnpm\s+(install|i|ci|run|test|exec|publish|audit|update|add)\b|\bnpx\s+\S/giu;
+/**
+ * Cópia SEM a flag `g` para as asserções de guarda.
+ *
+ * ⚠️ `RegExp.test()` numa regex global avança `lastIndex` e a próxima chamada recomeça de onde parou
+ * — a segunda asserção falharia em silêncio. `matchAll` não sofre disso (clona a regex), mas `.test`
+ * sofre, e um gate cuja guarda mente é pior que gate sem guarda.
+ */
+const IMPERATIVE_ONCE = new RegExp(IMPERATIVE.source, 'iu');
 
 /**
  * `pnpm` na MESMA LINHA isenta. O sinal foi escolhido depois de calibrar contra as ocorrências
@@ -105,8 +113,12 @@ describe('NO-NPM-IN-PROSE — a doc que instrui não ensina npm', () => {
         'acima passaria sobre nada',
     );
     assert.ok(
-      IMPERATIVE.test('npm install'),
+      IMPERATIVE_ONCE.test('npm install'),
       'o padrão parou de casar a forma que ele existe para pegar',
+    );
+    assert.ok(
+      !IMPERATIVE_ONCE.test('registry.npmjs.org e o pacote npm-run-all'),
+      'o padrão casa nome de registry ou de pacote — uso e menção confundidos',
     );
   });
 });
