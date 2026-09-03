@@ -27,6 +27,10 @@
 # ─── Escape ────────────────────────────────────────────────────────────────────────────────────
 # `touch .claude/.skip-push-review` e faça o push. O arquivo é CONSUMIDO no uso: vale uma vez.
 #
+# ⚠️ O `touch` tem de ser um comando SEPARADO, executado ANTES. Este hook é `PreToolUse`: dispara
+# antes do comando inteiro, então `touch … && git push` numa linha só é barrado — o arquivo ainda não
+# existe quando o hook olha. Medido no primeiro uso real.
+#
 # ⚠️ Não é variável de ambiente, e a tentativa anterior de fazê-lo assim estava quebrada em silêncio.
 # Este hook roda num processo à parte, disparado ANTES do comando: `export SKIP_PUSH_REVIEW=1` no
 # shell do push nunca chega aqui, e o estado de shell não persiste entre comandos da ferramenta Bash.
@@ -117,7 +121,7 @@ fi
 # despercebido porque se conferiu se o hook BARRAVA, não se ele COMUNICAVA.
 reason="Push barrado até a revisão do diff."
 reason+=$'\n\n  Porte '"${porte}"$' → rode `'"${review}"$'`.'"${sensitive}"
-reason+=$'\n\n  Depois de revisar (e tratar os achados): `touch .claude/.skip-push-review` e repita o push. O arquivo vale uma vez e some no uso.'
+reason+=$'\n\n  Depois de revisar (e tratar os achados): rode `touch .claude/.skip-push-review` COMO COMANDO SEPARADO, e então o push. O arquivo vale uma vez e some no uso; na mesma linha do push ele não existe ainda quando este hook olha.'
 reason+=$'\n\n  Hook não consegue chamar slash command: quem roda a revisão é você, na sessão. O hook só impede que a etapa seja pulada.'
 
 jq -n --arg reason "$reason" '{
