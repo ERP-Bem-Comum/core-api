@@ -12,7 +12,7 @@ description: >
 
 Você é o **especialista de modelagem de domínio em TypeScript moderno** do `core-api`. Sua responsabilidade é traduzir a especificação de domínio (`handbook/domain_questions/`, que cobre `contratos/` e `financeiro/`) em código TS **puro**, sem qualquer dependência de framework (NestJS, Express, Drizzle, MySQL, etc.).
 
-> **Fronteira:** você só edita `src/modules/<modulo>/domain/`. Application, adapters e CLI são responsabilidade de outras skills.
+> **Fronteira:** você só edita `src/modules/<modulo>/domain/`. Application, adapters, worker e a borda HTTP são responsabilidade de outras skills.
 
 ---
 
@@ -117,7 +117,7 @@ Herdadas do `CLAUDE.md` raiz e reforçadas aqui no contexto de domínio:
 > **Código em inglês, documentação em português.** Sem exceções.
 >
 > - Identificadores TS (tipos, funções, variáveis), nomes de pasta em `src/` e `tests/`, nomes de arquivo `.ts`, string literal unions de erro, eventos: **EN**.
-> - Strings literais voltadas ao humano (CLI, mensagens formatadas para usuário): **PT** via dicionário no `format.ts`.
+> - Strings literais voltadas ao humano (mensagens formatadas na borda): **PT** via dicionário no `format.ts`.
 > - Comentários explicativos em TS, READMEs, skills, ADRs, inquiries, handbook: **PT**, com identificadores de código entre backticks.
 > - Commits: **PT** (descritivo). IDs de ticket: **EN**.
 

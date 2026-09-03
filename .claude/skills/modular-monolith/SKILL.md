@@ -44,7 +44,7 @@ Reference local: [`./references/module-isolation-rules.md`](./references/module-
 | Drizzle ORM (organização de schemas por módulo no futuro) | [`handbook/reference/drizzle/`](../../../handbook/reference/drizzle/) |
 | mysql2 driver (quando MySQL real existir) | [`handbook/reference/mysql2/`](../../../handbook/reference/mysql2/) |
 | Layout canônico, vivo no repositório | `src/modules/contracts/{domain,application,adapters,worker,public-api}/` |
-| Módulo Financeiro (Fase 2 — reservado, ainda não codado) | [`handbook/domain_questions/financeiro/`](../../../handbook/domain_questions/financeiro/) |
+| Especificação de domínio do Financeiro | [`handbook/domain_questions/financeiro/`](../../../handbook/domain_questions/financeiro/) |
 | BCs do módulo Contratos com fronteiras nominadas | [`handbook/domain_questions/contratos/02-context-map.md`](../../../handbook/domain_questions/contratos/02-context-map.md) |
 | Fluxo de eventos cross-módulo (matriz P/C) | [`handbook/domain_questions/contratos/06-event-flow.md`](../../../handbook/domain_questions/contratos/06-event-flow.md) |
 
@@ -54,13 +54,14 @@ Reference local: [`./references/module-isolation-rules.md`](./references/module-
 
 ```
 src/
-├── shared/                   # Cross-cutting puro — Result, Brand, ID, ports compartilhados (Clock, etc.)
-│   ├── result.ts
-│   ├── brand.ts
-│   ├── id.ts
-│   └── ports/
-│       ├── clock.ts
-│       └── id-generator.ts
+├── shared/                   # Cross-cutting puro
+│   ├── primitives/           # Result, Brand, immutable, exhaustiveStringUnion
+│   ├── kernel/               # 🟡 VOs ESTÁVEIS: Money, Period, PlainDate, Cpf, Cnpj, UserRef
+│   ├── ports/                # Ports compartilhados (Clock, IdGenerator…)
+│   ├── outbox/               # Outbox pattern, compartilhado entre módulos
+│   ├── http/                 # Bootstrap da borda, plugins, envelope de erro
+│   ├── persistence/          # Pool, transação, helpers de driver
+│   ├── observability/, runtime/, adapters/, utils/
 ├── modules/
 │   ├── contracts/            # Bounded Context "Gestão de Contratos"
 │   │   ├── domain/           # TS puro
@@ -68,15 +69,10 @@ src/
 │   │   ├── adapters/         # Implementações (persistence, http, storage, outbox…)
 │   │   ├── worker/           # Processamento assíncrono do módulo
 │   │   └── public-api/       # 🔵 API PÚBLICA (eventos + commands publicáveis)
-│   ├── financial/            # Bounded Context "Financeiro"
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── adapters/
-│   │   └── public-api/       # API pública
-│   └── shared-kernel/        # 🟡 Tipos compartilhados ESTÁVEIS (CNPJ, CPF, IBGE)
-│       └── index.ts
-└── platform/
-    └── outbox/               # Implementação do outbox pattern (compartilhada)
+│   └── financial/            # Bounded Context "Financeiro" — mesma anatomia
+├── jobs/                     # Entrypoints de job pontual
+├── workers/                  # Entrypoints de worker de longa duração
+└── server.ts                 # Entrypoint HTTP
 ```
 
 ---
@@ -105,7 +101,7 @@ modules/<X>/application/ ❌   modules/<Y>/application/  (idem — comunique via
 | `modules/X/domain/` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | `modules/X/application/` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (próprio) | ✅ public-api/ |
 | `modules/X/adapters/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
-| `modules/X/cli/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
+| `modules/X/worker/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
 | `modules/X/public-api/` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 
 Resumo:

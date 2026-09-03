@@ -49,6 +49,23 @@ const ERROR_UNION_START = /\btype\s+(\w*Error)\s*=\s*/gu;
  * autoridade. Por isso a checagem parte do membro inteiro, não de uma varredura de aspas.
  */
 const WHOLE_LITERAL = /^'([^']+)'$/u;
+
+/**
+ * Comentário à direita não muda o que o membro É.
+ *
+ * ⚠️ `WHOLE_LITERAL` exige que o membro INTEIRO seja o literal, então `'x' // motivo` não casava e o
+ * literal saía da checagem em silêncio. Trinta e oito literais de `src/` estavam fora do gate por
+ * isso — `budget-not-found`, `collaborator-cpf-duplicate`, `remittance-without-payables` entre eles.
+ * Um `'ContractNotActive' // motivo` passaria verde.
+ *
+ * É a MESMA classe de buraco que a correção anterior fechou na delimitação do CORPO (o `;` seguido
+ * de `//`): comentário quebrando um delimitador. Fechei num lugar e deixei no outro.
+ */
+const stripComment = (member: string): string =>
+  member
+    .replace(/\/\*[\s\S]*?\*\//gu, '')
+    .replace(/\/\/.*$/gmu, '')
+    .trim();
 /** EN kebab-case: minúsculas e dígitos, separados por hífen simples. */
 const KEBAB = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/u;
 
@@ -80,8 +97,17 @@ const membersOf = (content: string, from: number): readonly string[] => {
   for (let i = from; i < content.length; i += 1) {
     const c = content[i] ?? '';
     if (c === ';' && depth === 0) break;
+    // `>` tem dois papéis em TS: fecha genérico e forma a seta `=>`. Contar a seta como fechamento
+    // levaria `depth` a negativo permanentemente — o `;` terminador nunca seria visto e a varredura
+    // engoliria o resto do arquivo, derrubando todas as unions seguintes. Hoje nenhuma union de
+    // `src/` tem seta, então é hazard e não defeito ativo; mas o piso de cobertura acusaria isso com
+    // a mensagem errada, e o custo de prevenir é uma comparação.
+    if (c === '>' && content[i - 1] === '=') {
+      current += c;
+      continue;
+    }
     if ('{<(['.includes(c)) depth += 1;
-    else if ('}>)]'.includes(c)) depth -= 1;
+    else if ('}>)]'.includes(c)) depth = Math.max(0, depth - 1);
     if (c === '|' && depth === 0) {
       members.push(current);
       current = '';
@@ -98,7 +124,7 @@ const badLiterals = (file: string): readonly Offender[] => {
     const start = (u.index ?? 0) + u[0].length;
     const line = content.slice(0, u.index ?? 0).split('\n').length;
     return membersOf(content, start)
-      .map((member) => WHOLE_LITERAL.exec(member.trim())?.[1] ?? '')
+      .map((member) => WHOLE_LITERAL.exec(stripComment(member))?.[1] ?? '')
       .filter((lit) => lit.length > 0 && !KEBAB.test(lit))
       .map((literal) => ({ where: `${file}:${line}`, type: name, literal }));
   });
@@ -128,15 +154,20 @@ describe('ERROR-LITERAL-CASING — erro interno é EN kebab-case', () => {
       const content = readFileSync(resolve(PROJECT_ROOT, f), 'utf-8');
       return [...content.matchAll(ERROR_UNION_START)].flatMap((u) =>
         membersOf(content, (u.index ?? 0) + u[0].length)
-          .map((m) => WHOLE_LITERAL.exec(m.trim())?.[1] ?? '')
+          .map((m) => WHOLE_LITERAL.exec(stripComment(m))?.[1] ?? '')
           .filter((l) => l.length > 0),
       );
     }).length;
 
     assert.ok(
-      covered >= 879,
-      `só ${covered} literais de erro sob verificação — eram 879 em 03/09/2026. O delimitador do ` +
-        'corpo da union estreitou, e os literais que saíram passam sem conferência de casing.',
+      // Piso com folga deliberada. A versão anterior fixou 879 contra um real de 880: apagar um
+      // único erro obsoleto deixaria o gate vermelho com a mensagem "o delimitador estreitou" — um
+      // diagnóstico FALSO, que mandaria o próximo dev caçar um parser que está certo. O piso existe
+      // para pegar encolhimento de PARSER (dezenas de literais de uma vez), não flutuação de código.
+      covered >= 850,
+      `só ${covered} literais de erro sob verificação — eram 918 em 03/09/2026. Uma queda dessa ` +
+        'ordem é o delimitador do corpo ou do membro tendo estreitado, e os literais que saíram ' +
+        'passam sem conferência de casing.',
     );
   });
 

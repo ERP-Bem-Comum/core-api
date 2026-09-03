@@ -11,83 +11,51 @@
 #
 # O que um hook PODE fazer com honestidade é o que este faz — medir o diff (isso é mensurável, ao
 # contrário de "tamanho do contexto", que o hook não enxerga) e recusar o push até que a revisão
-# proporcional tenha sido feita. Quem aperta o botão continua sendo o humano; o hook só impede que a
-# etapa seja pulada por esquecimento.
+# proporcional tenha sido feita. Quem aperta o botão continua sendo o humano.
+#
+# ─── Por que este arquivo é curto ───────────────────────────────────────────────────────────────
+# Três rodadas de revisão acharam nove furos, TODOS no mesmo lugar: a tentativa de parsear shell para
+# descobrir em que repositório o push aconteceria. Corrigir `&&` deixou a quebra de linha passar;
+# corrigir `-C` deixou `--git-dir` passar; um `head -1` fazia o segundo push de um comando composto
+# nunca ser medido. Não é azar — a gramática de shell é infinita e uma enumeração de casos é finita.
+#
+# A superfície foi então reduzida ao que o gate realmente precisa saber: **isto é um push do repo de
+# código?** A única exceção legítima medida em uso é a wiki (`core-api.wiki.git`, um clone em
+# `.wiki/`), e ela vira uma condição explícita de uma linha. Tudo o mais BARRA — falha fechada, que
+# é o lado certo de errar num gate.
 #
 # ─── Escape ────────────────────────────────────────────────────────────────────────────────────
-# `SKIP_PUSH_REVIEW=1 git push …` — para quando a revisão já rodou nesta sessão. É deliberadamente
-# um envelope explícito: some do histórico do shell, aparece no log, e não é o caminho de menor
-# resistência.
+# `export SKIP_PUSH_REVIEW=1` antes do push — variável de AMBIENTE, não atribuição inline (`FOO=1 git
+# push` define a variável para o `git`, não para este processo). É deliberadamente explícito: aparece
+# no log e não é o caminho de menor resistência.
 
 set -euo pipefail
 
 payload="$(cat)"
 command="$(printf '%s' "$payload" | jq -r '.tool_input.command // ""')"
 
-# O `if:` do settings.json já filtra por prefixo, mas um hook que confia no chamador vira surpresa
-# quando alguém reusa o arquivo noutro matcher.
-#
-# ⚠️ Casar `git push` em QUALQUER posição confunde uso com menção — a primeira versão barrou o
-# próprio comando que a testava, um `echo` que só montava o payload. `git push` tem de estar na
-# posição de COMANDO: no início, ou logo depois de um separador.
-#
-# ⚠️ E a posição de comando admite prefixos: atribuições inline (`FOO=1 git push`), `time`, `command`,
-# e `git -C <dir> push`. A segunda versão ignorava os quatro, e QUALQUER um deles furava o gate — o
-# mais irônico sendo `SKIP_PUSH_REVIEW=1 git push`, que "funcionava" por não ser reconhecido, não
-# pelo teste da variável lá embaixo.
-#
-# ⚠️ Aceitar prefixo de atribuição amplia o que o padrão confunde com MENÇÃO: uma string que contenha
-# `FOO=1 git push` passa a casar. É trade-off assumido, não descuido — aqui se falha FECHADO. Um
-# `deny` espúrio é visível, explicável e some com uma reescrita do comando; um furo é silencioso e só
-# aparece depois de ter passado. Num gate, essa assimetria decide.
-# `[^[:space:]]+ ` cobre qualquer opção antes do `push`, inclusive `--git-dir=/x/.git`, que a
-# alternação anterior perdia por exigir espaço depois da opção. `sudo` entrou na lista de prefixos.
-if ! grep -qE '(^|[;&|])[[:space:]]*((command|time|env|nice|sudo)[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*git[[:space:]]+(-[^[:space:]]+[[:space:]]+([^-][^[:space:]]*[[:space:]]+)?)*push\b' <<<"$command"; then
+# O `if:` do settings.json já filtra por prefixo do comando real. Este teste é defesa em profundidade
+# para o caso de o arquivo ser reusado noutro matcher — e é deliberadamente FROUXO: qualquer menção a
+# `git push` faz o hook opinar. Um deny espúrio é visível e recuperável; um furo é silencioso.
+if ! grep -qE 'git[[:space:]]+([^[:space:]]+[[:space:]]+)*push\b' <<<"$command"; then
   exit 0
 fi
 
-# O escape é uma variável do AMBIENTE do hook, não uma atribuição inline no comando: `FOO=1 git push`
-# define FOO para o `git`, não para este processo. Quem quiser pular exporta antes — e isso aparece
-# no log, que é o ponto.
 if [[ "${SKIP_PUSH_REVIEW:-}" == '1' ]]; then
   exit 0
 fi
 
-# ─── Só o repositório de CÓDIGO ────────────────────────────────────────────────────────────────
-# O comando pode ter feito `cd` para outro repositório antes do push — a wiki (`core-api.wiki.git`)
-# é o caso concreto: repo separado, sem código, sem CI, sem borda. Medi-la contra `origin/dev` do
-# repo principal dá "0 arquivos" e barra uma edição de documentação por engano.
+# A wiki é um repositório à parte (sem código, sem CI, sem borda) e a única exceção medida em uso.
+# Reconhecê-la pelo caminho do clone é exato e não exige interpretar a sintaxe do comando.
 #
-# Isso aconteceu no primeiro uso real deste hook, em 03/09/2026. Um gate que barra o que não deveria
-# treina o reflexo do escape — e aí para de valer no caso em que importa.
-# ⚠️ Três formas de errar o repositório-alvo, todas medidas:
-#
-#  1. `cd` DEPOIS do push contava como antes — `git push && cd ..` desligava o gate.
-#  2. Cortar no primeiro `git` em vez de no push: `git add -A && cd .wiki && git push` esvaziava o
-#     prefixo, o `cd` sumia, e o hook NEGAVA um push da wiki — o falso positivo que este bloco existe
-#     para evitar.
-#  3. `git -C <dir> push` passou a ser reconhecido como push sem que o `-C` fosse lido para achar o
-#     repositório: um miss silencioso virou um deny errado.
-#
-# O prefixo agora é o texto até o `git … push` que casou, e o `-C` é consultado.
-target_dir="${CLAUDE_PROJECT_DIR:-.}"
-
-push_stmt="$(grep -oE '(^|[;&|])[[:space:]]*((command|time|env|nice|sudo)[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*git[[:space:]]+(-[^[:space:]]+[[:space:]]+([^-][^[:space:]]*[[:space:]]+)?)*push\b' <<<"$command" | head -1)"
-before_push="${command%%"$push_stmt"*}"
-
-# `-C <dir>` no próprio comando ganha do `cd`: é o que o git obedece.
-if [[ "$push_stmt" =~ -C[[:space:]]+([^[:space:]]+) ]]; then
-  candidate="${BASH_REMATCH[1]}"
-  [[ -d "$candidate" ]] && target_dir="$candidate"
-elif [[ -n "$before_push" && "$before_push" =~ (^|[;&|])[[:space:]]*cd[[:space:]]+([^[:space:]\;\|\&]+) ]]; then
-  candidate="${BASH_REMATCH[2]}"
-  [[ -d "$candidate" ]] && target_dir="$candidate"
-fi
-
-main_repo="$(git -C "${CLAUDE_PROJECT_DIR:-.}" rev-parse --show-toplevel 2>/dev/null || echo '')"
-push_repo="$(git -C "$target_dir" rev-parse --show-toplevel 2>/dev/null || echo '')"
-
-if [[ -z "$push_repo" || "$push_repo" != "$main_repo" ]]; then
+# ⚠️ A exceção vale para UM push só. `git -C .wiki push && git push` menciona `.wiki` e publicaria o
+# repo de código sem medição — a exceção viraria o furo. Com mais de um push no comando não há como
+# saber, sem parsear shell, quais são de onde; então barra. Falha fechada.
+# ⚠️ Entre `git` e `push` só podem vir OPÇÕES. Com `([^[:space:]]+[[:space:]]+)*` o padrão é
+# ganancioso e casa `-C .wiki push && git ` inteiro, contando dois pushes como um — e a exceção da
+# wiki liberava o push do repo de código junto.
+pushes="$(grep -oE 'git[[:space:]]+(-[^[:space:]]+[[:space:]]+([^-][^[:space:]]*[[:space:]]+)?)*push\b' <<<"$command" | wc -l | tr -d ' ')"
+if [[ "$command" == *".wiki"* && "$pushes" -eq 1 ]]; then
   exit 0
 fi
 
@@ -123,38 +91,22 @@ fi
 
 # Segurança não é faixa de tamanho: é faixa de SUPERFÍCIE. Um diff de 5 linhas em auth vale mais
 # revisão de segurança que 500 linhas de relatório.
-# A borda HTTP real vive em `modules/*/adapters/http/`; `src/shared/security/` não existe. A primeira
-# versão listava um caminho inexistente e não listava o que precisava — um PR que adicionasse rota
-# sem `requireAuth` não disparava nada.
-# ⚠️ Sem pipe para o `grep`. Sob `set -o pipefail`, `git diff … | grep -q …` retorna 141 quando a
-# saída do `git` passa do buffer do pipe (64 KB): o `grep -q` sai no primeiro acerto, o `git` leva
-# SIGPIPE, e o `if` fica FALSO APESAR DE TER CASADO. A nota de segurança sumia exatamente nos diffs
-# grandes que tocam auth — falha aberta na superfície sensível, de novo.
+#
+# ⚠️ Sem pipe para o `grep`. Sob `pipefail`, `git diff … | grep -q …` devolve 141 quando a saída do
+# `git` passa do buffer do pipe: o `grep -q` sai no primeiro acerto, o `git` leva SIGPIPE, e o `if`
+# fica FALSO APESAR DE TER CASADO — a nota sumia justamente nos diffs grandes que tocam auth.
 sensitive=''
 changed="$(git diff --name-only "$base"...HEAD 2>/dev/null || true)"
 if grep -qE '^(src/modules/auth/|src/modules/[a-z-]+/adapters/http/|src/shared/http/|\.github/workflows/|compose|Dockerfile|src/modules/financial/adapters/cnab/)' <<<"$changed"; then
   sensitive=$'\n  • Tocou auth, borda HTTP, workflow de CI, imagem ou CNAB → rode TAMBÉM `/security-review`.'
 fi
 
-# ⚠️ O JSON é montado com `jq`, não com heredoc.
-#
-# A primeira versão usava `sensitive=$'\n …'`, que produz um NEWLINE REAL, e o interpolava dentro da
-# string JSON. Newline cru é caractere de controle não-escapado: o parser recusa o objeto inteiro, o
-# `permissionDecision: "deny"` some junto — e o push PASSA.
-#
-# O efeito era o pior possível para um gate de segurança: ele barrava o diff inócuo (JSON válido) e
-# liberava o diff que toca auth, CI ou CNAB (JSON quebrado). Falhava aberto exatamente onde existia
-# para fechar. Passou por quatro pipe-tests porque nenhum deles tocava superfície sensível.
-#
-# `jq -n --arg` escapa o que precisa ser escapado, e não há como esquecer.
-# ⚠️ `$'…'` para quebra de linha REAL. `"\n"` entre aspas duplas é backslash-n literal em bash; o
-# `jq --arg` escapa essa barra e a mensagem chega ao usuário numa linha só, com `\n` visível. O
-# heredoc anterior acertava isso por acidente (o `\n` ia cru para dentro do JSON, onde é escape
-# válido) — a correção do JSON inválido reintroduziu o problema pelo outro lado. Aconteceu ao vivo
-# nesta sessão e passou despercebido, porque eu conferi se o hook BARRAVA, não se ele COMUNICAVA.
+# ⚠️ `$'…'` para quebra de linha REAL. `"\n"` entre aspas duplas é backslash-n literal em bash, e o
+# `jq --arg` escapa essa barra: a mensagem chega numa linha só, com `\n` visível. Aconteceu, e passou
+# despercebido porque se conferiu se o hook BARRAVA, não se ele COMUNICAVA.
 reason="Push barrado até a revisão do diff."
 reason+=$'\n\n  Porte '"${porte}"$' → rode `'"${review}"$'`.'"${sensitive}"
-reason+=$'\n\n  Depois de revisar (e tratar os achados), repita o push definindo SKIP_PUSH_REVIEW=1 no ambiente.'
+reason+=$'\n\n  Depois de revisar (e tratar os achados), repita com `export SKIP_PUSH_REVIEW=1` antes do push.'
 reason+=$'\n\n  Hook não consegue chamar slash command: quem roda a revisão é você, na sessão. O hook só impede que a etapa seja pulada.'
 
 jq -n --arg reason "$reason" '{
