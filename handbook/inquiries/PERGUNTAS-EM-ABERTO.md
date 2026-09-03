@@ -11,8 +11,8 @@
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 13 de 36 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md)
-- **Total de perguntas em aberto:** **59**
+- **Inquiries cobertas:** 14 de 37 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0037](./0037-aprovacao-que-o-bypass-nao-alcanca.md)
+- **Total de perguntas em aberto:** **62**
 
 As demais 23 estão `decided` (19), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -38,6 +38,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu a forma da recusa na tela em 02/09; restam as 4 saídas, que são execução | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
 | [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
 | [0036](#inquiry-0036--onde-a-documentação-deve-viver) | `open` | Dono do repo + o MCP `acdg-skills` de volta ao ar, para inventariar o que já indexa | Nada de código — decide o layout do repositório: 1.442 arquivos (84 % do volume) e 707 citações do harness | 2 |
+| [0037](#inquiry-0037--a-aprovação-que-o-bypass-não-alcança) | `blocked` | **Dono do sistema** — a escolha libera ou trava pagamento em produção | Aprovação de pagamento inoperante em **produção** para 100 % dos usuários e a esteira inteira de Contas a Pagar ([#881](https://github.com/ERP-Bem-Comum/core-api/issues/881)); inventário de exceções do [ADR-0052](../architecture/adr/0052-rbac-bypass-flag.md) | 3 |
 
 ---
 
@@ -437,6 +438,38 @@ valer nesta branch**, onde o #814 já está integrado.
 - [ ] **(b)** Destino do `handbook/specs/` — 381 arquivos, 2 citações, 4 commits/90d. Provável mesmo caminho de (a), mas o acoplamento é 350× menor: pode sair antes, e sozinho.
 
 **O que NÃO se decide aqui:** o que já foi executado em 02/09 — `context/` removido com lápide declarada, `decisions/` promovido a `handbook/decisions/`, e o datado/episódico destinado a Discussions.
+
+---
+
+## Inquiry-0037 — A aprovação que o bypass não alcança
+
+> **Origem:** [`0037-aprovacao-que-o-bypass-nao-alcanca.md`](./0037-aprovacao-que-o-bypass-nao-alcanca.md) §4 e §6
+> **Aberta em:** 2026-09-03 · **Destinatário:** dono do sistema — a escolha **libera ou trava pagamento em produção**
+> **Por que importa:** é o único item que atinge **100 % dos usuários**. O `checkApprover` do `approveDocument`
+> lê `payable:approve` da junção real no MySQL, e o `AUTH_RBAC_MODE=bypass` **não o alcança** — `rbacMode` tem
+> **zero** ocorrências em todo `src/modules/financial/`, em `dev` e em `main` (byte-a-byte idênticas). O estado de
+> produção **contradiz duas decisões registradas**: o [ADR-0052](../architecture/adr/0052-rbac-bypass-flag.md) `:66-67` (`Accepted`), que **nomeia "aprovar pagamento"**
+> entre as operações liberadas sob bypass, e a decisão do dono de **25/08** em `auth/…/composition.ts:599-603`
+> — _"SEM EXCEÇÃO — nem para a rota que move dinheiro"_ —, que é **posterior** ao commit que criou o gate.
+
+- [ ] **(a)** **A decisão: A, B ou C** ([#881](https://github.com/ERP-Bem-Comum/core-api/issues/881)). Recomendação da inquiry: **A + C** — passar `rbacMode` ao `financial` (no mesmo padrão do `authorizeActor`, sem mecanismo novo) e dispensar o gate sob `bypass`, com erro acionável —, sob **quatro** guarda-corpos: pulo **observável** (o ADR-0052 `:48-52` proíbe bypass silencioso), CA2 provado sob `enforced`, **marcador na trilha** de que a alçada não foi checada (único dano de A que seria permanente), e o inventário fechado por ADR. **B é o estado-alvo, não o desbloqueio:** depende de uma tela de Perfis no front que **não pude verificar** (o repo do front não está nesta worktree) e de um ato em produção que não me cabe.
+- [ ] **(b)** **ADR novo que `supersede` o ADR-0052**, fechando o inventário de pontos fora do wrapper: ele declara **quatro** e existem **cinco** — o quinto de natureza distinta (lê a permissão do banco em vez de chamar `authorize`). Vale **independente** de (a): é defeito do registro. _ADR aceito não se edita._
+- [ ] **(c)** **O teste do CA4**, descrito em §6 da inquiry e **não commitado de propósito**: enquanto (a) não sair não existe assert correto — asseverar o 422 atual cristalizaria o bug como esperado, e asseverar o correto ficaria vermelho (regressão zero).
+
+⚠️ **Dois números da #881 não sobreviveram à medição.** (i) A #609 fechou **um** furo, não dois: o de
+**identidade** está declarado _"FORA DE ESCOPO"_ no próprio commit `ed4bf578` e segue aberto **em `enforced`
+também** — nenhuma das três opções o toca. (ii) O furo de **valor** já está aberto sob bypass: a mitigação que a
+própria issue documenta (`POST /api/v1/roles` + auto-atribuição, liberadas por `authorize-actor.ts:17`) entrega
+aprovação **sem teto**, porque a alçada é opt-in desde a #299. O gate sobrevivente barra o uso honesto, não o
+malicioso.
+
+⚠️ **A suíte não podia ter pego isto, e a causa não é a que a #881 supõe.** O teste de borda existe e roda no
+gate, mas `approve-document-authority.http.test.ts:52-53` injeta um fake com `canApprove: true` **hardcoded para
+qualquer id** — a linha `if (!authority.canApprove)` (`approval-policy.ts:27`) é **inalcançável por construção**.
+Não é teste ausente: é um _double_ que codifica a premissa errada.
+
+**O que NÃO se decide aqui:** o redesenho completo do RBAC, que o [ADR-0053](../architecture/adr/0053-sensitive-data-carve-out-rbac-bypass.md) `:133-141` já nomeia como
+substituto do bypass ao fim da aceitação.
 
 ---
 

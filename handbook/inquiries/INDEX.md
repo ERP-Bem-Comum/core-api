@@ -10,12 +10,12 @@
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
 | `open` | 8 | quem trabalha nela |
-| `blocked` | 5 | terceiro (banca, upstream, P.O.) |
+| `blocked` | 6 | terceiro (banca, upstream, P.O.) |
 | `decided` | 19 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **36**.
+Total: **37**.
 
 ---
 
@@ -43,6 +43,7 @@ Total: **36**.
 | [0014](./0014-schema-legado-vs-modelo-alvo.md) | Schema legado real vs. modelo alvo do handbook | 2026-05-14 |  |
 | [0015](./0015-charset-drizzle-roadmap.md) | Charset/collate por tabela via API drizzle-orm — roadmap | 2026-05-18 |  |
 | [0019](./0019-hard-delete-tripwire-sem-superficie.md) | `TentativaDeExclusaoDetectada` — tripwire sem superfície de ataque | 2026-05-25 |  |
+| [0037](./0037-aprovacao-que-o-bypass-nao-alcanca.md) | A aprovação que o bypass não alcança — o gate lê a tabela, e produção não tem a linha | 2026-09-03 |  |
 
 ---
 
