@@ -43,7 +43,7 @@ Reference local: [`./references/module-isolation-rules.md`](./references/module-
 | Email como port/adapter (mesmo padrão aplicado a outro recurso externo) | [`ADR-0010`](../../../handbook/architecture/adr/0010-email-port-adapter-pattern.md) |
 | Drizzle ORM (organização de schemas por módulo no futuro) | [`handbook/reference/drizzle/`](../../../handbook/reference/drizzle/) |
 | mysql2 driver (quando MySQL real existir) | [`handbook/reference/mysql2/`](../../../handbook/reference/mysql2/) |
-| Estado atual do módulo Contratos (único módulo ativo na Fase 1) | `src/modules/contracts/{domain,application,adapters,cli}/` — exemplo vivo do layout canônico |
+| Layout canônico, vivo no repositório | `src/modules/contracts/{domain,application,adapters,worker,public-api}/` |
 | Módulo Financeiro (Fase 2 — reservado, ainda não codado) | [`handbook/domain_questions/financeiro/`](../../../handbook/domain_questions/financeiro/) |
 | BCs do módulo Contratos com fronteiras nominadas | [`handbook/domain_questions/contratos/02-context-map.md`](../../../handbook/domain_questions/contratos/02-context-map.md) |
 | Fluxo de eventos cross-módulo (matriz P/C) | [`handbook/domain_questions/contratos/06-event-flow.md`](../../../handbook/domain_questions/contratos/06-event-flow.md) |
@@ -62,19 +62,17 @@ src/
 │       ├── clock.ts
 │       └── id-generator.ts
 ├── modules/
-│   ├── contratos/            # Bounded Context "Gestão de Contratos"
+│   ├── contracts/            # Bounded Context "Gestão de Contratos"
 │   │   ├── domain/           # TS puro
 │   │   ├── application/      # Use cases + ports
-│   │   ├── adapters/         # Implementações
-│   │   ├── cli/              # CLI específica do módulo
-│   │   ├── contracts/        # 🔵 API PÚBLICA do módulo (eventos + commands publicáveis)
-│   │   └── index.ts          # barrel: reexporta APENAS o que é público
-│   ├── financeiro/           # Bounded Context "Financeiro" (Fase 2)
+│   │   ├── adapters/         # Implementações (persistence, http, storage, outbox…)
+│   │   ├── worker/           # Processamento assíncrono do módulo
+│   │   └── public-api/       # 🔵 API PÚBLICA (eventos + commands publicáveis)
+│   ├── financial/            # Bounded Context "Financeiro"
 │   │   ├── domain/
 │   │   ├── application/
 │   │   ├── adapters/
-│   │   ├── contracts/        # API pública
-│   │   └── index.ts
+│   │   └── public-api/       # API pública
 │   └── shared-kernel/        # 🟡 Tipos compartilhados ESTÁVEIS (CNPJ, CPF, IBGE)
 │       └── index.ts
 └── platform/
@@ -105,7 +103,7 @@ modules/<X>/application/ ❌   modules/<Y>/application/  (idem — comunique via
 | `shared/` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `shared-kernel/` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `modules/X/domain/` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `modules/X/application/` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (próprio) | ✅ contracts/ |
+| `modules/X/application/` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (próprio) | ✅ public-api/ |
 | `modules/X/adapters/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
 | `modules/X/cli/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
 | `modules/X/public-api/` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
@@ -213,7 +211,7 @@ Quando um arquivo é criado/movido:
 ```bash
 # Achar imports proibidos cross-módulo
 grep -rn "from '.*modules/[^/]*/\(domain\|application\|adapters\)" src/modules/
-# Esperado: zero resultados — tudo deveria ir via contracts/
+# Esperado: zero resultados — tudo deveria ir via public-api/
 ```
 
 Pode virar lint rule no futuro. Por enquanto, code review manual + esse `grep` no CI.

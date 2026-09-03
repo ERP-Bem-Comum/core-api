@@ -35,18 +35,8 @@ const git = (...args: readonly string[]): readonly string[] =>
 
 const SOURCES = git('ls-files', 'src/*.ts', 'src/**/*.ts');
 
-/**
- * `type XError =` / `export type XError =`, capturando o corpo até o `;` que fecha a declaração.
- *
- * ⚠️ `[^;]+` parava no PRIMEIRO `;`, inclusive num `;` interno a um objeto — nove unions de `src/`
- * ficavam truncadas (`MagaluCloudEnvError`, `EmailConfigError`, `VanS3ConfigError` entre elas). Hoje
- * nenhuma delas mistura literal com objeto, então não havia falso resultado; mas uma union mista
- * (`Readonly<{ tag: 'a'; … }> | 'BadCasing'`) teria o literal solto ignorado — o gate passaria verde
- * exatamente sobre a violação que existe para pegar.
- *
- * O corpo agora vai até o fim da linha lógica: `;` seguido de quebra, ou fim do arquivo.
- */
-const ERROR_UNION = /\btype\s+(\w*Error)\s*=\s*([\s\S]*?);\s*(?:\n|$)/gu;
+/** Onde cada `type XError =` começa. O corpo é extraído por varredura, não por regex. */
+const ERROR_UNION_START = /\btype\s+(\w*Error)\s*=\s*/gu;
 /**
  * Membro que é UM LITERAL INTEIRO, não um literal em algum lugar do membro.
  *
@@ -68,13 +58,46 @@ interface Offender {
   readonly literal: string;
 }
 
+/**
+ * Membros da union em PROFUNDIDADE ZERO, varrendo o texto a partir do `=`.
+ *
+ * ⚠️ Duas versões anteriores tentaram delimitar o corpo por regex e as duas erraram:
+ *
+ *   • `[^;]+` parava no primeiro `;`, inclusive num `;` interno a `Readonly<{ tag: 'x'; … }>`.
+ *   • `[\s\S]*?;\s*(?:\n|$)` não casava quando o `;` vinha seguido de comentário `//`, e então
+ *     capturava por cima das declarações seguintes — cinco literais de `src/` PERDERAM cobertura
+ *     (`geography-repo-unavailable`, `collaborator-email-duplicate` e outros três). Um deles em
+ *     PascalCase teria passado verde.
+ *
+ * Delimitar sintaxe aninhada com regex não funciona porque regex não conta. Este contador conta:
+ * `{`, `<`, `(`, `[` sobem, os fechamentos descem, e só o que está em profundidade 0 é membro da
+ * union. O corpo acaba no `;` de profundidade 0.
+ */
+const membersOf = (content: string, from: number): readonly string[] => {
+  const members: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (let i = from; i < content.length; i += 1) {
+    const c = content[i] ?? '';
+    if (c === ';' && depth === 0) break;
+    if ('{<(['.includes(c)) depth += 1;
+    else if ('}>)]'.includes(c)) depth -= 1;
+    if (c === '|' && depth === 0) {
+      members.push(current);
+      current = '';
+    } else current += c;
+  }
+  members.push(current);
+  return members;
+};
+
 const badLiterals = (file: string): readonly Offender[] => {
   const content = readFileSync(resolve(PROJECT_ROOT, file), 'utf-8');
-  return [...content.matchAll(ERROR_UNION)].flatMap((u) => {
-    const [name, body] = [u[1] ?? '', u[2] ?? ''];
+  return [...content.matchAll(ERROR_UNION_START)].flatMap((u) => {
+    const name = u[1] ?? '';
+    const start = (u.index ?? 0) + u[0].length;
     const line = content.slice(0, u.index ?? 0).split('\n').length;
-    return body
-      .split('|')
+    return membersOf(content, start)
       .map((member) => WHOLE_LITERAL.exec(member.trim())?.[1] ?? '')
       .filter((lit) => lit.length > 0 && !KEBAB.test(lit))
       .map((literal) => ({ where: `${file}:${line}`, type: name, literal }));
@@ -97,12 +120,38 @@ describe('ERROR-LITERAL-CASING — erro interno é EN kebab-case', () => {
     );
   });
 
+  it('a cobertura não encolhe em silêncio (guarda contra o gate que estreita sozinho)', () => {
+    // A guarda que faltava. Duas versões da delimitação passaram verdes enquanto PERDIAM literais:
+    // um gate que estreita não fica vermelho, ele fica mudo. O piso é a contagem medida em
+    // 03/09/2026 com o parser por profundidade; se cair, alguém apertou o delimitador sem notar.
+    const covered = SOURCES.flatMap((f) => {
+      const content = readFileSync(resolve(PROJECT_ROOT, f), 'utf-8');
+      return [...content.matchAll(ERROR_UNION_START)].flatMap((u) =>
+        membersOf(content, (u.index ?? 0) + u[0].length)
+          .map((m) => WHOLE_LITERAL.exec(m.trim())?.[1] ?? '')
+          .filter((l) => l.length > 0),
+      );
+    }).length;
+
+    assert.ok(
+      covered >= 879,
+      `só ${covered} literais de erro sob verificação — eram 879 em 03/09/2026. O delimitador do ` +
+        'corpo da union estreitou, e os literais que saíram passam sem conferência de casing.',
+    );
+  });
+
   it('a varredura enxerga as unions (guarda contra verde por vacuidade)', () => {
     const found = SOURCES.flatMap((f) => [
-      ...readFileSync(resolve(PROJECT_ROOT, f), 'utf-8').matchAll(ERROR_UNION),
+      ...readFileSync(resolve(PROJECT_ROOT, f), 'utf-8').matchAll(ERROR_UNION_START),
     ]).length;
     assert.ok(found >= 50, `só ${found} unions de erro encontradas — o padrão parou de casar`);
     assert.ok(KEBAB.test('contract-not-active'), 'o padrão rejeita a forma canônica');
     assert.ok(!KEBAB.test('ContractNotActive'), 'o padrão aceita PascalCase');
+    // O parser tem de enxergar dentro de objeto sem confundir o `;` interno com o fim da union.
+    assert.deepEqual(
+      membersOf("Readonly<{ tag: 'A'; x: 1 }> | 'BadCasing';", 0).map((m) => m.trim()),
+      ["Readonly<{ tag: 'A'; x: 1 }>", "'BadCasing'"],
+      'o parser não separa membros em profundidade zero — union mista voltaria a passar verde',
+    );
   });
 });

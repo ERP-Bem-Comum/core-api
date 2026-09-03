@@ -32,7 +32,7 @@ Application **não** importa adapters — define apenas o tipo do port.
 
 Cada port tem **pelo menos 2 adapters**: real (para prod) e InMemory (para testes + CLI da P.O.).
 
-### Lei 4 — Cross-module via contracts/ + eventos
+### Lei 4 — Cross-module via public-api/ + eventos
 
 > Quando o módulo Y precisa reagir a algo do módulo X:
 > 1. X publica `XEvento` via `EventBus.publish` (que grava no outbox).
@@ -98,7 +98,7 @@ test('domain/ não importa de outro módulo', () => {
   }
 });
 
-test('application/ só importa contracts/ de outros módulos', () => { /* ... */ });
+test('application/ só importa public-api/ de outros módulos', () => { /* ... */ });
 ```
 
 Esses testes ficam **fora** dos módulos, em `tests/architecture/`. Validam estrutura sem rodar negócio.
