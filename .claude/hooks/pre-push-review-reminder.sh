@@ -19,10 +19,15 @@
 # corrigir `-C` deixou `--git-dir` passar; um `head -1` fazia o segundo push de um comando composto
 # nunca ser medido. Não é azar — a gramática de shell é infinita e uma enumeração de casos é finita.
 #
-# A superfície foi então reduzida ao que o gate realmente precisa saber: **isto é um push do repo de
-# código?** A única exceção legítima medida em uso é a wiki (`core-api.wiki.git`, um clone em
-# `.wiki/`), e ela vira uma condição explícita de uma linha. Tudo o mais BARRA — falha fechada, que
-# é o lado certo de errar num gate.
+# A superfície foi então reduzida ao que o gate realmente precisa saber: **isto é um push?** Não há
+# exceção nenhuma — nem para a wiki, cuja exceção por substring virou um bypass (ver abaixo). Tudo
+# barra, e quem precisa passar usa o sentinela. Falha fechada, que é o lado certo de errar num gate.
+#
+# ⚠️ E o hook NÃO usa `if:` no settings.json. `Bash(git push*)` é match de PREFIXO: `git -C … push`,
+# `git --git-dir=… push`, `sudo git push` e `FOO=1 git push` não começam com `git push` e nunca
+# invocariam este arquivo. Três rodadas de revisão "provaram" que o script barra esses casos —
+# rodando o script à mão, contornando o matcher que, na vida real, filtra antes. O filtro barato
+# custava a cobertura inteira; agora o hook roda em todo Bash e decide aqui.
 #
 # ─── Escape ────────────────────────────────────────────────────────────────────────────────────
 # `touch .claude/.skip-push-review` e faça o push. O arquivo é CONSUMIDO no uso: vale uma vez.
@@ -49,7 +54,17 @@ command="$(printf '%s' "$payload" | jq -r '.tool_input.command // ""')"
 # O `if:` do settings.json já filtra por prefixo do comando real. Este teste é defesa em profundidade
 # para o caso de o arquivo ser reusado noutro matcher — e é deliberadamente FROUXO: qualquer menção a
 # `git push` faz o hook opinar. Um deny espúrio é visível e recuperável; um furo é silencioso.
-if ! grep -qE 'git[[:space:]]+([^[:space:]]+[[:space:]]+)*push\b' <<<"$command"; then
+# ⚠️ Heredoc é CONTEÚDO, não comando. Sem remover o corpo do heredoc, um `git commit -F - <<'EOF'`
+# cuja mensagem menciona um push é barrado — o gate impediria documentar o próprio defeito que
+# corrige. Aconteceu no primeiro uso, com a mensagem deste commit. Só o corpo sai; o `git … push` em
+# posição de comando continua visível, então os bypasses reais seguem fechados.
+scrubbed="$(awk '
+  /<<-?'"'"'?[A-Za-z_][A-Za-z0-9_]*'"'"'?/ && !inside { delim = $0; sub(/.*<<-?'"'"'?/, "", delim); sub(/'"'"'.*/, "", delim); sub(/[^A-Za-z0-9_].*/, "", delim); inside = 1; print; next }
+  inside && $0 == delim { inside = 0; next }
+  !inside { print }
+' <<<"$command")"
+
+if ! grep -qE 'git[[:space:]]+([^[:space:]]+[[:space:]]+)*push\b' <<<"$scrubbed"; then
   exit 0
 fi
 
@@ -60,19 +75,17 @@ if [[ -f "$sentinel" ]]; then
   exit 0
 fi
 
-# A wiki é um repositório à parte (sem código, sem CI, sem borda) e a única exceção medida em uso.
-# Reconhecê-la pelo caminho do clone é exato e não exige interpretar a sintaxe do comando.
+# ⚠️ NÃO há exceção automática para a wiki, e a tentativa de criar uma foi um furo de segurança.
 #
-# ⚠️ A exceção vale para UM push só. `git -C .wiki push && git push` menciona `.wiki` e publicaria o
-# repo de código sem medição — a exceção viraria o furo. Com mais de um push no comando não há como
-# saber, sem parsear shell, quais são de onde; então barra. Falha fechada.
-# ⚠️ Entre `git` e `push` só podem vir OPÇÕES. Com `([^[:space:]]+[[:space:]]+)*` o padrão é
-# ganancioso e casa `-C .wiki push && git ` inteiro, contando dois pushes como um — e a exceção da
-# wiki liberava o push do repo de código junto.
-pushes="$(grep -oE 'git[[:space:]]+(-[^[:space:]]+[[:space:]]+([^-][^[:space:]]*[[:space:]]+)?)*push\b' <<<"$command" | wc -l | tr -d ' ')"
-if [[ "$command" == *".wiki"* && "$pushes" -eq 1 ]]; then
-  exit 0
-fi
+# A versão anterior liberava quando o comando continha a substring `.wiki`. Substring casa o comando
+# INTEIRO, não o destino: `git push origin dev  # .wiki` — um COMENTÁRIO de shell — desligava o gate.
+# O mesmo com `git push origin dev:dev.wiki` e com uma branch `feature/x.wiki`. Os três foram
+# medidos, e os três liberavam: um bypass repetível e invisível, ao contrário do sentinela, que some
+# no uso e aparece no `ls`.
+#
+# Saber o destino real exigiria resolver o remote, o que exige interpretar a sintaxe do comando — a
+# corrida que este arquivo já perdeu três vezes. Então não há exceção: push de wiki usa o sentinela
+# como qualquer outro. Um `touch` a mais numa operação rara, contra um furo permanente.
 
 cd "${CLAUDE_PROJECT_DIR:-.}"
 
@@ -80,8 +93,18 @@ cd "${CLAUDE_PROJECT_DIR:-.}"
 upstream="$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo '')"
 base="${upstream:-origin/dev}"
 
+# ⚠️ Sem base, NEGA. A versão anterior fazia `exit 0` aqui — allow — com o comentário "um número
+# inventado é pior que nenhum". O raciocínio estava certo e a conclusão invertida: não medir não é
+# motivo para liberar, é motivo para não deixar passar sem revisão. Num clone raso, com remote de
+# outro nome, ou sem `origin/dev` buscado, o gate desligava sozinho e em silêncio.
 if ! git rev-parse --verify --quiet "$base" >/dev/null; then
-  # Sem base para comparar não há medição — e um número inventado é pior que nenhum.
+  jq -n --arg base "$base" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: ("Push barrado: não consegui medir o diff — a base `" + $base + "` não resolve neste clone.\n\n  Sem medição não há porte, e sem porte não há revisão dimensionada. Busque a base (`git fetch origin dev`) ou, se a revisão já foi feita, use `touch .claude/.skip-push-review` como comando separado.")
+    }
+  }'
   exit 0
 fi
 
