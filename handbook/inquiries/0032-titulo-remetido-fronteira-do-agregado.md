@@ -462,6 +462,47 @@ Consequências:
 
 ---
 
+### 2026-09-02 — P.O. (resposta ao pendente de §5): a forma da recusa na tela
+
+Fecha o item que §5 deixou **pendente com a P.O.** e o que o índice
+(`PERGUNTAS-EM-ABERTO.md`) registra como *"a forma da recusa na tela"*. Respondido também na
+discussion #956, que é o canal do fio.
+
+**1. A recusa acontece ANTES do clique, não no salvar.** Nota com título já remetido abre com os
+campos financeiros — valor, vencimento, retenções — em **somente-consulta**, com o motivo visível ao
+lado. Habilitar o campo para depois recusar o save é ensinar o operador a perder trabalho.
+
+O front já tem a mecânica: `document-form.view.ts` trava **por campo e por status** (`FieldLocks`),
+e é a mesma régua que já vale para `issueDate` e `competencia`, ambos imutáveis após a criação.
+
+**2. A mensagem NOMEIA a recusa — qual título, em qual remessa.** É exatamente a evidência que a
+decisão de 23/08 mandou o erro carregar. Redação de referência:
+
+> **Esta nota tem título já enviado ao banco.** O título #N saiu na remessa NSA 000123 em
+> 02/09/2026. Valor, vencimento e retenções não podem ser alterados enquanto ele estiver enviado.
+
+**3. ✅ O caminho de escape EXISTE — resposta ao pendente explícito de §5.** Campos não-financeiros
+seguem editáveis; o bloqueio é só do que muda dinheiro. O backend já preserva os títulos nesse
+caminho (`editMetadata`, `adjust-document.ts:169-170`), então a mudança é de tela, não de domínio.
+
+Recusar a nota inteira porque um título saiu é punir o operador por algo que ele não pode desfazer —
+e o empurra para o pior contorno possível: criar uma nota nova.
+
+**4. O `1451` não chega ao operador — concordo com §5.** Do lado da tela, um 503 ali é
+indistinguível de "o sistema caiu", e a reação natural do operador é **tentar de novo**, que é a pior
+ação possível quando a causa foi uma corrida.
+
+#### 📌 O encanamento para isto passou a existir em 02/09
+
+O PR **ERP-Bem-Comum/web-app#396** (fecha a web-app#359) trocou o transporte de erro dos formulários:
+o motivo deixou de ser descartado no controller — era um `Record<string, boolean>` — e passa à tela
+como **slug nomeado**, traduzido por fonte única, com fallback para a frase genérica.
+
+Ou seja: quando o `document-has-held-payable` passar a carregar payload, **o front já sabe exibi-lo**.
+A redação do item 2 entra como uma linha no mapa de mensagens, sem tocar view nenhuma.
+
+---
+
 ### 2026-08-23 — Agente `mysql-database-expert` (leitura estática + Refman 8.4)
 
 **Veredito: o diagnóstico está certo e três dos quatro remédios também. O item "releitura sob lock no
