@@ -2,7 +2,7 @@
 
 # 🏛️ Arquitetura
 
-> **Como** o sistema é construído. Esta seção responde "como funciona". O **por que** das decisões mora em [`adr/`](./adr/README.md). O **o que** o sistema faz mora em [`../domain/`](../domain/README.md).
+> **Como** o sistema é construído. Esta seção responde "como funciona". O **por que** das decisões mora em [`adr/`](./adr/README.md). O **o que** o sistema faz mora em [`../domain_questions/`](../domain_questions/README.md).
 
 ---
 

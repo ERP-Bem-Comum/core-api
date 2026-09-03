@@ -10,7 +10,7 @@ Entrevistas técnicas longas, organizadas por blocos, entre membros do time e co
 - Inquiries documentam **uma pergunta** e a investigação que a fechou.
 - **Entrevistas** preservam a **conversa inteira** — perguntas em ordem, contra-argumentos, mudanças de rota, blocos que ficaram abertos.
 
-Uma entrevista madura **destila** rules (DO/DON'T/CONSIDER), abre tickets de pipeline (`.claude/.pipeline/<TICKET>/`) e gera ou atualiza ADRs/SKILLs. Mas o documento bruto fica aqui, intocado, para auditoria futura.
+Uma entrevista madura **destila** rules (DO/DON'T/CONSIDER) e gera ou atualiza ADRs/SKILLs. Mas o documento bruto fica aqui, intocado, para auditoria futura.
 
 ---
 

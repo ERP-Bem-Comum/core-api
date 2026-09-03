@@ -43,8 +43,8 @@ Reference local: [`./references/module-isolation-rules.md`](./references/module-
 | Email como port/adapter (mesmo padrão aplicado a outro recurso externo) | [`ADR-0010`](../../../handbook/architecture/adr/0010-email-port-adapter-pattern.md) |
 | Drizzle ORM (organização de schemas por módulo no futuro) | [`handbook/reference/drizzle/`](../../../handbook/reference/drizzle/) |
 | mysql2 driver (quando MySQL real existir) | [`handbook/reference/mysql2/`](../../../handbook/reference/mysql2/) |
-| Estado atual do módulo Contratos (único módulo ativo na Fase 1) | `src/modules/contracts/{domain,application,adapters,cli}/` — exemplo vivo do layout canônico |
-| Módulo Financeiro (Fase 2 — reservado, ainda não codado) | [`handbook/domain_questions/financeiro/`](../../../handbook/domain_questions/financeiro/) |
+| Layout canônico, vivo no repositório | `src/modules/contracts/{domain,application,adapters,worker,public-api}/` |
+| Especificação de domínio do Financeiro | [`handbook/domain_questions/financeiro/`](../../../handbook/domain_questions/financeiro/) |
 | BCs do módulo Contratos com fronteiras nominadas | [`handbook/domain_questions/contratos/02-context-map.md`](../../../handbook/domain_questions/contratos/02-context-map.md) |
 | Fluxo de eventos cross-módulo (matriz P/C) | [`handbook/domain_questions/contratos/06-event-flow.md`](../../../handbook/domain_questions/contratos/06-event-flow.md) |
 
@@ -54,31 +54,25 @@ Reference local: [`./references/module-isolation-rules.md`](./references/module-
 
 ```
 src/
-├── shared/                   # Cross-cutting puro — Result, Brand, ID, ports compartilhados (Clock, etc.)
-│   ├── result.ts
-│   ├── brand.ts
-│   ├── id.ts
-│   └── ports/
-│       ├── clock.ts
-│       └── id-generator.ts
+├── shared/                   # Cross-cutting puro
+│   ├── primitives/           # Result, Brand, immutable, exhaustiveStringUnion
+│   ├── kernel/               # 🟡 VOs ESTÁVEIS: Money, Period, PlainDate, Cpf, Cnpj, UserRef
+│   ├── ports/                # Ports compartilhados (Clock, IdGenerator…)
+│   ├── outbox/               # Outbox pattern, compartilhado entre módulos
+│   ├── http/                 # Bootstrap da borda, plugins, envelope de erro
+│   ├── persistence/          # Pool, transação, helpers de driver
+│   ├── observability/, runtime/, adapters/, utils/
 ├── modules/
-│   ├── contratos/            # Bounded Context "Gestão de Contratos"
+│   ├── contracts/            # Bounded Context "Gestão de Contratos"
 │   │   ├── domain/           # TS puro
 │   │   ├── application/      # Use cases + ports
-│   │   ├── adapters/         # Implementações
-│   │   ├── cli/              # CLI específica do módulo
-│   │   ├── contracts/        # 🔵 API PÚBLICA do módulo (eventos + commands publicáveis)
-│   │   └── index.ts          # barrel: reexporta APENAS o que é público
-│   ├── financeiro/           # Bounded Context "Financeiro" (Fase 2)
-│   │   ├── domain/
-│   │   ├── application/
-│   │   ├── adapters/
-│   │   ├── contracts/        # API pública
-│   │   └── index.ts
-│   └── shared-kernel/        # 🟡 Tipos compartilhados ESTÁVEIS (CNPJ, CPF, IBGE)
-│       └── index.ts
-└── platform/
-    └── outbox/               # Implementação do outbox pattern (compartilhada)
+│   │   ├── adapters/         # Implementações (persistence, http, storage, outbox…)
+│   │   ├── worker/           # Processamento assíncrono do módulo
+│   │   └── public-api/       # 🔵 API PÚBLICA (eventos + commands publicáveis)
+│   └── financial/            # Bounded Context "Financeiro" — mesma anatomia
+├── jobs/                     # Entrypoints de job pontual
+├── workers/                  # Entrypoints de worker de longa duração
+└── server.ts                 # Entrypoint HTTP
 ```
 
 ---
@@ -91,7 +85,7 @@ shared/              ◄────────  modules/<qualquer>/   (módulo
   │
 shared-kernel/       ◄────────  modules/<qualquer>/   (módulos podem usar shared-kernel)
 
-modules/<X>/contracts/  ◄────  modules/<Y>/application/  (Y pode escutar eventos de X)
+modules/<X>/public-api/  ◄────  modules/<Y>/application/  (Y pode escutar eventos de X)
 
 modules/<X>/domain/     ❌    modules/<Y>/...           (X.domain NUNCA vê Y)
 modules/<X>/adapters/   ❌    modules/<Y>/...           (idem)
@@ -100,30 +94,30 @@ modules/<X>/application/ ❌   modules/<Y>/application/  (idem — comunique via
 
 ### Tabela de permissões
 
-| De \ Para | `shared/` | `shared-kernel/` | `modules/X/domain/` | `modules/X/application/` | `modules/X/adapters/` | `modules/X/contracts/` | `modules/Y/*` |
+| De \ Para | `shared/` | `shared-kernel/` | `modules/X/domain/` | `modules/X/application/` | `modules/X/adapters/` | `modules/X/public-api/` | `modules/Y/*` |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | `shared/` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `shared-kernel/` | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `modules/X/domain/` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `modules/X/application/` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (próprio) | ✅ contracts/ |
+| `modules/X/application/` | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ (próprio) | ✅ public-api/ |
 | `modules/X/adapters/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
-| `modules/X/cli/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
-| `modules/X/contracts/` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| `modules/X/worker/` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (próprio) | ❌ |
+| `modules/X/public-api/` | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 
 Resumo:
 
 - **Domain só vê shared + shared-kernel.**
-- **Module X pode importar de `modules/Y/contracts/`** (escutar eventos de Y). Tudo o mais de Y é proibido.
-- **`contracts/` de um módulo é pura** — só tipos + zod-like validators. Não tem regra de negócio.
+- **Module X pode importar de `modules/Y/public-api/`** (escutar eventos de Y). Tudo o mais de Y é proibido.
+- **`public-api/` de um módulo é pura** — só tipos + zod-like validators. Não tem regra de negócio.
 
 ---
 
-## `modules/<X>/contracts/` — o que vai ali
+## `modules/<X>/public-api/` — o que vai ali
 
-A pasta `contracts/` é o que sai do módulo X e pode ser **consumido por outros módulos ou serviços externos**. Inclui:
+A pasta `public-api/` é o que sai do módulo X e pode ser **consumido por outros módulos ou serviços externos** — é a única fronteira que o anti-padrão #3 do `CLAUDE.md` autoriza importar de fora. Inclui:
 
 ```ts
-// src/modules/contratos/contracts/index.ts
+// src/modules/contracts/public-api/index.ts
 
 // Eventos publicáveis (cópia somente leitura do tipo interno)
 export type { ContratoEvento } from './eventos.ts';
@@ -135,7 +129,7 @@ export type { ContratoCommand } from './commands.ts';
 export type { NumeroSequencialContrato } from './vo-public.ts';
 ```
 
-> **Por que separar?** No dia em que extrair `modules/contratos/` para um serviço próprio, **só o `contracts/` continua sendo a fronteira**. O resto vira opaco. Quem consumia `contracts/` continua funcionando.
+> **Por que separar?** No dia em que extrair `modules/contracts/` para um serviço próprio, **só o `public-api/` continua sendo a fronteira**. O resto vira opaco. Quem consumia `public-api/` continua funcionando.
 
 ---
 
@@ -144,8 +138,8 @@ export type { NumeroSequencialContrato } from './vo-public.ts';
 ### ❌ Errado: chamada direta
 
 ```ts
-// src/modules/financeiro/application/use-cases/criar-conta-a-pagar.ts
-import { ContratoRepository } from '../../../contratos/application/ports/contrato-repository.ts'; // ❌ NÃO
+// src/modules/financial/application/use-cases/criar-conta-a-pagar.ts
+import { ContratoRepository } from '../../../contracts/application/ports/contrato-repository.ts'; // ❌ NÃO
 
 const usecase = (deps) => async (cmd) => {
   const contrato = await deps.contratoRepo.findById(cmd.contratoId); // ❌ acoplamento direto
@@ -156,7 +150,7 @@ const usecase = (deps) => async (cmd) => {
 ### ✅ Certo: evento
 
 ```ts
-// modules/contratos/ publica evento via outbox (ADR-0015)
+// modules/contracts/ publica evento via outbox (ADR-0015)
 const evento: ContratoEvento = {
   type: 'EstadoContratualAtualizado',
   contratoId: c.id,
@@ -166,8 +160,8 @@ const evento: ContratoEvento = {
 };
 await eventBus.publish(evento);  // grava no outbox
 
-// modules/financeiro/ consome o evento (ContratoEvento importado de contratos/contracts/)
-import type { ContratoEvento } from '../../contratos/contracts/index.ts';
+// modules/financial/ consome o evento (ContratoEvento importado de contracts/public-api/)
+import type { ContratoEvento } from '../../contracts/public-api/index.ts';
 
 const handleContratoEvento = (e: ContratoEvento) => {
   switch (e.type) {
@@ -179,7 +173,7 @@ const handleContratoEvento = (e: ContratoEvento) => {
 };
 ```
 
-> Financeiro **importa apenas `contratos/contracts/`** — não conhece domínio interno de Contratos.
+> Financeiro **importa apenas `contracts/public-api/`** — não conhece domínio interno de Contratos.
 
 ---
 
@@ -188,8 +182,8 @@ const handleContratoEvento = (e: ContratoEvento) => {
 | Database | Dono | Pode escrever | Pode ler |
 | :--- | :--- | :--- | :--- |
 | `legacy.*` | `legacy-api` (NestJS legado) | `legacy_app` user | `readonly_bi` |
-| `core.ctr_*` | `core-api` módulo Contratos | `core_app` user | `readonly_bi`, Financeiro **NÃO** |
-| `core.fin_*` | `core-api` módulo Financeiro | `core_app` user | `readonly_bi`, Contratos **NÃO** |
+| `core.ctr_*` | `core-api` módulo Contratos (`contracts`) | `core_app` user | `readonly_bi`, Financeiro **NÃO** |
+| `core.fin_*` | `core-api` módulo Financeiro (`financial`) | `core_app` user | `readonly_bi`, Contratos **NÃO** |
 | `core.outbox` | `core-api` | `core_app` | (worker de relay) |
 
 A regra é forte: **mesmo no mesmo processo (`core-api`)**, módulos não cruzam fronteira de tabela. Justificativa: ([ADR-0014](../../../../handbook/architecture/adr/0014-mysql-database-isolation.md)) — preservar caminho de extração futura para microserviço.
@@ -201,10 +195,10 @@ A regra é forte: **mesmo no mesmo processo (`core-api`)**, módulos não cruzam
 Quando um arquivo é criado/movido:
 
 - [ ] Domínio só importa de `shared/` e `shared-kernel/`.
-- [ ] Application só importa do próprio módulo + `contracts/` de outros.
+- [ ] Application só importa do próprio módulo + `public-api/` de outros.
 - [ ] Adapter pode importar do próprio módulo + lib externa (mysql2, etc.).
-- [ ] `contracts/` é pasta isolada — só tipos puros, sem dependência de adapters.
-- [ ] Nenhum `import` cruza barreira sem passar por `contracts/`.
+- [ ] `public-api/` é pasta isolada — só tipos puros, sem dependência de adapters.
+- [ ] Nenhum `import` cruza barreira sem passar por `public-api/`.
 
 ---
 
@@ -213,7 +207,7 @@ Quando um arquivo é criado/movido:
 ```bash
 # Achar imports proibidos cross-módulo
 grep -rn "from '.*modules/[^/]*/\(domain\|application\|adapters\)" src/modules/
-# Esperado: zero resultados — tudo deveria ir via contracts/
+# Esperado: zero resultados — tudo deveria ir via public-api/
 ```
 
 Pode virar lint rule no futuro. Por enquanto, code review manual + esse `grep` no CI.
@@ -224,11 +218,11 @@ Pode virar lint rule no futuro. Por enquanto, code review manual + esse `grep` n
 
 | ❌ Errado | ✅ Certo |
 | :--- | :--- |
-| `modules/financeiro` importa `modules/contratos/domain/X` | Importa `modules/contratos/contracts/X` (só eventos públicos) |
+| `modules/financial` importa `modules/contracts/domain/X` | Importa `modules/contracts/public-api/X` (só eventos públicos) |
 | Tabela `core.contratos_e_financeiro_compartilhado` | Tabela só de um módulo; outro tem projeção própria via evento |
 | Use case de Financeiro chamando repo de Contratos | Financeiro consome evento `EstadoContratualAtualizado` |
-| Helper "compartilhado" em `modules/contratos/utils.ts` reutilizado por Financeiro | Movido para `shared/` ou `shared-kernel/` |
-| `modules/X/index.ts` reexportando tudo (domain, application, adapters) | Reexporta apenas `contracts/` |
+| Helper "compartilhado" em `modules/contracts/utils.ts` reutilizado por Financeiro | Movido para `shared/` ou `shared-kernel/` |
+| `modules/X/index.ts` reexportando tudo (domain, application, adapters) | Reexporta apenas `public-api/` |
 | Outbox controller compartilhado por 2 módulos sabendo schemas internos | Cada módulo publica seu evento; outbox é transporte burro |
 
 ---

@@ -110,7 +110,7 @@ Motivação: **`verbatimModuleSyntax` força clareza sobre o que existe em runti
 Cada pasta do domínio tem `index.ts` que reexporta a API pública:
 
 ```ts
-// src/modules/contratos/domain/shared/index.ts
+// src/modules/contracts/domain/shared/index.ts
 export type { Moeda, MoedaError } from './moeda.ts';
 export { Moeda } from './moeda.ts';
 
@@ -125,7 +125,7 @@ export { UsuarioRef } from './usuario-ref.ts';
 ```
 
 ```ts
-// src/modules/contratos/domain/index.ts
+// src/modules/contracts/domain/index.ts
 export * from './shared/index.ts';
 export * from './contrato/index.ts';
 export * from './aditivo/index.ts';

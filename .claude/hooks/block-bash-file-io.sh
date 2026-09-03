@@ -3,7 +3,7 @@
 #
 # ─── A medição que originou este hook (2026-08-18, Claude Code 2.1.234) ──────────────────────────
 #
-# As 16 rules de `.claude/rules/` entram em contexto por `load_reason: path_glob_match`, e o gatilho
+# As rules de `.claude/rules/` entram em contexto por `load_reason: path_glob_match`, e o gatilho
 # é a FERRAMENTA DEDICADA — não o conteúdo lido. Experimento controlado, testemunhado pelo hook
 # `InstructionsLoaded` em `.claude/.last-instructions.log`:
 #
@@ -124,7 +124,7 @@ read -r -d '' REASON <<'EOF' || true
 Use as ferramentas dedicadas (Read/Edit/Write) para arquivo de código deste repositório.
 
 Por que este hook existe — medido, não suposto:
-  • As 16 rules de `.claude/rules/` carregam por `path_glob_match`, e QUEM DISPARA é a
+  • As rules de `.claude/rules/` carregam por `path_glob_match`, e QUEM DISPARA é a
     ferramenta dedicada. `head arquivo.ts` via Bash não carrega rule nenhuma; o `Read`
     do mesmo arquivo carrega na hora. Lendo por Bash, você trabalha SEM o harness — e
     nada na sessão avisa. Testemunho: `.claude/.last-instructions.log`.

@@ -134,20 +134,20 @@ Em ordem decrescente de autoridade:
 
 ### 🔴 Crítica (bloqueia approval)
 
-#### Issue 1 — `src/modules/contratos/domain/aditivo/aditivo.ts:42`
+#### Issue 1 — `src/modules/contracts/domain/amendment/amendment.ts:42`
 
 **Categoria:** A (regras absolutas do domínio)
-**Problema:** `throw new Error('aditivo invalido')` no domínio.
-**Esperado:** `return err('aditivo-invalido')` ou similar.
+**Problema:** `throw new Error('amendment invalid')` no domínio.
+**Esperado:** `return err('amendment-invalid')` ou similar.
 **Fix sugerido:**
 ```ts
 // antes
-throw new Error('aditivo invalido');
+throw new Error('amendment invalid');
 // depois
-return err('aditivo-invalido' as const);
+return err('amendment-invalid' as const);
 ```
 
-#### Issue 2 — `src/modules/contratos/domain/contrato/contrato.ts:78`
+#### Issue 2 — `src/modules/contracts/domain/contract/contract.ts:78`
 
 ...
 

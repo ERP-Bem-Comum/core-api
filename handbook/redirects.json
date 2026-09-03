@@ -313,6 +313,77 @@
     "since": "2026-09-02"
   },
 
+  "docs": {
+    "to": "handbook/architecture",
+    "reason": "Fonte dupla que perdia a corrida: o índice de ADR de docs/01-architecture.md parava em 0028 num repositório que já ia ao 0068, e o próprio docs/README.md avisava que contagem copiada envelhece no dia seguinte. A arquitetura viva é o handbook",
+    "since": "2026-09-03"
+  },
+  "docs/README.md": {
+    "to": "handbook/README.md",
+    "reason": "Índice da doc consolidada; o mapa vivo do acervo é o README do handbook",
+    "since": "2026-09-03"
+  },
+  "docs/01-architecture.md": {
+    "to": "handbook/architecture",
+    "reason": "Descrevia camadas e um índice de ADR em paralelo ao handbook, e se autocontradizia (listava a CLI como camada viva e, vinte linhas abaixo, dizia que o ADR-0037 a retirou)",
+    "since": "2026-09-03"
+  },
+  "docs/02-http-api.md": {
+    "to": null,
+    "reason": "Documentava a borda HTTP de dois módulos entre os sete que a têm; o contrato vivo é o OpenAPI gerado dos schemas Zod na borda (ADR-0027), que não diverge do código por construção",
+    "since": "2026-09-03"
+  },
+  "docs/03-domain-contracts.md": {
+    "to": "handbook/domain_questions/contratos",
+    "reason": "Especificação do domínio de Contratos, que vive em domain_questions/ com os bounded contexts e as RN numeradas",
+    "since": "2026-09-03"
+  },
+  "docs/04-dev-guide.md": {
+    "to": "README.md",
+    "reason": "Comandos e setup de desenvolvimento — o README raiz é o que se lê ao chegar no repositório",
+    "since": "2026-09-03"
+  },
+  "docs/05-frontend-api-handoff.md": {
+    "to": "handbook/tickets",
+    "reason": "Handoff front→core-api, encerrado em jul/2026; o registro do handoff está em tickets/",
+    "since": "2026-09-03"
+  },
+  "docs/diagrams/context.mmd": {
+    "to": null,
+    "reason": "Diagrama de contexto que descrevia o sistema como CLI-first, contra os ADR-0025 e 0037 — a UX primária é HTTP e a CLI embutida foi retirada",
+    "since": "2026-09-03"
+  },
+  "docs/decisions/_template.md": {
+    "to": null,
+    "reason": "Template órfão de um processo de ADR que nunca foi o real: os ADRs vivem em handbook/architecture/adr/. Nenhum documento o referenciava",
+    "since": "2026-09-03"
+  },
+  "deploy": {
+    "to": null,
+    "reason": "Continha um só arquivo, sobre a topologia de um ambiente 'QA' que não existe — os ambientes são local, homologação (Codebit) e produção. A infraestrutura sempre foi do ERP-INFRA, e o próprio README dizia que ali não havia nem deveria haver arquivo de infra",
+    "since": "2026-09-03"
+  },
+  "deploy/qa/README.md": {
+    "to": null,
+    "reason": "Registro de um drift medido em 08/2026 entre o compose da raiz (3 workers pelo #407) e o host (6 workers + caddy + web). A medição vale como história e segue no git; o documento apontava para um ambiente que mudou de nome e de dono, e nenhum arquivo o citava. O achado do Caddy sem ADR está preservado na tese T5c da inquiry 0027, e o incidente na 0002",
+    "since": "2026-09-03"
+  },
+  "handbook/domain_questions/financeiro/Goal.md": {
+    "to": null,
+    "reason": "O nome mentia sobre o conteúdo: 112 linhas listando os documentos da pipeline core-api-sdd v2.0.0 (.specify/templates/, fases W0→W3, STATE.json) coladas num diretório de domínio, sem uma linha sobre o domínio financeiro. Aparato removido em 2026-08-06; nenhum documento o citava",
+    "since": "2026-09-03"
+  },
+  "handbook/process": {
+    "to": null,
+    "reason": "Fluxo de engenharia W0→W3 + spec-kit: 1226 linhas de manual operável de um aparato removido em 2026-08-06 (.claude/.pipeline/, .specify/, scripts/pipeline/ não existem). A aposentadoria está registrada nas specs 038 e 039; o conteúdo integral foi para a discussão #975",
+    "since": "2026-09-03"
+  },
+  "handbook/process/00-fluxo-pipeline-sdd-agentes.md": {
+    "to": null,
+    "reason": "O documento em si — descrevia STATE.json, `pnpm run pipeline:state` e diagramas de estado de um pipeline extinto, como se fosse consulta viva. O que dele sobrevivia (TDD e regressão zero) já vive no CLAUDE.md raiz; conteúdo integral na discussão #975",
+    "since": "2026-09-03"
+  },
+
   "handbook/operations": {
     "to": null,
     "reason": "Recortes datados de operação (status e backlog de handoff, mai–jun/2026) — arquivados na discussão #965, que dá temporalidade nativa ao que era foto de um momento",

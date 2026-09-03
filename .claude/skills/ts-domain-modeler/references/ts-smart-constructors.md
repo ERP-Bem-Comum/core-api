@@ -60,7 +60,7 @@ Pontos-chave:
 ## 3. Smart constructor para Value Object composto
 
 ```ts
-// src/modules/contratos/domain/shared/periodo.ts
+// src/modules/contracts/domain/shared/periodo.ts
 import { type Result, ok, err } from '../../../../shared/result.ts';
 import type { Brand } from '../../../../shared/brand.ts';
 
@@ -104,7 +104,7 @@ Padrão "namespace de funções": `Periodo.criar`, `Periodo.estende`, `Periodo.c
 ## 4. Smart constructor para agregado
 
 ```ts
-// src/modules/contratos/domain/contrato/contrato.ts
+// src/modules/contracts/domain/contrato/contrato.ts
 import { type Result, ok, err, combine, isErr } from '../../../../shared/result.ts';
 
 export type ContratoError =
@@ -161,7 +161,7 @@ Pontos:
 ## 5. Smart constructor com `gerar` (novo ID)
 
 ```ts
-// src/modules/contratos/domain/shared/ids.ts
+// src/modules/contracts/domain/shared/ids.ts
 import { newUuid } from '../../../../shared/id.ts';
 import { type Result, ok, err } from '../../../../shared/result.ts';
 import { isUuidV4 } from '../../../../shared/id.ts';

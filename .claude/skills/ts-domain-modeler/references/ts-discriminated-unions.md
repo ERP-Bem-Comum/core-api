@@ -92,7 +92,7 @@ O `default` com `never` garante **exhaustiveness checking**: se um caso for adic
 ## 5. Discriminated union para eventos de domínio
 
 ```ts
-// src/modules/contratos/domain/contrato/eventos.ts
+// src/modules/contracts/domain/contrato/eventos.ts
 export type ContratoEvento =
   | {
       readonly type: 'ContratoMaeCriado';

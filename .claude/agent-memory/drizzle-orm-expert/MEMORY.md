@@ -11,3 +11,8 @@
 - [FOR UPDATE e errno em e.cause](reference_for_update_and_error_propagation.md) — ADR-0020 não cita FOR UPDATE (só precedente); errno de deadlock/lock-timeout mora em e.cause.errno
 - [Erro e transação no Drizzle 0.45.2](reference_drizzle_error_and_tx_semantics.md) — errno em `.cause` profundidade 1 p/ TODA query (não só db.execute); tx faz rollback+release, sem retry; `values([])` é erro do builder
 - [Document hard replace vs ordem de lock](project_fin_document_hard_replace_lock_order.md) — child-rows-diff JÁ cobre fin_payables; diff de linha não fecha deadlock de ORDEM contra fin_remittance_payables
+- [Bash cwd cruza worktree](feedback_bash_cwd_resets_across_worktrees.md) — ⚠️ path relativo em Bash pode ler OUTRO worktree; usar `git -C`/absoluto sempre em revisão multi-agente
+- [Custo medido de mudar o schema](reference_schema_change_cost_measured.md) — cascata para em 2 arquivos; format:check reprova por JSON do drizzle-kit; 86/88 fakes são cegos ao schema
+- [NOT NULL + CHECK = 2 statements](reference_notnull_check_ddl_two_statements.md) — sem DEFAULT nem aviso; em tabela com linhas o CHECK falha 3819 e a migration fica pela metade
+- [Extrair schema.sql consolidado](reference_schema_sql_extraction_toolkit.md) — `drizzle-kit export --dialect=mysql --sql` funciona e é determinístico; `--out` absoluto quebra; ENGINE= é sempre edição manual
+- [Atlas lê o diretório do Drizzle](reference_atlas_reads_drizzle_dir.md) — `--dir-format` NÃO é o obstáculo; 🚨 mas `migrate lint` é **Atlas Pro desde a v0.38** — o gate viável é o replay num MySQL limpo (~64 s), que não depende do Atlas

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code hook — InstructionsLoaded — testemunho de quais instruções entraram em contexto.
 #
-# As 16 rules de `.claude/rules/` carregam por path-matching (`paths:`), e isso é invisível de
+# As rules de `.claude/rules/` carregam por path-matching (`paths:`), e isso é invisível de
 # dentro da sessão: ninguém consegue afirmar, olhando para trás, se a rule de `domain/` chegou a
 # valer quando o arquivo foi editado. A dúvida é concreta — a auditoria de 2026-08-17 gastou meia
 # investigação para decidir se aquelas rules eram carregadas por alguma coisa ou eram letra morta.
