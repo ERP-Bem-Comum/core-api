@@ -211,14 +211,14 @@
     "since": "2026-08-07"
   },
   "handbook/handbook/research/feture_propose/gestao_programas/back_referncias.md": {
-    "to": "handbook/research/feture_propose/gestao_programas/back_referncias.md",
-    "reason": "Prefixo 'handbook/' duplicado (o typo 'referncias' está no nome real do arquivo)",
-    "since": "2026-08-07"
+    "to": null,
+    "reason": "Corrigia um prefixo 'handbook/' duplicado, mas o destino foi arquivado na discussão #967 em 2026-09-02 — redirect encadeado não sobrevive ao destino",
+    "since": "2026-09-02"
   },
   "handbook/handbook/research/feture_propose/gestao_programas/front_referencias.md": {
-    "to": "handbook/research/feture_propose/gestao_programas/front_referencias.md",
-    "reason": "Prefixo 'handbook/' duplicado",
-    "since": "2026-08-07"
+    "to": null,
+    "reason": "Corrigia um prefixo 'handbook/' duplicado, mas o destino foi arquivado na discussão #967 em 2026-09-02 — redirect encadeado não sobrevive ao destino",
+    "since": "2026-09-02"
   },
   "handbook/.claude/skills/ts-domain-modeler/SKILL.md": {
     "to": ".claude/skills/ts-domain-modeler/SKILL.md",
@@ -310,6 +310,47 @@
   "context/templates/spec.md": {
     "to": null,
     "reason": "Template do método spec-driven, removido com o pipeline em 2026-08-06",
+    "since": "2026-09-02"
+  },
+
+  "handbook/operations": {
+    "to": null,
+    "reason": "Recortes datados de operação (status e backlog de handoff, mai–jun/2026) — arquivados na discussão #965, que dá temporalidade nativa ao que era foto de um momento",
+    "since": "2026-09-02"
+  },
+  "handbook/po-feedback": {
+    "to": null,
+    "reason": "Conversa entre dev e P.O. — arquivada na discussão #966, categoria Q&A, onde a resposta é marcável",
+    "since": "2026-09-02"
+  },
+  "handbook/po-feedback/0001-gap-api-v2-contracts.md": {
+    "to": null,
+    "reason": "Gap de contrato levantado pela P.O., fonte do ADR-0032 — conteúdo integral na discussão #966 (https://github.com/ERP-Bem-Comum/core-api/discussions/966); o ADR que o cita não foi editado",
+    "since": "2026-09-02"
+  },
+  "handbook/operations/README.md": {
+    "to": null,
+    "reason": "Índice do diretório de operações, citado pelo README do handbook e por três documentos de infrastructure — conteúdo integral na discussão #965",
+    "since": "2026-09-02"
+  },
+  "handbook/research": {
+    "to": null,
+    "reason": "Propostas e descobertas de feature (material de produto, não de arquitetura) — arquivadas na discussão #967, categoria Ideas",
+    "since": "2026-09-02"
+  },
+  "handbook/research/feture_propose/gestao_programas/back_referncias.md": {
+    "to": null,
+    "reason": "Engenharia reversa do front de Programas, origem da spec 008 — arquivada na discussão #967",
+    "since": "2026-09-02"
+  },
+  "handbook/research/feture_propose/gestao_programas/front_referencias.md": {
+    "to": null,
+    "reason": "Engenharia reversa do front de Programas, origem da spec 008 — arquivada na discussão #967",
+    "since": "2026-09-02"
+  },
+  "_workspace": {
+    "to": null,
+    "reason": "Debate do ambiente de dados, com réplica e medições — arquivado na discussão #968; debate é a forma que Discussions serve melhor que arquivo",
     "since": "2026-09-02"
   }
 }

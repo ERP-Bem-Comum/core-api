@@ -101,10 +101,31 @@ toda busca no repositório; tirá-lo errado cega 12 agentes de uma vez.
 
 ---
 
+### 2026-09-02 (mais tarde) — o bloqueador mudou de natureza
+
+O host `mcp-server.tailf5e6ca.ts.net` **voltou a resolver** e a tailnet está ativa. O `ENOTFOUND` do início
+da sessão era queda de rede, não servidor desligado. Mas os servidores MCP conectam **na inicialização da
+sessão**: uma sessão que começou com o host fora do ar não os recupera enquanto durar.
+
+O bloqueador deixou de ser "o servidor está fora" e passou a ser "esta sessão não alcança o MCP" — o que
+uma sessão nova resolve sozinha.
+
+---
+
 ## 5. Decisão final
 
-**PENDENTE.** Bloqueador: a alternativa **C** não é avaliável enquanto o MCP `acdg-skills` estiver
-fora do ar — decidir sem inventariar o que ele já indexa seria escolher no escuro.
+**PENDENTE, e agora destravável.** A alternativa **C** passou a ser avaliável: basta uma sessão nova, com o
+MCP `acdg-skills` conectado no boot, para inventariar o que ele já indexa e comparar com os 1.061 arquivos
+de `handbook/reference/`.
+
+A pergunta a responder com esse inventário, e que decide entre **A** e **C**: *quanto do `reference/` o
+`acdg-skills` já serve?* Se a cobertura for alta, **C** elimina o peso sem custo de migração e a decisão é
+sobre aceitar dependência de rede para ler doc. Se for baixa, **A** é o caminho, e o custo real é reescrever
+os 707 caminhos — mecânico, mas amplo o bastante para pedir gate próprio.
+
+**O que NÃO fazer sem esse número:** criar o repositório separado. É ação externa, e escolher A por descarte
+de C não medido repete o erro que esta mesma sessão cometeu com `context/decisions/` — classificar por
+aparência e descobrir o consumidor depois.
 
 O que **já foi decidido** nesta sessão, e não depende deste bloqueador:
 
