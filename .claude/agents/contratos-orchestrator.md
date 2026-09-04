@@ -14,8 +14,8 @@ description: >
   Dockerfile/compose", "configurar pnpm", ou qualquer trabalho em
   src/modules/contracts/. Roteia para a skill canônica (ts-domain-modeler,
   ports-and-adapters, code-reviewer, ts-quality-checker,
-  drizzle-schema-author, modular-monolith, application-cli-builder,
-  database-engineer, ou as 3 famílias tutor/strategist/theorist) ou para o
+  drizzle-schema-author, modular-monolith, database-engineer, ou as 3
+  famílias tutor/strategist/theorist) ou para o
   expert de tecnologia (drizzle-orm-expert, mysql-database-expert,
   mysql2-driver-expert, typescript-language-expert, nodejs-runtime-expert,
   docker-compose-expert, pnpm-workspace-expert, fastify-server-expert,
@@ -38,15 +38,17 @@ Você **não modela domínio, não escreve testes, não revisa código diretamen
 
 ---
 
-## Status (2026-05-14)
+## Camadas e módulos
 
-| Stack | Path | Status | Skill canônica |
-| :--- | :--- | :--- | :--- |
-| Domínio puro TS | `src/modules/contratos/domain/` | **Ativo** Fase 1 | [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md) |
-| Application + Use Cases | `src/modules/contratos/application/` | **Próximo** | [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md) + [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) |
-| CLI para P.O. validar | `src/modules/contratos/cli/` | **Após domínio** | [`application-cli-builder`](../skills/application-cli-builder/SKILL.md) |
-| Adapters (MySQL, REST, Storage) | `src/modules/contratos/adapters/` | **Após CLI** | (skill futura — `adapter-implementer`) |
-| Módulo Financeiro | `src/modules/financeiro/` | **Reservado Fase 2** | reusa todas as skills |
+Os 8 módulos entregues em `src/modules/`: `auth`, `budget-plans`, `contracts`, `financial`, `notifications`, `partners`, `programs`, `reports`. Cada um segue as mesmas camadas (nem todo módulo tem todas — `reports` não tem `domain/`; `worker/` existe hoje só em `contracts` e `partners`):
+
+| Camada | Path | Skill canônica |
+| :--- | :--- | :--- |
+| Domínio puro TS | `src/modules/<módulo>/domain/` | [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md) |
+| Application + Use Cases | `src/modules/<módulo>/application/` | [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md) + [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) |
+| Adapters (MySQL, HTTP, Storage) | `src/modules/<módulo>/adapters/` | [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) (persistência: + [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL.md) / [`drizzle-orm-expert`](./drizzle-orm-expert.md)) |
+| Public API (fronteira cross-módulo) | `src/modules/<módulo>/public-api/` | [`modular-monolith`](../skills/modular-monolith/SKILL.md) |
+| Worker (outbox/background jobs) | `src/modules/<módulo>/worker/` | [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) + [`nodejs-runtime-expert`](./nodejs-runtime-expert.md) |
 
 ---
 
@@ -77,18 +79,13 @@ ADRs do handbook são **imutáveis**. Nunca contradizer um ADR aceito — abrir 
 
 - "define a Repository do Contrato" → [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md)
 - "como o domínio publica eventos sem conhecer o EventBus" → [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md)
-- "implementar adapter MySQL para X" → [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) + (futuro `adapter-implementer`)
+- "implementar adapter MySQL para X" → [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) + [`drizzle-orm-expert`](./drizzle-orm-expert.md)
 
 ### 🧱 Modular Monolith
 
 - "onde colocar tipo compartilhado entre Contratos e Financeiro" → [`modular-monolith`](../skills/modular-monolith/SKILL.md)
 - "Contratos pode importar de Financeiro?" → [`modular-monolith`](../skills/modular-monolith/SKILL.md)
 - "evento cross-módulo" → [`modular-monolith`](../skills/modular-monolith/SKILL.md) + [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md)
-
-### 🖥️ CLI para validação da P.O.
-
-- "monta CLI pra testar regras de Contrato" → [`application-cli-builder`](../skills/application-cli-builder/SKILL.md)
-- "expõe casos de uso na CLI" → [`application-cli-builder`](../skills/application-cli-builder/SKILL.md)
 
 ### 🌊 Review / Qualidade
 
@@ -162,9 +159,9 @@ ADRs do handbook são **imutáveis**. Nunca contradizer um ADR aceito — abrir 
 
 > **NUNCA `npm`. SEMPRE `pnpm`.** (CLAUDE.md raiz + ADR-0029.)
 
-### 🌐 Fastify (HTTP server — **reservado, Fase 2+**)
+### 🌐 Fastify (HTTP server — **UX primária, ADR-0025/0037**)
 
-- "vamos botar HTTP no core-api" → [`fastify-server-expert`](./fastify-server-expert.md) (exige novo ADR antes)
+- "expõe caso de uso pra P.O./frontend" → [`fastify-server-expert`](./fastify-server-expert.md) (a CLI embutida foi retirada pelo ADR-0037; a borda HTTP é o caminho único)
 - "rota com JSON Schema, plugin, hook, Type Provider" → [`fastify-server-expert`](./fastify-server-expert.md)
 - "configurar `@fastify/cors`, `helmet`, `rate-limit`, `swagger`" → [`fastify-server-expert`](./fastify-server-expert.md)
 

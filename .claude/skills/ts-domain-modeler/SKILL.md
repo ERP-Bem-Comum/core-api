@@ -10,9 +10,9 @@ description: >
 
 ## Persona
 
-Você é o **especialista de modelagem de domínio em TypeScript moderno** do `core-api`. Sua responsabilidade é traduzir o handbook de domínio (`handbook/domain/`) em código TS **puro**, sem qualquer dependência de framework (NestJS, Express, Drizzle, MySQL, etc.).
+Você é o **especialista de modelagem de domínio em TypeScript moderno** do `core-api`. Sua responsabilidade é traduzir a especificação de domínio (`handbook/domain_questions/`, que cobre `contratos/` e `financeiro/`) em código TS **puro**, sem qualquer dependência de framework (NestJS, Express, Drizzle, MySQL, etc.).
 
-> **Fronteira:** você só edita `src/modules/<modulo>/domain/`. Application, adapters e CLI são responsabilidade de outras skills.
+> **Fronteira:** você só edita `src/modules/<modulo>/domain/`. Application, adapters, worker e a borda HTTP são responsabilidade de outras skills.
 
 ---
 
@@ -117,7 +117,7 @@ Herdadas do `CLAUDE.md` raiz e reforçadas aqui no contexto de domínio:
 > **Código em inglês, documentação em português.** Sem exceções.
 >
 > - Identificadores TS (tipos, funções, variáveis), nomes de pasta em `src/` e `tests/`, nomes de arquivo `.ts`, string literal unions de erro, eventos: **EN**.
-> - Strings literais voltadas ao humano (CLI, mensagens formatadas para usuário): **PT** via dicionário no `format.ts`.
+> - Strings literais voltadas ao humano (mensagens formatadas na borda): **PT** via dicionário no `format.ts`.
 > - Comentários explicativos em TS, READMEs, skills, ADRs, inquiries, handbook: **PT**, com identificadores de código entre backticks.
 > - Commits: **PT** (descritivo). IDs de ticket: **EN**.
 
@@ -1704,7 +1704,7 @@ Os blocos abaixo **ainda não tiveram ticket CTR-SKILL-REFRESH-* concluído**. A
 | :--- | :--- | :--- | :--- |
 | **E1** — Eventos de Domínio | Shape canônico (`{ type: 'PascalCasePassado'; payload; occurredAt: Date }`), onde vivem (`events.ts`), quando publicar (após persist), diferença de evento interno vs externo | Pendente | CTR-SKILL-REFRESH-E1 |
 | **E2** — EventBus Port | Port em `application/ports/event-bus.ts`, InMemory adapter para testes, padrão de subscrição, erro de publicação como `Result` | Pendente | CTR-SKILL-REFRESH-E2 |
-| **E3** — Outbox Pattern (transversal) | Garantia de entrega (at-least-once), tabela `outbox` MySQL, idempotência no consumidor | Parcialmente documentado em `context/planning/OUTBOX-MYSQL.md` | CTR-OUTBOX-MYSQL (planejamento pausado) |
+| **E3** — Outbox Pattern (transversal) | Garantia de entrega (at-least-once), tabela `outbox` MySQL, idempotência no consumidor | Norma vigente no [ADR-0064](../../../handbook/architecture/adr/0064-outbox-fanout-per-consumer-progress.md); estratégia em `handbook/architecture/07-async-messaging-strategy.md` | — |
 | **F** — Use Cases: Query Side | `getContract`, `listContracts` — pattern de query, projections, paginação, filtros como tipos | Pendente | CTR-SKILL-REFRESH-F |
 | **G** — Clock Port | Port `Clock` em `application/ports/clock.ts`, `FakeClock` para testes de regras de data, usos canônicos | Pendente | CTR-SKILL-REFRESH-G |
 | **J** — CLI Adapters | Wiring CLI → use cases → InMemory vs MySQL, parseFlags, formatters PT-BR, tratamento de `Result` na saída | Pendente | CTR-SKILL-REFRESH-J |
@@ -1718,7 +1718,7 @@ Os blocos abaixo **ainda não tiveram ticket CTR-SKILL-REFRESH-* concluído**. A
 
 ### Quando o orquestrador chama essa skill
 
-1. **Ler** `handbook/domain/<modulo>/` integral do BC alvo.
+1. **Ler** a especificação de domínio do BC alvo, **quando existir**: `handbook/domain_questions/` cobre `contratos/` e `financeiro/` — só esses dois, e com o nome em **português**, herdado de quando o acervo nasceu. Os demais módulos não têm especificação lá; para eles, a fonte é o próprio `src/` e os ADRs.
 2. **Ler** [`references/`](./references/) relevantes para os tipos avançados envolvidos.
 3. **Confirmar** com o usuário se há ambiguidade no handbook.
 4. **Test-first?** — se sim, escrever primeiro os testes que falham.
@@ -1766,10 +1766,7 @@ ts-domain-modeler          ◄── você está aqui (modela tipos puros)
    │
    ├─► ports-and-adapters  (decide ports/contratos com infra)
    │
-   ├─► modular-monolith    (decide o que é compartilhado entre módulos)
-   │
-   └─► application-cli-builder
-        (consome o domínio para expor via CLI à P.O.)
+   └─► modular-monolith    (decide o que é compartilhado entre módulos)
 ```
 
 ---

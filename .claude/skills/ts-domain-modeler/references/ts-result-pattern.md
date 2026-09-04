@@ -50,7 +50,7 @@ Pontos-chave:
 ## 3. Uso típico em smart constructor
 
 ```ts
-// src/modules/contratos/domain/shared/moeda.ts
+// src/modules/contracts/domain/shared/moeda.ts
 import { type Result, ok, err } from '../../../../shared/result.ts';
 
 export type Moeda = Brand<{ readonly centavos: number }, 'Moeda'>;
@@ -180,7 +180,7 @@ Note: **`if (isErr(...)) return r;`** é o padrão "early return" preferido. Evi
 ## 6. Conversão na borda (adapter → domínio)
 
 ```ts
-// src/modules/contratos/adapters/contrato-repository.mysql.ts
+// src/modules/contracts/adapters/contrato-repository.mysql.ts
 import { type Result, ok, err } from '../../../shared/result.ts';
 
 export const findById = async (id: ContratoId): Promise<Result<Contrato | null, 'db-unavailable'>> => {

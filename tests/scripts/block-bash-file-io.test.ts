@@ -1,7 +1,7 @@
 /**
  * BLOCK-BASH-FILE-IO — o agente não substitui Read/Edit/Write por shell.
  *
- * Origem: medição de 18/08/2026 (Claude Code 2.1.234). As 16 rules de `.claude/rules/` entram em
+ * Origem: medição de 18/08/2026 (Claude Code 2.1.234). As rules de `.claude/rules/` entram em
  * contexto por `load_reason: path_glob_match`, e quem dispara é a FERRAMENTA DEDICADA, não o
  * conteúdo lido. Experimento controlado, testemunhado por `.claude/.last-instructions.log`:
  * `head -15 src/shared/kernel/cnpj.ts` via Bash não carregou rule alguma; o `Read` do MESMO arquivo

@@ -43,6 +43,16 @@ coverage/
 # de material local-only" para como cada IA CLI lê esta pasta.
 handbook/guidelines/
 
+# Escape de uso único do hook de pre-push. Criado com `touch`, consumido pelo hook no push
+# seguinte. É estado local e deliberado — nunca entra no repo, senão desliga o gate para todos.
+.claude/.skip-push-review
+
+# Wiki do GitHub — clone local de `core-api.wiki.git`, que é um repositório SEPARADO.
+# Existe no disco para que Read/Grep/Glob a alcancem (a wiki não-clonada é conhecimento que
+# ninguém lê); nunca entra neste repo, senão vira uma segunda cópia divergindo da primeira.
+# Sincronize com `pnpm run wiki:sync`.
+.wiki/
+
 # Docker Compose secrets — arquivos com senhas locais
 # Pasta secrets/ é versionada (com .gitkeep); apenas os .txt dentro são ignorados
 /secrets/*.txt

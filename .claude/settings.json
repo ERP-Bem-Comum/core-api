@@ -24,12 +24,12 @@
       "$defaults",
       "Backend do ERP Bem Comum: monorepo TypeScript/Node com harness próprio em `.claude/`. O gerenciador de pacotes é **pnpm** — `npm` é recusado por hook.",
       "Os repositórios `core-api` e `ERP-INFRA` são PÚBLICOS no GitHub: issue, PR, comentário e mensagem de commit são leitura pública e, na prática, irreversíveis.",
-      "`dev` e `main` são protegidas (PR obrigatório + required checks). Merge em `dev` dispara deploy automático no QA; `main` dispara deploy em PRODUÇÃO (AWS ECS).",
-      "As 16 rules de `.claude/rules/` só entram em contexto por Read/Edit/Write (`path_glob_match`). Ler ou escrever código do repositório por Bash (`cat`, `sed -i`, `>`) opera SEM o harness, e já é recusado pelo hook `block-bash-file-io.sh`.",
+      "`dev` e `main` são protegidas (PR obrigatório + required checks). `dev` é a integração; `main` é a PRODUÇÃO. Merge em `dev` publica imagem, não deploya ambiente.",
+      "As rules de `.claude/rules/` só entram em contexto por Read/Edit/Write (`path_glob_match`). Ler ou escrever código do repositório por Bash (`cat`, `sed -i`, `>`) opera SEM o harness, e já é recusado pelo hook `block-bash-file-io.sh`.",
       "Hooks `PreToolUse(Bash)` recusam: `npm`, interpretador inline (python/perl), I/O de arquivo de código por shell, e docker cruzando para o projeto legado. O hook `Stop` roda o gate: typecheck, format, lint e test.",
       "Arquivo temporário vai no scratchpad da sessão — nunca no repositório.",
-      "Máquina de 8 GB de RAM: build ou container em paralelo derrubam o ambiente. Os hosts remotos são o x99 (homelab, via Tailscale) e a VPS de QA.",
-      "Segredos vivem em `~/.secrets` e em cofre sops/age; referenciar sempre pelo NOME da variável, nunca pelo valor.",
+      "Máquina de 8 GB de RAM: build ou container em paralelo derrubam o ambiente. O host remoto de validação é o x99 (homelab, via Tailscale); a homologação roda na Codebit e não é acessível daqui.",
+      "Segredos vivem num cofre sops+age (`~/.config/secrets/secrets.yaml`); referenciar sempre pelo NOME da variável, nunca pelo valor.",
       "`handbook/guidelines/` está no `.gitignore` — documentação Bradesco com restrição de redistribuição. A leitura local é autorizada."
     ],
     "allow": [
@@ -52,12 +52,12 @@
       "Apagar estado de container: `docker compose down -v`, `docker volume rm`, `docker system prune`.",
       "Rodar job, worker ou seed que escreve em banco: `pnpm run job:*`, `worker:*`, `seed:*`, `db:seed:*`, `db:generate*`.",
       "Alterar `compose.yaml`, `Dockerfile` ou `.github/workflows/**` — é a planta do deploy.",
-      "Executar por `ssh` comando que muda estado em host remoto (x99, VPS de QA).",
+      "Executar por `ssh` comando que muda estado no host remoto de validação (x99).",
       "`rm -rf`, mover ou sobrescrever arquivo fora do repositório e do scratchpad."
     ],
     "hard_deny": [
       "$defaults",
-      "Ler, imprimir, ecoar, copiar ou gravar VALOR de segredo: `.env`, `.env.*`, `secrets/**`, `~/.secrets`, chave privada, token. Referenciar pelo nome da variável, jamais pelo valor.",
+      "Ler, imprimir, ecoar, copiar ou gravar VALOR de segredo: `.env`, `.env.*`, `secrets/**`, o cofre sops+age, chave privada, token. Referenciar pelo nome da variável, jamais pelo valor.",
       "Publicar em repositório público (issue, PR, commit, comentário) hostname, IP, caminho de host, credencial ou nome/valor de segredo.",
       "Push direto ou `--force`/`--force-with-lease` em `dev` ou `main`; furar o gate com `gh pr merge --admin` ou `git commit --no-verify`.",
       "Silenciar vermelho: apagar ou afrouxar teste, marcar `skip`, desabilitar hook, gate, regra de lint ou entrada de settings para o gate passar. Vermelho se conserta ou se escala — nunca se esconde.",
@@ -125,6 +125,12 @@
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-bash-file-io.sh",
             "timeout": 10,
             "statusMessage": "Verificando leitura/escrita de código por Bash (rules)..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-push-review-reminder.sh",
+            "timeout": 15,
+            "statusMessage": "Medindo o diff para dimensionar a revisão..."
           }
         ]
       }

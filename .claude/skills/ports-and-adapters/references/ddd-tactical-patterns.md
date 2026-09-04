@@ -59,7 +59,7 @@ const igual = (a: Moeda, b: Moeda) => a.centavos === b.centavos;
 Um Aggregate é o **escopo de uma transação**. Tudo que muda junto vive sob a mesma raiz.
 
 ```ts
-// src/modules/contratos/domain/contrato/types.ts
+// src/modules/contracts/domain/contrato/types.ts
 export type Contrato = Readonly<{
   id: ContratoId;
   numeroSequencial: string;
@@ -163,7 +163,7 @@ ACL é um **adapter especial** que protege o domínio novo de um sistema legado/
 No nosso caso: o **legado** (`abc-erp-financeiro-prod`, MySQL 8.4 com `contracts` legado) usa modelo achatado. O **novo** modela Contrato Mãe + Aditivo separados. O ACL traduz.
 
 ```ts
-// src/modules/contratos/adapters/legacy-contrato-adapter.ts
+// src/modules/contracts/adapters/legacy-contrato-adapter.ts
 // Lê schema legado e devolve o tipo Contrato/Aditivo do novo modelo
 export const LegacyContratoAdapter = (db: LegacyDb): Readonly<{
   readContratoMae: (legacyId: number) => Promise<Result<Contrato, AdapterError>>;
@@ -175,17 +175,17 @@ export const LegacyContratoAdapter = (db: LegacyDb): Readonly<{
 
 ## 8. Bounded Context boundary
 
-Dentro do mesmo monolito, módulos diferentes (`modules/contratos/`, `modules/financeiro/`) são **Bounded Contexts**. Eles se comunicam **apenas via eventos** ([ADR-0015](../../../../../handbook/architecture/adr/0015-mysql-outbox-pattern.md)):
+Dentro do mesmo monolito, módulos diferentes (`modules/contracts/`, `modules/financial/`) são **Bounded Contexts**. Eles se comunicam **apenas via eventos** ([ADR-0015](../../../../../handbook/architecture/adr/0015-mysql-outbox-pattern.md)):
 
 ```
-modules/contratos ──── ContratoMaeCriado ────▶  modules/financeiro
+modules/contracts ──── ContratoMaeCriado ────▶  modules/financial
                   ──── EstadoContratualAtualizado ──▶
                   ──── ContratoEncerrado ──▶
 ```
 
 **Proibido:**
 
-- `modules/financeiro/...` importando `modules/contratos/domain/*`
+- `modules/financial/...` importando `modules/contracts/domain/*`
 - Repository de Contratos sendo chamado por Financeiro
 - Tabela compartilhada `fin_*` lida ou escrita por Contratos
 

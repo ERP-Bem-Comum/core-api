@@ -3,7 +3,8 @@
  *
  * DEVE FALHAR em W0 (mapper inexistente: contractor-view.mapper.ts). Puro, sem IO.
  * Cobre: supplier (bankAccount + pixKey read-only), financier, collaborator, e o
- * `updatedAt` injetado (placeholder de "última atualização" — R5 do po-feedback/0001).
+ * `updatedAt` injetado (placeholder de "última atualização" — R5 do feedback da P.O., arquivado em
+ * https://github.com/ERP-Bem-Comum/core-api/discussions/966).
  *
  * A View é PROJEÇÃO PLANA (ADR-0014): nunca expõe o agregado interno nem `par_*` cru.
  */

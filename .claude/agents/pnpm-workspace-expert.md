@@ -238,7 +238,7 @@ pnpm run test:integration   # quando aplicável
 
 ## Anti-padrões
 
-1. **`npm install` / `npm run`** em qualquer doc ou PR.
+1. **`npm install` / `npm run`** em qualquer doc ou PR — converter para `pnpm` (ADR-0029).
 2. **`yarn`** — fora do escopo do projeto.
 3. **Editar `pnpm-lock.yaml` manualmente.**
 4. **`shamefully-hoist=true`** sem ADR.

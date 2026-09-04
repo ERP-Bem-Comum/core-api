@@ -46,7 +46,7 @@ Sempre a documentação oficial do Node 24 espelhada no handbook do projeto:
 | Mapa Bash → Node (catálogo de operações comuns) | [`./references/bash-to-node-mapping.md`](./references/bash-to-node-mapping.md) |
 | Tratamento de `NodeJS.ErrnoException` (códigos `ENOENT`, `EEXIST`, `EACCES`, …) e tradução para `Result` ou exit code | [`./references/errno-to-result.md`](./references/errno-to-result.md) |
 | Padrão `Result<T, E>` do projeto | [`src/shared/result.ts`](../../../src/shared/result.ts) |
-| Exit codes sysexits.h vigentes na CLI | [`../application-cli-builder/SKILL.md`](../application-cli-builder/SKILL.md) §"Exit codes" |
+| Exit codes sysexits.h vigentes | [`./references/errno-to-result.md`](./references/errno-to-result.md) §"Padrão: errno → exit code (sysexits.h)" |
 | Quando o script vira **port** (LocalFs, S3, etc.) em vez de utilitário ad-hoc | [`../ports-and-adapters/SKILL.md`](../ports-and-adapters/SKILL.md) |
 | Comandos `pnpm` (nunca `npm`) — usar `pnpm exec node ...`, `pnpm run script:nome` | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"IMPORTANTE" |
 
@@ -392,7 +392,7 @@ export const readJson = async <T>(path: string): Promise<Result<T, ReadJsonError
 
 - **Quer expor FS como dependência do domínio?** → use [`ports-and-adapters`](../ports-and-adapters/SKILL.md) e modele `FilesystemPort` (`readFile: (path) => Promise<Result<Buffer, FsError>>`). O adapter real importa `node:fs/promises`; o domínio só conhece o port. Esta skill cobre **scripts standalone**, não dependências do domínio.
 - **Upload/download para storage remoto?** → [`ADR-0019`](../../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) já dita S3/MinIO via `@aws-sdk/client-s3`. Não simule com FS local.
-- **Subcomando da CLI de Contratos?** → [`application-cli-builder`](../application-cli-builder/SKILL.md). Esta skill é para scripts de manutenção/build/devops, não para a CLI da P.O.
+- **Expor caso de uso para a P.O./frontend?** → a UX primária do core-api é HTTP/Fastify (ADR-0025/0037 — a CLI embutida foi retirada); veja o agent [`fastify-server-expert`](../../agents/fastify-server-expert.md). Esta skill é para scripts de manutenção/build/devops, não para a borda HTTP.
 - **Pipeline de testes / migrations / format-check?** → já está em `package.json#scripts`. Não duplique como `.ts` solto.
 
 ---
@@ -407,9 +407,6 @@ ports-and-adapters       (FilesystemPort + adapter real para o domínio)
         │
         ▼
 nodejs-fs-scripter   ◄── você está aqui (scripts de manutenção, build, devops)
-        │
-        ▼
-application-cli-builder  (CLI da P.O., não scripts internos)
 ```
 
 ---
@@ -434,4 +431,4 @@ application-cli-builder  (CLI da P.O., não scripts internos)
 ## Changelog
 
 - **2026-08-31:** A fronteira deixa de listar `.claude/.pipeline/<TICKET>/scripts/`, removido em 2026-08-06. Cobrado por `tests/cleanup/skills-describe-live-harness.test.ts` (#807).
-- **2026-05-15:** Criação. Ancorada em `handbook/reference/nodejs/File system.md`. Pareada com `ports-and-adapters` (para casos onde o script vira port) e `application-cli-builder` (para distinguir scripts internos de CLI da P.O.).
+- **2026-05-15:** Criação. Ancorada em `handbook/reference/nodejs/File system.md`. Pareada com `ports-and-adapters` (para casos onde o script vira port) e com a skill de CLI da P.O. então existente, para distinguir scripts internos de CLI (essa skill foi removida depois que ADR-0037 retirou a CLI embutida em favor da borda HTTP/Fastify).

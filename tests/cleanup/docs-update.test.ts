@@ -152,19 +152,10 @@ describe('CTR-DOCS-UPDATE — CA-7..10: SKILLs', () => {
     );
   });
 
-  it('CA-8: application-cli-builder SKILL — drivers vigentes são memory|mysql', () => {
-    const content = read('.claude/skills/application-cli-builder/SKILL.md');
-    assert.doesNotMatch(
-      content,
-      /memory[\s|]+\\?\|[\s|]+sqlite[\s|]+\\?\|[\s|]+mysql/,
-      'ainda lista "memory | sqlite | mysql" como drivers vigentes',
-    );
-    assert.doesNotMatch(
-      content,
-      /drivers\/\{memory,sqlite,mysql\}\.ts/,
-      'estrutura de pastas ainda lista drivers/sqlite.ts',
-    );
-  });
+  // CA-8 removido junto com `.claude/skills/application-cli-builder/`: a skill ensinava a construir
+  // `src/modules/*/cli/`, diretório que o ADR-0037 retirou e que não existe em `src/`. Um gate que
+  // guarda o conteúdo de um arquivo apagado não verifica nada — a ausência é assegurada pelo
+  // `skills-describe-live-harness.test.ts`, que varre as skills vivas.
 
   it('CA-9: tdd-strategist + tdd-tutor — sem refs a tests SQLite deletados', () => {
     const strategist = read('.claude/skills/tdd-strategist/SKILL.md');

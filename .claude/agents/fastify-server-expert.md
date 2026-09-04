@@ -164,7 +164,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
 import { onShutdown } from '#src/shared/lifecycle.ts';
-import { contractsPlugin } from '#src/modules/contracts/http/plugin.ts';
+import { contractsPlugin } from '#src/modules/contracts/adapters/http/plugin.ts';
 
 export const createServer = async (): Promise<FastifyInstance> => {
   const app = Fastify({

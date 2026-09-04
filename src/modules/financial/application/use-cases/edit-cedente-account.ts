@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
+import { checkCedenteRemittanceReadiness } from '../../domain/cedente/remittance-eligibility.ts';
 import type { AccountType, CedenteAccount } from '../../domain/cedente/types.ts';
 import type { CedenteAccountIdError } from '../../domain/cedente/cedente-account-id.ts';
 import type {
@@ -71,9 +72,25 @@ export const editCedenteAccount =
     // recusa da remessa promete ao operador. Trocar um já preenchido é outra coisa: ele identifica o
     // contrato junto ao banco e viaja no nome de toda remessa já transmitida — reescrevê-lo faria as
     // remessas antigas apontarem para um convênio que a conta não declara mais.
+    //
+    // ⚠️ "JÁ DEFINIDO" É SER UM CONVÊNIO DE VERDADE, NÃO SER UMA STRING NÃO-VAZIA (#879), e a
+    // diferença custou um bloqueio em PRODUÇÃO. O ETL gravava `'LEGADO'` como placeholder; o
+    // `!== ''` o lia como convênio definido e recusava toda alteração. Nenhuma conta migrada podia
+    // gerar remessa, e nenhuma tinha conserto — a porta que a #722 abriu foi trancada por um valor
+    // que só *parecia* dado.
+    //
+    // A régua de "serve como convênio?" NÃO é escrita aqui: é `checkCedenteRemittanceReadiness`, no
+    // domínio, e é a MESMA que decide se a conta gera remessa. Uma segunda régua para o mesmo fato
+    // divergiria — e a divergência entre duas réguas de elegibilidade é exatamente o defeito que a
+    // #837 fechou do outro lado do módulo. Aqui só se pergunta a ela.
+    //
+    // O efeito é o correto nos dois sentidos: convênio malformado ou longo demais passa a ACEITAR
+    // correção pela tela (é o que o operador precisa), e convênio válido continua RECUSANDO a troca
+    // — o invariante do #722 não afrouxa.
     const wantsConvenioChange =
       input.convenio !== undefined && input.convenio.trim() !== found.value.convenio.trim();
-    if (wantsConvenioChange && found.value.convenio.trim() !== '') {
+    const currentConvenioIsUsable = checkCedenteRemittanceReadiness(found.value).ok;
+    if (wantsConvenioChange && currentConvenioIsUsable) {
       return err('cedente-convenio-already-set');
     }
 

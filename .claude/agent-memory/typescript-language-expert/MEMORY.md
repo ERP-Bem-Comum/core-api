@@ -2,3 +2,4 @@
 - [Provar verde por mérito, não por acidente](feedback-prove-green-by-merit.md) — receita de probe (tsc `--ignoreConfig`, `IsAny`, `@ts-expect-error`, fonte da regra ESLint) em revisão de type system
 - [ESLint prefere `interface`, o repo usa `Readonly<{}>`](project-consistent-type-definitions-vs-readonly.md) — por que `type` passa e onde `interface` NÃO é violação
 - [Round tardio: adiar endurecimento de tipo](feedback-late-round-defer-type-refactor.md) — separar "dano ativo hoje" de "endurecimento de contrato"; endossar o adiamento do coordenador
+- [Probe exige `--dir` absoluto](feedback-probe-precisa-de-cwd-explicito.md) — o cwd do Bash cai noutra worktree e devolve verde de outro commit

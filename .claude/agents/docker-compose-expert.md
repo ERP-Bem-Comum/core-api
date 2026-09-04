@@ -210,7 +210,6 @@ CMD ["src/server.ts"]
 .gitignore
 .github
 .claude
-.pipeline
 .idea
 .vscode
 .devcontainer

@@ -12,7 +12,7 @@ Backend do ERP Bem Comum, modelado como **modular monolith**. Vários módulos d
 
 ## 🧩 Módulos
 
-Seis Bounded Contexts sob `src/modules/`, cada um com a mesma anatomia (`domain/` → `application/` → `adapters/` → `public-api/`). A comunicação cross-módulo passa **exclusivamente** por `public-api/` + eventos no Outbox (ADR-0006/0014).
+Os Bounded Contexts vivem sob `src/modules/`, cada um com a mesma anatomia (`domain/` → `application/` → `adapters/` → `public-api/`). A comunicação cross-módulo passa **exclusivamente** por `public-api/` + eventos no Outbox (ADR-0006/0014).
 
 | Módulo                                          | Responsabilidade                                                                                                                                           | Borda HTTP                                       |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -22,6 +22,8 @@ Seis Bounded Contexts sob `src/modules/`, cada um com a mesma anatomia (`domain/
 | [`partners`](./src/modules/partners/)           | Registry de parceiros — colaboradores, fornecedores, financiadores, geografia/território (soft-delete ADR-0035), ACT (ADR-0036) — ADR-0031.                | `/api/v1/{collaborators,suppliers,financiers,…}` |
 | [`programs`](./src/modules/programs/)           | Gestão de programas + logo storage S3/MinIO — spec 008, ADR-0033.                                                                                          | `/api/v1/programs`                               |
 | [`notifications`](./src/modules/notifications/) | E-mail transacional — templates + `EmailSender` (Nodemailer/Resend), **consumidor** de eventos de domínio (ADR-0010/0047).                                 | worker `email-dispatch`                          |
+| [`budget-plans`](./src/modules/budget-plans/)   | Planos orçamentários — plano, resultado realizado e estrutura de custo; taxonomia do planejável (ADR-0048/0051).                                           | `/api/v2/budget-plans`                           |
+| [`reports`](./src/modules/reports/)             | Leitura agregada sobre o que os outros módulos escreveram. **Não tem `domain/`** — é consulta, não modelo, e por isso não tem regra própria a proteger.    | `/api/v2/reports`                                |
 
 ---
 
@@ -71,12 +73,12 @@ db/drizzle/                              configs do drizzle-kit por módulo (con
 scripts/                                 ci · claude · e2e (Bruno) · etl · financial · handbook · seed · setup
 
 handbook/                                Source of Truth — interno ao repo
-├── architecture/adr/                    48 ADRs aceitos (IMUTÁVEIS)
+├── architecture/adr/                    ADRs aceitos (IMUTÁVEIS)
 ├── reference/<tech>/                    typescript · nodejs · drizzle · mysql · mysql2 · docker · pnpm · fastify
 │                                        · fastify-plugins · nodemailer · zod · bruno · magalu-cloud · claude-code
-├── domain/, domain_questions/, inquiries/, interviews/, research/, reviews/, operations/, …
+├── domain_questions/, inquiries/, interviews/, reviews/, specs/, runbooks/, …
 
-docs/                                    Doc consolidada IA-friendly (markdown plano) — ver também ./llms.txt
+llms.txt                                 Mapa do acervo em markdown plano, para leitura por IA
 .claude/
 ├── agents/                              Especialistas por tecnologia
 ├── skills/                              Técnicas e disciplinas aplicadas
@@ -227,7 +229,7 @@ A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` compl
 
 ### ✅ Entregue
 
-- **6 módulos** com a mesma anatomia (`domain` → `application` → `adapters` → `public-api`): `auth`, `contracts`, `financial`, `partners`, `programs`, `notifications`.
+- **8 módulos** com a mesma anatomia (`domain` → `application` → `adapters` → `public-api`): `auth`, `budget-plans`, `contracts`, `financial`, `notifications`, `partners`, `programs`, `reports`.
 - **Borda HTTP Fastify** real e versionada (`/api/v2` greenfield + `/api/v1` espelho do legado), contract-first com Zod 4 + OpenAPI 3.1 (ADR-0025/0027/0028/0033). CLI embutida **retirada** (ADR-0037).
 - **Auth & RBAC** próprios — JWT ES256 (`jose`), usuários, papéis/permissões, reset de senha, foto de perfil (ADR-0024).
 - **Financial** — títulos/payables, baixa manual, conciliação bancária, CNAB240, extrato/timeline, read-model de fornecedor.
@@ -246,9 +248,9 @@ A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` compl
 ## 📚 Documentação canônica
 
 - **Contexto do projeto:** [`CLAUDE.md`](./CLAUDE.md) (fonte única) + regras path-scoped em [`.claude/rules/`](./.claude/rules/).
-- **Doc consolidada (humanos + IA):** [`docs/`](./docs/) e [`llms.txt`](./llms.txt).
-- **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) (48 ADRs IMUTÁVEIS) + [`handbook/CHANGELOG.md`](./handbook/CHANGELOG.md).
-- **Domínio de negócio:** [`handbook/domain/`](./handbook/domain/) + [`handbook/domain_questions/`](./handbook/domain_questions/).
+- **Doc consolidada (humanos + IA):** [`llms.txt`](./llms.txt).
+- **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) — ADR aceito é IMUTÁVEL, e revogá-lo é abrir outro que o `supersedes` + [`handbook/CHANGELOG.md`](./handbook/CHANGELOG.md).
+- **Domínio de negócio:** [`handbook/domain_questions/`](./handbook/domain_questions/).
 - **Tecnologias:** [`handbook/reference/<tech>/`](./handbook/reference/) — cada uma com agente especialista próprio.
 - **Orquestrador + agentes + skills:** [`.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md).
   </content>

@@ -47,7 +47,7 @@ Sempre a documentação oficial do Node 24 espelhada no handbook:
 | Tradução shell → `child_process` (command sub, pipes, redirect, env, here-doc) | [`./references/sh-to-cp-mapping.md`](./references/sh-to-cp-mapping.md) |
 | Tradução erro/`exitCode`/`signal` → `Result<T, E>` ou exit code sysexits.h | [`./references/childprocess-errors-to-result.md`](./references/childprocess-errors-to-result.md) |
 | Padrão `Result<T, E>` do projeto | [`src/shared/result.ts`](../../../src/shared/result.ts) |
-| Exit codes sysexits.h vigentes | [`../application-cli-builder/SKILL.md`](../application-cli-builder/SKILL.md) §"Exit codes" |
+| Exit codes sysexits.h vigentes | [`./references/childprocess-errors-to-result.md`](./references/childprocess-errors-to-result.md) §"Convenções de exit codes para o script Node em si" |
 | Skill irmã para tudo que é só filesystem (sem disparar binário) | [`../nodejs-fs-scripter/SKILL.md`](../nodejs-fs-scripter/SKILL.md) |
 | Quando isso vira **port** (ex.: `GitVcsPort`, `ContainerRuntimePort`) | [`../ports-and-adapters/SKILL.md`](../ports-and-adapters/SKILL.md) |
 | Comandos do projeto (`pnpm`, nunca `npm`) — ADR-0029 reiterado no CLAUDE.md | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"IMPORTANTE" |
@@ -490,7 +490,7 @@ const esperarSaudavel = async (url: string, totalMs: number): Promise<boolean> =
 
 - **Operação de filesystem pura** (cp, rm, mkdir, glob): use [`nodejs-fs-scripter`](../nodejs-fs-scripter/SKILL.md). Não chame `cp`/`rm` externos.
 - **Domínio precisa rodar `git`, `docker`, etc.**: modele um Port (`GitVcsPort`, `ContainerRuntimePort`) via [`ports-and-adapters`](../ports-and-adapters/SKILL.md). O adapter real usa esta skill por dentro; o domínio não.
-- **CLI da P.O.**: [`application-cli-builder`](../application-cli-builder/SKILL.md). Esta skill é para automação interna / devops / scripts de build.
+- **Expor caso de uso para a P.O./frontend**: a UX primária do core-api é HTTP/Fastify (ADR-0025/0037 — a CLI embutida foi retirada); veja o agent [`fastify-server-expert`](../../agents/fastify-server-expert.md). Esta skill é para automação interna / devops / scripts de build.
 - **HTTP call simples**: `fetch` nativo (Node 18+). Não chame `curl`.
 - **Parsing de JSON**: `JSON.parse`. Não chame `jq`.
 
@@ -508,8 +508,6 @@ ports-and-adapters          (GitVcsPort, ContainerRuntimePort)
 nodejs-fs-scripter   ◄──┼──►   nodejs-process-runner   ◄── você está aqui
         │                            │
         └──────── usados juntos por scripts de devops/build ──────┘
-        ▼
-application-cli-builder     (CLI da P.O.; usa wrappers internamente)
 ```
 
 ---

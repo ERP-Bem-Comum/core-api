@@ -74,7 +74,7 @@ export type RegistrarAditivoUseCase = (
 Exemplos: Repository, EventBus, Clock, ID generator, Storage, ExternalAPI. **Sempre modelados como type explícito.**
 
 ```ts
-// src/modules/contratos/application/ports/contrato-repository.ts
+// src/modules/contracts/application/ports/contrato-repository.ts
 import type { Contrato, ContratoId } from '../../domain/index.ts';
 import type { Result } from '../../../../shared/result.ts';
 
@@ -90,14 +90,14 @@ export type ContratoRepository = Readonly<{
 ```
 
 ```ts
-// src/modules/contratos/application/ports/clock.ts
+// src/modules/contracts/application/ports/clock.ts
 export type Clock = Readonly<{
   now: () => Date;
 }>;
 ```
 
 ```ts
-// src/modules/contratos/application/ports/event-bus.ts
+// src/modules/contracts/application/ports/event-bus.ts
 import type { ContratoEvento } from '../../domain/index.ts';
 import type { Result } from '../../../../shared/result.ts';
 
@@ -113,7 +113,7 @@ export type EventBus = Readonly<{
 ## Use Case = Factory Function
 
 ```ts
-// src/modules/contratos/application/use-cases/criar-contrato.ts
+// src/modules/contracts/application/use-cases/criar-contrato.ts
 import { type Result, ok, err, isErr } from '../../../../shared/result.ts';
 import { Contrato, type ContratoError } from '../../domain/contrato/index.ts';
 import type { ContratoRepository } from '../ports/contrato-repository.ts';
@@ -189,7 +189,7 @@ Pontos-chave:
 ## Adapter pattern — exemplo MySQL
 
 ```ts
-// src/modules/contratos/adapters/contrato-repository.mysql.ts
+// src/modules/contracts/adapters/contrato-repository.mysql.ts
 import { type Result, ok, err } from '../../../../shared/result.ts';
 import type { Contrato, ContratoId } from '../../domain/index.ts';
 import type { ContratoRepository, ContratoRepositoryError } from '../application/ports/contrato-repository.ts';
@@ -235,7 +235,7 @@ const mapRowToContrato = (row: unknown): Contrato => {
 Adapter equivalente em memória (para testes e CLI da P.O.):
 
 ```ts
-// src/modules/contratos/adapters/contrato-repository.in-memory.ts
+// src/modules/contracts/adapters/contrato-repository.in-memory.ts
 export const ContratoRepositoryInMemory = (): ContratoRepository => {
   const store = new Map<ContratoId, Contrato>();
   return {
@@ -255,8 +255,8 @@ export const ContratoRepositoryInMemory = (): ContratoRepository => {
 | `Clock` | `src/shared/ports/clock.ts` | Compartilhada — todo módulo usa |
 | `IdGenerator` | `src/shared/ports/id-generator.ts` | Compartilhada |
 | `EventBus` | `src/shared/ports/event-bus.ts` (interface) + módulos definem eventos próprios | Compartilhada o port, próprio o payload |
-| `ContratoRepository` | `src/modules/contratos/application/ports/` | Específica do módulo |
-| `DocumentoStorage` | `src/modules/contratos/application/ports/` | Específica do módulo |
+| `ContratoRepository` | `src/modules/contracts/application/ports/` | Específica do módulo |
+| `DocumentoStorage` | `src/modules/contracts/application/ports/` | Específica do módulo |
 
 > Regra: se 2+ módulos usam, sobe pro `shared/`. Senão, fica no módulo.
 
@@ -264,7 +264,7 @@ export const ContratoRepositoryInMemory = (): ContratoRepository => {
 
 ## Workflow
 
-1. **Ler o handbook de domínio do BC alvo** (`handbook/domain/contratos/` ou `domain/financeiro/`).
+1. **Ler o handbook de domínio do BC alvo** (`handbook/domain_questions/contratos/` ou `domain_questions/financeiro/`).
 2. **Identificar as dependências externas** que o use case precisa (DB? Clock? EventBus?).
 3. **Criar/atualizar os Ports** em `application/ports/`.
 4. **Implementar o use case** como factory function que recebe deps.
@@ -307,9 +307,7 @@ ts-domain-modeler  (modela tipos puros e regras invariantes)
        ▼
 ports-and-adapters ◄── você está aqui (orquestra use cases + Ports + adapters)
        │
-       ├─► modular-monolith         (decide o que é cross-módulo vs. módulo-próprio)
-       │
-       └─► application-cli-builder  (CLI consome use cases via InMemory adapter)
+       └─► modular-monolith         (decide o que é cross-módulo vs. módulo-próprio)
 ```
 
 ---
