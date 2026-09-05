@@ -51,10 +51,19 @@ export type PlannedBatch = Readonly<{
 
 export type PlanBatchesResult = Readonly<{
   batches: readonly PlannedBatch[];
-  // Quantos pagamentos da seleção NÃO entraram em lote algum, e quanto eles somam.
+  // Quantos dos pagamentos RECEBIDOS AQUI não entraram em lote algum, e quanto eles somam.
   //
-  // O VALOR viaja junto com a contagem, e não é redundância: a soma dos lotes mais este total é a
-  // seleção inteira, e é essa propriedade que faz a tela fechar. Sem ele o operador soma os lotes,
+  // ⚠️ "RECEBIDOS AQUI", e não "da seleção" — a distinção custou um teste vermelho e vale a linha.
+  // Este número fecha a aritmética do que ESTE planejador viu, e quem o chama pode ter filtrado
+  // antes: `previewRemittance` só lhe entrega título `ready` com rota, então o resíduo daqui é
+  // "pronto que ainda assim não agrupou", nunca "o que o operador marcou e não vai sair". Propagar
+  // este campo direto para a tela devolve `0` numa seleção cheia de títulos impedidos.
+  //
+  // Quem precisa da conta da SELEÇÃO soma duas parcelas — o que não chegou até aqui mais este
+  // resíduo —, e é o que o pré-voo faz (#948, CA5). O planejador não tem como fazê-lo sozinho: ele
+  // não sabe o que não lhe foi dado.
+  //
+  // O VALOR viaja junto com a contagem, e não é redundância: sem ele o operador soma os lotes,
   // compara com o que selecionou, vê que não bate e não sabe QUANTO ficou de fora — a tela
   // levantaria a dúvida sem oferecer a resposta.
   //
