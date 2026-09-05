@@ -81,6 +81,9 @@ export type GenerateRemittanceError =
   // aprovou, contornando a separação de funções que o `payable:approve` garante.
   | 'document-not-approved'
   | 'remittance-mixed-payment-dates'
+  // Pix misturado com outra modalidade na mesma seleção (#948 CA4). Irmão do anterior: os dois são
+  // regras de SELEÇÃO, recusadas antes do NSA, e nos dois a ação do operador é refazer a seleção.
+  | 'remittance-pix-requires-exclusive-file'
   // Título de rota que o emissor ainda não cobre (PIX, guia). Não é dado faltando: é o arquivo que
   // ainda não sabe emitir aquela forma, e o operador não tem o que corrigir no cadastro.
   | 'remittance-launch-form-unsupported'
@@ -155,11 +158,35 @@ export const generateRemittance =
       // A rota sem emissor sobe com nome próprio — é o que o operador entende ("o arquivo ainda não
       // sabe emitir esta forma"), e não há dado a corrigir no cadastro. As demais causas são falha
       // de montagem: o pré-voo já as mostra título a título.
-      return err(
-        plan.error === 'cnab-launch-form-unsupported'
-          ? 'remittance-launch-form-unsupported'
-          : 'remittance-build-failed',
-      );
+      // ⚠️ O `switch` substituiu o ternário porque as causas nomeadas viraram DUAS, e a terceira que
+      // entrasse cairia calada no genérico — o compilador não cobra ramo faltando num ternário.
+      //
+      // E SEM `default`, de propósito: com ele, a variante seguinte da união entraria em silêncio no
+      // desfecho genérico e ninguém saberia que havia uma decisão a tomar. Enumerado, o
+      // `switch-exhaustiveness-check` obriga quem acrescentar a recusa a escolher o nome que o
+      // operador vai ler. Foi assim que este bloco ganhou o `pix-requires-exclusive-file`.
+      switch (plan.error) {
+        case 'cnab-launch-form-unsupported':
+          return err('remittance-launch-form-unsupported');
+        // #948 CA4 — a única recusa desta etapa que não é sobre DADO: a seleção mistura Pix com
+        // outra modalidade, e o Pix sai em remessa exclusiva. Nada foi montado e nenhum NSA foi
+        // alocado, então refazer a seleção é tudo que o operador precisa.
+        case 'cnab-pix-requires-exclusive-file':
+          return err('remittance-pix-requires-exclusive-file');
+        // As demais são falha de montagem, e o pré-voo já as mostra título a título. Chegar em
+        // qualquer uma delas AQUI — na partição, que não monta nada — significa que `batchProfileFor`
+        // recusou o perfil de um pagamento, e é o mesmo desfecho que o montador daria adiante.
+        case 'cnab-file-name-failed':
+        case 'cnab-translation-failed':
+        case 'cnab-malformed-file':
+        case 'cnab-convenio-missing':
+        case 'cnab-convenio-overflow':
+        case 'cnab-billet-party-unidentified':
+        case 'cnab-pix-key-unrepresentable':
+        case 'cnab-pix-key-type-unsupported':
+        case 'cnab-inscription-alphanumeric-unsupported':
+          return err('remittance-build-failed');
+      }
     }
 
     const generatedAt = deps.now();
@@ -284,6 +311,14 @@ export const generateRemittance =
           case 'cnab-inscription-alphanumeric-unsupported':
           case 'cnab-translation-failed':
             return err('remittance-build-failed');
+          // ⚠️ INALCANÇÁVEL DAQUI, e o `case` existe porque o compilador o exige — a exaustividade
+          // deste `switch` é o que garante que uma recusa nova não caia num `default` calado.
+          //
+          // A seleção mista é recusada por `planFiles`, antes do NSA; chegar aqui significaria que
+          // alguém montou sem repartir. Sobe com o MESMO nome do outro caminho de propósito: se um
+          // dia acontecer, o operador lê a mesma frase, em vez de dois nomes para a mesma escolha.
+          case 'cnab-pix-requires-exclusive-file':
+            return err('remittance-pix-requires-exclusive-file');
         }
       }
 

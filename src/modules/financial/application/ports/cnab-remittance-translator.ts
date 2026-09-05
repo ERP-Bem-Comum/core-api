@@ -174,7 +174,13 @@ export type CnabTranslateError =
   // terceira do bloco acima, porque a ação de quem recebe é a única do módulo que NÃO é "corrigir o
   // cadastro": o CNPJ está certo, e quem não acompanhou foi o layout do banco. Quem trata este erro
   // escala ao gerente da conta; mandar o operador ao cadastro seria mandá-lo consertar o que já está.
-  | 'cnab-inscription-alphanumeric-unsupported';
+  | 'cnab-inscription-alphanumeric-unsupported'
+  // #948 CA4 — a seleção mistura Pix com outra modalidade. Categoria própria, e é a ÚNICA da união
+  // que não fala de título nem de arquivo: fala da SELEÇÃO. Não há dado a corrigir em lugar nenhum e
+  // não há defeito de código — o operador escolheu títulos que não cabem numa remessa só, e a ação
+  // dele é refazer a seleção. Achatá-la em `cnab-translation-failed` produziria "falha ao montar",
+  // que descreve o sistema em vez de descrever a escolha.
+  | 'cnab-pix-requires-exclusive-file';
 
 // ─── A partição em arquivos (CA4 da #838) ──────────────────────────────────────────────────────
 //

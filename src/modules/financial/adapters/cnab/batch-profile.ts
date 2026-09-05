@@ -235,6 +235,19 @@ const PIX_FILE_IDENTIFICATION = 'PIX';
 export const pixIdentificationFor = (fileGroup: string): string | null =>
   fileGroup === FILE_GROUP_PIX ? PIX_FILE_IDENTIFICATION : null;
 
+/**
+ * Este grupo de arquivo é o do Pix?
+ *
+ * Predicado, e não a constante exportada, porque quem pergunta não precisa saber que o grupo é a
+ * string `'pix'` — precisa saber que aquele arquivo é de Pix. Exportar o valor cru convidaria o
+ * chamador a comparar por conta própria, e a segunda comparação é onde a régua diverge.
+ *
+ * Existe para a CA4 da #948: o Pix sai em remessa EXCLUSIVA, então a partição precisa reconhecê-lo
+ * para recusar a seleção mista — enquanto as demais modalidades continuam se repartindo em silêncio,
+ * que é o comportamento validado em produção.
+ */
+export const isPixFileGroup = (fileGroup: string): boolean => fileGroup === FILE_GROUP_PIX;
+
 // Os três primeiros dígitos do código de barras são o banco emissor do título (Carta-Circular Bacen
 // 2.926) — é o que separa liquidação de título do próprio banco de título de outro banco.
 //

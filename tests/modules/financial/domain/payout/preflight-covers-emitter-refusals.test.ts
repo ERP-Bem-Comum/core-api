@@ -143,6 +143,17 @@ const COVERAGE: Record<CnabTranslateError, Coverage> = {
     kind: 'file-scope',
     why: 'desfecho genérico do montador; não nomeia campo, então não há o que antecipar por título',
   },
+  // #948 CA4. Fora do alcance do pré-voo por uma razão DIFERENTE das outras deste bloco: não é
+  // recusa do arquivo nem do cedente — é da SELEÇÃO. `checkPayoutReadiness` julga um título por vez
+  // e não sabe quais outros o acompanham, então nenhuma régua por título poderia vê-la. Quem a
+  // recusa é `planFiles`, também antes do `allocateNsa`, e é isso que preserva a garantia.
+  //
+  // ⚠️ Esta entrada nasceu do teste: acrescentar a variante à união quebrou a COMPILAÇÃO deste
+  // `Record` antes de qualquer caso rodar. É o mecanismo funcionando como projetado.
+  'cnab-pix-requires-exclusive-file': {
+    kind: 'file-scope',
+    why: 'regra de SELEÇÃO (Pix sai em remessa exclusiva); uma régua por título não enxerga os vizinhos',
+  },
 
   // ── Dívida declarada ──────────────────────────────────────────────────────────────────────────
   'cnab-billet-party-unidentified': {
