@@ -8,6 +8,7 @@ import type { Payee } from '#src/modules/financial/adapters/cnab/multipag-segmen
 import {
   buildRemittanceFile,
   LINE_TERMINATOR,
+  planRemittanceFiles,
   type RemittancePayment,
 } from '#src/modules/financial/adapters/cnab/remittance-file.ts';
 
@@ -948,6 +949,61 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
     const r = buildRemittanceFile({ ...base, payments: [pix(1, 100_00), payment(2, 50_00)] });
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-mixed-file-modalities');
+  });
+
+  /*
+   * A PARTIÇÃO, e a régua que a #948 CA4 pôs sobre ela (decisão da P.O., 03/09/2026).
+   *
+   * `planRemittanceFiles` não tinha teste direto — era exercida só através do use case. Estes casos
+   * a medem onde ela decide, que é ANTES do `allocateNsa`: é essa posição, e não a mensagem, que
+   * torna a recusa barata. Recusar depois deixaria um número da série queimado sem arquivo do outro
+   * lado, e o NSA não volta por desenho.
+   */
+  describe('#948 CA4 — o Pix sai em remessa exclusiva', () => {
+    const plan = (payments: readonly RemittancePayment[]) =>
+      planRemittanceFiles(payments, CEDENTE.bankCode);
+
+    it('recusa a seleção que mistura Pix com outra modalidade, e recusa ANTES de montar', () => {
+      const r = plan([pix(1, 100_00), payment(2, 50_00)]);
+
+      assert.ok(isErr(r), 'a partição aceitou a mistura — ela viraria dois arquivos calados');
+      assert.equal(r.error, 'remittance-pix-requires-exclusive-file');
+    });
+
+    // A ordem não pode mudar o veredito: quem seleciona não escolhe em que ordem os títulos chegam.
+    it('recusa independentemente da ordem em que as modalidades aparecem', () => {
+      const r = plan([payment(1, 50_00), pix(2, 100_00)]);
+
+      assert.ok(isErr(r));
+      assert.equal(r.error, 'remittance-pix-requires-exclusive-file');
+    });
+
+    it('a seleção só de Pix passa, num arquivo só', () => {
+      const r = plan([pix(1, 100_00), pix(2, 200_00)]);
+
+      assert.ok(isOk(r), `esperava plano, veio ${isErr(r) ? r.error : '?'}`);
+      assert.equal(r.value.length, 1);
+      assert.deepEqual(r.value[0]?.paymentIndices, [0, 1]);
+    });
+
+    /*
+     * ⚠️ A GUARDA DA FAIXA MADURA, e é o caso mais importante deste bloco.
+     *
+     * TED, transferência entre contas Bradesco e boleto já foram testados, habilitados e validados
+     * EM PRODUÇÃO pelo cliente — arquivo transmitido, aceito e pago. A frente Pix não pode alterá-los,
+     * e "não alterou" se DEMONSTRA, não se presume.
+     *
+     * As três convivem num arquivo só (formas `01`, `41` e `31` em lotes distintos, como o golden de
+     * TED mostra), então a régua acima não as alcança: ela exige DOIS grupos, e só o Pix cria o
+     * segundo. Este caso é o que faz a regressão aparecer aqui, e não numa remessa real.
+     */
+    it('não toca a seleção sem Pix: as três modalidades validadas seguem num arquivo só', () => {
+      const r = plan([payment(1, 50_00), billet(2, 70_00), payment(3, 30_00, '237')]);
+
+      assert.ok(isOk(r), `esperava plano, veio ${isErr(r) ? r.error : '?'}`);
+      assert.equal(r.value.length, 1, 'a partição repartiu o que sempre coube num arquivo');
+      assert.deepEqual(r.value[0]?.paymentIndices, [0, 1, 2]);
+    });
   });
 
   it('emite sem consultar banco algum do favorecido — a recusa por ISPB desconhecido não existe mais', () => {

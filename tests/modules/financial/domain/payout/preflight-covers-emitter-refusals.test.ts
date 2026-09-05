@@ -12,9 +12,9 @@ import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payou
 /*
  * CA3 da #948, a metade ESTRUTURAL — a rede que não precisa ser reescrita a cada campo novo.
  *
- * Já havia duas redes por campo: `pix-key-single-source` (#948) e `inscription-single-source`
- * (#863). Cada uma nasceu DEPOIS do defeito que ela impede, e é essa a limitação: elas cobrem o que
- * já se descobriu. A CA3 pede a outra coisa — varrer a união INTEIRA de recusas do emissor e cobrar,
+ * Já havia rede por campo: `pix-key-single-source` (#948) é o exemplar. Ela nasceu DEPOIS do defeito
+ * que impede, e é essa a limitação: cobre o que já se descobriu. A CA3 pede a outra coisa — varrer a
+ * união INTEIRA de recusas do emissor e cobrar,
  * de cada variante, uma resposta à pergunta "e o pré-voo, barra isto antes do `allocateNsa`?".
  *
  * ⚠️ O MECANISMO É O `Record<CnabTranslateError, Coverage>` ABAIXO, e não os `assert`. Uma recusa
@@ -100,15 +100,6 @@ const COVERAGE: Record<CnabTranslateError, Coverage> = {
       );
     },
   },
-  'cnab-inscription-alphanumeric-unsupported': {
-    kind: 'preflight',
-    probe: () => {
-      blocks(
-        readinessOf({ payee: target({ document: '12ABC34501DE35' }) }),
-        'CNPJ alfanumérico num campo que o layout declara Num (ADR-0044)',
-      );
-    },
-  },
   'cnab-launch-form-unsupported': {
     kind: 'preflight',
     // A contraparte não é uma LACUNA: é o status `no-issuer`, que a #837 criou exatamente para
@@ -142,6 +133,17 @@ const COVERAGE: Record<CnabTranslateError, Coverage> = {
   'cnab-translation-failed': {
     kind: 'file-scope',
     why: 'desfecho genérico do montador; não nomeia campo, então não há o que antecipar por título',
+  },
+  // #948 CA4. Fora do alcance do pré-voo por uma razão DIFERENTE das outras deste bloco: não é
+  // recusa do arquivo nem do cedente — é da SELEÇÃO. `checkPayoutReadiness` julga um título por vez
+  // e não sabe quais outros o acompanham, então nenhuma régua por título poderia vê-la. Quem a
+  // recusa é `planFiles`, também antes do `allocateNsa`, e é isso que preserva a garantia.
+  //
+  // ⚠️ Esta entrada nasceu do teste: acrescentar a variante à união quebrou a COMPILAÇÃO deste
+  // `Record` antes de qualquer caso rodar. É o mecanismo funcionando como projetado.
+  'cnab-pix-requires-exclusive-file': {
+    kind: 'file-scope',
+    why: 'regra de SELEÇÃO (Pix sai em remessa exclusiva); uma régua por título não enxerga os vizinhos',
   },
 
   // ── Dívida declarada ──────────────────────────────────────────────────────────────────────────
@@ -189,6 +191,6 @@ describe('#948 CA3 — toda recusa do emissor tem resposta do pré-voo', () => {
   // sonda nenhuma. Este caso fixa que a rede continua MEDINDO alguma coisa.
   it('a rede não fica sem sondas executáveis', () => {
     const probed = Object.values(COVERAGE).filter((c) => c.kind === 'preflight');
-    assert.ok(probed.length >= 4, `só ${probed.length} variantes executam o pré-voo`);
+    assert.ok(probed.length >= 3, `só ${probed.length} variantes executam o pré-voo`);
   });
 });

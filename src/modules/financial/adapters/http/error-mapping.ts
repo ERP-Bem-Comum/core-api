@@ -237,6 +237,12 @@ const SLUG_MESSAGES: Record<string, string> = {
     'A remessa inclui título cuja forma de pagamento ainda não é emitida no arquivo. Retire-o da seleção.',
   'remittance-mixed-payment-dates':
     'A seleção mistura vencimentos diferentes. Uma remessa é de um único dia — gere por vencimento.',
+  // #948 CA4. A mensagem NOMEIA A REGRA em vez de descrever a falha, porque a regra não é evidente:
+  // o operador não tem como saber que o Pix sai em arquivo separado, e "não foi possível gerar"
+  // deixaria a seleção parecendo errada por outro motivo. Diz também o que fazer, e que nada foi
+  // consumido — a recusa acontece antes do NSA, então gerar de novo não deixa buraco na sequência.
+  'remittance-pix-requires-exclusive-file':
+    'O Pix sai em remessa exclusiva: gere os títulos de Pix numa remessa e os demais em outra. Nada foi gerado e nenhum número de arquivo foi consumido.',
   'remittance-payables-already-held':
     'Há título já incluído em outra remessa. Atualize a lista e refaça a seleção.',
   // #736: só título Aprovado entra em remessa. A mensagem diz o que fazer (aprovar), não "erro
