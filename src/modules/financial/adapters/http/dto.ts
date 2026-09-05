@@ -615,6 +615,11 @@ export const remittancePreviewToDto = (
     count: b.count,
     totalCents: String(b.totalCents),
   })),
+  // #948 CA5 — o par que fecha a conta da tela. Transportados, nunca recalculados: derivá-los aqui
+  // de `lines` produziria um segundo critério de "não planejado", e as duas contas divergiriam no
+  // dia em que o agrupamento mudasse — com a tela sem nada indicando qual delas está certa.
+  unplannedCount: preview.unplannedCount,
+  unplannedTotalCents: String(preview.unplannedTotalCents),
 });
 
 /**

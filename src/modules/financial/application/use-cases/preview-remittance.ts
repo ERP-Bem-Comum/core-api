@@ -91,6 +91,20 @@ export type RemittancePreview = Readonly<{
   // Só título `ready` entra: um impedido não vai no arquivo, e contá-lo prometeria um lote maior do
   // que o que seria enviado. A soma dos lotes é, por construção, `readyTotalCents`.
   batches: readonly PlannedBatch[];
+  // O QUE NÃO ENTROU EM LOTE ALGUM (#948, CA5) — a metade que faltava para a tela fechar a conta.
+  //
+  // `planBatches` já os produzia e o pré-voo os DESCARTAVA: só `batches` subia. A tela ficava com os
+  // lotes e a seleção, via que não batiam, e não tinha como dizer quanto ficou de fora — levantava a
+  // dúvida sem oferecer a resposta. A propriedade que estes dois campos restauram é
+  // `lotes + não planejado = seleção`, e é ela que impede a tela de mentir sobre o que vai ser pago.
+  //
+  // ⚠️ NÃO é `blockedCount` por outro nome, e confundi-los produz uma tela errada. Os contadores
+  // acima classificam o TÍTULO pela ação do operador (completar cadastro, retirar da seleção,
+  // aprovar); estes dois medem o LOTE — quantos dos selecionados o emissor não conseguiu agrupar.
+  // Um título fora da VAN conta em `outOfVanCount` E aqui, porque as duas perguntas são diferentes:
+  // "o que preciso fazer?" e "a soma dos lotes explica minha seleção?".
+  unplannedCount: number;
+  unplannedTotalCents: number;
 }>;
 
 export type PreviewRemittanceDeps = Readonly<{
@@ -232,6 +246,12 @@ const countWhere = (lines: readonly RemittancePreviewLine[], status: PreviewLine
 // `null` para tudo que não está `ready`, e é a regra inteira do que entra em lote: impedido,
 // não-aprovado e fora-da-VAN não vão no arquivo. Derivar isto da linha já classificada — em vez de
 // reclassificar aqui — é o que garante que a composição e o pré-voo nunca discordem.
+// Soma em centavos de qualquer coleção que carregue `valueCents` — linha do pré-voo ou pagamento
+// planejável. Uma função só porque as duas parcelas do CA5 precisam somar as duas listas pela MESMA
+// régua: dois somadores dariam ao operador uma diferença que nenhuma das duas contas explica.
+const sumOf = (items: readonly Readonly<{ valueCents: number }>[]): number =>
+  items.reduce((total, item) => total + item.valueCents, 0);
+
 const plannableOf = (
   line: RemittancePreviewLine,
   row: RemittancePreviewRow,
@@ -300,5 +320,19 @@ export const previewRemittance =
       // câmbio.
       blockedTotalCents: sumWhere(lines, 'blocked'),
       batches: planned.batches,
+      // #948 CA5 — "não planejado" tem DUAS origens, e somá-las é o que faz a conta fechar.
+      //
+      // ⚠️ O `unplannedCount` do planejador NÃO serve sozinho, e a armadilha é atraente: o nome é o
+      // mesmo e o comentário dele promete `lotes + não planejado = seleção`. Só que a seleção que
+      // ELE vê já passou por `plannableOf`, que retém apenas `ready` com rota. O número dele conta o
+      // resíduo — título pronto que ainda assim não agrupou —, não o que o operador marcou e não vai
+      // sair. Propagá-lo direto devolvia `0` para uma seleção com dois títulos impedidos.
+      //
+      // As duas parcelas vêm de fontes independentes, de propósito: uma é a diferença entre o que
+      // foi selecionado e o que chegou ao planejador, a outra é o que o planejador recusou. Se as
+      // duas etapas divergirem, a soma para de bater e o teste da aritmética acusa — que é o único
+      // motivo de este número existir.
+      unplannedCount: lines.length - plannable.length + planned.unplannedCount,
+      unplannedTotalCents: sumOf(lines) - sumOf(plannable) + planned.unplannedTotalCents,
     });
   };
