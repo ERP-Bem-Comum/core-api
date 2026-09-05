@@ -44,6 +44,19 @@
 export const normalizeInscription = (raw: string): string =>
   raw.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
 
+/**
+ * "HÁ inscrição aqui?" — pela mesma definição de vazio que o emissor usa.
+ *
+ * ⚠️ EXISTE PORQUE `trim()` E ESTA PERGUNTA NÃO SÃO A MESMA COISA, e a diferença já produziu
+ * divergência entre as duas pontas: `'---'`, `'.'` e `'./-'` sobrevivem ao `trim()` e normalizam para
+ * vazio. O emissor os vê como campo sem conteúdo (`num('')` → `numeric-field-invalid`); um pré-voo
+ * que perguntasse `trim() === ''` os veria como inscrição PRESENTE, e — não sendo numéricos —
+ * concluiria "alfanumérica", mandando escalar ao banco um cadastro que só está incompleto.
+ *
+ * Quem decide presença de inscrição pergunta aqui, dos dois lados.
+ */
+export const hasInscription = (raw: string): boolean => normalizeInscription(raw) !== '';
+
 const DIGITS_ONLY = /^\d+$/;
 
 /**

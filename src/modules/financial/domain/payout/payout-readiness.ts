@@ -1,7 +1,7 @@
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { PaymentMethod } from '../document/types.ts';
 import { type DigitableLineError, resolveBarcode } from './digitable-line.ts';
-import { isCnabEmittableInscription } from './inscription.ts';
+import { hasInscription, isCnabEmittableInscription } from './inscription.ts';
 import { decomposePayeeAccount } from './payee-account.ts';
 import { isPayablePixKeyType, pixKeyFitsField } from './pix-key.ts';
 import { hasRemittanceIssuer } from './van-routes.ts';
@@ -244,11 +244,19 @@ const checkRouteData = (candidate: PayoutCandidate, route: VanRoute): RouteDataC
 // A pendência de INSCRIÇÃO ALFANUMÉRICA (#863), ou `null` quando não há.
 //
 // ⚠️ VERIFICADA FORA DO `switch` DE ROTA, e é a única régua deste arquivo que fica de fora. A razão
-// é que ela não é propriedade da rota: TODA rota com emissor escreve a inscrição do favorecido — o
-// Segmento B da transferência (019-032), o Segmento B do Pix (019-032) e o `G031` do Segmento A, e o
-// Segmento J-52 do boleto (021-035 e 077-091). São sete pontos de escrita. Posta dentro do `switch`,
-// ela seria três cópias, e uma rota nova nasceria sem ela — que é o modo de falha que este arquivo
-// já colecionou.
+// é que ela não é propriedade da rota: TODA rota com emissor escreve a inscrição do FAVORECIDO — o
+// Segmento B da transferência (019-032), o Segmento B do Pix (019-032), o `G031` do Segmento A no
+// Pix (178-191) e o Segmento J-52 do boleto em 077-091, onde o cedente do título é o favorecido que
+// o reader resolveu. Posta dentro do `switch`, ela seria três cópias, e uma rota nova nasceria sem
+// ela — que é o modo de falha que este arquivo já colecionou.
+//
+// ⚠️ O QUE ELA NÃO COBRE, e a distinção é de PARTICIPANTE, não de rota: o emissor escreve inscrição
+// em outros três pontos — header de arquivo e header de lote (019-032) e o SACADO do J-52 (021-035)
+// — e nos três o dado é o da PRÓPRIA EMPRESA (`input.cedente.document`), que não chega aqui: um
+// `PayoutCandidate` só carrega o favorecido. Ler "sete pontos de escrita" e concluir cobertura total
+// é o engano a evitar; são quatro. Na prática o risco é baixo, porque a empresa já existe e sua
+// inscrição é numérica — a Receita emite alfanumérico para inscrição NOVA (ADR-0044). Mas se um dia
+// não for, toda remessa falha DEPOIS do `allocateNsa`, e é este parágrafo que diz onde procurar.
 //
 // `unmappable` é o motivo exato, e a escolha importa: o cadastro tem um dado LEGÍTIMO que ninguém
 // sabe converter para o campo — é a mesma semântica do nome de banco em texto livre. NÃO é
@@ -268,7 +276,22 @@ const readAlphanumericInscription = (
   // Inscrição AUSENTE não é assunto desta régua — quem a cobra é `readBilletPayee`, no boleto. Aqui
   // o `false` de `isCnabEmittableInscription` cobriria os dois casos, e reportar "não sei converter"
   // sobre um campo vazio mandaria o operador ao lugar errado.
-  if (document.trim() === '' || isCnabEmittableInscription(document)) return null;
+  if (document.trim() === '') return null;
+
+  // ⚠️ DOCUMENTO SÓ COM PONTUAÇÃO — `'---'`, `'.'`, `'./-'` — É INSCRIÇÃO AUSENTE, e não inscrição
+  // que ninguém sabe converter. Ele sobrevive ao `trim()` acima e normaliza para vazio, que é como o
+  // emissor o enxerga: `inscription()` o devolve `numeric-field-invalid`, e há caso fixando isso em
+  // `inscription-single-source.test.ts`. Sem esta linha ele cairia no `unmappable` abaixo — por não
+  // ser numérico — e a tela mandaria ESCALAR ao gerente uma conversa sobre CNPJ alfanumérico que não
+  // existe naquele cadastro. É a mesma classe de divergência pré-voo/emissor que a #837 fechou, e
+  // custa mais aqui do que nas outras: `unmappable` é a única lacuna do módulo cuja ação não é "vá ao
+  // cadastro", justamente a ação que este caso exige.
+  //
+  // `missing`, e o motivo é o de `readBilletPayee`: campo em branco e campo sem nenhum alfanumérico
+  // pedem a MESMA coisa do operador — ir ao cadastro completar a inscrição.
+  if (!hasInscription(document)) return missingField(route, 'payee-document');
+
+  if (isCnabEmittableInscription(document)) return null;
 
   return incomplete(
     route,

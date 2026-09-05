@@ -659,7 +659,8 @@ const J52_NAME_WIDTH = 40;
 // uma string não-vazia que produz 40 posições em branco. Um `name.trim() !== ''` sobre o valor cru
 // aprovaria esse caso e emitiria o registro anônimo que esta guarda existe para impedir.
 //
-// A inscrição não entra: `digits()` já a recusa vazia, com erro próprio.
+// A inscrição não entra: `inscription()` já a recusa vazia, com erro próprio (#863 — era `digits()`
+// até a inscrição ganhar campo próprio).
 const identifies = (party: BilletParty): boolean => alpha(party.name, J52_NAME_WIDTH).trim() !== '';
 
 // O Sacador Avalista (132-187) é o terceiro responsável pelo título original, e o emissor não o
@@ -691,9 +692,14 @@ export const segmentJ52 = (input: SegmentJ52Input): Result<string, CnabSegmentEr
   // coberto por teste que chame `segmentJ52` na unha — e sem esse teste, é código morto que o gate
   // não acusa. Ele existe em `multipag-segment-j52.test.ts`.
   //
-  // Guarda o NOME, e só ele, porque a INSCRIÇÃO já falha sozinha: `digits()` recusa string vazia com
-  // `numeric-field-invalid`, e recusa também a que não sobra dígito nenhum. Repetir a checagem aqui
-  // nomearia uma distinção que não existe do lado de quem recebe.
+  // Guarda o NOME, e só ele, porque a INSCRIÇÃO já falha sozinha: `inscription()` recusa string
+  // vazia com `numeric-field-invalid`, e recusa também aquela de que não sobra alfanumérico nenhum.
+  // Repetir a checagem aqui nomearia uma distinção que não existe do lado de quem recebe.
+  //
+  // ⚠️ Era `digits()` até a #863. A troca acrescentou um SEGUNDO desfecho a este campo —
+  // `inscription-alphanumeric-unsupported`, para o CNPJ com letras —, e ele não é intercambiável com
+  // o primeiro: aquele manda ao cadastro, este manda ESCALAR ao banco. Quem vier somar checagem aqui
+  // precisa preservar os dois.
   if (!identifies(input.payer) || !identifies(input.beneficiary))
     return err('billet-party-unidentified');
 

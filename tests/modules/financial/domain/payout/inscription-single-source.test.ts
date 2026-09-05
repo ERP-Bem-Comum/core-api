@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import {
+  hasInscription,
   isCnabEmittableInscription,
   normalizeInscription,
 } from '#src/modules/financial/domain/payout/inscription.ts';
@@ -72,6 +73,25 @@ describe('#863 — a inscrição alfanumérica é recusada, nunca destruída', (
       const r = inscription(raw, 14);
       assert.ok(isErr(r), raw);
       assert.equal(r.error, 'numeric-field-invalid', raw);
+    }
+  });
+
+  // ⚠️ A CARVE-OUT DO VAZIO SÓ VALE SE AS DUAS PONTAS DEFINIREM "VAZIO" IGUAL — e por um tempo não
+  // definiram: o emissor perguntava pela normalização, o pré-voo perguntava `trim()`. `'---'` passa
+  // no `trim()` e normaliza para vazio, então o pré-voo o classificava como inscrição alfanumérica e
+  // mandava escalar ao banco, enquanto o emissor o tratava como campo em branco. `hasInscription` é
+  // a pergunta única, e este caso é o que impede as duas de divergirem outra vez.
+  it('"vazio" é a MESMA definição nos dois lados, pontuação inclusive', () => {
+    for (const raw of ['', '   ', '///', '---', '.', './-']) {
+      assert.equal(hasInscription(raw), false, `'${raw}' deveria contar como inscrição ausente`);
+
+      const r = inscription(raw, 14);
+      assert.ok(isErr(r), raw);
+      assert.equal(
+        r.error,
+        'numeric-field-invalid',
+        `'${raw}' saiu como alfanumérico — isso manda escalar ao banco um cadastro incompleto`,
+      );
     }
   });
 

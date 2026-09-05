@@ -418,6 +418,43 @@ describe('checkPayoutReadiness — inscrição alfanumérica não vira outra em 
     assert.equal(reasonFor(r, 'payee-document'), 'missing');
   });
 
+  // ⚠️ DOCUMENTO SÓ COM PONTUAÇÃO — a divergência que o `trim()` escondia.
+  //
+  // `'---'` sobrevive ao `trim()` e normaliza para vazio. O emissor sempre o viu como campo sem
+  // conteúdo (`inscription('///', 14)` → `numeric-field-invalid`, fixado em
+  // `inscription-single-source.test.ts`); o pré-voo o via como inscrição PRESENTE e, por não ser
+  // numérica, concluía "alfanumérica" — mandando ESCALAR ao banco uma conversa sobre CNPJ com letras
+  // que não existe naquele cadastro. Duas pontas, dois vereditos, sobre o mesmo dado.
+  //
+  // É `missing` pelo mesmo motivo do campo em branco: a ação do operador é ir ao cadastro. Este caso
+  // roda em TED de propósito — a rota transfer não tem régua de presença de inscrição própria, então
+  // sem esta linha o defeito passaria do pré-voo direto ao emissor, com o NSA já queimado.
+  it('documento sem nenhum alfanumérico é `missing`, não `unmappable`', () => {
+    for (const document of ['---', '.', './-']) {
+      const r = checkPayoutReadiness(
+        candidate({ paymentMethod: 'TED', payee: target({ ...fullAccount(), document }) }),
+      );
+
+      assert.equal(r.status, 'incomplete', document);
+      assert.equal(reasonFor(r, 'payee-document'), 'missing', document);
+    }
+  });
+
+  // E o boleto não passa a reportar a mesma lacuna duas vezes: `readBilletPayee` cobra o campo em
+  // branco, esta régua cobra o que normaliza para vazio, e os dois carve-outs são complementares.
+  it('boleto não duplica a lacuna de inscrição', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'Boleto',
+        paymentDetail: DIGITABLE_LINE,
+        payee: target({ ...fullAccount(), document: '---' }),
+      }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['payee-document']);
+  });
+
   // ACUMULA com a pendência da rota: chave Pix longa demais E inscrição alfanumérica são
   // independentes, e resolver uma não libera o título.
   it('acumula com a pendência da própria rota', () => {
