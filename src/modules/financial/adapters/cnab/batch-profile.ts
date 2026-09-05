@@ -83,6 +83,25 @@ const TED_LAUNCH_FORMS: ReadonlySet<string> = new Set(['03', '41', '43']);
 // como arquivo cuja câmara não corresponde à forma — exatamente o defeito da #751.
 export const LAUNCH_PIX_TRANSFER = '45'; // G029 — Pix Transferência (p. 100)
 
+/**
+ * TODA forma de lançamento que este emissor pode escrever num arquivo.
+ *
+ * Existe para ser CONFERIDA DE FORA — a borda HTTP traduz cada código num rótulo legível para a tela
+ * de confirmação, e sem uma lista a lacuna só aparece como número cru no lugar do nome. Foi assim
+ * que a `45` chegou à validação sem rótulo: quatro formas tinham tradução, ninguém contou a quinta,
+ * e o arquivo estava certo o tempo todo — o que faltava era do lado da tela.
+ *
+ * ⚠️ Acrescentar forma nova AQUI é parte de emiti-la, não um passo separado. Quem esquecer verá o
+ * teste de rótulos falhar, que é o ponto de a lista existir.
+ */
+export const LAUNCH_FORMS = [
+  LAUNCH_CREDIT_CURRENT_ACCOUNT,
+  LAUNCH_TED_OTHER_HOLDER,
+  LAUNCH_BILLET_OWN_BANK,
+  LAUNCH_BILLET_OTHER_BANK,
+  LAUNCH_PIX_TRANSFER,
+] as const;
+
 // Total sobre o domínio de G029, de propósito: uma forma nova entra pelo último `return` e sai com
 // zeros, que é o que o manual manda para tudo que não é TED nem PIX — nunca herdando a câmara da
 // forma anterior.
