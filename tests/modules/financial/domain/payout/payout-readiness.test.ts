@@ -123,7 +123,7 @@ describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo e
 const pixPayee = (): PayeePaymentTarget =>
   target({ ...fullAccount(), pixKey: { keyType: 'email', key: 'a@b.com' } });
 
-describe('checkPayoutReadiness — PIX exige a chave E o bloco bancário (#838)', () => {
+describe('checkPayoutReadiness — PIX exige a chave, e só ela (#945)', () => {
   it('aceita PIX com chave e conta completa', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX', payee: pixPayee() }));
     assert.equal(r.status, whenDataIsGood('pix'));
@@ -169,34 +169,54 @@ describe('checkPayoutReadiness — PIX exige a chave E o bloco bancário (#838)'
   });
 
   // Conta completa não substitui chave: quem escolheu PIX no lançamento paga por PIX, e trocar a
-  // rota mudaria o custo e o prazo que o operador aceitou. Continua valendo — o que mudou é que
-  // agora a conta é exigida ALÉM da chave, não NO LUGAR dela.
+  // rota mudaria o custo e o prazo que o operador aceitou. Sobreviveu às duas viradas de régua —
+  // a conta nunca bastou, nem quando era exigida além da chave (#838), nem agora que não é exigida.
   it('não aceita conta bancária no lugar da chave PIX', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX', payee: fullAccount() }));
     assert.equal(r.status, 'incomplete');
     assert.deepEqual(fieldsOf(r), ['pix-key']);
   });
 
-  // O caso que a mudança de régua criou, e o que ele fixa é a ACUMULAÇÃO: quem tem PIX sem chave e
-  // sem conta precisa ver as duas pendências de uma vez, não uma volta ao cadastro por vez.
-  it('acumula as pendências de chave e de conta, sem parar na primeira', () => {
+  // A chave é a ÚNICA pendência possível nesta rota. Sem cadastro nenhum, o operador recebe um
+  // caminho só — e não uma lista de campos bancários que o pagamento não vai usar.
+  it('aponta só a chave quando o favorecido não tem cadastro algum', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX' }));
     assert.equal(r.status, 'incomplete');
-    assert.ok(fieldsOf(r).includes('pix-key'), 'a chave tem de aparecer');
-    assert.ok(fieldsOf(r).length > 1, `esperava conta junto, veio ${fieldsOf(r).join(', ')}`);
+    assert.deepEqual(fieldsOf(r), ['pix-key']);
   });
 
-  // A chave sozinha deixou de bastar, e este é o teste que prova a mudança — o inverso exato do que
-  // a suíte afirmava antes da #838.
-  it('recusa PIX com chave mas SEM dado bancário', () => {
+  // ⚠️ O TESTE QUE FIXA A REVERSÃO DA #945, e o inverso exato do que a suíte afirmava entre a #838 e
+  // ela. Favorecido com chave e SEM nenhum dado bancário é o cenário que a modalidade existe para
+  // atender; exigir conta aqui represava justamente ele.
+  //
+  // A arbitragem foi do banco, por escrito (laudo de 05/09/2026): banco, agência e conta do
+  // favorecido podem sair zerados no Pix iniciado por chave. O emissor passou a zerá-los, e é isso
+  // que autoriza esta régua — nesta ordem. Ver `PIX_ZEROED_PAYEE_ACCOUNT`.
+  it('aceita PIX com chave e SEM dado bancário algum', () => {
     const r = checkPayoutReadiness(
       candidate({
         paymentMethod: 'PIX',
         payee: target({ pixKey: { keyType: 'email', key: 'a@b.com' } }),
       }),
     );
-    assert.equal(r.status, 'incomplete');
-    assert.equal(fieldsOf(r).includes('pix-key'), false, 'a chave está lá; o que falta é a conta');
+    assert.equal(r.status, whenDataIsGood('pix'));
+  });
+
+  // O efeito colateral desejado da reversão, e ele merece teste próprio por ser o que mais surpreende
+  // quem conhece a régua da transferência: o DV divergente deixa de bloquear no Pix. Está certo — o
+  // dígito não vai no arquivo, e as posições saem zeradas. A régua de DV continua onde ele é escrito.
+  it('não bloqueia por DV divergente — o dígito não vai no arquivo desta rota', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({
+          ...fullAccount(),
+          checkDigit: '9',
+          pixKey: { keyType: 'random-key', key: 'a-b-c' },
+        }),
+      }),
+    );
+    assert.equal(r.status, whenDataIsGood('pix'));
   });
 });
 

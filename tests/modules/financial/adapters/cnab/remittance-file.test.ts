@@ -793,14 +793,20 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
 
   // ⚠️ O favorecido do Pix carrega bloco bancário COMPLETO, e é o que o golden mostra no Segmento A.
   // Ver `PixPayment`, no montador: a chave endereça no SPI, o Segmento A identifica a conta.
-  const pix = (n: number, valueCents: number, over: Partial<Payee> = {}): RemittancePayment => ({
-    route: 'pix',
-    payee: { ...payee(n), ...over },
-    pixKey: PIX_KEY,
-    pixKeyType: 'random-key',
-    paymentDate: PAYMENT_DATE,
-    valueCents,
-  });
+  // O favorecido de Pix é IDENTIDADE, e só: desde a #945 o tipo não tem onde guardar conta. O
+  // `over` some junto — não há mais campo bancário que um caso de teste pudesse variar, que é
+  // exatamente a garantia que a mudança de tipo dá.
+  const pix = (n: number, valueCents: number): RemittancePayment => {
+    const { name, documentType, document } = payee(n);
+    return {
+      route: 'pix',
+      payee: { name, documentType, document },
+      pixKey: PIX_KEY,
+      pixKeyType: 'random-key',
+      paymentDate: PAYMENT_DATE,
+      valueCents,
+    };
+  };
 
   const buildPix = (payments: readonly RemittancePayment[]) => {
     const r = buildRemittanceFile({ ...base, payments });
@@ -839,16 +845,30 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
     assert.equal(at(batchHeader, 14, 16), '045');
   });
 
-  it('o Segmento A transita pelo SPI e identifica a CONTA do favorecido', () => {
-    // A metade contra-intuitiva da rota, e a que a #708 não previa: o bloco bancário sai preenchido.
-    // Um Segmento A zerado aqui seria o defeito silencioso — arquivo bem-formado, crédito sem destino.
+  it('o Segmento A transita pelo SPI e ZERA o bloco bancário do favorecido', () => {
+    // A régua que o laudo do Bradesco de 05/09/2026 fixou (#945): no Pix iniciado por chave, banco,
+    // agência, conta e os dois DVs saem zerados. Quem endereça o pagamento no SPI é a chave, em
+    // 128-226 do Segmento B — estas posições são preenchimento técnico, não destino do dinheiro.
+    //
+    // Este teste é a INVERSÃO do que existia aqui até a #945, que afirmava o oposto apoiado no
+    // golden. O golden prova como aquele arquivo foi montado; o laudo diz o que o banco aceita.
     const a = linesOf(buildPix([pix(1, 100_00)]).content)[2] ?? '';
-    const p = payee(1);
 
     assert.equal(at(a, 18, 20), '009', 'câmara do SPI');
-    assert.equal(at(a, 21, 23), p.bankCode);
-    assert.equal(at(a, 24, 28), p.agency.padStart(5, '0'));
-    assert.equal(at(a, 30, 41), p.accountNumber.padStart(12, '0'));
+    assert.equal(at(a, 21, 23), '000', 'banco do favorecido');
+    assert.equal(at(a, 24, 28), '00000', 'agência');
+    assert.equal(at(a, 29, 29), '0', 'DV da agência');
+    assert.equal(at(a, 30, 41), '000000000000', 'conta');
+    assert.equal(at(a, 42, 42), '0', 'DV da conta');
+  });
+
+  it('a coluna 043 continua em BRANCO, e não zerada junto com o resto do bloco', () => {
+    // A armadilha do laudo: ele nomeia CINCO campos, e o DV agência/conta (G012) não é um deles.
+    // Zerar o bloco "inteiro" por simetria preencheria a posição que o validador oficial recusa
+    // (#754, `cnab-validator#2`). Um teste próprio porque é o erro que uma leitura rápida produz.
+    const a = linesOf(buildPix([pix(1, 100_00)]).content)[2] ?? '';
+
+    assert.equal(at(a, 43, 43), ' ');
   });
 
   it('o Segmento A não leva finalidade de TED nem finalidade complementar', () => {
@@ -869,7 +889,7 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
     const p = payee(1);
 
     assert.equal(at(a, 178, 191), p.document.padStart(14, '0'), 'inscrição do favorecido');
-    assert.match(at(a, 192, 199), /^\d{8}$/, 'ISPB derivado do código de compensação');
+    assert.equal(at(a, 192, 199), '00000000', 'ISPB — zeros, por laudo do banco (#923)');
     assert.equal(at(a, 200, 201), '01', 'conta corrente — premissa da P.O., ver #817');
     assert.equal(at(a, 202, 217), ' '.repeat(16));
   });
@@ -881,13 +901,13 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
     assert.equal(at(b, 33, 67), ' '.repeat(35), 'TXID');
     assert.equal(at(b, 128, 226).trimEnd(), PIX_KEY);
     assert.equal(at(b, 227, 232), '000000', 'UG SIAPE zerada, como no golden');
-    assert.match(at(b, 233, 240), /^\d{8}$/, 'ISPB do PSP');
+    assert.equal(at(b, 233, 240), '00000000', 'ISPB do PSP — zeros, por laudo do banco (#923)');
   });
 
-  it('o ISPB do Segmento A e o do Segmento B são o mesmo — os dois vêm da mesma origem', () => {
+  it('o ISPB do Segmento A e o do Segmento B são o mesmo — um só literal para um só fato', () => {
     // Dois campos do mesmo pagamento afirmando instituições diferentes seria arquivo bem-formado e
-    // incoerente. É por isso que o ISPB é DERIVADO uma vez, do código de compensação, e passado aos
-    // dois registros — em vez de recebido pronto do chamador.
+    // incoerente. Desde a #923 os dois leem a MESMA constante (`PIX_ISPB_ZEROS`), e nenhum dos dois
+    // recebe o valor do chamador — que é o que torna a divergência inalcançável, e não só improvável.
     const lines = linesOf(buildPix([pix(1, 100_00)]).content);
     const [a, b] = [lines[2] ?? '', lines[3] ?? ''];
 
@@ -910,11 +930,19 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
     assert.equal(r.error, 'remittance-mixed-file-modalities');
   });
 
-  it('recusa o favorecido cujo banco não está na tabela de ISPB, sem inventar', () => {
-    // `999` não é participante. O que não pode acontecer é sair com oito zeros: o inspetor aprova —
-    // não é defeito de forma — e o banco recusa depois de transmitido.
-    const r = buildRemittanceFile({ ...base, payments: [pix(1, 100_00, { bankCode: '999' })] });
-    assert.ok(isErr(r));
-    assert.equal(r.error, 'payee-ispb-unknown');
+  it('emite sem consultar banco algum do favorecido — a recusa por ISPB desconhecido não existe mais', () => {
+    // O contrário do que este bloco testava até a #923, e a inversão é o ponto. Havia aqui um caso
+    // exigindo `payee-ispb-unknown` para banco fora da tabela de-para; com o ISPB virando constante
+    // do layout, não há tabela a consultar e portanto não há banco a desconhecer.
+    //
+    // Custava caro: a recusa vinha DEPOIS do `allocateNsa`, então cada favorecido de instituição
+    // fora da tabela queimava um número da série antes de o operador saber que não daria (#948).
+    //
+    // O que este teste fixa é que o arquivo sai para um favorecido sem nenhum dado bancário — que é o
+    // cenário que a modalidade existe para atender, e que o tipo agora torna o único possível.
+    const r = buildRemittanceFile({ ...base, payments: [pix(1, 100_00)] });
+
+    assert.ok(isOk(r), `esperava arquivo, veio ${isErr(r) ? r.error : '?'}`);
+    assert.equal(linesOf(r.value.content).length, 6);
   });
 });

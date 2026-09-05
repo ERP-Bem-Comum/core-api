@@ -8,8 +8,8 @@ import { ok, err, type Result } from '#src/shared/index.ts';
  * cinco valores cada, de donos diferentes — `PixKeyType` é de `partners`
  * (`domain/shared/payment-target.ts:10`) e o `G100` é do banco (`03-dominios-campos.md:254`).
  *
- * ⚠️ VIVE NO ADAPTER, e não no domínio, pela mesma razão que `payee-ispb.ts`: a tradução é da
- * fronteira com o banco, e é aqui que ela morre quando o layout mudar. O `financial` mantém o
+ * ⚠️ VIVE NO ADAPTER, e não no domínio, pela mesma razão que as demais constantes do layout: a
+ * tradução é da fronteira com o banco, e é aqui que ela morre quando o layout mudar. O `financial` mantém o
  * `keyType` OPACO de propósito (`domain/payout/types.ts:57-62`) — o payout decide aptidão, e para
  * isso basta haver chave. Interpretar o tipo é trabalho de quem emite o registro, que é este arquivo.
  *
@@ -49,9 +49,10 @@ export type PixInitiationError = 'remittance-pix-key-type-unsupported';
 // ⚠️ `Map`, e NÃO um objeto literal, e a razão é de segurança, não de estilo. Um
 // `Record<string, string>` herda de `Object.prototype`, e `keyType` chega como string arbitrária:
 // `record['toString']` devolveria uma FUNÇÃO, que não é `undefined` e passaria pela guarda abaixo
-// como se fosse código `G100` válido. O `payee-ispb.ts` escapa disso por ter uma guarda de forma
-// (`^\d{3}$`) que barra `'toString'` antes do acesso — e há teste lá fixando exatamente esse caso.
-// Aqui não existe forma numérica a validar, então a estrutura é que precisa não ter protótipo.
+// como se fosse código `G100` válido. Um mapa banco→ISPB que vivia aqui ao lado escapava disso por
+// ter uma guarda de forma (`^\d{3}$`) que barrava `'toString'` antes do acesso — ele saiu na #923,
+// mas a lição fica. Aqui não existe forma numérica a validar, então a estrutura é que precisa não
+// ter protótipo.
 const INITIATION_BY_KEY_TYPE: ReadonlyMap<string, string> = new Map([
   ['phone', '01'],
   ['email', '02'],
@@ -67,7 +68,7 @@ export const pixInitiationFor = (keyType: string): Result<string, PixInitiationE
   // ("aleatória serve para qualquer coisa"), nem brancos, nem o próprio `keyType` truncado: os três
   // produzem arquivo bem-formado que o banco recusa depois de transmitido, e o inspetor não pega
   // porque não é defeito de forma. É a mesma classe do `?? ''` que virou endereço em branco em 100%
-  // das remessas (#858) e do zero-padding recusado em `payee-ispb.ts:35-39`.
+  // das remessas (#858).
   //
   // ⚠️ O compilador não protege este caminho: `keyType` chega como `string` porque o `financial`
   // mantém o tipo opaco e não importa a união de `partners` (`domain/payout/types.ts:57-62`). A
