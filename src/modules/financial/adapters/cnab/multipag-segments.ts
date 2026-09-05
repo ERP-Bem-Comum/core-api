@@ -15,6 +15,7 @@ import {
   cents,
   dateDDMMYYYY,
   digits,
+  inscription,
   joinFields,
   num,
   text,
@@ -316,7 +317,7 @@ export const segmentB = (input: SegmentBInput): Result<string, CnabSegmentError>
     text('B', 1), // 014     segmento
     blanks(3), // 015-017 CNAB
     num(p.documentType, 1), // 018     tipo de inscrição do favorecido
-    digits(p.document, 14), // 019-032 nº de inscrição do favorecido
+    inscription(p.document, 14), // 019-032 nº de inscrição do favorecido
     text(a?.street ?? '', 30), // 033-062 logradouro
     num(a?.number ?? 0, 5), // 063-067 número
     text(a?.complement ?? '', 15), // 068-082 complemento
@@ -448,7 +449,7 @@ export const segmentBPix = (input: SegmentBPixInput): Result<string, CnabSegment
     // valor do domínio.
     text(input.initiation, 3),
     num(p.documentType, 1), // 018     tipo de inscrição do favorecido (G005)
-    digits(p.document, 14), // 019-032 nº de inscrição do favorecido (G006)
+    inscription(p.document, 14), // 019-032 nº de inscrição do favorecido (G006)
     // 033-067 TXID e 068-127 identificação do pagamento entre usuários — os dois OPCIONAIS no
     // layout, e os dois em branco por não haver fonte. O golden traz texto livre em 068-127, o que
     // prova que o campo aceita conteúdo, não que ele o exija. Inventar aqui seria escrever no arquivo
@@ -513,7 +514,7 @@ export const pixPaymentInfo = (input: PixPaymentInfoInput): Result<string, CnabS
     // `digits`, e não `text`: CPF de 11 posições entra zero-padded à esquerda até 14, que é o que o
     // manual manda por extenso ("11 dígitos com 0 a esq"). Alinhar à esquerda produziria um número de
     // inscrição que não é o de ninguém.
-    digits(input.payeeDocument, PIX_INFO_DOCUMENT_WIDTH),
+    inscription(input.payeeDocument, PIX_INFO_DOCUMENT_WIDTH),
     digits(PIX_ISPB_ZEROS, PIX_INFO_ISPB_WIDTH),
     num(input.accountType, PIX_INFO_ACCOUNT_TYPE_WIDTH),
   ]);
@@ -709,10 +710,10 @@ export const segmentJ52 = (input: SegmentJ52Input): Result<string, CnabSegmentEr
     num(J52_MOVEMENT_CODE, 2), // 016-017 código de movimento remessa (*C004)
     num(J52_OPTIONAL_RECORD_ID, 2), // 018-019 identificação do registro opcional (G067)
     num(input.payer.documentType, 1), // 020     SACADO — tipo de inscrição (*G005)
-    digits(input.payer.document, 15), // 021-035 SACADO — nº de inscrição (*G006)
+    inscription(input.payer.document, 15), // 021-035 SACADO — nº de inscrição (*G006)
     text(input.payer.name, J52_NAME_WIDTH), // 036-075 SACADO — nome (G013)
     num(input.beneficiary.documentType, 1), // 076     CEDENTE — tipo de inscrição (*G005)
-    digits(input.beneficiary.document, 15), // 077-091 CEDENTE — nº de inscrição (*G006)
+    inscription(input.beneficiary.document, 15), // 077-091 CEDENTE — nº de inscrição (*G006)
     text(input.beneficiary.name, J52_NAME_WIDTH), // 092-131 CEDENTE — nome (G013)
     ...SACADOR_AVALISTA_ABSENT, // 132-187 SACADOR AVALISTA — ausente
     blanks(53), // 188-240 CNAB (G004)

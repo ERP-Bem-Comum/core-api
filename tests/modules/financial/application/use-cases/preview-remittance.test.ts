@@ -27,10 +27,14 @@ import { createRemittanceBatchPlanner } from '#src/modules/financial/adapters/cn
 // Um cadastro `ready` no pré-voo precisa ser um cadastro que o banco aceitaria — na Modalidade 01 os
 // dígitos são validados por ele. Fixture com DV inventado descrevia como apto um título que a
 // remessa perderia.
-// A inscrição que o Segmento J-52 exige do boleto (#891), OPACA de propósito: a régua só pergunta se
-// HÁ inscrição — quem valida formato é `partners`. Um documento bem-formado aqui sugeriria validação
-// que não existe, e poria dado de cadastro em fixture num repositório público.
-const PAYEE_DOCUMENT = 'inscricao-opaca';
+// A inscrição que o Segmento J-52 exige do boleto (#891). SINTÉTICA — dado real de cadastro não entra
+// em fixture, porque os repositórios são públicos.
+//
+// ⚠️ Era `'inscricao-opaca'` até a #863, com a razão escrita de que "a régua só pergunta se HÁ
+// inscrição". A régua passou a perguntar uma segunda coisa: se a inscrição pode ser escrita num campo
+// `Num` do CNAB sem virar outra. Ela continua não validando CPF/CNPJ — só recusa o que `digits()`
+// destruiria em silêncio —, mas um valor sem nenhum dígito deixou de servir de fixture neutra.
+const PAYEE_DOCUMENT = '00000000000191';
 
 const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',

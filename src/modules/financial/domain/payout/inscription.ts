@@ -42,6 +42,11 @@ const DIGITS_ONLY = /^\d+$/;
  *
  * O banco aceita. O cedente declarado no arquivo não é o titular da conta que paga.
  *
+ * ⚠️ O LAUDO DO BRADESCO DE 05/09/2026 AGRAVOU ISTO, ainda que não falasse dele. Ficou estabelecido
+ * que, no Pix, o PSP do recebedor cruza a inscrição do arquivo com o titular da chave no DICT,
+ * recusando com `PF` quando não bate. Uma inscrição deformada deixou de ser só um dado errado no
+ * arquivo: é a recusa do pagamento, sem que nada no ERP aponte a causa.
+ *
  * Documento alfanumérico responde `false`, e a recusa é DELIBERADA — não uma limitação a contornar:
  *
  *   · **emitir com as letras** num campo declarado `Num` produz arquivo que o banco pode recusar, e

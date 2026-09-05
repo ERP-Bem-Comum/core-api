@@ -105,6 +105,15 @@ const COVERAGE: Record<CnabTranslateError, Coverage> = {
       );
     },
   },
+  'cnab-inscription-alphanumeric-unsupported': {
+    kind: 'preflight',
+    probe: () => {
+      blocks(
+        readinessOf({ payee: target({ document: '12ABC34501DE35' }) }),
+        'CNPJ alfanumérico num campo que o layout declara Num (ADR-0044)',
+      );
+    },
+  },
   'cnab-launch-form-unsupported': {
     kind: 'preflight',
     // A contraparte não é uma LACUNA: é o status `no-issuer`, que a #837 criou exatamente para
@@ -225,6 +234,6 @@ describe('#948 CA3 — toda recusa do emissor tem resposta do pré-voo', () => {
   // sonda nenhuma. Este caso fixa que a rede continua MEDINDO alguma coisa.
   it('a rede não fica sem sondas executáveis', () => {
     const probed = Object.values(COVERAGE).filter((c) => c.kind === 'preflight');
-    assert.ok(probed.length >= 3, `só ${probed.length} variantes executam o pré-voo`);
+    assert.ok(probed.length >= 4, `só ${probed.length} variantes executam o pré-voo`);
   });
 });

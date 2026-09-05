@@ -62,7 +62,7 @@ const PAYEE_BANK = '001';
 // entrou. Sem ela, este arquivo mediria a bicondicional com uma fixture incompleta: o pré-voo
 // recusaria por falta de documento e o emissor aceitaria, e a falha diria "as réguas discordam"
 // quando o defeito seria da fixture. É a mesma armadilha do slug de erro, um andar acima.
-const PAYEE_DOCUMENT = 'inscricao-opaca';
+const PAYEE_DOCUMENT = '00000000000191';
 
 // O par de fixtures COMPLETAS de cada rota: o que o cadastro precisa ter, e o que o emissor precisa
 // receber. "Completo" aqui significa completo o bastante para os outros dois slugs de erro não
