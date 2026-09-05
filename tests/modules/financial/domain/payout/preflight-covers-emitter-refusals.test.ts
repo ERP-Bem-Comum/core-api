@@ -58,12 +58,17 @@ const readinessOf = (over: Partial<PayoutCandidate>): PayoutReadiness =>
  * `preflight`   — barra o título antes do NSA. `probe` demonstra, executando.
  * `file-scope`  — a recusa não é do TÍTULO, é do arquivo ou do cedente. O pré-voo é por título e não
  *                 tem onde vê-la; anteciparia perguntando outra coisa, em outro lugar.
- * `gap`         — o emissor recusa e o pré-voo aprova. Declarado, com issue: é dívida conhecida, não
- *                 omissão. Entrada nova aqui exige issue aberta.
+ * `schema`      — a guarda existe no emissor, mas o estado NÃO é alcançável por dado: a coluna que o
+ *                 alimenta é `NOT NULL` e a borda recusa vazio. É defesa em profundidade, não dívida.
+ *                 Exige a citação da coluna, porque a afirmação tem prazo — ela deixa de valer no dia
+ *                 em que alguém afrouxar o schema.
+ * `gap`         — o emissor recusa e o pré-voo aprova, com dado ALCANÇÁVEL. Declarado, com issue: é
+ *                 dívida conhecida, não omissão. Entrada nova aqui exige issue ABERTA.
  */
 type Coverage =
   | Readonly<{ kind: 'preflight'; probe: () => void }>
   | Readonly<{ kind: 'file-scope'; why: string }>
+  | Readonly<{ kind: 'schema'; why: string }>
   | Readonly<{ kind: 'gap'; why: string; issue: string }>;
 
 const blocks = (readiness: PayoutReadiness, hint: string): void => {
@@ -146,19 +151,29 @@ const COVERAGE: Record<CnabTranslateError, Coverage> = {
     why: 'regra de SELEÇÃO (Pix sai em remessa exclusiva); uma régua por título não enxerga os vizinhos',
   },
 
-  // ── Dívida declarada ──────────────────────────────────────────────────────────────────────────
+  // ── Defesa em profundidade, sem caminho vivo ──────────────────────────────────────────────────
+  //
+  // ⚠️ ESTA ENTRADA JÁ FOI `gap`, E A CORREÇÃO É DE ALCANÇABILIDADE, NÃO DE MEDIÇÃO. A divergência é
+  // real e foi medida: boleto com inscrição válida e NOME em branco sai `ready` no pré-voo e
+  // `billet-party-unidentified` no emissor. `'€€€'` cai no mesmo lugar, porque `alpha()` o transforma
+  // em brancos (#862) e a guarda mede o que VAI PARA O ARQUIVO. A causa é estrutural:
+  // `PayeePaymentTarget` (`types.ts`) não carrega NOME, então o pré-voo não vê o dado que o emissor
+  // guarda.
+  //
+  // O que faltava era perguntar se o estado é ALCANÇÁVEL, e não é: `name` é `NOT NULL` em todas as
+  // tabelas de parceiro (`partners/adapters/persistence/schemas/mysql.ts`), `PayeeContractor.name` é
+  // `string` não-anulável, e a criação valida `.min(1)` na borda. Sobra o nome composto só de
+  // caracteres sem transliteração legível — emoji, ideograma —, que não sai de cadastro brasileiro.
+  //
+  // ⚠️ E NÃO FOI A VALIDAÇÃO EM PRODUÇÃO QUE FECHOU ISSO, embora a rota de boleto esteja validada no
+  // Validador Universal e em produção pelo cliente. Aquele laudo prova que o FORMATO está certo para
+  // os dados que passaram; ele é cego para pré-voo aprovando o que o emissor recusa, porque isso não
+  // é defeito de forma e nunca chega a virar arquivo. Quem fecha é o `NOT NULL`. Registrado aqui
+  // porque o argumento errado, se ficar de pé, dispensa o próximo achado desta classe — que pode ser
+  // alcançável.
   'cnab-billet-party-unidentified': {
-    kind: 'gap',
-    // ⚠️ Medido, não suposto: boleto com inscrição válida e NOME em branco sai `ready` no pré-voo e
-    // `billet-party-unidentified` no emissor, com o NSA já consumido. `'€€€'` cai no mesmo lugar,
-    // porque `alpha()` o transforma em brancos (#862) e a guarda mede o que VAI PARA O ARQUIVO.
-    //
-    // A causa é estrutural e não se conserta neste arquivo: `PayeePaymentTarget` (`types.ts`) não
-    // tem campo de NOME. O pré-voo não vê o dado que o emissor guarda — não é régua faltando, é
-    // dado que não chega. Fechar exige levar o nome até o candidato, passando pelo reader e pela
-    // composição da borda.
-    why: 'a guarda do J-52 mede o NOME do sacado/cedente, e `PayeePaymentTarget` não carrega nome',
-    issue: 'https://github.com/ERP-Bem-Comum/core-api/issues/985',
+    kind: 'schema',
+    why: '`name` é NOT NULL em todas as tabelas de parceiro e a borda recusa vazio (`.min(1)`)',
   },
 };
 
@@ -172,9 +187,13 @@ describe('#948 CA3 — toda recusa do emissor tem resposta do pré-voo', () => {
     }
   });
 
-  // A classificação `gap` é a única que admite o pré-voo aprovar o que o emissor recusa, e por isso
-  // é a única que exige rastro. Sem esta cobrança, `gap` viraria o balde onde a próxima variante cai
-  // para o teste continuar verde — que é o oposto do que a CA3 pede.
+  // A classificação `gap` é a única que admite o pré-voo aprovar o que o emissor recusa COM DADO
+  // ALCANÇÁVEL, e por isso é a única que exige rastro. Sem esta cobrança, `gap` viraria o balde onde
+  // a próxima variante cai para o teste continuar verde — o oposto do que a CA3 pede.
+  //
+  // ⚠️ HOJE NÃO HÁ NENHUMA, e o laço passa a vazio DE PROPÓSITO: é o estado desejado, não um teste
+  // esquecido. A `cnab-billet-party-unidentified` esteve aqui até a #985 ser fechada por
+  // alcançabilidade. O caso fica de pé para o dia em que uma dívida real aparecer.
   it('toda dívida declarada aponta uma issue', () => {
     for (const [error, coverage] of Object.entries(COVERAGE)) {
       if (coverage.kind !== 'gap') continue;
@@ -182,6 +201,21 @@ describe('#948 CA3 — toda recusa do emissor tem resposta do pré-voo', () => {
         coverage.issue,
         /^https:\/\/github\.com\/ERP-Bem-Comum\/core-api\/issues\/\d+$/,
         `${error}: dívida declarada sem issue rastreável`,
+      );
+    }
+  });
+
+  // `schema` afirma que o estado NÃO é alcançável, e é a classificação mais fácil de usar como
+  // desculpa — basta escrevê-la para o caso sumir. A cobrança do `why` é o preço: quem a usa nomeia a
+  // coluna ou a validação que sustenta a afirmação, e a próxima pessoa consegue conferir se ela ainda
+  // vale. Sem isso, `schema` viraria o balde que o `gap` deixou de ser.
+  it('toda defesa declarada como inalcançável cita o que a sustenta', () => {
+    for (const [error, coverage] of Object.entries(COVERAGE)) {
+      if (coverage.kind !== 'schema') continue;
+      assert.match(
+        coverage.why,
+        /NOT NULL|min\(1\)/,
+        `${error}: alegou inalcançável sem citar coluna ou validação`,
       );
     }
   });
