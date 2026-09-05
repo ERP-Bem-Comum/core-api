@@ -169,7 +169,12 @@ export type CnabTranslateError =
   // Eram três. O `cnab-payee-ispb-unknown` saiu na #923, quando o ISPB deixou de ser derivado de uma
   // tabela embarcada e virou constante do layout: sem tabela não há banco desconhecido, e um erro que
   // não pode mais ocorrer é um caminho que os chamadores continuariam tratando à toa.
-  | 'cnab-pix-key-type-unsupported';
+  | 'cnab-pix-key-type-unsupported'
+  // #863 — inscrição alfanumérica num campo que o layout declara `Num`. Categoria PRÓPRIA, e não uma
+  // terceira do bloco acima, porque a ação de quem recebe é a única do módulo que NÃO é "corrigir o
+  // cadastro": o CNPJ está certo, e quem não acompanhou foi o layout do banco. Quem trata este erro
+  // escala ao gerente da conta; mandar o operador ao cadastro seria mandá-lo consertar o que já está.
+  | 'cnab-inscription-alphanumeric-unsupported';
 
 // ─── A partição em arquivos (CA4 da #838) ──────────────────────────────────────────────────────
 //

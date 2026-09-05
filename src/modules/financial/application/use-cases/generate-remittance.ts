@@ -271,6 +271,17 @@ export const generateRemittance =
           case 'cnab-pix-key-unrepresentable':
           case 'cnab-pix-key-type-unsupported':
             return err('remittance-payments-unavailable');
+          // ⚠️ #863 — CNPJ ALFANUMÉRICO, e é o ÚNICO caso do módulo que NÃO converge com os de cima,
+          // ainda que também venha do favorecido. `remittance-payments-unavailable` diz ao operador
+          // "há títulos sem os dados necessários; confira o pré-voo" — e aqui isso seria FALSO nas
+          // duas metades: o dado está lá e está certo, e conferir o pré-voo não revela nada que ele
+          // possa consertar. O CNPJ com letras é válido desde 07/2026 (ADR-0044); quem não acompanhou
+          // foi o layout do banco, que declara o campo `Num` na v08 (jul/2025).
+          //
+          // `remittance-build-failed` é o desfecho honesto: a montagem não é possível, e a saída é
+          // escalar — a pergunta ao Bradesco sobre a forma de emissão está registrada na #863 e ainda
+          // não foi respondida. No dia em que for, este `case` provavelmente desaparece.
+          case 'cnab-inscription-alphanumeric-unsupported':
           case 'cnab-translation-failed':
             return err('remittance-build-failed');
         }
