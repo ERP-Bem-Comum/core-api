@@ -6,7 +6,6 @@ import type { CedenteAccountStore } from '#src/modules/financial/application/por
 import type { CedenteAccount } from '#src/modules/financial/domain/cedente/types.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import { create, close } from '#src/modules/financial/domain/cedente/cedente-account.ts';
-import * as Nsa from '#src/modules/financial/domain/cedente/nsa.ts';
 
 // Suíte de CONTRATO do `CedenteAccountStore`: todo adapter (in-memory, Drizzle+MySQL) consome esta
 // função e deve passar. NÃO é executada direto (sufixo `.contract.ts` — ver `.claude/rules/testing.md`
@@ -32,7 +31,14 @@ export const CONTRACT_AGENCY = '9001';
 
 // Cada conta nasce com chave natural distinta: o UNIQUE de FR-016 colide se dois casos a reusarem.
 let naturalKeySeq = 0;
-const buildAccount = (nextNsa?: number): CedenteAccount => {
+
+// ⚠️ O CONVÊNIO TAMBÉM VARIA POR CONTA, e desde a #943 isso é o que isola um caso do outro: o
+// contador de NSA é do CONVÊNIO, então duas contas que o compartilhassem dividiriam a sequência e um
+// caso enxergaria o número que o anterior gastou. Quem PRECISA do compartilhamento pede
+// explicitamente — ver `buildAccount({ convenio })` e o bloco da #943 no fim deste arquivo.
+const buildAccount = (
+  over: Readonly<{ nextNsa?: number; convenio?: string }> = {},
+): CedenteAccount => {
   naturalKeySeq += 1;
   const r = create({
     id: CedenteAccountId.generate(),
@@ -40,10 +46,10 @@ const buildAccount = (nextNsa?: number): CedenteAccount => {
     agency: CONTRACT_AGENCY,
     accountNumber: `7700${String(naturalKeySeq).padStart(2, '0')}`,
     accountDigit: '4',
-    convenio: '9999999',
+    convenio: over.convenio ?? `9${String(naturalKeySeq).padStart(5, '0')}`,
     document: '12345678000190',
     nickname: 'Conta do contrato',
-    ...(nextNsa !== undefined ? { nextNsa } : {}),
+    ...(over.nextNsa !== undefined ? { nextNsa: over.nextNsa } : {}),
   });
   if (!r.ok) throw new Error(`test setup: cedente (${r.error})`);
   return r.value;
@@ -73,8 +79,11 @@ export const cedenteAccountStoreContract = (
 
     // Semeia uma conta e devolve o snapshot persistido — não o construído: o que interessa a cada caso
     // é o estado que o store guardou.
-    const seed = async (nextNsa?: number, status: 'Active' | 'Closed' = 'Active') => {
-      const built = buildAccount(nextNsa);
+    const seed = async (
+      over: Readonly<{ nextNsa?: number; convenio?: string }> = {},
+      status: 'Active' | 'Closed' = 'Active',
+    ) => {
+      const built = buildAccount(over);
       const account = status === 'Closed' ? close(built) : { ok: true as const, value: built };
       assert.ok(isOk(account));
       assert.ok(isOk(await store.save(account.value)));
@@ -86,8 +95,11 @@ export const cedenteAccountStoreContract = (
 
     // ─── save ───────────────────────────────────────────────────────────────────
 
+    // ⚠️ `nextNsa` aqui é o campo VESTIGIAL da conta (#943): desde que a sequência passou para
+    // `fin_convenio_nsa`, ele não manda mais em alocação nenhuma. O caso continua porque o
+    // round-trip da coluna ainda é contrato de persistência — não porque o número signifique algo.
     it('save insere a conta nova e findById devolve o snapshot, inclusive o NSA inicial', async () => {
-      const account = buildAccount(4);
+      const account = buildAccount({ nextNsa: 4 });
       assert.ok(isOk(await store.save(account)));
 
       const found = await store.findById(account.id);
@@ -158,29 +170,33 @@ export const cedenteAccountStoreContract = (
     // o `save`, o snapshot em mãos do use case carrega o contador OBSOLETO. Um `save` que o gravasse
     // faria o contador RETROCEDER, e um NSA já emitido seria reemitido — que o banco trata como
     // RETRANSMISSÃO, não como remessa nova.
-    it('save com snapshot anterior a uma alocação concorrente não retrocede o contador (lost update)', async () => {
-      const staleSnapshot = await seed(1);
-      assert.equal(staleSnapshot.nextNsa, 1);
+    // ⚠️ ESTE CASO FOI REESCRITO NA #943, e a razão importa mais que o novo corpo. Ele media que o
+    // `save` não escrevia `fin_cedente_accounts.next_nsa`, porque o contador vivia ali e um snapshot
+    // obsoleto o faria retroceder. O contador MUDOU DE TABELA: agora é `fin_convenio_nsa`, do
+    // convênio, e o `save` da conta não tem caminho nenhum até ele.
+    //
+    // A propriedade deixou de ser "o `save` não retrocede o contador" e passou a ser ESTRUTURAL: o
+    // `save` não alcança a sequência. Vale mais, e por isso o caso continua existindo em vez de sair
+    // — o que ele vigia é que ninguém religue os dois pelo caminho antigo.
+    it('save com snapshot obsoleto não alcança a sequência (o lost update ficou impossível)', async () => {
+      const staleSnapshot = await seed();
 
-      // Alocação concorrente avança o contador persistido para 2.
       const allocated = await store.allocateNsa(staleSnapshot.id);
       assert.ok(isOk(allocated));
-      assert.equal(allocated.value, 1);
+      assert.equal(allocated.value, 1, 'convênio novo começa no mínimo da faixa');
 
-      // O `save` chega DEPOIS, carregando o snapshot obsoleto — como faria a edição de um `nickname`
-      // por quem não soube da alocação.
+      // O `save` chega DEPOIS, com o snapshot que o use case leu antes da alocação — e ainda traz o
+      // `next_nsa` vestigial da conta, que hoje não manda em nada.
       assert.ok(isOk(await store.save({ ...staleSnapshot, nickname: 'apelido novo' })));
 
       const found = await store.findById(staleSnapshot.id);
       assert.ok(isOk(found) && found.value !== null);
-      assert.equal(found.value.nextNsa, 2, 'o contador retrocedeu: lost update de volta');
-      // A edição em si — campo que não é o contador — foi persistida normalmente.
-      assert.equal(found.value.nickname, 'apelido novo');
+      assert.equal(found.value.nickname, 'apelido novo', 'a edição normal foi persistida');
 
-      // E o próximo NSA continua de onde a alocação deixou: o 1 já emitido nunca se repete.
+      // O que importa: a sequência do convênio seguiu de onde estava. O 1 já emitido não volta.
       const next = await store.allocateNsa(staleSnapshot.id);
       assert.ok(isOk(next));
-      assert.equal(next.value, 2);
+      assert.equal(next.value, 2, 'um `save` reposicionou a sequência do convênio');
     });
 
     // A garantia é FORTE, e a distinção não é acadêmica: o contrato promete que `save` **não escreve**
@@ -189,49 +205,39 @@ export const cedenteAccountStoreContract = (
     // update voltaria por essa porta. Reposicionar o NSA, se o banco um dia pedir, é operação rara,
     // perigosa e auditável: pede método próprio e explícito no port, não carona num `save` que a
     // edição de um apelido dispara.
-    it('save não move o contador nem quando o snapshot traz um NSA deliberadamente diferente', async () => {
-      const account = await seed(5);
-      assert.equal(account.nextNsa, 5);
+    // A garantia continua FORTE e mudou de alvo (#943): nenhum valor que o chamador ponha no
+    // agregado — em direção nenhuma — reposiciona a sequência do convênio. Reposicionar o NSA, se o
+    // banco um dia pedir, é operação rara, perigosa e auditável: pede método próprio e explícito no
+    // port, não carona num `save` que a edição de um apelido dispara.
+    it('save não move a sequência nem quando o snapshot traz um NSA deliberadamente diferente', async () => {
+      const account = await seed();
 
-      // Para BAIXO (5 → 2): o retrocesso do lost update, agora deliberado.
-      assert.ok(isOk(await store.save({ ...account, nextNsa: 2 })));
-      const afterDown = await store.findById(account.id);
-      assert.ok(isOk(afterDown) && afterDown.value !== null);
-      assert.equal(afterDown.value.nextNsa, 5, 'o contador retrocedeu por um `save`');
-
-      // Para CIMA (5 → 40): o "pulo" deliberado, recusado pela mesma razão — `save` não é caminho de
-      // escrita do contador em direção nenhuma.
+      // Para CIMA e para BAIXO: os dois são ignorados, porque o campo da conta não é mais o contador.
       assert.ok(isOk(await store.save({ ...account, nextNsa: 40 })));
-      const afterUp = await store.findById(account.id);
-      assert.ok(isOk(afterUp) && afterUp.value !== null);
-      assert.equal(
-        afterUp.value.nextNsa,
-        5,
-        'o contador avançou por um `save`, não por `allocateNsa`',
-      );
+      assert.ok(isOk(await store.save({ ...account, nextNsa: 2 })));
 
-      // E a alocação segue de onde o contador realmente está — 5, nem 2 nem 40.
+      // A sequência do convênio nunca foi tocada: continua no primeiro número.
       const next = await store.allocateNsa(account.id);
       assert.ok(isOk(next));
-      assert.equal(next.value, 5);
+      assert.equal(next.value, 1, 'um `save` moveu a sequência do convênio');
     });
 
     // ─── allocateNsa ────────────────────────────────────────────────────────────
 
-    it('allocateNsa devolve o número corrente e avança o contador persistido', async () => {
-      const account = await seed(5);
+    it('allocateNsa devolve o número corrente e avança a sequência persistida', async () => {
+      const account = await seed();
 
       const first = await store.allocateNsa(account.id);
       assert.ok(isOk(first));
-      assert.equal(first.value, 5);
+      assert.equal(first.value, 1);
 
-      const found = await store.findById(account.id);
-      assert.ok(isOk(found) && found.value !== null);
-      assert.equal(found.value.nextNsa, 6);
+      const second = await store.allocateNsa(account.id);
+      assert.ok(isOk(second));
+      assert.equal(second.value, 2, 'a sequência não avançou entre as duas alocações');
     });
 
     it('allocateNsa em chamadas sucessivas nunca repete o número', async () => {
-      const account = await seed(1);
+      const account = await seed();
       const allocated: number[] = [];
 
       for (let i = 0; i < 5; i += 1) {
@@ -250,31 +256,72 @@ export const cedenteAccountStoreContract = (
       assert.equal(r.error, 'cedente-account-not-found');
     });
 
-    it('allocateNsa em conta encerrada não aloca e não move o contador', async () => {
-      const account = await seed(3, 'Closed');
+    /*
+     * ⚠️ CA1 DA #943 — O CASO QUE REPRODUZ O BLOQUEIO DE PRODUÇÃO, e que nenhuma suíte tinha.
+     *
+     * O mesmo contrato multipag vale para VÁRIAS contas de pagamento (confirmado com o gerente do
+     * Bradesco em 02/09/2026). Enquanto o contador viveu em `fin_cedente_accounts.next_nsa`, cada
+     * conta nova nascia em 1 e as duas emitiam o MESMO número sob o mesmo contrato.
+     *
+     * O dano não esperava o banco: `fin_remittance_payables.your_number` é
+     * `<convênio><NSA><sequência>`, com UNIQUE global e SEM componente de tempo. As duas contas
+     * geravam a mesma referência para o primeiro título, e o segundo INSERT era recusado — 503
+     * opaco, conta sem conseguir gerar remessa (#942).
+     *
+     * Este caso falha contra o modelo antigo: as duas alocações devolviam 1.
+     */
+    it('CA1: contas do MESMO convênio compartilham a sequência — números distintos e crescentes', async () => {
+      const convenio = '918002';
+      const first = await seed({ convenio });
+      const second = await seed({ convenio });
 
-      const r = await store.allocateNsa(account.id);
+      const a = await store.allocateNsa(first.id);
+      const b = await store.allocateNsa(second.id);
+      assert.ok(isOk(a) && isOk(b));
+
+      assert.equal(a.value, 1);
+      assert.equal(b.value, 2, 'a conta irmã reemitiu o número — é o defeito da #943');
+      assert.notEqual(a.value, b.value, 'NSA repetido sob o mesmo contrato é retransmissão');
+    });
+
+    // CA2 — o outro lado: convênios distintos NÃO se conhecem. Não é critério defensivo; o cliente
+    // tem contas com convênios diferentes, e cada contrato tem a sua série junto ao banco.
+    it('CA2: convênios distintos mantêm sequências independentes', async () => {
+      const here = await seed({ convenio: '918003' });
+      const there = await seed({ convenio: '918004' });
+
+      const a = await store.allocateNsa(here.id);
+      const b = await store.allocateNsa(there.id);
+      assert.ok(isOk(a) && isOk(b));
+
+      assert.equal(a.value, 1);
+      assert.equal(b.value, 1, 'o primeiro número de um contrato gastou o do outro');
+    });
+
+    // ⚠️ A ORDEM DENTRO DA TRANSAÇÃO, e é por isso que este caso confere a sequência DEPOIS: a conta
+    // é verificada ANTES de a sequência ser tocada. Invertida, uma conta encerrada queimaria um
+    // número do convênio INTEIRO — e o número não volta. Com o contador na conta o dano ficava
+    // contido nela; agora ele atingiria todas as contas irmãs.
+    it('allocateNsa em conta encerrada não aloca e não queima número do convênio', async () => {
+      const convenio = '918001';
+      const closed = await seed({ convenio }, 'Closed');
+      const active = await seed({ convenio });
+
+      const r = await store.allocateNsa(closed.id);
       assert.ok(isErr(r));
       assert.equal(r.error, 'cedente-account-not-active');
 
-      const found = await store.findById(account.id);
-      assert.ok(isOk(found) && found.value !== null);
-      assert.equal(found.value.nextNsa, 3);
+      // A conta IRMÃ, ativa e sob o mesmo convênio, recebe o primeiro número — prova de que a
+      // tentativa recusada não consumiu nada da sequência compartilhada.
+      const next = await store.allocateNsa(active.id);
+      assert.ok(isOk(next));
+      assert.equal(next.value, 1, 'a conta encerrada queimou um número do convênio');
     });
 
-    // O teto não é arbitrário: o NSA ocupa seis dígitos no header de arquivo (Multipag p. 14). Alocar
-    // além dele gravaria um número que não cabe no campo — o defeito só apareceria na serialização,
-    // com a remessa inteira já montada.
-    it('allocateNsa com a faixa esgotada falha sem estourar o campo de seis dígitos', async () => {
-      const account = await seed(Nsa.MAX);
-
-      const last = await store.allocateNsa(account.id);
-      assert.ok(isOk(last));
-      assert.equal(last.value, Nsa.MAX);
-
-      const beyond = await store.allocateNsa(account.id);
-      assert.ok(isErr(beyond));
-      assert.equal(beyond.error, 'nsa-exhausted');
-    });
+    // O teto (seis dígitos no header, Multipag p. 14) é regra de DOMÍNIO e está coberto em
+    // `nsa-sequence.test.ts`, que alcança `Nsa.MAX` sem precisar de banco. Aqui ele saiu de propósito:
+    // com o contador fora da conta, criar a conta deixou de posicionar a sequência, e chegar ao teto
+    // pelo contrato exigiria 999.999 alocações ou um caminho de escrita direto — que é exatamente o
+    // que o caso acima existe para negar.
   });
 };

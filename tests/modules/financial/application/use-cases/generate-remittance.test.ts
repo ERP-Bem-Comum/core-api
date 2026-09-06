@@ -124,6 +124,27 @@ const input = (
 // juntos), então uma partição que os separasse por engano seria um defeito. Um `files[0]` cru
 // esconderia isso: os asserts seguintes passariam sobre o primeiro arquivo, e o segundo — que não
 // devia existir — não seria olhado por ninguém.
+/*
+ * "A recusa NÃO queimou um número da sequência" — e este helper existe porque a forma anterior de
+ * afirmar isso ficou VAZIA (#943).
+ *
+ * Os casos conferiam `fin_cedente_accounts.next_nsa` depois da recusa. Enquanto o contador vivia na
+ * conta, isso media o fato certo. Com a sequência no CONVÊNIO, a coluna da conta não se move NUNCA —
+ * nem no sucesso —, então o assert passaria com o NSA queimado ou não. Asserção que não pode falhar
+ * é pior que asserção nenhuma: ela ocupa o lugar da que faltava.
+ *
+ * A prova honesta é observável pelo desfecho: se nada foi consumido, a PRÓXIMA geração bem-sucedida
+ * naquele convênio recebe o PRIMEIRO número.
+ */
+const assertNoNsaBurned = async (
+  s: Awaited<ReturnType<typeof setup>>,
+  cedenteAccountId = s.cedenteAccountId,
+) => {
+  const allocated = await s.accounts.allocateNsa(cedenteAccountId);
+  assert.ok(isOk(allocated), 'não foi possível alocar depois da recusa');
+  assert.equal(allocated.value, 1, 'a recusa consumiu um número da sequência do convênio');
+};
+
 const onlyFile = (out: Readonly<{ files: readonly GeneratedRemittanceFile[] }>) => {
   assert.equal(out.files.length, 1, 'esperava uma geração de arquivo único');
   const file = out.files[0];
@@ -165,13 +186,29 @@ describe('generateRemittance — caminho feliz', () => {
     );
   });
 
-  it('consome o NSA da conta', async () => {
+  // ⚠️ REESCRITO NA #943, e a razão é que a versão anterior media a coluna errada. Ela conferia
+  // `fin_cedente_accounts.next_nsa`, que era o contador — e deixou de ser: a sequência passou para o
+  // CONVÊNIO (`fin_convenio_nsa`), e a coluna da conta virou vestigial. Continuar assertando sobre
+  // ela produziria um caso que passa sem medir nada.
+  //
+  // O que prova o consumo agora é a alocação SEGUINTE: se o número foi consumido, a próxima remessa
+  // recebe o seguinte. É observável pelo desfecho, que é onde a garantia importa.
+  it('consome o NSA — a geração seguinte recebe o número seguinte', async () => {
     const s = await setup();
-    await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
 
-    const acc = await s.accounts.findById(s.cedenteAccountId);
-    assert.ok(isOk(acc) && acc.value !== null);
-    assert.equal(acc.value.nextNsa, 2);
+    const first = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(first));
+    assert.equal(onlyFile(first.value).nsa, 1);
+
+    const other = await setup({ docs: ['doc-3', 'doc-4'] });
+    const second = await generateRemittance({
+      ...other.deps,
+      // MESMA conta-cedente da primeira geração: é a sequência dela que tem de ter avançado.
+      cedenteAccounts: s.accounts,
+    })(input(s.cedenteAccountId, other.docs));
+
+    assert.ok(isOk(second), `esperava ok, veio ${isErr(second) ? second.error : '?'}`);
+    assert.equal(onlyFile(second.value).nsa, 2, 'o NSA não avançou entre duas gerações');
   });
 });
 
@@ -305,10 +342,7 @@ describe('generateRemittance — os campos do cedente no header (#856)', () => {
 
     assert.ok(isErr(r));
     assert.equal(r.error, 'cedente-agency-malformed');
-
-    const acc = await s.accounts.findById(s.cedenteAccountId);
-    assert.ok(isOk(acc) && acc.value !== null);
-    assert.equal(acc.value.nextNsa, 1, 'a recusa não pode consumir um número da sequência');
+    await assertNoNsaBurned(s);
   });
 
   // ── CA3 — o CNPJ alfanumérico do cedente ────────────────────────────────────────────────────
@@ -327,10 +361,7 @@ describe('generateRemittance — os campos do cedente no header (#856)', () => {
 
     assert.ok(isErr(r));
     assert.equal(r.error, 'cedente-inscription-alphanumeric');
-
-    const acc = await s.accounts.findById(s.cedenteAccountId);
-    assert.ok(isOk(acc) && acc.value !== null);
-    assert.equal(acc.value.nextNsa, 1, 'a recusa não pode consumir um número da sequência');
+    await assertNoNsaBurned(s);
   });
 });
 
