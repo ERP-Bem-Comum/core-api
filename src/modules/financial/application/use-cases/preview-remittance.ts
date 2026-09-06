@@ -241,17 +241,21 @@ const sumWhere = (lines: readonly RemittancePreviewLine[], status: PreviewLineSt
 const countWhere = (lines: readonly RemittancePreviewLine[], status: PreviewLineStatus): number =>
   lines.filter((l) => l.status === status).length;
 
-// Do título PRONTO para o mínimo que decide o agrupamento.
-//
-// `null` para tudo que não está `ready`, e é a regra inteira do que entra em lote: impedido,
-// não-aprovado e fora-da-VAN não vão no arquivo. Derivar isto da linha já classificada — em vez de
-// reclassificar aqui — é o que garante que a composição e o pré-voo nunca discordem.
 // Soma em centavos de qualquer coleção que carregue `valueCents` — linha do pré-voo ou pagamento
 // planejável. Uma função só porque as duas parcelas do CA5 precisam somar as duas listas pela MESMA
 // régua: dois somadores dariam ao operador uma diferença que nenhuma das duas contas explica.
 const sumOf = (items: readonly Readonly<{ valueCents: number }>[]): number =>
   items.reduce((total, item) => total + item.valueCents, 0);
 
+// Do título PRONTO para o mínimo que decide o agrupamento.
+//
+// `null` para tudo que não está `ready`, e é a regra inteira do que entra em lote: impedido,
+// não-aprovado e fora-da-VAN não vão no arquivo. Derivar isto da linha já classificada — em vez de
+// reclassificar aqui — é o que garante que a composição e o pré-voo nunca discordem.
+//
+// ⚠️ É TAMBÉM O QUE TORNA A ARITMÉTICA DO CA5 CORRETA, e por isso este comentário fica colado nesta
+// função: `unplannedCount` só fecha porque o que sai daqui é exatamente "pronto com rota". Quem
+// afrouxar o predicado muda a conta da tela sem tocar em linha alguma de `sumOf`.
 const plannableOf = (
   line: RemittancePreviewLine,
   row: RemittancePreviewRow,
