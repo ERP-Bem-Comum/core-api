@@ -34,8 +34,14 @@ CREATE TABLE `fin_convenio_nsa` (
 --
 -- Convênio vazio fica de fora: sem convênio não há contrato a que a sequência pertença, e a conta
 -- já é recusada antes do NSA por `checkCedenteConvenio` (`cedente-convenio-missing`).
+-- ⚠️ `GREATEST` no `ON DUPLICATE KEY UPDATE` torna o statement IDEMPOTENTE e monotônico. A migration
+-- roda uma vez pelo journal, mas o job que a executa vive num pipeline de deploy que pode ser
+-- retentado — e um `INSERT` cru abortaria com `ER_DUP_ENTRY` na segunda passada, derrubando o deploy
+-- ANTES de o app subir. `GREATEST` também garante o invariante que importa: reexecutar NUNCA faz o
+-- contador retroceder, porque só o maior valor sobrevive.
 INSERT INTO `fin_convenio_nsa` (`convenio`, `next_nsa`)
 SELECT TRIM(`convenio`), MAX(`next_nsa`)
 FROM `fin_cedente_accounts`
 WHERE TRIM(`convenio`) <> ''
-GROUP BY TRIM(`convenio`);
+GROUP BY TRIM(`convenio`)
+ON DUPLICATE KEY UPDATE `next_nsa` = GREATEST(`fin_convenio_nsa`.`next_nsa`, VALUES(`next_nsa`));
