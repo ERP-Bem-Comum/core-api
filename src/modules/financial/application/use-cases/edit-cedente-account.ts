@@ -36,12 +36,26 @@ export type EditCedenteAccountInput = Readonly<{
   typeLabel?: string; // #206: texto livre (metadado, não dado bancário travável).
   nickname?: string;
   bankName?: string;
+  // #995 — SALDO DE ABERTURA. Só entrava na criação, e a ausência tinha consequência operacional
+  // real: a conta migrada do legado veio com saldo congelado do começo do ano, e sem poder corrigi-lo
+  // o operador criou contas NOVAS para gerar remessa — que é a origem das duplicatas que a issue
+  // trata. Alinhar o saldo e informar o multipag resolveria sem duplicar nada.
+  //
+  // ⚠️ Travado por HISTÓRICO, como o dado bancário (FR-008). O saldo de abertura é a base de todo
+  // saldo calculado: mudá-lo numa conta que já importou extrato reescreveria em silêncio o resultado
+  // de cada conciliação feita em cima dele. A decisão da P.O. (06/09) é manter a edição liberada
+  // nesta fase e endurecer depois — o guard por histórico é o "depois" que já dá para ter agora, sem
+  // esperar a trilha de auditoria.
+  openingBalanceCents?: number;
+  openingBalanceDate?: string;
 }>;
 
 export type EditCedenteAccountError =
   | 'cedente-account-not-found'
   | 'cedente-account-bank-data-locked'
   | 'cedente-convenio-already-set'
+  // FR-006 — o par saldo+data é coeso, e a edição pode quebrá-lo tanto quanto a criação.
+  | 'opening-balance-requires-date'
   | CedenteAccountIdError
   | CedenteAccountStoreError
   | CedenteAccountHistoryError;
@@ -78,13 +92,20 @@ export const editCedenteAccount =
       found.value.agencyDigit !== undefined &&
       found.value.agencyDigit !== agencyDigitPatch;
 
+    // O saldo de abertura entra na MESMA trava do dado bancário, e pela mesma razão de fundo: os dois
+    // são premissas de cálculos já feitos. Mudar o saldo de abertura de uma conta que já importou
+    // extrato reescreve o saldo de todos os dias seguintes, sem nada apontar a causa.
+    const wantsOpeningBalanceChange =
+      input.openingBalanceCents !== undefined || input.openingBalanceDate !== undefined;
+
     const wantsBankDataChange =
       input.bankCode !== undefined ||
       input.agency !== undefined ||
       input.accountNumber !== undefined ||
       input.accountDigit !== undefined ||
       input.type !== undefined ||
-      wantsAgencyDigitSwap;
+      wantsAgencyDigitSwap ||
+      wantsOpeningBalanceChange;
 
     if (wantsBankDataChange) {
       const hist = await deps.accountHistory.hasActivity(id.value);
@@ -146,7 +167,24 @@ export const editCedenteAccount =
       ...(input.typeLabel !== undefined ? { typeLabel: input.typeLabel } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
       ...(input.bankName !== undefined ? { bankName: input.bankName } : {}),
+      ...(input.openingBalanceCents !== undefined
+        ? { openingBalanceCents: input.openingBalanceCents }
+        : {}),
+      ...(input.openingBalanceDate !== undefined
+        ? { openingBalanceDate: input.openingBalanceDate }
+        : {}),
     };
+
+    // ⚠️ O PAR SALDO+DATA É COESO (FR-006), e a edição tem de cobrar isso no RESULTADO, não no
+    // patch. Uma conta sem saldo que recebe só os centavos ficaria com valor e sem data — estado que
+    // o construtor recusa na criação e que entraria pela edição sem esta guarda. É o mesmo invariante,
+    // e a régua é a do domínio: perguntar aqui pelo `create` seria uma segunda definição do par.
+    if (
+      (updated.openingBalanceCents === undefined) !==
+      (updated.openingBalanceDate === undefined)
+    ) {
+      return err('opening-balance-requires-date');
+    }
 
     const saved = await deps.cedenteStore.save(updated);
     if (!saved.ok) return saved;

@@ -2315,6 +2315,13 @@ const financialRoutes =
           ...(b.typeLabel !== undefined ? { typeLabel: b.typeLabel } : {}),
           ...(b.nickname !== undefined ? { nickname: b.nickname } : {}),
           ...(b.bankName !== undefined ? { bankName: b.bankName } : {}),
+          // Money em string de centavos na borda (convenção do módulo) → número no domínio.
+          ...(b.openingBalanceCents !== undefined
+            ? { openingBalanceCents: Number(b.openingBalanceCents) }
+            : {}),
+          ...(b.openingBalanceDate !== undefined
+            ? { openingBalanceDate: b.openingBalanceDate }
+            : {}),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
