@@ -152,6 +152,89 @@ describe('edit-cedente-account — o convênio preenche, mas não troca (#722/#8
 });
 
 /**
+ * O SALDO DE ABERTURA passa a ser editável (#995).
+ *
+ * ⚠️ A AUSÊNCIA DISSO É A ORIGEM OPERACIONAL DAS DUPLICATAS. A conta migrada do legado veio com o
+ * saldo congelado do começo do ano, e o campo só existia na criação — sem poder corrigi-lo, o
+ * operador criou contas NOVAS para conseguir gerar remessa. Alinhar o saldo e informar o multipag
+ * resolveria sem duplicar nada.
+ *
+ * ⚠️ E ELE ENTRA NA TRAVA FR-008, junto com o dado bancário, pela mesma razão de fundo: o saldo de
+ * abertura é a BASE de todo saldo calculado. Mudá-lo numa conta que já importou extrato reescreveria
+ * em silêncio o resultado de cada conciliação feita em cima dele — e nada apontaria a causa. A P.O.
+ * decidiu manter a edição liberada nesta fase e endurecer depois; o guard por histórico é o "depois"
+ * que já dá para ter agora, sem esperar a trilha de auditoria.
+ */
+describe('edit-cedente-account — o saldo de abertura (#995)', () => {
+  const editBalance = async (
+    account: unknown,
+    patch: Readonly<{ openingBalanceCents?: number; openingBalanceDate?: string }>,
+    hasHistory = false,
+  ) =>
+    editCedenteAccount(deps(account, hasHistory) as never)({
+      id: String((account as { id: unknown }).id),
+      ...patch,
+    });
+
+  it('corrige o saldo congelado do legado — o caminho que evitava a duplicata', async () => {
+    const r = await editBalance(buildAccount('123456'), {
+      openingBalanceCents: 250_000,
+      openingBalanceDate: '2026-09-01',
+    });
+
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.openingBalanceCents, 250_000);
+      assert.equal(r.value.openingBalanceDate, '2026-09-01');
+    }
+  });
+
+  // ⚠️ A guarda que protege a conciliação: com extrato importado, o saldo de abertura vira premissa
+  // de cálculos já feitos.
+  it('conta COM histórico recusa a edição do saldo — ele é a base do que já foi conciliado', async () => {
+    const r = await editBalance(
+      buildAccount('123456'),
+      { openingBalanceCents: 1, openingBalanceDate: '2026-09-01' },
+      true,
+    );
+
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'cedente-account-bank-data-locked');
+  });
+
+  /*
+   * FR-006 — o par saldo+data é coeso, e a EDIÇÃO pode quebrá-lo de um jeito que a criação não pode.
+   *
+   * O construtor recusa "um sem o outro" porque recebe os dois de uma vez. A edição recebe um patch:
+   * mandar só os centavos numa conta que não tinha saldo deixaria valor sem data — estado que o
+   * domínio nunca produziria. Por isso a checagem é sobre o RESULTADO, não sobre o patch.
+   */
+  it('FR-006: mandar só os centavos numa conta sem saldo é recusado', async () => {
+    const r = await editBalance(buildAccount('123456'), { openingBalanceCents: 100 });
+
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'opening-balance-requires-date');
+  });
+
+  // O outro lado do par: numa conta que JÁ tem os dois, mandar só um é legítimo — o resultado
+  // continua coeso. Sem este caso, alguém "corrigiria" a guarda para olhar o patch e quebraria isto.
+  it('FR-006: numa conta que já tem o par, corrigir só um dos dois é aceito', async () => {
+    const withBalance = {
+      ...buildAccount('123456'),
+      openingBalanceCents: 100,
+      openingBalanceDate: '2026-01-01',
+    };
+    const r = await editBalance(withBalance, { openingBalanceCents: 999 });
+
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.openingBalanceCents, 999);
+      assert.equal(r.value.openingBalanceDate, '2026-01-01', 'a data se perdeu na edição');
+    }
+  });
+});
+
+/**
  * O CONVÊNIO VOLTA A SER EDITÁVEL NA CONTA ENCERRADA (#995, B8.1).
  *
  * A trava do #722 existe porque o convênio viaja no NOME de toda remessa transmitida — reescrevê-lo

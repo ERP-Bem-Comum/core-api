@@ -902,6 +902,12 @@ export const editCedenteAccountBodySchema = z.object({
   typeLabel: z.string().min(1).max(120).optional(),
   nickname: z.string().min(1).max(120).optional(),
   bankName: z.string().min(1).max(120).optional(),
+  // #995 — saldo de abertura editável. A conta migrada veio com saldo congelado do começo do ano, e
+  // não poder corrigi-lo foi o que levou o operador a criar contas NOVAS para gerar remessa.
+  // Travado por histórico no use case (FR-008): com extrato importado, mudá-lo reescreveria todo
+  // saldo calculado em cima dele.
+  openingBalanceCents: centsStringSchema.optional(),
+  openingBalanceDate: z.iso.date().optional(),
 });
 
 export const cedenteAccountIdParamSchema = z.object({
