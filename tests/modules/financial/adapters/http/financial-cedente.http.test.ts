@@ -344,6 +344,75 @@ describe('financial/http — cedente-accounts (019) — W0 RED', () => {
     assert.equal(recreated.statusCode, 409, recreated.body);
   });
 
+  /*
+   * ⚠️ CA2 DO BLOCO A (#995) — O CASO DE PRODUÇÃO, PELO CAMINHO INTEIRO.
+   *
+   * Em 06/09 existia a conta migrada do legado, ATIVA. O operador cadastrou outra, com os MESMOS
+   * dados bancários escritos de outro jeito, e **passou** — porque a busca de duplicata comparava as
+   * quatro colunas como string crua. Depois, o teste de envio de remessa não processou.
+   *
+   * Este caso mede a borda, e não a régua: o teste do domínio prova que as duas escritas produzem a
+   * mesma chave; só este prova que o CADASTRO recusa. Entre os dois há o `findByNaturalKey`, que era
+   * onde o defeito morava.
+   */
+  it('#995 CA2: a mesma conta escrita de outro jeito é RECUSADA como duplicata', async () => {
+    const legacy = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      // Como o ETL grava: banco sem zeros, agência com o DV embutido, conta com zeros à esquerda.
+      payload: body({
+        bankCode: '7',
+        agency: '1234-1',
+        accountNumber: '0088123',
+        accountDigit: '3',
+        nickname: 'Conta migrada',
+      }),
+    });
+    assert.equal(legacy.statusCode, 201, legacy.body);
+
+    // Como o operador digita na tela: banco em 3 posições, agência sem DV, conta sem zeros.
+    const typed = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body({
+        bankCode: '007',
+        agency: '1234',
+        accountNumber: '88123',
+        accountDigit: '3',
+        nickname: 'Conta nova',
+      }),
+    });
+
+    assert.equal(
+      typed.statusCode,
+      409,
+      `a duplicata entrou de novo — a chave natural voltou a comparar string crua: ${typed.body}`,
+    );
+  });
+
+  // O outro lado, e ele impede a canonização de virar recusa indevida: contas realmente diferentes
+  // continuam entrando. Sem este caso, uma régua agressiva demais passaria em tudo acima e travaria
+  // o cadastro legítimo.
+  it('#995 CA2: conta de OUTRA agência não é lida como duplicata', async () => {
+    const first = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body({ agency: '5001', accountNumber: '660011', nickname: 'Agência A' }),
+    });
+    assert.equal(first.statusCode, 201, first.body);
+
+    const second = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body({ agency: '5002', accountNumber: '660011', nickname: 'Agência B' }),
+    });
+    assert.equal(second.statusCode, 201, second.body);
+  });
+
   it('CA-US2: POST /cedente-accounts/:id/close → rota existe (≠ 404)', async () => {
     const id = '11111111-1111-4111-8111-111111111111';
     const res = await handle.app.inject({

@@ -9,6 +9,7 @@ import type {
 } from '../../../application/ports/cedente-account-store.ts';
 import { isActive } from '../../../domain/cedente/cedente-account.ts';
 import * as NsaSequence from '../../../domain/cedente/nsa-sequence.ts';
+import { canonicalNaturalKey } from '../../../domain/cedente/natural-key.ts';
 import type { Nsa } from '../../../domain/cedente/nsa.ts';
 
 // Adapter in-memory do CedenteAccountStore (testes / boot sem DB).
@@ -37,17 +38,15 @@ export const createInMemoryCedenteAccountStore = (
 
     // #995 B4 — a conta EXCLUÍDA não ocupa mais a chave natural. Espelha o predicado do adapter
     // Drizzle; sem ele, o fake aprovaria um recadastro que o MySQL recusaria (ou o contrário).
+    // ⚠️ Comparação CANÔNICA, pela régua do domínio (#995, bloco A) — a MESMA que o adapter Drizzle
+    // usa. Comparar campo a campo aqui faria o fake aprovar um cadastro que o MySQL recusaria, ou o
+    // contrário: `'7'` e `'007'` são a mesma conta bancária e strings diferentes.
     findByNaturalKey: async (
       key: CedenteAccountNaturalKey,
     ): Promise<Result<CedenteAccount | null, CedenteAccountStoreError>> => {
+      const wanted = canonicalNaturalKey(key);
       for (const account of accounts.values()) {
-        if (
-          account.status !== 'Deleted' &&
-          account.bankCode === key.bankCode &&
-          account.agency === key.agency &&
-          account.accountNumber === key.accountNumber &&
-          account.accountDigit === key.accountDigit
-        ) {
+        if (account.status !== 'Deleted' && canonicalNaturalKey(account) === wanted) {
           return Promise.resolve(ok(account));
         }
       }

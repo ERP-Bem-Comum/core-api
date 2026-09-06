@@ -120,6 +120,51 @@ export const cedenteAccountStoreContract = (
       assert.equal(found.value.nextNsa, 4);
     });
 
+    /*
+     * ⚠️ A BUSCA POR CHAVE NATURAL É CANÔNICA, E ISTO PRECISA VALER NOS DOIS ADAPTERS (#995, bloco A).
+     *
+     * O caso vive no contrato — e não só na borda — porque a borda de teste roda no fake in-memory:
+     * um caso só lá deixaria o caminho DRIZZLE sem cobertura, e é justamente nele que a comparação
+     * deixou de ser `where` em SQL e passou a ser varredura com a régua do domínio. Aqui ele roda
+     * também contra MySQL real, pelo consumidor de integração.
+     *
+     * O par abaixo é o de produção (06/09): a mesma conta bancária escrita como o ETL grava e como o
+     * operador digita.
+     */
+    it('#995: findByNaturalKey acha a conta escrita de outro jeito — comparação CANÔNICA', async () => {
+      const account = buildAccount({ convenio: `${CONTRACT_CONVENIO_PREFIX}7001` });
+      assert.ok(isOk(await store.save(account)));
+
+      const found = await store.findByNaturalKey({
+        // Mesma conta, escrita como o legado a grava: banco sem zeros, conta com zeros à esquerda.
+        bankCode: String(Number(account.bankCode)),
+        agency: account.agency,
+        accountNumber: `00${account.accountNumber}`,
+        accountDigit: account.accountDigit,
+      });
+
+      assert.ok(isOk(found));
+      assert.notEqual(found.value, null, 'a duplicata escrita de outro jeito não foi encontrada');
+      if (found.value !== null) assert.equal(found.value.id, account.id);
+    });
+
+    // O contraponto, no mesmo lugar: conta REALMENTE diferente continua não sendo encontrada. Sem
+    // ele, uma canonização agressiva demais passaria no caso acima e recusaria cadastro legítimo.
+    it('#995: findByNaturalKey NÃO acha conta de outra agência', async () => {
+      const account = buildAccount({ convenio: `${CONTRACT_CONVENIO_PREFIX}7002` });
+      assert.ok(isOk(await store.save(account)));
+
+      const found = await store.findByNaturalKey({
+        bankCode: account.bankCode,
+        agency: '8888',
+        accountNumber: account.accountNumber,
+        accountDigit: account.accountDigit,
+      });
+
+      assert.ok(isOk(found));
+      assert.equal(found.value, null);
+    });
+
     it('save em id existente atualiza os campos editáveis', async () => {
       const account = await seed();
 
