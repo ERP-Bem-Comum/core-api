@@ -4,7 +4,7 @@ import { strict as assert } from 'node:assert';
 import { type Result, ok } from '#src/shared/index.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
-import { checkCedenteRemittanceReadiness } from '#src/modules/financial/domain/cedente/remittance-eligibility.ts';
+import { checkCedenteConvenio } from '#src/modules/financial/domain/cedente/remittance-eligibility.ts';
 // W0 RED (019): o use-case editCedenteAccount ainda não existe.
 import { editCedenteAccount } from '#src/modules/financial/application/use-cases/edit-cedente-account.ts';
 
@@ -126,12 +126,17 @@ describe('edit-cedente-account — o convênio preenche, mas não troca (#722/#8
   });
 
   // A propriedade que amarra as duas metades, e a razão de a régua ser UMA só: o use case aceita a
-  // correção exatamente quando a remessa recusa a conta. Duas réguas para o mesmo fato divergiriam —
-  // é o defeito que a #837 fechou do outro lado deste módulo.
-  it('aceita a correção exatamente quando a remessa recusaria a conta', async () => {
+  // correção exatamente quando a remessa recusa a conta POR CAUSA DO CONVÊNIO. Duas réguas para o
+  // mesmo fato divergiriam — é o defeito que a #837 fechou do outro lado deste módulo.
+  //
+  // ⚠️ A régua é `checkCedenteConvenio`, e não a readiness inteira (#856). Desde que a agência entrou
+  // na readiness, usá-la aqui mediria outra coisa: uma conta de agência malformada responderia
+  // "a remessa recusa" e o teste passaria a exigir que a edição destravasse a troca de um convênio
+  // que está perfeito — o oposto do invariante do #722.
+  it('aceita a correção exatamente quando a remessa recusaria a conta pelo convênio', async () => {
     for (const convenio of ['', 'LEGADO', '9999999', 'ABC123']) {
       const account = buildAccount(convenio);
-      const readiness = checkCedenteRemittanceReadiness({ convenio });
+      const readiness = checkCedenteConvenio({ convenio });
       const r = await editConvenio(account, '123456');
 
       assert.equal(
@@ -140,5 +145,61 @@ describe('edit-cedente-account — o convênio preenche, mas não troca (#722/#8
         `convênio ${JSON.stringify(convenio)}: a edição e a remessa discordam`,
       );
     }
+  });
+});
+
+/**
+ * O DV DA AGÊNCIA na edição (#856 · #942/#943).
+ *
+ * O beco medido em produção: a conta migrada tem histórico e nasceu SEM dígito, porque não havia
+ * coluna. Sob a trava FR-008 pura, nenhuma conta em uso poderia ganhar o dado — o operador digita
+ * o DV, ele é descartado, e ao reabrir a tela o campo volta vermelho e desabilita o Salvar de TODOS
+ * os outros campos. É o mesmo desenho que a #722 deu ao convênio: PREENCHER o vazio destrava,
+ * TROCAR o que já existe continua sendo alteração de dado bancário.
+ */
+describe('edit-cedente-account — o DV da agência (#856)', () => {
+  const editAgencyDigit = async (account: unknown, agencyDigit: string, hasHistory = true) =>
+    editCedenteAccount(deps(account, hasHistory) as never)({
+      id: String((account as { id: unknown }).id),
+      agencyDigit,
+    });
+
+  it('preenche o DV ausente MESMO com histórico — é o que destrava a conta migrada', async () => {
+    const account = buildAccount('123456');
+    const r = await editAgencyDigit(account, '5');
+    assert.equal(r.ok, true, 'conta em uso tem de poder completar o cadastro');
+    if (r.ok) assert.equal(r.value.agencyDigit, '5');
+  });
+
+  it('TROCAR um DV já definido, com histórico, cai na trava de dado bancário', async () => {
+    const account = { ...buildAccount('123456'), agencyDigit: '5' };
+    const r = await editAgencyDigit(account, '7');
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'cedente-account-bank-data-locked');
+  });
+
+  it('sem histórico, trocar o DV é permitido como qualquer dado bancário', async () => {
+    const account = { ...buildAccount('123456'), agencyDigit: '5' };
+    const r = await editAgencyDigit(account, '7', false);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.agencyDigit, '7');
+  });
+
+  // Reenviar o mesmo valor não é troca. Sem isto, o front — que manda o formulário inteiro —
+  // receberia `bank-data-locked` ao salvar apenas o apelido de uma conta que já tem DV.
+  it('reenviar o MESMO DV não conta como alteração', async () => {
+    const account = { ...buildAccount('123456'), agencyDigit: '5' };
+    const r = await editAgencyDigit(account, '5');
+    assert.equal(r.ok, true);
+  });
+
+  // ⚠️ `''` é o que o front envia quando o operador não digitou DV. Tratá-lo como VALOR faria "sem
+  // dígito" virar "dígito definido", e a próxima tentativa de preencher cairia na trava — o beco de
+  // volta, por outra porta.
+  it('string vazia é ausência, não valor — não define nem apaga', async () => {
+    const account = buildAccount('123456');
+    const r = await editAgencyDigit(account, '   ');
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.agencyDigit, undefined);
   });
 });

@@ -848,6 +848,19 @@ export const createCedenteAccountBodySchema = z.object({
   // #206: texto livre p/ identificar conta `outro`/`cartao` (opcional).
   typeLabel: z.string().min(1).max(120).optional(),
   agency: z.string().min(1).max(10),
+  // #856 · #859 — DV da agência, posição 058 do header CNAB. OPCIONAL porque a agência pode não ter
+  // DV; separado de `agency` porque o emissor remove o separador antes de gravar as posições
+  // 053-057, e um `1234-5` num campo só vira `12345` onde o banco espera `01234`.
+  //
+  // ⚠️ UMA posição, e não duas como o DV da CONTA. `alpha()` faz `.slice(0, size)`: um `max(2)` aqui
+  // aceitaria `5X` e gravaria `5`, e `-2` gravaria um `-` literal na 058 — aceitar-e-truncar, que é
+  // exatamente o defeito que esta issue existe para eliminar. O DV da conta tem 2 porque o layout
+  // prevê DV de duas posições (G011 + G012); o da agência, não.
+  agencyDigit: z
+    .string()
+    .max(1)
+    .optional()
+    .meta({ description: 'Dígito verificador da agência (posição 058 do CNAB). Sem separador.' }),
   accountNumber: z.string().min(1).max(20),
   accountDigit: z.string().max(2),
   convenio: z.string().max(20).optional(),
@@ -865,6 +878,10 @@ export const editCedenteAccountBodySchema = z.object({
   convenio: z.string().min(1).max(20).optional(),
   bankCode: z.string().min(1).max(10).optional(),
   agency: z.string().min(1).max(10).optional(),
+  // #856: preenchível na conta já cadastrada, que nasceu sem DV porque não havia coluna. TROCAR um
+  // DV já definido continua caindo na trava de dado bancário (FR-008) — ver `edit-cedente-account`.
+  // `max(1)` pela razão do create: a 058 tem uma posição, e `alpha()` truncaria a segunda em silêncio.
+  agencyDigit: z.string().max(1).optional(),
   accountNumber: z.string().min(1).max(20).optional(),
   accountDigit: z.string().max(2).optional(),
   type: accountTypeSchema.optional(),
@@ -885,6 +902,10 @@ export const cedenteAccountResponseSchema = z
     type: z.string().nullable(),
     typeLabel: z.string().nullable(),
     agency: z.string(),
+    // Presente na leitura para o front poder exibir o cadastro COMPLETO na edição (#856). Sem ele,
+    // a tela reabre com 4 dígitos, marca a agência como incompleta e desabilita o Salvar — o beco
+    // medido em produção (#942/#943).
+    agencyDigit: z.string().nullable(),
     accountNumber: z.string(),
     accountDigit: z.string(),
     convenio: z.string(),

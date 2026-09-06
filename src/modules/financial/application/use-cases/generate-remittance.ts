@@ -7,6 +7,7 @@ import {
   checkCedenteRemittanceReadiness,
   type CedenteRemittanceGap,
 } from '../../domain/cedente/remittance-eligibility.ts';
+import { inscriptionType } from '../../domain/payout/inscription.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
 import type { RemittancePaymentData } from '../ports/remittance-payment-reader.ts';
 import type { CedenteAccountStore } from '../ports/cedente-account-store.ts';
@@ -169,19 +170,47 @@ export const generateRemittance =
     // cedentes diferentes, que é o tipo de divergência que nenhum teste procura.
     const cedente = {
       bankCode: account.value.bankCode,
-      documentType: '2',
+      // 018 — G005. DERIVADO da inscrição, não afirmado (#856, CA4). Era `'2'` literal: todo cedente
+      // saía declarado pessoa jurídica, e um cedente pessoa física produzia arquivo bem-formado cujo
+      // tipo de inscrição não corresponde ao titular. A régua é a MESMA que o reader usa para o
+      // favorecido — uma função só, no domínio, medindo o comprimento da inscrição normalizada.
+      documentType: inscriptionType(account.value.document),
       document: account.value.document,
       convenio: account.value.convenio,
       agency: account.value.agency,
-      agencyDigit: '',
+      // 058 — G009. Sai do CADASTRO desde a #856; era `''` literal, e o dígito que o operador digita
+      // na tela desde 25/08 (specs/107 do web-app) não tinha onde ser gravado.
+      //
+      // Ausente continua sendo BRANCO, e isso é o layout, não desistência: `Alfa` vazio é brancos
+      // (p. 14), e a agência pode legitimamente não ter DV. O que mudou é que o branco passou a
+      // significar "esta agência não tem dígito" em vez de "o sistema não sabe".
+      //
+      // ⚠️ Nunca `'0'` por omissão. `05-armadilhas-e-divergencias.md` §2 é explícito: "se o DV for
+      // `0`, enviar `0`; se a agência realmente não tiver DV, enviar branco. Nunca zero por padrão
+      // sem confirmar" — zero é um dígito afirmado, e afirmar o errado é pior que não afirmar.
+      agencyDigit: account.value.agencyDigit ?? '',
       accountNumber: account.value.accountNumber,
       accountDigit: account.value.accountDigit,
+      // 072 — G012. BRANCO, e a ausência é justificada, não esquecida (#856, CA2 · ramo facultativo).
+      //
+      // O campo não é "o segundo DV do cedente": `G012` (layout v08, p. 96) o define como a **2ª
+      // posição do DV** para bancos cujo dígito de conta tem duas posições — o exemplo do próprio
+      // manual é `45981-36`, com `3` na 071 e `6` na 072. O DV de conta do Bradesco tem UMA posição:
+      // `bradescoAccountCheckDigits` (Manual de Procedimentos 4008-523-0096 v16, p. 30) devolve um
+      // único caractere, `0`–`9` ou `P`. Não existe segunda posição a gravar.
+      //
+      // Confirmado do outro lado, no arquivo que o banco aceitou: a inquiry-0033 mediu 18 submissões
+      // ao Validador Universal em 25/08/2026, com os DVs de agência/conta vazios em três cenários e
+      // **nenhuma crítica** a eles.
+      //
+      // ⚠️ Por isso NÃO ganhou coluna, ao contrário da 058: uma coluna aqui pediria ao operador um
+      // dígito que a conta dele não tem, e o que ele digitasse iria para o arquivo.
       accountAgencyDigit: '',
       companyName: CEDENTE_COMPANY_NAME,
-      // ⚠️ Continua saindo com 30 brancos sempre que a coluna é NULL — o caso de TODA conta vinda
-      // do ETL, que nunca preenche o campo. Fica assim de propósito: o destinatário do arquivo é o
-      // próprio banco, e afirmar que o branco é inofensivo exige o layout, não dedução. Registrado
-      // na #856 junto com os DVs de 058/072 e o tipo de inscrição.
+      // ⚠️ Sai com 30 brancos quando a coluna é NULL — o caso de TODA conta vinda do ETL, que nunca
+      // preenche o campo. Fica assim de propósito: 103-132 é o nome do BANCO, o destinatário do
+      // arquivo é o próprio banco, e o layout (p. 15, G014) não marca o campo como obrigatório —
+      // é uma das duas colunas sem asterisco do header, ao lado do nome da empresa.
       bankName: account.value.bankName ?? '',
     } as const;
 

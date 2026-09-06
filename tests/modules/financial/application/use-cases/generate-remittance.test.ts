@@ -57,7 +57,15 @@ const reader = (docs: readonly string[]): RemittancePaymentReader => ({
 const approved = (ids: readonly string[]): Readonly<Record<string, 'Approved'>> =>
   Object.fromEntries(ids.map((id) => [id, 'Approved' as const]));
 
-const setup = async (over: Partial<{ docs: readonly string[] }> = {}) => {
+// `account` sobrescreve o cadastro do cedente — os campos que a #856 leva ao header (documento,
+// agência, DV da agência) precisam variar por caso, e variá-los aqui é o que faz o teste medir o
+// CAMINHO INTEIRO: cadastro → use case → emissor → posição no arquivo.
+const setup = async (
+  over: Partial<{
+    docs: readonly string[];
+    account: Partial<{ agency: string; agencyDigit: string; document: string }>;
+  }> = {},
+) => {
   const docs = over.docs ?? ['doc-1', 'doc-2'];
 
   const accounts = createInMemoryCedenteAccountStore();
@@ -76,6 +84,7 @@ const setup = async (over: Partial<{ docs: readonly string[] }> = {}) => {
     // O nome do BANCO, que é o que este campo significa. Enquanto ele guardava a razão social, o
     // emissor produzia o header certo por acidente — e o defeito ficava invisível na suíte.
     bankName: 'BRADESCO',
+    ...over.account,
   });
   assert.ok(isOk(acc));
   await accounts.save(acc.value);
@@ -163,6 +172,165 @@ describe('generateRemittance — caminho feliz', () => {
     const acc = await s.accounts.findById(s.cedenteAccountId);
     assert.ok(isOk(acc) && acc.value !== null);
     assert.equal(acc.value.nextNsa, 2);
+  });
+});
+
+/**
+ * OS CAMPOS DO CEDENTE NO HEADER (#856).
+ *
+ * ⚠️ ESTE BLOCO MEDE O ARQUIVO, e essa é a razão de ele viver aqui e não num teste de unidade do
+ * emissor. Os testes de `multipag-records` provam que o emissor escreve na posição certa o que lhe
+ * ENTREGAM; o defeito da #856 é anterior a isso — o use case entregava literais. Um teste que
+ * passasse `agencyDigit: '5'` ao emissor e conferisse a posição 058 ficaria verde durante os meses
+ * inteiros em que o campo saía em branco na produção.
+ *
+ * A régua é o registro tipo 0 (header de arquivo) e o tipo 1 (header de lote): os dois carregam o
+ * MESMO bloco de cedente, e um defeito que atingisse só um deles é o tipo de assimetria que ninguém
+ * procura.
+ */
+describe('generateRemittance — os campos do cedente no header (#856)', () => {
+  // Posições do layout são 1-based e inclusivas; `slice` é 0-based e exclusivo no fim.
+  const at = (line: string, from: number, to: number) => line.slice(from - 1, to);
+
+  const headersOf = async (
+    over: Parameters<typeof setup>[0] = {},
+  ): Promise<readonly [string, string]> => {
+    const s = await setup(over);
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+
+    const stored = await s.storage.getText(onlyFile(r.value).objectKey);
+    assert.ok(isOk(stored));
+    const lines = stored.value.split('\n').filter((l) => l.length > 0);
+
+    const fileHeader = lines[0];
+    const batchHeader = lines[1];
+    assert.ok(fileHeader !== undefined && batchHeader !== undefined);
+    assert.equal(at(fileHeader, 8, 8), '0', 'primeira linha deve ser o header de arquivo');
+    assert.equal(at(batchHeader, 8, 8), '1', 'segunda linha deve ser o header de lote');
+    return [fileHeader, batchHeader];
+  };
+
+  // ── 058 · G009 — DV da agência (CA2, ramo obrigatório) ──────────────────────────────────────
+  //
+  // O manual se contradiz sobre este campo e a contradição está registrada: `G009` (p. 95) o chama
+  // de "Campo Não Obrigatório – Informação Opcional", enquanto `G059 'AG'` (p. 107) e `'HD'`
+  // (p. 111) dizem que "o dígito da agência deve ser informado na posição 58". Quem paga é o
+  // validador — e, independentemente dele, o dado EXISTE no cadastro desde 25/08 e era descartado.
+  it('CA2: o DV da agência do cadastro chega às posições 058 dos dois headers', async () => {
+    const [fileHeader, batchHeader] = await headersOf({ account: { agencyDigit: '5' } });
+
+    assert.equal(at(fileHeader, 53, 57), '01234', 'a agência ocupa 053-057, e só ela');
+    assert.equal(at(fileHeader, 58, 58), '5', 'header de arquivo: 058');
+    assert.equal(at(batchHeader, 58, 58), '5', 'header de lote: 058');
+  });
+
+  // Ausência continua saindo em branco, e isso é o layout — não desistência. `Alfa` vazio é brancos
+  // (p. 14), e a agência pode legitimamente não ter DV.
+  //
+  // ⚠️ NUNCA `'0'`. `05-armadilhas-e-divergencias.md` §2: "se o DV for `0`, enviar `0`; se a agência
+  // realmente não tiver DV, enviar branco. Nunca zero por padrão sem confirmar". Zero é um dígito
+  // afirmado, e afirmar o dígito errado é pior que não afirmar nenhum.
+  it('CA2: conta sem DV cadastrado sai com BRANCO na 058 — nunca zero por omissão', async () => {
+    const [fileHeader, batchHeader] = await headersOf();
+
+    assert.equal(at(fileHeader, 58, 58), ' ');
+    assert.equal(at(batchHeader, 58, 58), ' ');
+  });
+
+  // ── 072 · G012 — DV agência/conta (CA2, ramo facultativo: o branco JUSTIFICADO) ──────────────
+  //
+  // `G012` (p. 96) define o campo como a **2ª posição do DV** para bancos cujo dígito de conta tem
+  // duas posições — o exemplo do manual é `45981-36`, com `3` na 071 e `6` na 072. O DV de conta do
+  // Bradesco tem UMA posição: `bradescoAccountCheckDigits` (Manual de Procedimentos 4008-523-0096
+  // v16, p. 30) devolve um único caractere. Não há segunda posição a gravar.
+  //
+  // Medido do outro lado também: a inquiry-0033 submeteu 18 arquivos ao Validador Universal em
+  // 25/08/2026 com os DVs de agência/conta vazios em três cenários, e NENHUMA crítica a eles.
+  //
+  // Este teste existe para que o branco continue sendo uma DECISÃO: quem um dia resolver preencher
+  // a 072 vai encontrar aqui a razão pela qual ela está vazia, em vez de concluir que foi esquecida.
+  it('CA2: a 072 fica em BRANCO — o Bradesco não tem 2ª posição de DV de conta', async () => {
+    const [fileHeader, batchHeader] = await headersOf({ account: { agencyDigit: '5' } });
+
+    assert.equal(at(fileHeader, 71, 71), '1', 'a 071 leva o DV da conta, que existe');
+    assert.equal(at(fileHeader, 72, 72), ' ');
+    assert.equal(at(batchHeader, 72, 72), ' ');
+  });
+
+  // ── 018 · G005 — tipo de inscrição (CA4) ────────────────────────────────────────────────────
+  it('CA4: cedente com CNPJ sai com tipo de inscrição 2', async () => {
+    const [fileHeader, batchHeader] = await headersOf({
+      account: { document: '12345678000199' },
+    });
+
+    assert.equal(at(fileHeader, 18, 18), '2');
+    assert.equal(at(batchHeader, 18, 18), '2');
+  });
+
+  // O caso que o literal `'2'` errava. Um cedente pessoa física saía declarado pessoa jurídica: o
+  // arquivo é bem-formado, o banco não recusa, e o `G005` simplesmente não descreve o titular.
+  it('CA4: cedente com CPF sai com tipo de inscrição 1 — era onde o literal mentia', async () => {
+    const [fileHeader, batchHeader] = await headersOf({ account: { document: '12345678909' } });
+
+    assert.equal(at(fileHeader, 18, 18), '1');
+    assert.equal(at(batchHeader, 18, 18), '1');
+  });
+
+  // A inscrição de 11 posições ocupa o campo de 14 com zeros à esquerda (G006). Vai junto porque é
+  // o par do caso acima: tipo `1` com a inscrição zerada errada seria um header coerente e falso.
+  it('CA4: o CPF ocupa 019-032 com zeros à esquerda, ao lado do tipo 1', async () => {
+    const [fileHeader] = await headersOf({ account: { document: '12345678909' } });
+
+    assert.equal(at(fileHeader, 19, 32), '00012345678909');
+  });
+
+  // A máscara não muda o tipo: quem mede o comprimento é a inscrição NORMALIZADA. Sem isto,
+  // `123.456.789-09` teria 14 caracteres e seria classificado como pessoa jurídica.
+  it('CA4: CPF com máscara no cadastro ainda é tipo 1', async () => {
+    const [fileHeader] = await headersOf({ account: { document: '123.456.789-09' } });
+
+    assert.equal(at(fileHeader, 18, 18), '1');
+  });
+
+  // ── A recusa que impede a correção silenciosa (CA2, o irmão da #859) ────────────────────────
+  //
+  // A saída "óbvia" para não perder o DV é gravá-lo dentro de `agency`, que aceita 10 caracteres na
+  // borda. `digits('01234-5', 5)` removeria o separador e gravaria `12345` em 053-057, onde o banco
+  // espera `01234` — cinco dígitos, cabe no campo, nenhum gate acusa, e toda remessa daquela conta
+  // vai ao banco apontando outra agência. Recusar é a política da #804: nunca truncar.
+  it('CA2: agência com separador RECUSA a geração, e antes de queimar NSA', async () => {
+    const s = await setup({ account: { agency: '01234-5' } });
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'cedente-agency-malformed');
+
+    const acc = await s.accounts.findById(s.cedenteAccountId);
+    assert.ok(isOk(acc) && acc.value !== null);
+    assert.equal(acc.value.nextNsa, 1, 'a recusa não pode consumir um número da sequência');
+  });
+
+  // ── CA3 — o CNPJ alfanumérico do cedente ────────────────────────────────────────────────────
+  //
+  // O emissor grava 019-032 com um helper que remove tudo que não é dígito. Sobre uma inscrição
+  // ALFANUMÉRICA (válida desde 07/2026, ADR-0044) isso não tira máscara: destrói conteúdo, e
+  // `12ABC34501DE35` vira `00000123450135` — catorze dígitos, campo `Num` perfeito, arquivo aceito,
+  // e o cedente declarado não é o titular da conta que paga.
+  //
+  // ⚠️ A recusa é do PRÉ-VOO, e é isso que este caso mede: o emissor monta depois do `allocateNsa`,
+  // então uma barreira só lá dentro custaria um número da sequência por tentativa e chegaria ao
+  // operador como falha genérica de montagem, sem apontar campo nenhum.
+  it('CA3: cedente com CNPJ alfanumérico RECUSA com slug próprio, sem zero-padding e sem NSA', async () => {
+    const s = await setup({ account: { document: '12ABC34501DE35' } });
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'cedente-inscription-alphanumeric');
+
+    const acc = await s.accounts.findById(s.cedenteAccountId);
+    assert.ok(isOk(acc) && acc.value !== null);
+    assert.equal(acc.value.nextNsa, 1, 'a recusa não pode consumir um número da sequência');
   });
 });
 

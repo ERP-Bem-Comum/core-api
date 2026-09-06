@@ -113,6 +113,44 @@ export const cedenteAccountStoreContract = (
       assert.equal(found.value.nickname, 'apelido novo');
     });
 
+    /*
+     * ⚠️ O UPDATE É CONFERIDO CAMPO A CAMPO, e a razão é um defeito medido (#856).
+     *
+     * O adapter Drizzle faz `onDuplicateKeyUpdate({ set: {...} })` com a lista de colunas escrita À
+     * MÃO. O `values(row)` do INSERT vem de `toRow` e ganha coluna nova de graça; o `set` não. Uma
+     * coluna esquecida ali é gravada na conta NOVA e descartada na EDIÇÃO — o use case devolve 200
+     * com o valor ecoado do agregado em memória, e a coluna fica NULL.
+     *
+     * E o compilador não cobra: `$inferInsert` torna coluna nullable OPCIONAL no tipo. Nem o fake
+     * cobra: o in-memory substitui o objeto inteiro por spread, então ele acerta sempre. O caso
+     * acima passava verde asserindo `status` e `nickname` — por acaso, as duas colunas que ESTAVAM
+     * na lista.
+     *
+     * Este caso é a rede: ele varre o snapshot inteiro, então toda coluna futura entra sozinha.
+     */
+    it('save em id existente preserva TODOS os campos, não só os que alguém lembrou de listar', async () => {
+      const account = await seed();
+
+      // Um valor diferente do semeado em cada campo editável, para o assert distinguir "gravou" de
+      // "por acaso já era isso".
+      const edited: CedenteAccount = {
+        ...account,
+        agencyDigit: '7',
+        nickname: 'apelido novo',
+        bankName: 'BANCO NOVO',
+        convenio: '123456',
+      };
+      assert.ok(isOk(await store.save(edited)));
+
+      const found = await store.findById(account.id);
+      assert.ok(isOk(found) && found.value !== null);
+      assert.deepEqual(
+        found.value,
+        edited,
+        'algum campo do agregado não sobreviveu ao UPDATE — confira o `set` do onDuplicateKeyUpdate',
+      );
+    });
+
     // O caso que justifica esta suíte existir — regressão do lost update em produção.
     //
     // `edit-cedente-account.ts` (e `close-cedente-account.ts`) leem a conta, montam o objeto por spread
