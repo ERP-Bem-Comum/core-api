@@ -3,7 +3,7 @@
 // Boundary: todo try/catch converte para Result; nenhum Error cruza a borda
 // (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { and, eq, ne } from 'drizzle-orm';
+import { eq, ne } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -17,6 +17,7 @@ import type {
 } from '#src/modules/financial/application/ports/cedente-account-store.ts';
 import { isActive } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 import * as NsaSequence from '#src/modules/financial/domain/cedente/nsa-sequence.ts';
+import { canonicalNaturalKey } from '#src/modules/financial/domain/cedente/natural-key.ts';
 import * as Nsa from '#src/modules/financial/domain/cedente/nsa.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finCedenteAccounts, finConvenioNsa } from '../schemas/mysql.ts';
@@ -56,6 +57,22 @@ export const createDrizzleCedenteAccountStore = (
       }
     },
 
+    // ⚠️ A COMPARAÇÃO É CANÔNICA, E ACONTECE EM TS — não no `where` (#995, bloco A).
+    //
+    // Comparar as colunas cruas com `eq()` era o defeito: `'7'` e `'007'`, `'0012345'` e `'12345'`,
+    // `'1234-1'` e `'1234'` são a MESMA conta para o banco e strings diferentes para o `=`. Foi assim
+    // que o segundo cadastro passou em produção (06/09) sobre uma conta que já existia.
+    //
+    // Escrever `LPAD`/`TRIM LEADING` no `where` resolveria a busca e criaria uma SEGUNDA definição da
+    // regra — com o fake in-memory precisando de uma terceira. Duas réguas para o mesmo fato divergem
+    // na primeira correção feita só numa delas; é a classe que a #863 e a #837 já documentaram aqui.
+    // A régua vive em `domain/cedente/natural-key.ts`, e os dois adapters descem até ela.
+    //
+    // O custo é varrer as linhas vivas em vez de usar o índice. Aceitável por medida, não por
+    // descuido: esta tabela guarda as contas bancárias DA ORGANIZAÇÃO — unidades, não milhares.
+    //
+    // O filtro de `Deleted` continua no SQL (#995, B4): a conta excluída não ocupa mais a chave, e
+    // isso é predicado de linha, não de forma canônica.
     findByNaturalKey: async (
       key: CedenteAccountNaturalKey,
     ): Promise<Result<CedenteAccount | null, CedenteAccountStoreError>> => {
@@ -63,32 +80,18 @@ export const createDrizzleCedenteAccountStore = (
         const rows = await db
           .select()
           .from(finCedenteAccounts)
-          .where(
-            and(
-              eq(finCedenteAccounts.bankCode, key.bankCode),
-              eq(finCedenteAccounts.agency, key.agency),
-              eq(finCedenteAccounts.accountNumber, key.accountNumber),
-              eq(finCedenteAccounts.accountDigit, key.accountDigit),
-              // #995 B4 — a conta EXCLUÍDA não ocupa mais a chave. Sem este predicado, o
-              // `createCedenteAccount` continuaria recusando o recadastro com
-              // `cedente-account-duplicate`, e a exclusão não teria efeito nenhum sobre o cadastro.
-              //
-              // ⚠️ Duas guardas para o mesmo fato, e não é redundância: aqui é a régua de NEGÓCIO,
-              // que decide o que o operador vê; a UNIQUE com `natural_key_slot` é a garantia no
-              // BANCO, que impede duas linhas vivas mesmo se este `where` for reescrito errado.
-              ne(finCedenteAccounts.status, 'Deleted'),
-            ),
-          )
-          .limit(1);
-        const row = rows[0];
-        if (row === undefined) return ok(null);
+          .where(ne(finCedenteAccounts.status, 'Deleted'));
 
-        const mapped = toDomain(row);
-        if (!mapped.ok) {
-          logStore('findByNaturalKey:map', mapped.error);
-          return err('cedente-account-store-unavailable');
+        const wanted = canonicalNaturalKey(key);
+        for (const row of rows) {
+          const mapped = toDomain(row);
+          if (!mapped.ok) {
+            logStore('findByNaturalKey:map', mapped.error);
+            return err('cedente-account-store-unavailable');
+          }
+          if (canonicalNaturalKey(mapped.value) === wanted) return ok(mapped.value);
         }
-        return ok(mapped.value);
+        return ok(null);
       } catch (cause) {
         logStore('findByNaturalKey', cause);
         return err('cedente-account-store-unavailable');
