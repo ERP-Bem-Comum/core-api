@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import { checkCedenteConvenio } from '../../domain/cedente/remittance-eligibility.ts';
+import { isActive } from '../../domain/cedente/cedente-account.ts';
 import type { AccountType, CedenteAccount } from '../../domain/cedente/types.ts';
 import type { CedenteAccountIdError } from '../../domain/cedente/cedente-account-id.ts';
 import type {
@@ -115,10 +116,21 @@ export const editCedenteAccount =
     // O efeito é o correto nos dois sentidos: convênio malformado ou longo demais passa a ACEITAR
     // correção pela tela (é o que o operador precisa), e convênio válido continua RECUSANDO a troca
     // — o invariante do #722 não afrouxa.
+    // ⚠️ A TRAVA VALE SÓ EM CONTA ATIVA (#995, B8.1), e a razão é a mesma que a criou. O #722 travou
+    // a troca porque o convênio viaja no NOME de toda remessa transmitida: reescrevê-lo faria as
+    // remessas antigas apontarem para um contrato que a conta não declara mais.
+    //
+    // Em conta ENCERRADA não há remessa nova a nomear. Travar o campo ali não protege coisa alguma —
+    // só força `UPDATE` direto no banco de produção, que foi o que aconteceu em 06/09 e é o tipo de
+    // intervenção que a #879 já mostrou custar caro. O histórico das remessas antigas continua
+    // intacto: elas guardam o próprio nome de arquivo em `fin_remittances`, não uma referência viva
+    // ao cadastro.
+    //
+    // O invariante do #722 não afrouxa onde ele importa: conta ativa segue recusando a troca.
     const wantsConvenioChange =
       input.convenio !== undefined && input.convenio.trim() !== found.value.convenio.trim();
     const currentConvenioIsUsable = checkCedenteConvenio(found.value).ok;
-    if (wantsConvenioChange && currentConvenioIsUsable) {
+    if (wantsConvenioChange && currentConvenioIsUsable && isActive(found.value)) {
       return err('cedente-convenio-already-set');
     }
 
