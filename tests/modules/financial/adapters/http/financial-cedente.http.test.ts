@@ -188,6 +188,39 @@ describe('financial/http — cedente-accounts (019) — W0 RED', () => {
     assert.equal((patched.json() as { agencyDigit: string | null }).agencyDigit, '7');
   });
 
+  /*
+   * B8.2 (#995) — a borda passa a ACEITAR o convênio vazio no PATCH.
+   *
+   * ⚠️ ESTE CASO MEDE A BORDA, e é onde o defeito estava: o use case sempre soube lidar com vazio
+   * (`checkCedenteConvenio` o recusa com nome próprio), mas o schema declarava `min(1)` e o pedido
+   * morria em 400 antes de chegar lá. Um teste só do use case ficaria verde com a operação ainda
+   * impossível pela tela — que é exatamente o que empurrou a correção de 06/09 para `UPDATE` no
+   * banco de produção.
+   */
+  it('#995 B8.2: o PATCH aceita convênio VAZIO — 400 aqui significa o `min(1)` de volta', async () => {
+    const created = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body({ accountNumber: '991122', nickname: 'Conta a desativar' }),
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const id = (created.json() as { id: string }).id;
+
+    const patched = await handle.app.inject({
+      method: 'PATCH',
+      url: `/api/v2/financial/cedente-accounts/${id}`,
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: { convenio: '' },
+    });
+
+    assert.notEqual(
+      patched.statusCode,
+      400,
+      'o schema recusou a string vazia — o `min(1)` voltou ao `editCedenteAccountBodySchema`',
+    );
+  });
+
   it('CA-US2: POST /cedente-accounts/:id/close → rota existe (≠ 404)', async () => {
     const id = '11111111-1111-4111-8111-111111111111';
     const res = await handle.app.inject({
