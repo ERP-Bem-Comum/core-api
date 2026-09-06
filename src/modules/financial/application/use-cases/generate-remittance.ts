@@ -259,15 +259,16 @@ export const generateRemittance =
           // comentário do `allocateNsa` acima), mas a recusa parcial não é — e é por isso que a
           // gravação é UMA para todas as remessas, em `saveAll`, e não uma por arquivo.
           //
-          // ⚠️ OS TRÊS DA ROTA PIX (#838) convergem para o MESMO desfecho, e a convergência é escolha
-          // registrada, não efeito de `default`: nos três o operador vai ao cadastro do favorecido, e
-          // a tela é a do pré-voo. O que os distingue — chave que não cabe no campo, banco fora da
-          // tabela do Bacen, tipo de chave fora do domínio do layout — importa para quem lê o log do
-          // emissor, e é por isso que eles sobem NOMEADOS até aqui em vez de serem achatados na
-          // origem. Chegar em qualquer um deles é rede de segurança: o reader já recusou antes do NSA.
+          // ⚠️ OS DOIS DA ROTA PIX (#838) convergem para o MESMO desfecho, e a convergência é escolha
+          // registrada, não efeito de `default`: nos dois o operador vai ao cadastro do favorecido, e
+          // a tela é a do pré-voo. O que os distingue — chave que não cabe no campo, tipo de chave
+          // fora do domínio do layout — importa para quem lê o log do emissor, e é por isso que eles
+          // sobem NOMEADOS até aqui em vez de serem achatados na origem. Chegar em qualquer um deles
+          // é rede de segurança: o reader já recusou antes do NSA.
+          //
+          // Eram três; o `cnab-payee-ispb-unknown` saiu na #923 junto com a tabela de-para de ISPB.
           case 'cnab-billet-party-unidentified':
           case 'cnab-pix-key-unrepresentable':
-          case 'cnab-payee-ispb-unknown':
           case 'cnab-pix-key-type-unsupported':
             return err('remittance-payments-unavailable');
           case 'cnab-translation-failed':

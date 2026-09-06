@@ -159,7 +159,7 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
       row({ payableId: 'ted-sem-banco', payee: NO_DESTINATION_NULLS }),
       row({ payableId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_COMPLETE }),
       row({ payableId: 'pix-sem-chave', paymentMethod: 'PIX', payee: BANK_ACCOUNT_ONLY }),
-      // O caso que a #838 criou: chave presente, cadastro bancário ausente. Antes bastava a chave.
+      // Chave presente, cadastro bancário ausente. A #838 fez disto um bloqueio; a #945 desfez.
       row({ payableId: 'pix-sem-conta', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
       // 44 dígitos — o código de barras que o Segmento J grava (G063).
       row({
@@ -195,10 +195,11 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     // para a rota. Antes, ela aparecia como `ready` e a recusa só chegava no clique em Gerar.
     assert.equal(line(r, 'guia-ok').status, 'no-issuer');
 
-    // #838 — a metade nova da régua do Pix. Chave presente e cadastro bancário ausente é pendência
-    // de CADASTRO, não ausência de emissor: o operador tem o que fazer, e a tela precisa dizer o quê.
-    assert.equal(line(r, 'pix-sem-conta').status, 'blocked');
-    assert.ok(line(r, 'pix-sem-conta').missing.length > 0, 'a tela precisa apontar o campo');
+    // #945 — a régua do Pix voltou a ser a chave, e só ela. Favorecido com chave e sem nenhum dado
+    // bancário SAI: banco, agência e conta do Segmento A vão zerados, por laudo do banco de
+    // 05/09/2026. Era o cenário que a modalidade existe para atender, e que a #838 represava.
+    assert.equal(line(r, 'pix-sem-conta').status, 'ready');
+    assert.deepEqual(line(r, 'pix-sem-conta').missing, [], 'não há cadastro a cobrar');
 
     // #837 — CA4. Os dois motivos coexistem e não se confundem: aqui falta a CHAVE, e o operador tem
     // o que fazer. Achatá-lo em `no-issuer` esconderia a pendência de cadastro atrás de um
