@@ -17,7 +17,7 @@ import type {
 } from '#src/modules/financial/application/ports/cedente-account-store.ts';
 import { isActive } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 import * as NsaSequence from '#src/modules/financial/domain/cedente/nsa-sequence.ts';
-import type { Nsa } from '#src/modules/financial/domain/cedente/nsa.ts';
+import * as Nsa from '#src/modules/financial/domain/cedente/nsa.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finCedenteAccounts, finConvenioNsa } from '../schemas/mysql.ts';
 import { toRow, toDomain } from '../mappers/cedente-account.mapper.ts';
@@ -194,7 +194,7 @@ export const createDrizzleCedenteAccountStore = (
     // A ORDEM DENTRO DA TRANSAÇÃO É REGRA, não arrumação: lê a conta e confere que ela paga ANTES
     // de tocar a sequência. Invertida, uma conta encerrada queimaria um número do convênio inteiro —
     // e o número não volta.
-    allocateNsa: async (id: CedenteAccountId): Promise<Result<Nsa, NsaAllocationError>> => {
+    allocateNsa: async (id: CedenteAccountId): Promise<Result<Nsa.Nsa, NsaAllocationError>> => {
       try {
         return await db.transaction(async (tx) => {
           // 1. A CONTA — sem lock: ela não é mais o recurso disputado, só a origem do convênio e a
@@ -223,7 +223,26 @@ export const createDrizzleCedenteAccountStore = (
           const convenio = account.value.convenio.trim();
           if (convenio === '') return err('cedente-account-not-found');
 
-          // 2. A SEQUÊNCIA — COM lock. É aqui que as contas irmãs se serializam.
+          // 2. MATERIALIZA a linha da sequência ANTES de travá-la.
+          //
+          // ⚠️ ESTE INSERT NÃO É REDUNDANTE, e removê-lo traz de volta um DEADLOCK sob concorrência —
+          // medido pelo CA3 da #943, que falhou com `cedente-account-store-unavailable` antes desta
+          // linha existir. Em REPEATABLE READ (o default), um `SELECT … FOR UPDATE` que não encontra
+          // linha trava o GAP, não uma linha: N transações do mesmo convênio novo pegam o mesmo gap,
+          // todas seguem, e todas tentam inserir a mesma PK — `ER_LOCK_DEADLOCK`. É a mesma armadilha
+          // que `.claude/rules/adapters.md` registra para o claim do outbox.
+          //
+          // Com a linha materializada primeiro, o `ON DUPLICATE KEY UPDATE` vira lock de LINHA na PK:
+          // a segunda transação espera a primeira e depois enxerga o valor dela. O `set` é no-op de
+          // propósito — quem move o contador é o UPDATE do passo 4, e escrever aqui sobrescreveria o
+          // trabalho de quem chegou antes.
+          await tx
+            .insert(finConvenioNsa)
+            .values({ convenio, nextNsa: Nsa.MIN })
+            .onDuplicateKeyUpdate({ set: { convenio } });
+
+          // 3. A SEQUÊNCIA — COM lock, e agora sobre uma linha que existe. É aqui que as contas irmãs
+          // se serializam.
           const sequenceRows = await tx
             .select()
             .from(finConvenioNsa)
@@ -232,24 +251,24 @@ export const createDrizzleCedenteAccountStore = (
             .limit(1);
 
           const sequenceRow = sequenceRows[0];
-          // Convênio sem linha é convênio genuinamente novo — nasce em `Nsa.MIN`. O backfill da
-          // migration já criou linha para todo convênio que JÁ emitiu, partindo do `MAX`, então
-          // chegar aqui sem linha não pode reemitir faixa usada.
-          const sequence =
-            sequenceRow === undefined
-              ? NsaSequence.start(convenio)
-              : { convenio: sequenceRow.convenio, nextNsa: sequenceRow.nextNsa };
+          // Inalcançável: o INSERT acima garante a linha. Explícito porque a alternativa seria um
+          // não-nulo assumido — e se um dia deixar de valer, o erro aqui é melhor que um NSA inventado.
+          if (sequenceRow === undefined) {
+            logStore('allocateNsa', 'sequência do convênio ausente após o insert');
+            return err('cedente-account-store-unavailable');
+          }
 
-          const allocation = NsaSequence.allocate(sequence);
+          const allocation = NsaSequence.allocate({
+            convenio: sequenceRow.convenio,
+            nextNsa: sequenceRow.nextNsa,
+          });
           if (!allocation.ok) return err('nsa-exhausted');
 
-          // `ON DUPLICATE KEY UPDATE` cobre o convênio novo e o existente num caminho só. Duas
-          // gerações concorrentes do MESMO convênio novo não passam as duas: a segunda espera no
-          // lock da PK e enxerga a linha da primeira.
+          // 4. AVANÇA. Só aqui o contador se move, e sob o lock adquirido no passo 3.
           await tx
-            .insert(finConvenioNsa)
-            .values({ convenio, nextNsa: allocation.value.sequence.nextNsa })
-            .onDuplicateKeyUpdate({ set: { nextNsa: allocation.value.sequence.nextNsa } });
+            .update(finConvenioNsa)
+            .set({ nextNsa: allocation.value.sequence.nextNsa })
+            .where(eq(finConvenioNsa.convenio, convenio));
 
           return ok(allocation.value.nsa);
         });

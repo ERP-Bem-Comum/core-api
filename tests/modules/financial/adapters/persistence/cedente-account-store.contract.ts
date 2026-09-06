@@ -29,6 +29,13 @@ import { create, close } from '#src/modules/financial/domain/cedente/cedente-acc
 // recorte por agência É o espaço de chave que o arquivo escreve, e não atinge os irmãos).
 export const CONTRACT_AGENCY = '9001';
 
+// ⚠️ O PREFIXO DO CONVÊNIO É ESPAÇO DE CHAVE, como a agência (#943). Desde que a sequência de NSA
+// passou para `fin_convenio_nsa`, o consumidor Drizzle precisa limpar TAMBÉM aquela tabela na
+// entrada — senão a segunda execução contra o mesmo MySQL herda o contador da primeira, e os casos
+// que esperam começar em 1 falham. É a regra de `.claude/rules/testing.md` §"passar DUAS VEZES
+// seguidas": a linha da sequência sobrevive ao `DELETE` das contas, porque não tem FK para elas.
+export const CONTRACT_CONVENIO_PREFIX = '91';
+
 // Cada conta nasce com chave natural distinta: o UNIQUE de FR-016 colide se dois casos a reusarem.
 let naturalKeySeq = 0;
 
@@ -46,7 +53,8 @@ const buildAccount = (
     agency: CONTRACT_AGENCY,
     accountNumber: `7700${String(naturalKeySeq).padStart(2, '0')}`,
     accountDigit: '4',
-    convenio: over.convenio ?? `9${String(naturalKeySeq).padStart(5, '0')}`,
+    convenio:
+      over.convenio ?? `${CONTRACT_CONVENIO_PREFIX}${String(naturalKeySeq).padStart(4, '0')}`,
     document: '12345678000190',
     nickname: 'Conta do contrato',
     ...(over.nextNsa !== undefined ? { nextNsa: over.nextNsa } : {}),
