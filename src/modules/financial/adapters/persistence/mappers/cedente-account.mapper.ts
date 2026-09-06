@@ -68,8 +68,14 @@ export const toDomain = (
       // `''` gravado por uma versão anterior colapsa em ausente aqui também — a re-hidratação não
       // passa pelo construtor, e sem esta linha uma linha antiga com string vazia voltaria como
       // "dígito definido", trancando o preenchimento pela edição.
+      //
+      // ⚠️ O VALOR GRAVADO É O APARADO, e não o bruto da coluna. Guardar `' 5'` produzia DOIS
+      // defeitos de uma linha só: `text(' 5', 1)` devolve `' '`, então a 058 sai em BRANCO com o
+      // dígito presente no banco; e `wantsAgencyDigitSwap` compara contra o `'5'` que o construtor e
+      // a edição gravam, lendo um reenvio idêntico como TROCA e disparando a trava FR-008. As três
+      // cópias da mesma regra — construtor, edição e aqui — têm de aparar igual.
       ...(row.agencyDigit !== null && row.agencyDigit.trim() !== ''
-        ? { agencyDigit: row.agencyDigit }
+        ? { agencyDigit: row.agencyDigit.trim() }
         : {}),
       ...(row.type !== null ? { type: row.type as AccountType } : {}),
       ...(row.typeLabel !== null ? { typeLabel: row.typeLabel } : {}),

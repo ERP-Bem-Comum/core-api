@@ -105,7 +105,7 @@ describe('Aptidão da conta-cedente à remessa — a agência (#856)', () => {
     }
   });
 
-  // ⚠️ O CASO QUE ESTE BLOCO EXISTE PARA FIXAR. O operador digita `0288-2` na tela; se o separador
+  // ⚠️ O CASO QUE ESTE BLOCO EXISTE PARA FIXAR. O operador digita a agência COM o DV na tela; se o separador
   // sobreviver até o cadastro, `digits('01234-5', 5)` devolve `12345` — cinco dígitos, cabe, ninguém
   // reclama — onde o banco espera `01234`. Recusar é a única saída que não adivinha qual metade é a
   // agência: `12345` é `1234`+`5` ou `12345` sem DV? A #708 já decidiu que isso não se resolve por
@@ -122,6 +122,47 @@ describe('Aptidão da conta-cedente à remessa — a agência (#856)', () => {
     const r = checkCedenteAgency({ agency: '123456' });
     assert.ok(isErr(r));
     assert.equal(r.error, 'cedente-agency-malformed');
+  });
+
+  /*
+   * ⚠️ O DV DA AGÊNCIA — a recusa que impede este PR de reintroduzir o defeito que ele fecha.
+   *
+   * `alpha()` faz `.slice(0, size)`, e a 058 tem UMA posição: `text('12', 1)` descarta o segundo
+   * caractere e `text('-2', 1)` grava um `-` literal — os dois em silêncio, num campo de
+   * identificação bancária. O alfabeto vem do manual, não de palpite: dígito, `X` para resto 10, e
+   * `P` no Bradesco quando o resto é 1 (4008-523-0096 v16, p. 30).
+   */
+  it('aceita os DVs que o manual admite — dígito, X e P, em qualquer caixa', () => {
+    for (const digit of ['0', '9', 'X', 'P', 'p', 'x']) {
+      assert.ok(isOk(checkCedenteAgency({ agency: '01234', agencyDigit: digit })), digit);
+    }
+  });
+
+  it('DV ausente é legítimo — a agência pode não ter dígito, e a 058 sai em branco', () => {
+    assert.ok(isOk(checkCedenteAgency({ agency: '01234' })));
+    assert.ok(isOk(checkCedenteAgency({ agency: '01234', agencyDigit: '' })));
+    assert.ok(isOk(checkCedenteAgency({ agency: '01234', agencyDigit: '  ' })));
+  });
+
+  it('DV de dois caracteres é RECUSADO, em vez de gravado pela metade', () => {
+    const r = checkCedenteAgency({ agency: '01234', agencyDigit: '5X' });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'cedente-agency-digit-malformed');
+  });
+
+  it('DV fora do alfabeto do manual é recusado — inclusive o que viraria caractere literal', () => {
+    for (const digit of ['-', 'Z', 'ç', '/']) {
+      const r = checkCedenteAgency({ agency: '01234', agencyDigit: digit });
+      assert.ok(isErr(r), digit);
+      assert.equal(r.error, 'cedente-agency-digit-malformed', digit);
+    }
+  });
+
+  // A ordem importa para quem lê a mensagem: sem agência não há dígito de que falar.
+  it('o número da agência é cobrado ANTES do dígito', () => {
+    const r = checkCedenteAgency({ agency: '', agencyDigit: '5X' });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'cedente-agency-missing');
   });
 
   it('a readiness completa cobra as duas coisas — convênio bom não absolve agência ruim', () => {

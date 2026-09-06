@@ -94,6 +94,7 @@ describe('error-mapping — as lacunas da conta-cedente têm mensagem própria (
   const slugs = [
     'cedente-agency-missing',
     'cedente-agency-malformed',
+    'cedente-agency-digit-malformed',
     'cedente-inscription-missing',
     'cedente-inscription-alphanumeric',
   ];
@@ -111,7 +112,7 @@ describe('error-mapping — as lacunas da conta-cedente têm mensagem própria (
     });
   }
 
-  it('as quatro mensagens são DISTINTAS entre si', () => {
+  it('as mensagens são DISTINTAS entre si', () => {
     const messages = new Set(slugs.map((s) => toPublicMessage(s)));
     assert.equal(messages.size, slugs.length);
   });

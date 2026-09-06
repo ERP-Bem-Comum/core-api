@@ -113,4 +113,21 @@ describe('financial/adapters/persistence/mappers/cedente-account.mapper', () => 
     assert.equal(back.ok, true);
     if (back.ok) assert.equal(back.value.agencyDigit, undefined);
   });
+
+  /*
+   * ⚠️ O VALOR RE-HIDRATADO É O APARADO — dois defeitos numa linha só, e nenhum dos dois aparece
+   * num teste que monte o agregado em memória (a via que o construtor já apara).
+   *
+   *   1. `text(' 5', 1)` devolve `' '`: a 058 sai em BRANCO com o dígito presente no banco.
+   *   2. `wantsAgencyDigitSwap` compara contra o `'5'` que o construtor e a edição gravam, então
+   *      reenviar o MESMO dígito lê como troca e dispara a trava FR-008.
+   *
+   * Padding chega por qualquer via que não passe pelo construtor: dump restaurado, correção manual
+   * no banco, ETL futuro.
+   */
+  it('#856: dígito com espaço na coluna re-hidrata APARADO, e não bruto', () => {
+    const back = toDomain({ ...rowOf(buildAccount()), agencyDigit: ' 5' });
+    assert.equal(back.ok, true);
+    if (back.ok) assert.equal(back.value.agencyDigit, '5');
+  });
 });

@@ -22,7 +22,7 @@ import { isCnabEmittableInscription, normalizeInscription } from '../payout/insc
 //
 // ⚠️ A #856 acrescentou a AGÊNCIA, e ela quebra a simetria acima: o convênio ausente tem uma última
 // barreira adiante — o montador do nome —, a agência corrompida NÃO TEM NENHUMA. Aqui é a única
-// barreira que existe entre um `0288-2` digitado no cadastro e um arquivo que credita outra agência.
+// barreira entre uma agência digitada com o DV junto e um arquivo que credita outra agência.
 
 export type CedenteConvenioGap =
   | 'cedente-convenio-missing'
@@ -36,7 +36,13 @@ export type CedenteConvenioGap =
 // #856 · #859. A AGÊNCIA é o segundo campo do cedente que o arquivo lê da conta, e o único cuja
 // falha é SILENCIOSA: o convênio ausente estoura no montador do nome, a agência corrompida não
 // estoura em lugar nenhum. Ver a constante `AGENCY_WIDTH` abaixo para o mecanismo.
-export type CedenteAgencyGap = 'cedente-agency-missing' | 'cedente-agency-malformed';
+export type CedenteAgencyGap =
+  | 'cedente-agency-missing'
+  | 'cedente-agency-malformed'
+  // O DV, quando existe, tem de caber na 058 — UMA posição, e do alfabeto do manual. Desfecho
+  // separado porque o campo que o operador corrige é OUTRO: um é o número, outro é o dígito, e são
+  // duas caixas distintas na tela.
+  | 'cedente-agency-digit-malformed';
 
 // #856 CA3. A INSCRIÇÃO do cedente — 019-032, `G006`. Os dois desfechos terminam em ações opostas, e
 // é por isso que não se juntam: o ausente o operador preenche no cadastro; o alfanumérico ninguém
@@ -99,18 +105,38 @@ export const checkCedenteConvenio = (
 // ambiguidade não se resolve por palpite — resolve-se com campo próprio, que é o `agencyDigit`.
 const AGENCY_WIDTH = 5;
 
+// O DV cabe em UMA posição (058), e o alfabeto é o que `payee-account.ts` documenta contra o manual:
+// dígito, `X` onde o módulo 11 dá resto 10, e `P` no Bradesco quando o resto é 1 — "o dígito poderá
+// ser igual a zero ou 'P'" (Manual de Procedimentos 4008-523-0096 v16, p. 30).
+//
+// ⚠️ A RECUSA EXISTE PORQUE `alpha()` NÃO RECUSA: ele faz `.slice(0, size)`, então um DV de dois
+// caracteres é gravado pela metade e um `-2` grava um `-` literal na 058 — as duas coisas em
+// silêncio, num campo de identificação bancária. A borda barra o comprimento (`schemas.ts`); esta é
+// a régua para quem NÃO passa por ela: o ETL e a linha re-hidratada, que não vê construtor.
+const AGENCY_CHECK_DIGIT_RE = /^[0-9XP]$/;
+
 export const checkCedenteAgency = (
-  account: Readonly<{ agency: string }>,
+  account: Readonly<{ agency: string; agencyDigit?: string }>,
 ): Result<void, CedenteAgencyGap> => {
   const agency = account.agency.trim();
 
   if (agency === '') return err('cedente-agency-missing');
   // Não-numérico é, na prática, agência com separador — o caso que o front descreve na #859, em que
-  // o operador digita `0288-2` e a base e o dígito acabam no mesmo campo.
+  // o operador digita a agência com o dígito e os dois acabam no mesmo campo.
   if (!NUMERIC_ONLY.test(agency)) return err('cedente-agency-malformed');
   // Estouro tem o mesmo desfecho de propósito: `num()` já o recusaria no montador, mas lá o NSA já
   // foi queimado. Aqui é antes, e a ação do operador — conferir a agência no cadastro — é a mesma.
   if (agency.length > AGENCY_WIDTH) return err('cedente-agency-malformed');
+
+  // O DV vem DEPOIS do número, e a ordem é a que o operador precisa: sem agência não há dígito de
+  // que falar, e reportar o acessório antes do principal manda corrigir a caixa errada.
+  //
+  // Ausente é legítimo — a agência pode não ter DV, e a 058 sai em branco (layout p. 14). Só o que
+  // ESTÁ lá é conferido.
+  const agencyDigit = account.agencyDigit?.trim() ?? '';
+  if (agencyDigit !== '' && !AGENCY_CHECK_DIGIT_RE.test(agencyDigit.toUpperCase())) {
+    return err('cedente-agency-digit-malformed');
+  }
 
   return ok(undefined);
 };

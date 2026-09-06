@@ -144,6 +144,15 @@ export const createDrizzleCedenteAccountStore = (
             set: {
               bankCode: row.bankCode,
               agency: row.agency,
+              // ⚠️ ESTA LISTA É ESCRITA À MÃO, e o que falta nela some no UPDATE sem erro nenhum —
+              // o `values(row)` acima grava a coluna no INSERT, então a conta NOVA sai certa e a
+              // EDIÇÃO não. O use case devolve 200 com o dígito ecoado do agregado em memória
+              // enquanto a coluna continua NULL, e a 058 fica em branco para sempre (#856).
+              //
+              // Coluna nova aqui é coluna nova nesta lista. `$inferInsert` torna coluna nullable
+              // OPCIONAL no tipo, então o compilador não cobra a ausência — quem cobra é
+              // `cedente-account-store.contract.ts`, que passou a conferir o UPDATE campo a campo.
+              agencyDigit: row.agencyDigit,
               accountNumber: row.accountNumber,
               accountDigit: row.accountDigit,
               convenio: row.convenio,

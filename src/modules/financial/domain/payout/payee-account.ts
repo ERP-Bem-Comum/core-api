@@ -83,8 +83,8 @@ export type CheckDigitSplit = Readonly<{ base: string; digit: string | null }>;
 // descarte da segunda é do layout, não nosso: o campo tem uma posição só.
 //
 // ⚠️ EXPORTADA na #856, e o segundo chamador é o ETL. A agência legada vem com o DV embutido
-// (`0288-7`, evidência F7) e era gravada INTEIRA na coluna `agency` — de onde `digits(agency, 5)`
-// removia o separador e escrevia `02887` nas posições 053-057, onde o banco espera `00288`. A mesma
+// (formato `NNNN-D`, evidência F7) e era gravada INTEIRA na coluna `agency` — de onde
+// `digits(agency, 5)` removia o separador e escrevia `12345` onde o banco espera `01234`. A mesma
 // gramática que decompõe a conta do favorecido decompõe a agência do cedente; escrever uma segunda
 // no `scripts/` faria as duas divergirem no dia em que uma mudasse.
 export const splitCheckDigit = (raw: string): CheckDigitSplit | null => {

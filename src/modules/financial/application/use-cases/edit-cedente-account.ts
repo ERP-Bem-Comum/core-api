@@ -20,7 +20,7 @@ export type EditCedenteAccountInput = Readonly<{
   // Preenchível quando ausente, pelo MESMO desenho do convênio abaixo (#856). A conta migrada nasceu
   // sem DV porque não havia coluna, e ela tem histórico — sob a trava FR-008 pura, nenhuma conta em
   // uso poderia ganhar o dígito, que é precisamente o beco medido em produção (#942/#943): o
-  // operador digita `0288-2`, o dígito é descartado, e ao reabrir a tela o campo volta vermelho e
+  // operador digita a agência com o DV, o dígito é descartado, e ao reabrir a tela o campo fica vermelho e
   // trava o Salvar de TODOS os outros campos. Preencher o vazio destrava; TROCAR um DV já definido
   // continua sendo alteração de dado bancário e cai na trava.
   agencyDigit?: string;

@@ -272,12 +272,14 @@ const SLUG_MESSAGES: Record<string, string> = {
   'cedente-convenio-already-set':
     'Esta conta já tem convênio. Ele identifica o contrato junto ao banco e não pode ser trocado.',
   // #856 · #859. Também campo do CADASTRO da conta. A mensagem do malformado diz o que fazer com o
-  // dígito de propósito: o caso real é o operador ter digitado `0288-2` num campo que é só a agência,
-  // e mandá-lo "corrigir a agência" sem dizer onde o dígito vai o faria apagar o dado.
+  // dígito de propósito: o caso real é o operador ter digitado a agência COM o dígito num campo que
+  // é só a agência, e mandá-lo "corrigir a agência" sem dizer onde o dígito vai o faria apagar o dado.
   'cedente-agency-missing':
     'A conta bancária selecionada está sem a agência. Informe-a no cadastro da conta para gerar remessas.',
   'cedente-agency-malformed':
     'A agência da conta bancária selecionada não é um número de até 5 dígitos. Informe apenas os dígitos da agência, sem traço nem ponto — o dígito verificador tem campo próprio no cadastro.',
+  'cedente-agency-digit-malformed':
+    'O dígito verificador da agência precisa ser um único caractere (0 a 9, X ou P). Corrija-o no cadastro da conta.',
   // #856 CA3. As duas frases terminam em AÇÕES opostas, e é a ação que o operador precisa ler: a
   // primeira se resolve no cadastro, a segunda NÃO se resolve em lugar nenhum do ERP — o dado está
   // certo e o layout do banco é que é anterior ao CNPJ alfanumérico (ADR-0044).

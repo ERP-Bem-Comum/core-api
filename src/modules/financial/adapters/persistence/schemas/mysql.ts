@@ -653,9 +653,9 @@ export const finCedenteAccounts = mysqlTable(
     // a agência pode legitimamente não ter DV, e toda conta já cadastrada nasceu sem ele (não havia
     // coluna, e o front descartava o dígito que o operador digitava).
     //
-    // ⚠️ COLUNA PRÓPRIA, e não sufixo de `agency`. `agency` tem 12 posições e caberia `0288-2` — mas
-    // o emissor escreve `digits(agency, 5)`, que remove o separador e grava `02882` nas posições
-    // 053-057, onde o banco espera `00288`. Nenhum gate acusa. Ver `remittance-eligibility.ts`.
+    // ⚠️ COLUNA PRÓPRIA, e não sufixo de `agency`. `agency` tem 12 posições e caberia `1234-5` — mas
+    // o emissor escreve `digits(agency, 5)`, que remove o separador e grava `12345` nas posições
+    // 053-057, onde o banco espera `01234`. Nenhum gate acusa. Ver `remittance-eligibility.ts`.
     //
     // ⚠️ FORA da UNIQUE de chave natural, de propósito: a identidade da conta é banco+agência+conta
     // +dígito da CONTA (FR-016), e o DV da agência é atributo dela, não parte de quem ela é. Incluí-lo
