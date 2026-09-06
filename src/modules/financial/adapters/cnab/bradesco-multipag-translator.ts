@@ -50,6 +50,13 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     // domínio do layout. Eram dois até a #923 — o `payee-ispb-unknown` saiu com a tabela de-para.
     case 'remittance-pix-key-type-unsupported':
       return 'cnab-pix-key-type-unsupported';
+    // CNPJ alfanumérico (#863), e sobe nomeado por um motivo DIFERENTE dos anteriores: aqui não há
+    // dado a corrigir no cadastro nem defeito no emissor. O documento está certo — é o layout do
+    // banco, na v08 (jul/2025), que declara o campo `Num` e não previu a mudança da Receita de
+    // 07/2026 (ADR-0044). A ação de quem recebe é escalar, não cadastrar, e um erro genérico
+    // mandaria o operador procurar defeito numa inscrição válida.
+    case 'inscription-alphanumeric-unsupported':
+      return 'cnab-inscription-alphanumeric-unsupported';
     // `remittance-mixed-file-modalities` converge para o desfecho genérico, e é escolha, não
     // descuido: a seleção mista NÃO deveria alcançar o montador — quem chama passa por `planFiles`,
     // que já reparte. Chegar aqui significa que alguém montou um arquivo sem repartir antes, e não há
@@ -62,6 +69,12 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     case 'remittance-reference-overflow':
     case 'remittance-mixed-file-modalities':
       return 'cnab-translation-failed';
+    // #948 CA4 — sobe nomeado, e é o contraste com a linha acima que explica por quê. As duas falam
+    // de mistura, e param em lugares opostos: `mixed-file-modalities` é a defesa do montador contra
+    // quem não repartiu — chegar lá é defeito de CÓDIGO, e o operador não tem o que fazer. Este vem
+    // da partição, antes do NSA, e é ESCOLHA DE SELEÇÃO: o operador refaz e segue.
+    case 'remittance-pix-requires-exclusive-file':
+      return 'cnab-pix-requires-exclusive-file';
   }
 };
 

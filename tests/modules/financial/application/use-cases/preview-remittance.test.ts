@@ -27,10 +27,14 @@ import { createRemittanceBatchPlanner } from '#src/modules/financial/adapters/cn
 // Um cadastro `ready` no pré-voo precisa ser um cadastro que o banco aceitaria — na Modalidade 01 os
 // dígitos são validados por ele. Fixture com DV inventado descrevia como apto um título que a
 // remessa perderia.
-// A inscrição que o Segmento J-52 exige do boleto (#891), OPACA de propósito: a régua só pergunta se
-// HÁ inscrição — quem valida formato é `partners`. Um documento bem-formado aqui sugeriria validação
-// que não existe, e poria dado de cadastro em fixture num repositório público.
-const PAYEE_DOCUMENT = 'inscricao-opaca';
+// A inscrição que o Segmento J-52 exige do boleto (#891). SINTÉTICA — dado real de cadastro não entra
+// em fixture, porque os repositórios são públicos.
+//
+// ⚠️ Era `'inscricao-opaca'` até a #863, com a razão escrita de que "a régua só pergunta se HÁ
+// inscrição". A régua passou a perguntar uma segunda coisa: se a inscrição pode ser escrita num campo
+// `Num` do CNAB sem virar outra. Ela continua não validando CPF/CNPJ — só recusa o que `digits()`
+// destruiria em silêncio —, mas um valor sem nenhum dígito deixou de servir de fixture neutra.
+const PAYEE_DOCUMENT = '00000000000191';
 
 const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',
@@ -499,6 +503,54 @@ describe('previewRemittance — a composição dos lotes (#804, CA7)', () => {
 
     assert.ok(isOk(r));
     assert.deepEqual(r.value.batches, []);
+  });
+
+  /*
+   * CA5 da #948 — a ARITMÉTICA fecha, e é isso que a tela precisa poder provar.
+   *
+   * O caso acima (`a soma dos lotes bate com o total pronto`) mede uma metade: o que ENTROU. Sozinha
+   * ela não impede a tela de mentir, porque o operador não seleciona "o que está pronto" — ele
+   * seleciona títulos, e precisa saber por que a soma dos lotes é menor do que o que marcou.
+   *
+   * `planBatches` já produzia os dois números; o pré-voo os DESCARTAVA, propagando só `batches`. A
+   * tela recebia a diferença sem a explicação — levantava a dúvida sem oferecer a resposta.
+   */
+  it('lotes + não planejado = a seleção inteira, em contagem e em valor', async () => {
+    const rows = [
+      row({ payableId: 'a', payee: OUTRO_BANCO, valueCents: 100_00 }),
+      row({ payableId: 'b', payee: TERCEIRO_BANCO, valueCents: 250_00 }),
+      // Cadastro sem banco: não entra em lote, e é o que o número precisa explicar.
+      row({ payableId: 'c', payee: NO_DESTINATION_NULLS, valueCents: 999_00 }),
+      row({ payableId: 'd', status: 'Draft', payee: OUTRO_BANCO, valueCents: 70_00 }),
+    ];
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['a', 'b', 'c', 'd'] });
+
+    assert.ok(isOk(r));
+
+    const batchedCount = r.value.batches.reduce((n, b) => n + b.count, 0);
+    const batchedCents = r.value.batches.reduce((n, b) => n + b.totalCents, 0);
+
+    assert.equal(
+      batchedCount + r.value.unplannedCount,
+      r.value.lines.length,
+      'a contagem não fecha — a tela não conseguiria explicar a diferença',
+    );
+    assert.equal(
+      batchedCents + r.value.unplannedTotalCents,
+      rows.reduce((n, x) => n + x.valueCents, 0),
+      'o valor não fecha',
+    );
+  });
+
+  // O par não some quando não há nada a explicar: `0` é resposta, ausência não é. Uma tela que só
+  // recebe o campo às vezes precisa tratar dois formatos, e é aí que ela decide errado.
+  it('a seleção inteiramente planejável reporta zero, e não omite o par', async () => {
+    const rows = [row({ payableId: 'a', payee: OUTRO_BANCO, valueCents: 100_00 })];
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['a'] });
+
+    assert.ok(isOk(r));
+    assert.equal(r.value.unplannedCount, 0);
+    assert.equal(r.value.unplannedTotalCents, 0);
   });
 
   // Conta-cedente inexistente é erro NOMEADO, não silêncio: sem ela não há forma a derivar, e

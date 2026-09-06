@@ -23,13 +23,25 @@ const EMPTY_TARGET: PayeePaymentTarget = {
   document: null,
 };
 
-// A inscrição que o Segmento J-52 exige do boleto (#891), OPACA de propósito.
+// A inscrição que o Segmento J-52 exige do boleto (#891). SINTÉTICA — zeros e um sufixo —, porque os
+// repositórios são públicos e fixture é o caminho por onde dado real de cadastro entra.
 //
-// Um valor que não se parece com CPF/CNPJ prova o que importa: a régua decide aptidão e só pergunta
-// se HÁ inscrição — quem valida formato é `partners`, pelo VO do kernel, e desde 07/2026 o CNPJ pode
-// conter letras (ADR-0044). Um documento bem-formado aqui convidaria a próxima pessoa a supor que a
-// régua o valida. E mantém dado de cadastro fora de fixture, num repositório público.
-const PAYEE_DOCUMENT = 'inscricao-opaca';
+// ⚠️ ERA `'inscricao-opaca'`, e a troca é um achado da #863, não arrumação. O valor opaco tinha uma
+// razão escrita: provar que a régua "só pergunta se HÁ inscrição", já que quem valida formato é
+// `partners`. Essa afirmação DEIXOU DE SER INTEIRAMENTE VERDADEIRA — a régua passou a perguntar uma
+// segunda coisa, e é sobre a forma: *esta inscrição pode ser escrita num campo `Num` do CNAB sem
+// virar outra?*
+//
+// A distinção que sobrevive, e que a fixture ainda precisa respeitar, é fina: a régua continua NÃO
+// validando CPF/CNPJ — não confere dígito, não confere comprimento, não sabe o que é uma inscrição
+// válida. Ela só recusa o que `digits()` DESTRUIRIA em silêncio. Um valor sem nenhum dígito, como o
+// anterior, não distinguia os dois casos: ele falharia pelas duas razões ao mesmo tempo.
+const PAYEE_DOCUMENT = '00000000000191';
+
+// CNPJ alfanumérico, no formato que a Receita emite desde 07/2026 (ADR-0044): doze posições
+// alfanuméricas mais dois dígitos verificadores numéricos. É inscrição VÁLIDA — e é exatamente por
+// isso que ela não pode ser tratada como cadastro a corrigir.
+const ALPHANUMERIC_DOCUMENT = '12ABC34501DE35';
 
 const target = (patch: Partial<PayeePaymentTarget>): PayeePaymentTarget => ({
   ...EMPTY_TARGET,
@@ -336,6 +348,132 @@ const BARCODE = '23791234500000150000123456789012345678901234'; // 44 dígitos
 // calcula — os mesmos pares sintéticos de `digitable-line.test.ts`. Nenhum boleto real entra aqui:
 // linha digitável identifica cedente, valor e vencimento, e os três repositórios são públicos.
 const DIGITABLE_LINE = '23791234546789012345767890123457512340000015000'; // 47
+
+describe('checkPayoutReadiness — inscrição alfanumérica não vira outra em silêncio (#863)', () => {
+  // ⚠️ O DEFEITO QUE ESTES CASOS FIXAM NÃO ERA UMA RECUSA — era um PAGAMENTO. `digits()` removia as
+  // letras e re-preenchia com zeros até 14, produzindo uma inscrição diferente e sintaticamente
+  // perfeita: o arquivo era aceito, o dinheiro saía, e o favorecido chegava ao banco identificado por
+  // outro documento. Nada no caminho reclamava.
+  //
+  //     digits('12ABC34501DE35', 14)  →  '00000123450135'
+  //
+  // A régua vive no pré-voo para que a recusa venha ANTES do `allocateNsa`, como as duas da chave Pix.
+  for (const [paymentMethod, route] of [
+    ['PIX', 'pix'],
+    ['TED', 'transfer'],
+    ['Boleto', 'billet'],
+  ] as const) {
+    it(`recusa inscrição alfanumérica na rota ${route}`, () => {
+      const r = checkPayoutReadiness(
+        candidate({
+          paymentMethod,
+          paymentDetail: DIGITABLE_LINE,
+          payee: target({
+            ...fullAccount(),
+            document: ALPHANUMERIC_DOCUMENT,
+            pixKey: { keyType: 'email', key: 'a@b.com' },
+          }),
+        }),
+      );
+
+      assert.equal(r.status, 'incomplete', paymentMethod);
+      assert.ok(fieldsOf(r).includes('payee-document'), paymentMethod);
+      // `unmappable`, e NÃO `malformed`: o CNPJ com letras está bem formado desde 07/2026 (ADR-0044).
+      // Mandar "corrigir o formato" mandaria o operador estragar uma inscrição correta — o que falta
+      // é o BANCO dizer como quer recebê-la (#863, pergunta em aberto).
+      assert.equal(reasonFor(r, 'payee-document'), 'unmappable', paymentMethod);
+    });
+  }
+
+  it('aceita inscrição numérica COM máscara — tirar pontuação continua sendo tradução legítima', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'TED',
+        payee: target({ ...fullAccount(), document: '12.345.678/0001-99' }),
+      }),
+    );
+
+    assert.equal(r.status, whenDataIsGood('transfer'));
+  });
+
+  // A régua NÃO valida CPF/CNPJ, e este caso é o que mantém a distinção viva: uma inscrição numérica
+  // de comprimento improvável passa, porque quem valida documento é `partners`. O que a régua recusa
+  // é só o que `digits()` destruiria.
+  it('não se transforma em validador de CPF/CNPJ', () => {
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'TED', payee: target({ ...fullAccount(), document: '123' }) }),
+    );
+
+    assert.equal(r.status, whenDataIsGood('transfer'));
+  });
+
+  // Inscrição AUSENTE é outra pendência, com outra ação: cadastrar. Se as duas caíssem no mesmo
+  // motivo, o operador de um boleto sem favorecido seria mandado a escalar ao banco.
+  it('inscrição ausente continua sendo `missing`, e não `unmappable`', () => {
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'Boleto', paymentDetail: DIGITABLE_LINE }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'payee-document'), 'missing');
+  });
+
+  // ⚠️ DOCUMENTO SÓ COM PONTUAÇÃO — a divergência que o `trim()` escondia.
+  //
+  // `'---'` sobrevive ao `trim()` e normaliza para vazio. O emissor sempre o viu como campo sem
+  // conteúdo (`inscription('///', 14)` → `numeric-field-invalid`, fixado em
+  // `inscription-single-source.test.ts`); o pré-voo o via como inscrição PRESENTE e, por não ser
+  // numérica, concluía "alfanumérica" — mandando ESCALAR ao banco uma conversa sobre CNPJ com letras
+  // que não existe naquele cadastro. Duas pontas, dois vereditos, sobre o mesmo dado.
+  //
+  // É `missing` pelo mesmo motivo do campo em branco: a ação do operador é ir ao cadastro. Este caso
+  // roda em TED de propósito — a rota transfer não tem régua de presença de inscrição própria, então
+  // sem esta linha o defeito passaria do pré-voo direto ao emissor, com o NSA já queimado.
+  it('documento sem nenhum alfanumérico é `missing`, não `unmappable`', () => {
+    for (const document of ['---', '.', './-']) {
+      const r = checkPayoutReadiness(
+        candidate({ paymentMethod: 'TED', payee: target({ ...fullAccount(), document }) }),
+      );
+
+      assert.equal(r.status, 'incomplete', document);
+      assert.equal(reasonFor(r, 'payee-document'), 'missing', document);
+    }
+  });
+
+  // E o boleto não passa a reportar a mesma lacuna duas vezes: `readBilletPayee` cobra o campo em
+  // branco, esta régua cobra o que normaliza para vazio, e os dois carve-outs são complementares.
+  it('boleto não duplica a lacuna de inscrição', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'Boleto',
+        paymentDetail: DIGITABLE_LINE,
+        payee: target({ ...fullAccount(), document: '---' }),
+      }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['payee-document']);
+  });
+
+  // ACUMULA com a pendência da rota: chave Pix longa demais E inscrição alfanumérica são
+  // independentes, e resolver uma não libera o título.
+  it('acumula com a pendência da própria rota', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({
+          ...fullAccount(),
+          document: ALPHANUMERIC_DOCUMENT,
+          pixKey: { keyType: 'email', key: 'k'.repeat(100) },
+        }),
+      }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual([...fieldsOf(r)].sort(), ['payee-document', 'pix-key']);
+  });
+});
+
 const TAX_GUIDE_LINE = '836500000010500012345673890123456786901234567898'; // 48
 
 describe('checkPayoutReadiness — boleto e guia dependem do código de barras, não do favorecido', () => {

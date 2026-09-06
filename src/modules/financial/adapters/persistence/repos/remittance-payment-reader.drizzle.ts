@@ -35,6 +35,7 @@ import type {
 import { isApprovedForRemittance } from '#src/modules/financial/domain/document/remittance-approval.ts';
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
 import { resolveBarcode } from '#src/modules/financial/domain/payout/digitable-line.ts';
+import { normalizeInscription } from '#src/modules/financial/domain/payout/inscription.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
 import type { PayeeContractor } from '../../http/payee-bank-composition.ts';
 import { finDocuments, finPayables } from '../schemas/mysql.ts';
@@ -52,8 +53,14 @@ export type PayeeContractorLookup = (
 // A limpeza preserva letras de propósito — desde 07/2026 a inscrição de pessoa jurídica pode contê-las
 // (ADR-0044). Filtrar só numerais encurtaria a string e faria uma inscrição válida ser classificada
 // como física, gravando o tipo errado no arquivo.
+//
+// ⚠️ E É A FUNÇÃO DO DOMÍNIO, NÃO UMA CÓPIA LOCAL. Havia aqui um `cleanDocument` privado, idêntico
+// caractere a caractere a `normalizeInscription` — e essa configuração é exatamente a que produziu a
+// #863: duas decisões sobre o mesmo dado, nenhuma citando a outra, concordando por acidente até o
+// dia em que uma mudasse. O acoplamento é real e vale declará-lo: `documentTypeOf` mede o
+// COMPRIMENTO do que a normalização devolve, então qualquer mudança nela reclassifica pessoa física
+// e jurídica no arquivo. Com uma fonte só, essa mudança é visível de um lado só.
 const CPF_LENGTH = 11;
-const cleanDocument = (raw: string): string => raw.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
 const documentTypeOf = (raw: string): '1' | '2' => (raw.length === CPF_LENGTH ? '1' : '2');
 
 type PayableRow = Readonly<{
@@ -143,7 +150,7 @@ const toPaymentData = (
       // preferível ao campo vazio no arquivo.
       if (!parts.ok || contractor === null) return err('remittance-payment-incomplete');
 
-      const document = cleanDocument(contractor.document);
+      const document = normalizeInscription(contractor.document);
       return ok({
         payableId: row.payableId,
         documentId: row.documentId,
@@ -188,7 +195,7 @@ const toPaymentData = (
       // título sai da seleção ANTES de o NSA ser alocado, em vez de derrubar a remessa inteira
       // depois de queimar um número de sequência que não volta.
       if (contractor === null) return err('remittance-payment-incomplete');
-      const beneficiaryDocument = cleanDocument(contractor.document);
+      const beneficiaryDocument = normalizeInscription(contractor.document);
       if (beneficiaryDocument === '') return err('remittance-payment-incomplete');
 
       return ok({
@@ -223,7 +230,7 @@ const toPaymentData = (
       const pixKeyType = contractor.pixKey?.keyType ?? '';
       if (pixKey === '' || pixKeyType === '') return err('remittance-payment-incomplete');
 
-      const document = cleanDocument(contractor.document);
+      const document = normalizeInscription(contractor.document);
       if (document === '') return err('remittance-payment-incomplete');
 
       return ok({

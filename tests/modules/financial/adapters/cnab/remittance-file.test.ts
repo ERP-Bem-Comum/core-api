@@ -8,6 +8,7 @@ import type { Payee } from '#src/modules/financial/adapters/cnab/multipag-segmen
 import {
   buildRemittanceFile,
   LINE_TERMINATOR,
+  planRemittanceFiles,
   type RemittancePayment,
 } from '#src/modules/financial/adapters/cnab/remittance-file.ts';
 
@@ -776,26 +777,46 @@ describe('Remessa Multipag — boleto emite o par J + J-52 (#891)', () => {
  * iniciação tivesse sido escrita como `'004'` em vez de `'04 '`, eles passariam do mesmo jeito. Só um
  * arquivo que o banco emitiu é testemunha externa.
  *
- * Medido em `GOLDEN_TEST_MULTIPAG_PIX_240` (01/09/2026), fornecido pela P.O. e NÃO versionado — ele
- * carrega convênio, conta e inscrição reais, e os repositórios são públicos. O que este arquivo
- * guarda é a ESTRUTURA medida, nunca os valores:
+ * ⚠️ A RÉGUA PASSOU A SER `TESTE_PIX_BLOQUEADO_CNAB240_REV2.REM`, e a promoção importa. O golden de
+ * 01/09 era um arquivo fornecido pela P.O.; o REV2 foi submetido ao banco em 02/09 e VALIDADO POR
+ * ESCRITO em 05/09 pela equipe Multipag Pix/VAN — *"o arquivo foi validado e não necessita de
+ * ajustes em sua estrutura, estando apto para transmissão"*. É a diferença entre um exemplo e um
+ * veredito, e é o mais perto de homologação que esta rota chega: não há ambiente de teste para
+ * remessa de pagamento (ADR-0061).
  *
- *   6 registros · header de arquivo com `PIX` em 172-174 · header de lote `20`/`45`/`045`
- *   Segmento A: câmara `009`, bloco bancário do favorecido PREENCHIDO, 220-224 e 225-226 em BRANCOS,
+ * NENHUM DOS DOIS É VERSIONADO — a estrutura é o que este arquivo guarda, nunca os valores:
+ *
+ *   6 registros · header de arquivo com `PIX` em 172-174 · header de lote `C20`/`45`/`045`
+ *   Segmento A: câmara `009`, movimento `0` + instrução `09` (pagamento bloqueado para autorização
+ *               posterior), bloco bancário do favorecido ZERADO em 021-042, `043` em BRANCO (#754),
+ *               220-224 e 225-226 em BRANCOS,
  *               Informação 2 = inscrição(14) + ISPB(8) + `01`(2) + 16 brancos
  *   Segmento B: `04 ` em 015-017, TXID em brancos, chave em 128-226, UG SIAPE zerada, ISPB em 233-240
  *   trailer de lote: 000004
+ *
+ * ⚠️ O BLOCO BANCÁRIO ZERADO é o ponto que o laudo mudou, e a nota existe porque o golden ANTERIOR
+ * mostrava o oposto: *"em relação ao sexto questionamento, é possível enviar os campos referentes ao
+ * banco, agência e conta do favorecido preenchidos com zeros"*. Quem reler o golden de 01/09 e
+ * concluir que o bloco deve ir preenchido estará lendo a edição superada — foi o que a #945 fechou.
+ *
+ * Conferido campo a campo contra o REV2 em 05/09/2026: 14 campos, zero divergências, incluindo os
+ * três que só o arquivo revela — `04 ` alinhado à ESQUERDA (e não `004`), a literal `PIX` e o `043`
+ * em branco.
  */
 describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
   // Chave aleatória em formato UUID: 36 posições, como a do golden — e sintética, como todo o resto
   // das fixtures deste arquivo.
   const PIX_KEY = '00000000-0000-4000-8000-000000000000';
 
-  // ⚠️ O favorecido do Pix carrega bloco bancário COMPLETO, e é o que o golden mostra no Segmento A.
-  // Ver `PixPayment`, no montador: a chave endereça no SPI, o Segmento A identifica a conta.
-  // O favorecido de Pix é IDENTIDADE, e só: desde a #945 o tipo não tem onde guardar conta. O
+  // O favorecido de Pix é IDENTIDADE, e só: desde a #945 o tipo não tem onde guardar conta, e o
   // `over` some junto — não há mais campo bancário que um caso de teste pudesse variar, que é
-  // exatamente a garantia que a mudança de tipo dá.
+  // exatamente a garantia que a mudança de tipo dá. Quem endereça o pagamento é a CHAVE, no SPI.
+  //
+  // ⚠️ Este parágrafo já afirmou o contrário — "o favorecido do Pix carrega bloco bancário COMPLETO"
+  // — apoiado no golden de 01/09, e a afirmação sobreviveu à mudança de tipo que a tornou falsa.
+  // O laudo do banco de 05/09 arbitrou por escrito: banco, agência e conta do favorecido podem ir
+  // ZERADOS quando o Pix é iniciado por chave. Ver o caso `o Segmento A [...] ZERA o bloco bancário`,
+  // abaixo, que é quem mede.
   const pix = (n: number, valueCents: number): RemittancePayment => {
     const { name, documentType, document } = payee(n);
     return {
@@ -928,6 +949,61 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
     const r = buildRemittanceFile({ ...base, payments: [pix(1, 100_00), payment(2, 50_00)] });
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-mixed-file-modalities');
+  });
+
+  /*
+   * A PARTIÇÃO, e a régua que a #948 CA4 pôs sobre ela (decisão da P.O., 03/09/2026).
+   *
+   * `planRemittanceFiles` não tinha teste direto — era exercida só através do use case. Estes casos
+   * a medem onde ela decide, que é ANTES do `allocateNsa`: é essa posição, e não a mensagem, que
+   * torna a recusa barata. Recusar depois deixaria um número da série queimado sem arquivo do outro
+   * lado, e o NSA não volta por desenho.
+   */
+  describe('#948 CA4 — o Pix sai em remessa exclusiva', () => {
+    const plan = (payments: readonly RemittancePayment[]) =>
+      planRemittanceFiles(payments, CEDENTE.bankCode);
+
+    it('recusa a seleção que mistura Pix com outra modalidade, e recusa ANTES de montar', () => {
+      const r = plan([pix(1, 100_00), payment(2, 50_00)]);
+
+      assert.ok(isErr(r), 'a partição aceitou a mistura — ela viraria dois arquivos calados');
+      assert.equal(r.error, 'remittance-pix-requires-exclusive-file');
+    });
+
+    // A ordem não pode mudar o veredito: quem seleciona não escolhe em que ordem os títulos chegam.
+    it('recusa independentemente da ordem em que as modalidades aparecem', () => {
+      const r = plan([payment(1, 50_00), pix(2, 100_00)]);
+
+      assert.ok(isErr(r));
+      assert.equal(r.error, 'remittance-pix-requires-exclusive-file');
+    });
+
+    it('a seleção só de Pix passa, num arquivo só', () => {
+      const r = plan([pix(1, 100_00), pix(2, 200_00)]);
+
+      assert.ok(isOk(r), `esperava plano, veio ${isErr(r) ? r.error : '?'}`);
+      assert.equal(r.value.length, 1);
+      assert.deepEqual(r.value[0]?.paymentIndices, [0, 1]);
+    });
+
+    /*
+     * ⚠️ A GUARDA DA FAIXA MADURA, e é o caso mais importante deste bloco.
+     *
+     * TED, transferência entre contas Bradesco e boleto já foram testados, habilitados e validados
+     * EM PRODUÇÃO pelo cliente — arquivo transmitido, aceito e pago. A frente Pix não pode alterá-los,
+     * e "não alterou" se DEMONSTRA, não se presume.
+     *
+     * As três convivem num arquivo só (formas `01`, `41` e `31` em lotes distintos, como o golden de
+     * TED mostra), então a régua acima não as alcança: ela exige DOIS grupos, e só o Pix cria o
+     * segundo. Este caso é o que faz a regressão aparecer aqui, e não numa remessa real.
+     */
+    it('não toca a seleção sem Pix: as três modalidades validadas seguem num arquivo só', () => {
+      const r = plan([payment(1, 50_00), billet(2, 70_00), payment(3, 30_00, '237')]);
+
+      assert.ok(isOk(r), `esperava plano, veio ${isErr(r) ? r.error : '?'}`);
+      assert.equal(r.value.length, 1, 'a partição repartiu o que sempre coube num arquivo');
+      assert.deepEqual(r.value[0]?.paymentIndices, [0, 1, 2]);
+    });
   });
 
   it('emite sem consultar banco algum do favorecido — a recusa por ISPB desconhecido não existe mais', () => {
