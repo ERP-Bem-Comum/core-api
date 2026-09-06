@@ -73,7 +73,7 @@ const trimmed = (value: string | null | undefined): string => value?.trim() ?? '
 // O que sobra ao separar `1234-5`: a base e o dígito, quando há um. `digit: null` significa "não
 // veio", não "é vazio" — a diferença decide se o campo posicional sai em branco ou se o cadastro
 // está malformado.
-type CheckDigitSplit = Readonly<{ base: string; digit: string | null }>;
+export type CheckDigitSplit = Readonly<{ base: string; digit: string | null }>;
 
 // Separa `1234-5` em base + DV. SEM separador não decompõe: `12345` pode ser agência de cinco
 // dígitos ou quatro mais DV, e a escolha depende do banco. Devolver `digit: null` empurra a decisão
@@ -81,7 +81,13 @@ type CheckDigitSplit = Readonly<{ base: string; digit: string | null }>;
 //
 // Quando o DV tem duas posições, só a PRIMEIRA vai para o campo (regra G011 citada acima). O
 // descarte da segunda é do layout, não nosso: o campo tem uma posição só.
-const splitCheckDigit = (raw: string): CheckDigitSplit | null => {
+//
+// ⚠️ EXPORTADA na #856, e o segundo chamador é o ETL. A agência legada vem com o DV embutido
+// (`0288-7`, evidência F7) e era gravada INTEIRA na coluna `agency` — de onde `digits(agency, 5)`
+// removia o separador e escrevia `02887` nas posições 053-057, onde o banco espera `00288`. A mesma
+// gramática que decompõe a conta do favorecido decompõe a agência do cedente; escrever uma segunda
+// no `scripts/` faria as duas divergirem no dia em que uma mudasse.
+export const splitCheckDigit = (raw: string): CheckDigitSplit | null => {
   const withDigit = WITH_CHECK_DIGIT_RE.exec(raw);
   if (withDigit !== null) {
     const [, base, digit] = withDigit;

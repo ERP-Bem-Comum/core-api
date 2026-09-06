@@ -1,4 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import { isCnabEmittableInscription, normalizeInscription } from '../payout/inscription.ts';
 
 // A conta-cedente está apta a GERAR remessa? (#722)
 //
@@ -18,8 +19,12 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 // última barreira. São camadas com propósitos distintos: aqui, dizer ao operador o que corrigir;
 // lá, impedir que um nome inválido chegue ao banco. É a mesma dupla verificação que o ADR-0027
 // declara intencional na borda HTTP.
+//
+// ⚠️ A #856 acrescentou a AGÊNCIA, e ela quebra a simetria acima: o convênio ausente tem uma última
+// barreira adiante — o montador do nome —, a agência corrompida NÃO TEM NENHUMA. Aqui é a única
+// barreira que existe entre um `0288-2` digitado no cadastro e um arquivo que credita outra agência.
 
-export type CedenteRemittanceGap =
+export type CedenteConvenioGap =
   | 'cedente-convenio-missing'
   | 'cedente-convenio-malformed'
   // #804. Terceiro desfecho, e a ação do operador é de novo outra: não falta o convênio nem ele
@@ -27,6 +32,21 @@ export type CedenteRemittanceGap =
   // efetivamente contratado. Achatá-lo em `malformed` mandaria arrumar o formato de um número que
   // está bem formado.
   | 'cedente-convenio-too-long';
+
+// #856 · #859. A AGÊNCIA é o segundo campo do cedente que o arquivo lê da conta, e o único cuja
+// falha é SILENCIOSA: o convênio ausente estoura no montador do nome, a agência corrompida não
+// estoura em lugar nenhum. Ver a constante `AGENCY_WIDTH` abaixo para o mecanismo.
+export type CedenteAgencyGap = 'cedente-agency-missing' | 'cedente-agency-malformed';
+
+// #856 CA3. A INSCRIÇÃO do cedente — 019-032, `G006`. Os dois desfechos terminam em ações opostas, e
+// é por isso que não se juntam: o ausente o operador preenche no cadastro; o alfanumérico ninguém
+// preenche, porque o dado está CERTO — quem não acompanhou foi o layout do banco, e a saída é
+// escalar. Achatá-los mandaria o operador procurar no cadastro um defeito que não existe lá.
+export type CedenteInscriptionGap =
+  | 'cedente-inscription-missing'
+  | 'cedente-inscription-alphanumeric';
+
+export type CedenteRemittanceGap = CedenteConvenioGap | CedenteAgencyGap | CedenteInscriptionGap;
 
 // O convênio identifica o contrato de prestação de serviço junto ao banco e é numérico. Ausente e
 // malformado são desfechos separados porque a ação do operador difere: um pede preenchimento, o
@@ -42,9 +62,16 @@ const NUMERIC_ONLY = /^\d+$/;
 // impõe e o manual não escreve. Layout e validador divergem, e é o validador quem paga.
 const CONVENIO_MAX_LENGTH = 6;
 
-export const checkCedenteRemittanceReadiness = (
+// ⚠️ SEPARADA DA READINESS COMPLETA, e a separação não é organização de código (#856). A edição de
+// conta-cedente pergunta "o convênio que está lá serve?" para decidir se aceita TROCÁ-LO (#722), e
+// perguntava isso chamando a readiness inteira. Enquanto a readiness só olhava o convênio, as duas
+// perguntas coincidiam; com a agência dentro dela, uma conta de agência malformada passaria a
+// responder "convênio não serve" — e destravaria a troca de um convênio que está perfeito.
+//
+// A regra é a de sempre: quem pergunta uma coisa chama a função daquela coisa.
+export const checkCedenteConvenio = (
   account: Readonly<{ convenio: string }>,
-): Result<void, CedenteRemittanceGap> => {
+): Result<void, CedenteConvenioGap> => {
   // Espaço em volta não é erro do operador: o cadastro aceita e o dado continua legível.
   const convenio = account.convenio.trim();
 
@@ -53,4 +80,69 @@ export const checkCedenteRemittanceReadiness = (
   if (convenio.length > CONVENIO_MAX_LENGTH) return err('cedente-convenio-too-long');
 
   return ok(undefined);
+};
+
+// As posições 053-057 do header, e são SÓ a agência — o DV mora na 058, em campo próprio.
+//
+// ⚠️ ESTE É O CAMPO QUE FALHA SEM FAZER BARULHO, e por isso a recusa existe (#856, herdada da #859).
+// O emissor escreve `digits(agency, 5)`, e `digits()` faz `replace(/\D/g,'')` ANTES do pad:
+//
+//     digits('1487-2', 5)  →  num('14872', 5)  →  '14872'
+//
+// O banco espera `01487` ali. O resultado tem cinco dígitos, cabe no campo, não estoura o
+// `numeric-field-overflow`, atravessa o `remittance-inspector` — que valida forma, e a forma está
+// perfeita — e vai ao banco em TODA remessa daquela conta apontando outra agência. É a mesma classe
+// do convênio truncado da #804: o banco não recusa, processa sob identidade errada.
+//
+// Recusar é a única saída que não inventa dado. Separar o DV por conta própria seria adivinhar qual
+// metade é a agência (`12345` é `1234`+`5` ou `12345` sem DV?), e a #708 já estabeleceu que essa
+// ambiguidade não se resolve por palpite — resolve-se com campo próprio, que é o `agencyDigit`.
+const AGENCY_WIDTH = 5;
+
+export const checkCedenteAgency = (
+  account: Readonly<{ agency: string }>,
+): Result<void, CedenteAgencyGap> => {
+  const agency = account.agency.trim();
+
+  if (agency === '') return err('cedente-agency-missing');
+  // Não-numérico é, na prática, agência com separador — o caso que o front descreve na #859, em que
+  // o operador digita `0288-2` e a base e o dígito acabam no mesmo campo.
+  if (!NUMERIC_ONLY.test(agency)) return err('cedente-agency-malformed');
+  // Estouro tem o mesmo desfecho de propósito: `num()` já o recusaria no montador, mas lá o NSA já
+  // foi queimado. Aqui é antes, e a ação do operador — conferir a agência no cadastro — é a mesma.
+  if (agency.length > AGENCY_WIDTH) return err('cedente-agency-malformed');
+
+  return ok(undefined);
+};
+
+// A inscrição do cedente — 019-032, `G006` (#856, CA3).
+//
+// ⚠️ A RECUSA VIVE AQUI, e não só no emissor, pela ordem: o emissor monta DEPOIS do `allocateNsa`, e
+// o número não volta. Sem esta barreira, um cedente de CNPJ alfanumérico queimaria um da sequência a
+// cada tentativa — e chegaria ao operador como falha de montagem, sem apontar campo nenhum.
+export const checkCedenteInscription = (
+  account: Readonly<{ document: string }>,
+): Result<void, CedenteInscriptionGap> => {
+  // ⚠️ A pergunta é `hasInscription`, não `trim() === ''`, e a diferença não é preciosismo: `'---'`,
+  // `'.'` e `'./-'` sobrevivem ao `trim()` e normalizam para vazio. Perguntando pelo trim, eles
+  // seriam vistos como inscrição PRESENTE e — não sendo numéricos — classificados como
+  // "alfanumérica", mandando escalar ao banco um cadastro que só está incompleto.
+  if (normalizeInscription(account.document) === '') return err('cedente-inscription-missing');
+  if (!isCnabEmittableInscription(account.document)) {
+    return err('cedente-inscription-alphanumeric');
+  }
+
+  return ok(undefined);
+};
+
+export const checkCedenteRemittanceReadiness = (
+  account: Readonly<{ convenio: string; agency: string; document: string }>,
+): Result<void, CedenteRemittanceGap> => {
+  const convenio = checkCedenteConvenio(account);
+  if (!convenio.ok) return convenio;
+
+  const agency = checkCedenteAgency(account);
+  if (!agency.ok) return agency;
+
+  return checkCedenteInscription(account);
 };

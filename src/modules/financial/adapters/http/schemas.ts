@@ -848,6 +848,14 @@ export const createCedenteAccountBodySchema = z.object({
   // #206: texto livre p/ identificar conta `outro`/`cartao` (opcional).
   typeLabel: z.string().min(1).max(120).optional(),
   agency: z.string().min(1).max(10),
+  // #856 · #859 — DV da agência, posição 058 do header CNAB. OPCIONAL porque a agência pode não ter
+  // DV; separado de `agency` porque o emissor remove o separador antes de gravar as posições
+  // 053-057, e `0288-2` num campo só vira `02882` onde o banco espera `00288`.
+  agencyDigit: z
+    .string()
+    .max(2)
+    .optional()
+    .meta({ description: 'Dígito verificador da agência (posição 058 do CNAB). Sem separador.' }),
   accountNumber: z.string().min(1).max(20),
   accountDigit: z.string().max(2),
   convenio: z.string().max(20).optional(),
@@ -865,6 +873,9 @@ export const editCedenteAccountBodySchema = z.object({
   convenio: z.string().min(1).max(20).optional(),
   bankCode: z.string().min(1).max(10).optional(),
   agency: z.string().min(1).max(10).optional(),
+  // #856: preenchível na conta já cadastrada, que nasceu sem DV porque não havia coluna. TROCAR um
+  // DV já definido continua caindo na trava de dado bancário (FR-008) — ver `edit-cedente-account`.
+  agencyDigit: z.string().max(2).optional(),
   accountNumber: z.string().min(1).max(20).optional(),
   accountDigit: z.string().max(2).optional(),
   type: accountTypeSchema.optional(),
@@ -885,6 +896,10 @@ export const cedenteAccountResponseSchema = z
     type: z.string().nullable(),
     typeLabel: z.string().nullable(),
     agency: z.string(),
+    // Presente na leitura para o front poder exibir o cadastro COMPLETO na edição (#856). Sem ele,
+    // a tela reabre com 4 dígitos, marca a agência como incompleta e desabilita o Salvar — o beco
+    // medido em produção (#942/#943).
+    agencyDigit: z.string().nullable(),
     accountNumber: z.string(),
     accountDigit: z.string(),
     convenio: z.string(),

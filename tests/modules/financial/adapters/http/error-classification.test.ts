@@ -78,6 +78,45 @@ describe('error-mapping — mensagem PT-BR nunca vaza o slug (#52)', () => {
   }
 });
 
+/*
+ * As lacunas da conta-cedente (#856) — e por que elas precisam de bloco próprio.
+ *
+ * ⚠️ O mapa de mensagens é `ReadonlySet` + objeto, NÃO união exaustiva: o compilador não cobra a
+ * linha, e um slug sem entrada sai no fallback genérico. Quem gerar remessa com a agência
+ * malformada leria "erro interno" para um dado que ele mesmo corrige na tela — que é exatamente o
+ * defeito de UX que a #722 fechou para o convênio e que estes slugs poderiam reintroduzir.
+ *
+ * O bloco também vigia a DISTINÇÃO: os dois da inscrição terminam em ações opostas — o ausente se
+ * resolve no cadastro, o alfanumérico não se resolve em lugar nenhum do ERP e manda escalar ao
+ * banco. Uma mensagem só serviria mal às duas.
+ */
+describe('error-mapping — as lacunas da conta-cedente têm mensagem própria (#856)', () => {
+  const slugs = [
+    'cedente-agency-missing',
+    'cedente-agency-malformed',
+    'cedente-inscription-missing',
+    'cedente-inscription-alphanumeric',
+  ];
+
+  for (const slug of slugs) {
+    it(`${slug} tem mensagem PT-BR ≠ slug`, () => {
+      const msg = toPublicMessage(slug);
+      assert.ok(msg.length > 0, 'mensagem não pode ser vazia');
+      assert.notEqual(msg, slug, 'mensagem não pode ser o slug interno');
+      assert.notEqual(
+        msg,
+        toPublicMessage('slug-que-nao-existe-no-mapa'),
+        'slug sem entrada cai no fallback genérico e não diz o que corrigir',
+      );
+    });
+  }
+
+  it('as quatro mensagens são DISTINTAS entre si', () => {
+    const messages = new Set(slugs.map((s) => toPublicMessage(s)));
+    assert.equal(messages.size, slugs.length);
+  });
+});
+
 // Os dois conflitos de CAS por título nasceram como UM slug só, e a mensagem — escrita para a baixa
 // — chegava a quem tinha tentado reagendar. O gate não pegou: os testes da borda asseram
 // `error.code`, e é a decisão certa (acoplar teste a string de UX é frágil). O efeito colateral é

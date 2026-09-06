@@ -26,6 +26,7 @@ export const toRow = (account: CedenteAccount): NewCedenteAccountRow => ({
   id: account.id,
   bankCode: account.bankCode,
   agency: account.agency,
+  agencyDigit: account.agencyDigit ?? null,
   accountNumber: account.accountNumber,
   accountDigit: account.accountDigit,
   convenio: account.convenio,
@@ -64,6 +65,12 @@ export const toDomain = (
       document: row.document,
       status,
       nextNsa: row.nextNsa,
+      // `''` gravado por uma versão anterior colapsa em ausente aqui também — a re-hidratação não
+      // passa pelo construtor, e sem esta linha uma linha antiga com string vazia voltaria como
+      // "dígito definido", trancando o preenchimento pela edição.
+      ...(row.agencyDigit !== null && row.agencyDigit.trim() !== ''
+        ? { agencyDigit: row.agencyDigit }
+        : {}),
       ...(row.type !== null ? { type: row.type as AccountType } : {}),
       ...(row.typeLabel !== null ? { typeLabel: row.typeLabel } : {}),
       ...(row.nickname !== null ? { nickname: row.nickname } : {}),

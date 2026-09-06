@@ -41,6 +41,13 @@ export const create = (input: CreateInput): Result<CedenteAccount, CedenteAccoun
       document: input.document,
       status: input.status ?? 'Active',
       nextNsa,
+      // ⚠️ `''` COLAPSA EM AUSENTE, e não é normalização cosmética: o front envia o campo vazio
+      // quando o operador não digitou DV, e guardar `''` faria a conta parecer "com DV já definido"
+      // para a régua de preenchimento-uma-vez da edição — trancando o cadastro que a #856 existe
+      // para destravar. Sem DV é sem DV, venha como ausência ou como string vazia.
+      ...(input.agencyDigit !== undefined && input.agencyDigit.trim() !== ''
+        ? { agencyDigit: input.agencyDigit.trim() }
+        : {}),
       ...(input.type !== undefined ? { type: input.type } : {}),
       ...(input.typeLabel !== undefined ? { typeLabel: input.typeLabel } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
