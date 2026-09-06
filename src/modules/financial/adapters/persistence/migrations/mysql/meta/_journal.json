@@ -400,6 +400,13 @@
       "when": 1788702432348,
       "tag": "0056_daily_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1788718100073,
+      "tag": "0057_lying_vindicator",
+      "breakpoints": true
     }
   ]
 }

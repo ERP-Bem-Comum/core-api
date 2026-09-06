@@ -693,6 +693,50 @@ export const finCedenteAccounts = mysqlTable(
   ],
 );
 
+// ─── fin_convenio_nsa ─────────────────────────────────────────────────────────
+//
+// O CONTADOR DE NSA, e ele é do CONVÊNIO — não da conta-cedente (#943).
+//
+// O mesmo contrato multipag vale para VÁRIAS contas de pagamento (confirmado com o gerente do
+// Bradesco em 02/09/2026). Enquanto o contador viveu em `fin_cedente_accounts.next_nsa`, cada conta
+// nova nascia em 1 e duas contas irmãs emitiam o mesmo número sob o mesmo contrato — que o banco lê
+// como retransmissão, não como remessa nova.
+//
+// ⚠️ E o defeito quebrava ANTES de chegar ao banco: `fin_remittance_payables.your_number` é
+// `<convênio><NSA><sequência>`, com UNIQUE global e SEM componente de tempo. Duas contas do mesmo
+// convênio, ambas em `000001`, geravam a MESMA referência e o segundo INSERT era recusado — 503
+// opaco, conta sem conseguir gerar remessa (#942, medido em produção).
+//
+// A PK é o CONVÊNIO, e não um id sintético, por três razões que se reforçam: o convênio É a
+// identidade do contrato junto ao banco; `fin_cedente_accounts` não tem índice em `convenio`, e a PK
+// daqui resolve a busca; e o lock de linha do `SELECT … FOR UPDATE` passa a serializar exatamente
+// entre as contas irmãs, que é onde o defeito mora.
+//
+// ⚠️ O convênio é TEXTO DIGITADO no cadastro de cada conta, não entidade própria — não há FK a
+// declarar, e nada impede (nem deve impedir) duas contas carregarem o mesmo número: é o desenho
+// pretendido. A consequência a conhecer: convênio digitado errado cria uma sequência nova em 1, e o
+// sintoma que aparece primeiro é o NSA reiniciando, não o cadastro errado.
+//
+// ⚠️ CHARSET/COLLATE — inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
+//   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci.
+export const finConvenioNsa = mysqlTable(
+  'fin_convenio_nsa',
+  {
+    convenio: varchar('convenio', { length: 30 }).primaryKey().notNull(),
+    // O PRÓXIMO a alocar, não o último emitido. A distinção é o que torna o backfill correto:
+    // `MAX(next_nsa)` das contas do convênio é ≥ qualquer número já emitido por qualquer uma delas.
+    nextNsa: int('next_nsa').notNull(),
+  },
+  (t) => [
+    // Espelha `fin_cedente_accounts_next_nsa_chk`: o campo tem seis dígitos no header (158-163), e o
+    // teto vive no VO `Nsa`. O CHECK é a rede no banco para quem escrever fora do domínio.
+    check('fin_convenio_nsa_next_nsa_chk', sql`${t.nextNsa} >= 1`),
+  ],
+);
+
+export type FinConvenioNsaRow = typeof finConvenioNsa.$inferSelect;
+export type NewFinConvenioNsaRow = typeof finConvenioNsa.$inferInsert;
+
 // ─── fin_bank_statements ──────────────────────────────────────────────────────
 //
 // Raiz do agregado BankStatement (US1 conciliação): extrato importado (OFX/CSV). period_* e file_*

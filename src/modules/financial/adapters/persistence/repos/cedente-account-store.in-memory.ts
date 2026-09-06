@@ -7,12 +7,27 @@ import type {
   CedenteAccountStoreError,
   NsaAllocationError,
 } from '../../../application/ports/cedente-account-store.ts';
-import { allocateNsa } from '../../../domain/cedente/cedente-account.ts';
+import { isActive } from '../../../domain/cedente/cedente-account.ts';
+import * as NsaSequence from '../../../domain/cedente/nsa-sequence.ts';
 import type { Nsa } from '../../../domain/cedente/nsa.ts';
 
 // Adapter in-memory do CedenteAccountStore (testes / boot sem DB).
-export const createInMemoryCedenteAccountStore = (): CedenteAccountStore => {
+//
+// `sequences` semeia o contador de um convênio — o equivalente ao que o backfill da migration faz em
+// `fin_convenio_nsa`. Existe porque, com o dono da sequência fora da conta (#943), criar a conta
+// deixou de ser caminho para posicionar o contador: um caso que precise partir de um número alto
+// (faixa esgotada, por exemplo) não tem outro jeito de chegar lá senão emitir de um em um.
+export const createInMemoryCedenteAccountStore = (
+  options: Readonly<{ sequences?: Readonly<Record<string, number>> }> = {},
+): CedenteAccountStore => {
   const accounts = new Map<string, CedenteAccount>();
+  // A sequência de NSA por CONVÊNIO (#943) — espelha `fin_convenio_nsa`, e não a coluna da conta.
+  const sequences = new Map<string, NsaSequence.ConvenioNsaSequence>(
+    Object.entries(options.sequences ?? {}).map(([convenio, nextNsa]) => [
+      convenio,
+      { convenio, nextNsa },
+    ]),
+  );
 
   return {
     findById: async (
@@ -62,14 +77,26 @@ export const createInMemoryCedenteAccountStore = (): CedenteAccountStore => {
     // leitura e a escrita. É o comportamento OBSERVÁVEL do adapter real — mas a garantia dele vem
     // do lock de linha do InnoDB, e só o teste contra MySQL a prova. Um fake verde aqui não diz
     // nada sobre concorrência real.
+    //
+    // ⚠️ O CONTADOR É DO CONVÊNIO (#943), e o fake tem de espelhar isso ou os testes ficam verdes
+    // descrevendo o defeito. Enquanto ele guardava o número na conta, duas contas irmãs alocavam
+    // `1` cada uma aqui dentro — exatamente o que quebrou em produção, e nada nesta suíte apontava.
+    // A guarda de conta ativa vem ANTES de consumir o número, como no adapter real: conta encerrada
+    // não queima NSA do convênio.
     allocateNsa: async (id: CedenteAccountId): Promise<Result<Nsa, NsaAllocationError>> => {
       const account = accounts.get(id);
       if (account === undefined) return Promise.resolve(err('cedente-account-not-found'));
+      if (!isActive(account)) return Promise.resolve(err('cedente-account-not-active'));
 
-      const allocation = allocateNsa(account);
-      if (!allocation.ok) return Promise.resolve(err(allocation.error));
+      const convenio = account.convenio.trim();
+      if (convenio === '') return Promise.resolve(err('cedente-account-not-found'));
 
-      accounts.set(id, allocation.value.account);
+      const allocation = NsaSequence.allocate(
+        sequences.get(convenio) ?? NsaSequence.start(convenio),
+      );
+      if (!allocation.ok) return Promise.resolve(err('nsa-exhausted'));
+
+      sequences.set(convenio, allocation.value.sequence);
       return Promise.resolve(ok(allocation.value.nsa));
     },
   };
