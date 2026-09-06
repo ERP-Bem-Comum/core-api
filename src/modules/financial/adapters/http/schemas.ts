@@ -848,6 +848,19 @@ export const createCedenteAccountBodySchema = z.object({
   // #206: texto livre p/ identificar conta `outro`/`cartao` (opcional).
   typeLabel: z.string().min(1).max(120).optional(),
   agency: z.string().min(1).max(10),
+  // #856 · #859 — DV da agência, posição 058 do header CNAB. OPCIONAL porque a agência pode não ter
+  // DV; separado de `agency` porque o emissor remove o separador antes de gravar as posições
+  // 053-057, e um `1234-5` num campo só vira `12345` onde o banco espera `01234`.
+  //
+  // ⚠️ UMA posição, e não duas como o DV da CONTA. `alpha()` faz `.slice(0, size)`: um `max(2)` aqui
+  // aceitaria `5X` e gravaria `5`, e `-2` gravaria um `-` literal na 058 — aceitar-e-truncar, que é
+  // exatamente o defeito que esta issue existe para eliminar. O DV da conta tem 2 porque o layout
+  // prevê DV de duas posições (G011 + G012); o da agência, não.
+  agencyDigit: z
+    .string()
+    .max(1)
+    .optional()
+    .meta({ description: 'Dígito verificador da agência (posição 058 do CNAB). Sem separador.' }),
   accountNumber: z.string().min(1).max(20),
   accountDigit: z.string().max(2),
   convenio: z.string().max(20).optional(),
@@ -862,15 +875,39 @@ export type CreateCedenteAccountBody = z.infer<typeof createCedenteAccountBodySc
 export const editCedenteAccountBodySchema = z.object({
   // #722: preenchível quando ausente, para a conta cadastrada sem ele passar a gerar remessa. Trocar
   // um convênio já preenchido é recusado no use case — ele viaja no nome de toda remessa transmitida.
-  convenio: z.string().min(1).max(20).optional(),
+  //
+  // ⚠️ SEM `min(1)` (#995, B8.2): a string VAZIA é o valor que DESATIVA a numeração de uma conta
+  // encerrada, e o `min(1)` a recusava na borda — empurrando a operação para `UPDATE` no banco.
+  //
+  // Vazio já significa "sem convênio" em todo o caminho, e é por isso que ele foi escolhido no lugar
+  // de `000000`: `checkCedenteConvenio` o recusa com `cedente-convenio-missing` ANTES do
+  // `allocateNsa` (o número não volta), e o front já o exclui do seletor "Conta que paga". O
+  // `000000`, além de não ter nenhuma dessas propriedades, é o valor RESERVADO de mascaramento de
+  // fixture deste repositório (`tests/cleanup/bank-fixture-masking.test.ts`), alinhado com o
+  // `van-agent` — dar-lhe um segundo sentido colidiria com dez arquivos e com o outro lado do
+  // contrato.
+  //
+  // Quem PODE limpar continua sendo decidido no use case, não aqui: conta ATIVA com convênio válido
+  // segue recusando qualquer troca (#722), inclusive para vazio.
+  convenio: z.string().max(20).optional(),
   bankCode: z.string().min(1).max(10).optional(),
   agency: z.string().min(1).max(10).optional(),
+  // #856: preenchível na conta já cadastrada, que nasceu sem DV porque não havia coluna. TROCAR um
+  // DV já definido continua caindo na trava de dado bancário (FR-008) — ver `edit-cedente-account`.
+  // `max(1)` pela razão do create: a 058 tem uma posição, e `alpha()` truncaria a segunda em silêncio.
+  agencyDigit: z.string().max(1).optional(),
   accountNumber: z.string().min(1).max(20).optional(),
   accountDigit: z.string().max(2).optional(),
   type: accountTypeSchema.optional(),
   typeLabel: z.string().min(1).max(120).optional(),
   nickname: z.string().min(1).max(120).optional(),
   bankName: z.string().min(1).max(120).optional(),
+  // #995 — saldo de abertura editável. A conta migrada veio com saldo congelado do começo do ano, e
+  // não poder corrigi-lo foi o que levou o operador a criar contas NOVAS para gerar remessa.
+  // Travado por histórico no use case (FR-008): com extrato importado, mudá-lo reescreveria todo
+  // saldo calculado em cima dele.
+  openingBalanceCents: centsStringSchema.optional(),
+  openingBalanceDate: z.iso.date().optional(),
 });
 
 export const cedenteAccountIdParamSchema = z.object({
@@ -885,6 +922,10 @@ export const cedenteAccountResponseSchema = z
     type: z.string().nullable(),
     typeLabel: z.string().nullable(),
     agency: z.string(),
+    // Presente na leitura para o front poder exibir o cadastro COMPLETO na edição (#856). Sem ele,
+    // a tela reabre com 4 dígitos, marca a agência como incompleta e desabilita o Salvar — o beco
+    // medido em produção (#942/#943).
+    agencyDigit: z.string().nullable(),
     accountNumber: z.string(),
     accountDigit: z.string(),
     convenio: z.string(),

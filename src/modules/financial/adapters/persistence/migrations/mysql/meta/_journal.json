@@ -393,6 +393,27 @@
       "when": 1788212989660,
       "tag": "0055_cuddly_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "5",
+      "when": 1788702432348,
+      "tag": "0056_daily_firebrand",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1788718100073,
+      "tag": "0057_lying_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1788723766782,
+      "tag": "0058_melodic_nick_fury",
+      "breakpoints": true
     }
   ]
 }

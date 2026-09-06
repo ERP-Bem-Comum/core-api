@@ -112,33 +112,45 @@ describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo e
   });
 });
 
-// ⚠️ ESTE BLOCO SE CHAMAVA "PIX exige a chave, e só a chave", e a mudança de nome é o registro de
-// uma premissa que caiu (#838). O "e só a chave" vinha da decisão da P.O. de 13/08 (#708) — "PIX
-// paga por chave, não olha agência ou conta" —, que descreve o NEGÓCIO corretamente e o ARQUIVO não:
-// o golden do banco traz banco, agência, DV, conta e DV do favorecido preenchidos no Segmento A, com
-// o layout (p. 39) marcando os quatro como obrigatórios.
+// ⚠️ ESTE BLOCO JÁ TROCOU DE NOME DUAS VEZES, e o vaivém é o registro mais útil que ele carrega.
 //
-// Quem reverter isto lendo a #708 reabre a divergência que a #837 fechou, pelo outro lado: o
-// pré-voo aprovaria um título que o emissor não consegue montar.
+// Era "PIX exige a chave, e só a chave" (#708: *"PIX paga por chave, não olha agência ou conta"*).
+// Virou "exige a chave E o bloco bancário" (#838), porque o golden do banco traz banco, agência, DV,
+// conta e DV preenchidos no Segmento A e o layout marca os campos com asterisco. Voltou a ser "e só
+// ela" (#945), quando o Bradesco arbitrou por escrito que essas posições podem sair ZERADAS no Pix
+// iniciado por chave.
+//
+// A lição que sobra, e é a razão de este parágrafo continuar aqui: **golden prova como um arquivo
+// foi montado, não o que o ERP deve coletar**, e o asterisco do manual significa "merece atenção
+// especial", não "obrigatório" (legenda, p. 7 — o manual chega a marcar `*G009` e escrever "Campo
+// Não Obrigatório" na descrição). Quem reabrir a exigência com base numa dessas duas evidências
+// estará refazendo o mesmo salto.
+//
+// O que NÃO oscilou, e a #948 reforça: o pré-voo não pode aprovar o que o emissor recusa. As duas
+// condições da CHAVE (comprimento e tipo) são verificadas aqui justamente por isso.
 const pixPayee = (): PayeePaymentTarget =>
   target({ ...fullAccount(), pixKey: { keyType: 'email', key: 'a@b.com' } });
 
-describe('checkPayoutReadiness — PIX exige a chave E o bloco bancário (#838)', () => {
+describe('checkPayoutReadiness — PIX exige a chave, e só ela (#945)', () => {
   it('aceita PIX com chave e conta completa', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX', payee: pixPayee() }));
     assert.equal(r.status, whenDataIsGood('pix'));
   });
 
-  // O `keyType` NÃO participa da decisão de aptidão — ele viaja para quem emite o registro. Um
-  // tipo desconhecido aqui não pode reprovar o título: quem valida o conjunto de tipos é
-  // `partners`, no `createPixKey`, e duplicar essa lista seria criar a segunda fonte da verdade.
+  // ⚠️ INVERTIDO PELA #948 (CA2), e o teste anterior dizia o contrário — "não julga o tipo da chave,
+  // apenas a existência dela" —, apoiado em duas premissas que eram boas e não bastavam: o
+  // vocabulário de tipos é de `partners`, e duplicá-lo criaria segunda fonte da verdade.
   //
-  // ⚠️ Continua verdadeiro depois da #838, e a distinção é fina: o `keyType` fora do domínio `G100`
-  // faz o EMISSOR recusar (`remittance-pix-key-type-unsupported`), não o pré-voo. São perguntas
-  // diferentes — "o cadastro está completo?" e "sei emitir isto?" —, e é exatamente a separação que
-  // a #837 estabeleceu.
-  it('não julga o tipo da chave, apenas a existência dela', () => {
-    for (const keyType of ['email', 'cpf', 'random-key', 'algo-que-partners-ainda-nao-tem']) {
+  // A primeira continua verdadeira; a segunda deixou de valer, porque a fonte NÃO está duplicada: a
+  // lista de tipos PAGÁVEIS vive em `domain/payout/pix-key.ts` e o emissor desce até ela. Não são
+  // duas listas — é uma, consumida dos dois lados, no molde de `van-routes.ts`.
+  //
+  // E o que derrubou a separação "o cadastro está completo?" × "sei emitir isto?" foi o CUSTO: a
+  // recusa do emissor vem DEPOIS do `allocateNsa`, então deixá-la para a geração queima um número da
+  // série a cada tentativa. A #837 estabeleceu que as duas perguntas não podem discordar; esta é a
+  // segunda metade dela, sobre as CONDIÇÕES do emissor e não sobre a existência dele.
+  it('aceita todo tipo de chave que o emissor sabe traduzir', () => {
+    for (const keyType of ['phone', 'email', 'cpf', 'cnpj', 'random-key']) {
       const r = checkPayoutReadiness(
         candidate({
           paymentMethod: 'PIX',
@@ -147,6 +159,102 @@ describe('checkPayoutReadiness — PIX exige a chave E o bloco bancário (#838)'
       );
       assert.equal(r.status, whenDataIsGood('pix'), keyType);
     }
+  });
+
+  it('recusa o tipo de chave que o G100 não prevê, em vez de deixar o emissor queimar o NSA', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({
+          ...fullAccount(),
+          pixKey: { keyType: 'algo-que-o-G100-nao-tem', key: 'x' },
+        }),
+      }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['pix-key']);
+    // `unmappable` — não há o que corrigir no VALOR: é preciso outra chave.
+    assert.equal(reasonFor(r, 'pix-key'), 'unmappable');
+  });
+
+  // CA8: `keyType` vazio cai na mesma régua, e o desfecho é o mesmo. Hoje o reader o recusa
+  // derrubando a geração INTEIRA (contrato tudo-ou-nada), com o pré-voo tendo aprovado a linha.
+  it('trata tipo de chave vazio como não suportado', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({ ...fullAccount(), pixKey: { keyType: '', key: 'x' } }),
+      }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'pix-key'), 'unmappable');
+  });
+
+  // CA1. Alcançável por cadastro LEGÍTIMO: o campo `G101` tem 99 posições e o cadastro aceita mais.
+  //
+  // ⚠️ O perigo não é o arquivo ser recusado — é `text()` TRUNCAR por desenho. As 99 primeiras
+  // posições de uma chave maior são uma chave DIFERENTE, e ou o SPI a recusa, ou ela pertence a
+  // outro recebedor. O emissor já barra isso; o que faltava era barrar antes de o NSA ser alocado.
+  it('recusa a chave que não cabe nas 99 posições do G101', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({ ...fullAccount(), pixKey: { keyType: 'email', key: 'k'.repeat(100) } }),
+      }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['pix-key']);
+    // `malformed`, e não `unmappable`: a chave É conversível e É uma chave — o que ela não é, é
+    // representável no campo. Ver a nota em `payout-readiness.ts`, `case 'pix'`.
+    assert.equal(reasonFor(r, 'pix-key'), 'malformed');
+  });
+
+  it('aceita a chave de exatamente 99 posições — o limite é inclusivo', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({ ...fullAccount(), pixKey: { keyType: 'email', key: 'k'.repeat(99) } }),
+      }),
+    );
+
+    assert.equal(r.status, whenDataIsGood('pix'));
+  });
+
+  // As duas condições ACUMULAM: quem tem chave longa demais E de tipo não suportado precisa ver as
+  // duas de uma vez, não uma volta ao cadastro por vez. Mesma disciplina do boleto.
+  it('acumula as duas condições da chave', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({
+          ...fullAccount(),
+          pixKey: { keyType: 'nao-existe', key: 'k'.repeat(100) },
+        }),
+      }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(
+      gapsOf(r)
+        .map((g) => g.reason)
+        .sort(),
+      ['malformed', 'unmappable'],
+    );
+  });
+
+  // Sem chave, o pré-voo PARA — listar "comprimento" e "tipo" de um campo vazio mandaria o operador
+  // corrigir o que não existe. A pendência é uma só: cadastrar a chave.
+  it('não acumula condições da chave quando a chave nem existe', () => {
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'PIX', payee: target({ ...fullAccount(), pixKey: null }) }),
+    );
+
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['pix-key']);
+    assert.equal(reasonFor(r, 'pix-key'), 'missing');
   });
 
   // Chave presente porém em branco é chave ausente — o cadastro guarda `''` com mais frequência
@@ -169,34 +277,54 @@ describe('checkPayoutReadiness — PIX exige a chave E o bloco bancário (#838)'
   });
 
   // Conta completa não substitui chave: quem escolheu PIX no lançamento paga por PIX, e trocar a
-  // rota mudaria o custo e o prazo que o operador aceitou. Continua valendo — o que mudou é que
-  // agora a conta é exigida ALÉM da chave, não NO LUGAR dela.
+  // rota mudaria o custo e o prazo que o operador aceitou. Sobreviveu às duas viradas de régua —
+  // a conta nunca bastou, nem quando era exigida além da chave (#838), nem agora que não é exigida.
   it('não aceita conta bancária no lugar da chave PIX', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX', payee: fullAccount() }));
     assert.equal(r.status, 'incomplete');
     assert.deepEqual(fieldsOf(r), ['pix-key']);
   });
 
-  // O caso que a mudança de régua criou, e o que ele fixa é a ACUMULAÇÃO: quem tem PIX sem chave e
-  // sem conta precisa ver as duas pendências de uma vez, não uma volta ao cadastro por vez.
-  it('acumula as pendências de chave e de conta, sem parar na primeira', () => {
+  // A chave é a ÚNICA pendência possível nesta rota. Sem cadastro nenhum, o operador recebe um
+  // caminho só — e não uma lista de campos bancários que o pagamento não vai usar.
+  it('aponta só a chave quando o favorecido não tem cadastro algum', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'PIX' }));
     assert.equal(r.status, 'incomplete');
-    assert.ok(fieldsOf(r).includes('pix-key'), 'a chave tem de aparecer');
-    assert.ok(fieldsOf(r).length > 1, `esperava conta junto, veio ${fieldsOf(r).join(', ')}`);
+    assert.deepEqual(fieldsOf(r), ['pix-key']);
   });
 
-  // A chave sozinha deixou de bastar, e este é o teste que prova a mudança — o inverso exato do que
-  // a suíte afirmava antes da #838.
-  it('recusa PIX com chave mas SEM dado bancário', () => {
+  // ⚠️ O TESTE QUE FIXA A REVERSÃO DA #945, e o inverso exato do que a suíte afirmava entre a #838 e
+  // ela. Favorecido com chave e SEM nenhum dado bancário é o cenário que a modalidade existe para
+  // atender; exigir conta aqui represava justamente ele.
+  //
+  // A arbitragem foi do banco, por escrito (laudo de 05/09/2026): banco, agência e conta do
+  // favorecido podem sair zerados no Pix iniciado por chave. O emissor passou a zerá-los, e é isso
+  // que autoriza esta régua — nesta ordem. Ver `PIX_ZEROED_PAYEE_ACCOUNT`.
+  it('aceita PIX com chave e SEM dado bancário algum', () => {
     const r = checkPayoutReadiness(
       candidate({
         paymentMethod: 'PIX',
         payee: target({ pixKey: { keyType: 'email', key: 'a@b.com' } }),
       }),
     );
-    assert.equal(r.status, 'incomplete');
-    assert.equal(fieldsOf(r).includes('pix-key'), false, 'a chave está lá; o que falta é a conta');
+    assert.equal(r.status, whenDataIsGood('pix'));
+  });
+
+  // O efeito colateral desejado da reversão, e ele merece teste próprio por ser o que mais surpreende
+  // quem conhece a régua da transferência: o DV divergente deixa de bloquear no Pix. Está certo — o
+  // dígito não vai no arquivo, e as posições saem zeradas. A régua de DV continua onde ele é escrito.
+  it('não bloqueia por DV divergente — o dígito não vai no arquivo desta rota', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({
+          ...fullAccount(),
+          checkDigit: '9',
+          pixKey: { keyType: 'random-key', key: 'a-b-c' },
+        }),
+      }),
+    );
+    assert.equal(r.status, whenDataIsGood('pix'));
   });
 });
 

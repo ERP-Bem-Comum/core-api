@@ -67,7 +67,10 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
     id: 1,
     name: 'PARC',
     bank: 'BRADESCO',
-    agency: '0288-7',
+    // ⚠️ Agência SINTÉTICA. O valor anterior era um número de agência plausivelmente copiado do
+    // cadastro real, e estes repositórios são públicos (CLAUDE.md, anti-padrão 9). A FORMA é o que
+    // o caso mede — `NNNN-D`, o formato F7 do legado —, e ela se preserva com qualquer número.
+    agency: '1234-5',
     accountNumber: '12345',
     dv: '0',
     initialBalance: 1000.5,
@@ -76,12 +79,13 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
     ...over,
   });
 
-  it('mapeia Bradesco → bankCode 237, convenio VAZIO (D6), agência preservada (F7)', () => {
+  it('mapeia Bradesco → bankCode 237, convenio VAZIO (D6), agência DECOMPOSTA (F7 · #856)', () => {
     const r = mapLegacyAccountRow(account());
     assert.ok(r.ok);
     assert.equal(r.value.legacyId, 1);
     assert.equal(r.value.input.bankCode, '237');
-    assert.equal(r.value.input.agency, '0288-7');
+    assert.equal(r.value.input.agency, '1234');
+    assert.equal(r.value.input.agencyDigit, '5');
     assert.equal(r.value.input.accountNumber, '12345');
     assert.equal(r.value.input.accountDigit, '0');
     assert.equal(r.value.input.convenio, '');
@@ -116,6 +120,42 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
     const r = mapLegacyAccountRow(account({ bank: 'BANCO X' }));
     assert.ok(!r.ok);
     assert.ok(r.error.some((e) => e.tag === 'EnumUnknown' && e.field === 'bank'));
+  });
+
+  /*
+   * ⚠️ O CASO QUE MOTIVOU A DECOMPOSIÇÃO (#856), e o assert é sobre o que NÃO acontece mais.
+   *
+   * A agência ia INTEIRA para a coluna, com o separador. O emissor escreve `digits(agency, 5)`, que
+   * remove o `-` antes do pad: `1234-5` virava `12345` nas posições 053-057, onde o banco espera
+   * `01234`. Cinco dígitos, cabe no campo, o `remittance-inspector` aprova — ele valida forma, e a
+   * forma fica perfeita — e o arquivo vai ao banco apontando outra agência, em toda remessa daquela
+   * conta. O comentário do mapper afirmava que o dígito ia "no campo próprio"; não ia, porque campo
+   * próprio não existia.
+   */
+  it('#856: a agência migrada NÃO retém o separador — ele corromperia as posições 053-057', () => {
+    const r = mapLegacyAccountRow(account());
+    assert.ok(r.ok);
+    assert.ok(
+      !/\D/.test(r.value.input.agency),
+      'agência migrada com separador vira outra agência no arquivo',
+    );
+  });
+
+  it('#856: agência sem DV no legado migra sem dígito — nunca com um zero inventado', () => {
+    const r = mapLegacyAccountRow(account({ agency: '1234' }));
+    assert.ok(r.ok);
+    assert.equal(r.value.input.agency, '1234');
+    assert.equal(r.value.input.agencyDigit, undefined);
+  });
+
+  // Não decompõe → não migra errado, e também NÃO vai para quarentena: a conta serve à conciliação
+  // sem agência válida, e barrar a migração repetiria o beco do `'LEGADO'` (#879) — conta ausente do
+  // sistema, sem via de correção pela tela. Quem recusa é `checkCedenteAgency`, na geração.
+  it('#856: agência que não decompõe migra como veio, para a régua da remessa recusar depois', () => {
+    const r = mapLegacyAccountRow(account({ agency: 'AG 12' }));
+    assert.ok(r.ok);
+    assert.equal(r.value.input.agency, 'AG 12');
+    assert.equal(r.value.input.agencyDigit, undefined);
   });
 });
 

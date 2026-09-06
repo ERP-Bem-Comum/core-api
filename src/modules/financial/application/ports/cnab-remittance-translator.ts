@@ -7,16 +7,22 @@ import type { Result } from '../../../../shared/primitives/result.ts';
 // O DV agência/conta do favorecido não entra: o banco exige a posição correspondente em branco, e um
 // campo que não pode ser preenchido não deve existir na borda (#754). O homônimo em
 // `RemittanceCedenteData` é outro campo, noutro ponto do layout, e permanece.
-export type RemittancePayeeData = Readonly<{
+// QUEM É o favorecido. Rota que identifica o recebedor por outro meio — a chave, no Pix — precisa só
+// disto, e pedir mais transformaria um dado que o pagamento não usa em requisito de cadastro (#945).
+export type RemittancePayeeIdentity = Readonly<{
   name: string;
   documentType: '1' | '2';
   document: string;
-  bankCode: string;
-  agency: string;
-  agencyDigit: string;
-  accountNumber: string;
-  accountDigit: string;
 }>;
+
+export type RemittancePayeeData = RemittancePayeeIdentity &
+  Readonly<{
+    bankCode: string;
+    agency: string;
+    agencyDigit: string;
+    accountNumber: string;
+    accountDigit: string;
+  }>;
 
 export type RemittanceCedenteData = Readonly<{
   bankCode: string;
@@ -68,18 +74,23 @@ export type RemittanceBilletPayment = Readonly<{
 
 // Pagamento por chave Pix, forma `45` (#838).
 //
-// ⚠️ CARREGA `payee` COMPLETO, e a leitura errada a evitar é concluir daí que "o Pix passou a ser uma
-// transferência". Ele não é: quem endereça o pagamento no SPI é a CHAVE, e é ela que vai no Segmento
-// B. O bloco bancário está aqui porque o Segmento A — que continua sendo o registro de crédito —
-// identifica a conta, e o golden do banco o traz preenchido, com o layout marcando os campos como
-// obrigatórios (p. 39). Duas coisas verdadeiras ao mesmo tempo, e a #708 só havia declarado uma.
+// ⚠️ **NÃO carrega bloco bancário, e a mudança é de premissa, não de conveniência (#945).** A versão
+// anterior deste tipo exigia `RemittancePayeeData` completo, com o argumento de que o Segmento A
+// "identifica a conta" e o golden o traz preenchido. O golden prova como AQUELE arquivo foi montado,
+// não o que o ERP deve coletar — e o laudo do Bradesco de 05/09/2026 fechou a questão: banco, agência
+// e conta do favorecido podem sair ZERADOS quando o Pix é iniciado por chave. Quem endereça o
+// pagamento no SPI é a chave; as posições 021-042 do Segmento A são preenchimento técnico, resolvido
+// na serialização por `PIX_ZEROED_PAYEE_ACCOUNT`, e não requisito funcional do pagamento.
+//
+// O efeito de tipar assim é o que importa: um chamador não CONSEGUE mais alimentar o Segmento A com a
+// conta cadastrada do favorecido nesta rota, e o pré-voo não tem mais como exigi-la.
 //
 // O `keyType` viaja CRU, no vocabulário de `partners`. A tradução para o domínio `G100` é do adapter
-// — a application não conhece layout —, e é o mesmo arranjo do ISPB, que nem sequer aparece aqui:
-// ele é derivado do código de compensação lá dentro.
+// — a application não conhece layout. O ISPB não aparece aqui pelo mesmo motivo, e desde a #923 nem
+// sequer é derivado: é constante do layout (`PIX_ISPB_ZEROS`).
 export type RemittancePixPayment = Readonly<{
   route: 'pix';
-  payee: RemittancePayeeData;
+  payee: RemittancePayeeIdentity;
   pixKey: string;
   pixKeyType: string;
   valueCents: number;
@@ -152,13 +163,12 @@ export type CnabTranslateError =
   // CADASTRO —, e o nome próprio existe porque a alternativa é pior do que um erro genérico: sem ele
   // a chave seria truncada e o pagamento sairia bem-formado para OUTRO recebedor.
   | 'cnab-pix-key-unrepresentable'
-  // Os outros dois da rota Pix, e cada um manda o operador a um lugar DIFERENTE — que é a única
-  // razão pela qual três erros de uma rota só não são exagero:
-  //   · `ispb-unknown`      → o banco do favorecido não está na tabela do Bacen. A saída é atualizar
-  //                           a fonte embarcada, ou corrigir o código de compensação no cadastro.
-  //   · `key-type-unsupported` → o tipo da chave não existe no domínio `G100` do layout. Não há o que
-  //                           atualizar: ou o cadastro gravou fora do contrato, ou o layout mudou.
-  | 'cnab-payee-ispb-unknown'
+  // O outro da rota Pix: `key-type-unsupported` diz que o tipo da chave não existe no domínio `G100`
+  // do layout. Não há o que atualizar — ou o cadastro gravou fora do contrato, ou o layout mudou.
+  //
+  // Eram três. O `cnab-payee-ispb-unknown` saiu na #923, quando o ISPB deixou de ser derivado de uma
+  // tabela embarcada e virou constante do layout: sem tabela não há banco desconhecido, e um erro que
+  // não pode mais ocorrer é um caminho que os chamadores continuariam tratando à toa.
   | 'cnab-pix-key-type-unsupported';
 
 // ─── A partição em arquivos (CA4 da #838) ──────────────────────────────────────────────────────

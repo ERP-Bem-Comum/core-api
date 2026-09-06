@@ -2,6 +2,7 @@ import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { PaymentMethod } from '../document/types.ts';
 import { type DigitableLineError, resolveBarcode } from './digitable-line.ts';
 import { decomposePayeeAccount } from './payee-account.ts';
+import { isPayablePixKeyType, pixKeyFitsField } from './pix-key.ts';
 import { hasRemittanceIssuer } from './van-routes.ts';
 import type {
   PayoutCandidate,
@@ -129,40 +130,75 @@ const readBilletPayee = (
 
 const checkRouteData = (candidate: PayoutCandidate, route: VanRoute): RouteDataCheck => {
   switch (route) {
-    // ⚠️ O PIX PASSOU A EXIGIR CHAVE **E** BLOCO BANCÁRIO (#838), e esta é a linha que mais
-    // provavelmente alguém vai querer reverter lendo a decisão da P.O. de 13/08 (#708) — que dizia,
-    // com todas as letras, que "PIX paga por chave, não olha agência ou conta". A decisão não estava
-    // errada sobre o NEGÓCIO; ela estava incompleta sobre o ARQUIVO, e quem desfaz a diferença
-    // reabre a divergência que a #837 fechou.
+    // ⚠️ O PIX EXIGE A CHAVE, E SÓ ELA — a exigência de bloco bancário que vigorou entre a #838 e a
+    // #945 foi REVERTIDA, e esta nota existe para que ela não volte por releitura do golden.
     //
-    // A evidência é do banco, não de leitura: no golden `GOLDEN_TEST_MULTIPAG_PIX_240` (forma `45`),
-    // o Segmento A traz banco, agência, DV, conta e DV do favorecido TODOS PREENCHIDOS — e o layout
-    // (p. 39) marca os quatro com asterisco de obrigatório. A chave endereça o pagamento no SPI; o
-    // Segmento A continua sendo o registro de crédito, e ele identifica a conta.
+    // O argumento que a sustentava era: o Segmento A do golden `GOLDEN_TEST_MULTIPAG_PIX_240` traz
+    // banco, agência, DV, conta e DV do favorecido preenchidos, e o layout marca os campos com
+    // asterisco. Os dois fatos são verdadeiros e nenhum dos dois sustenta a conclusão:
     //
-    // A dependência já existia sem estar declarada, e é o que torna esta mudança menos brusca do que
-    // parece: `payeeIspbFor` (#923) deriva o ISPB do CÓDIGO DE COMPENSAÇÃO do favorecido, que é parte
-    // deste mesmo bloco. O emissor de Pix já não funcionava sem cadastro bancário; o que faltava era
-    // o pré-voo dizer isso ANTES da geração, em vez de no último clique.
+    //   · o golden prova como AQUELE arquivo foi montado, não o que o ERP deve coletar;
+    //   · o asterisco, pela legenda do próprio manual (p. 7), significa "merece atenção especial",
+    //     NÃO "obrigatório" — o manual chega a marcar `*G009` (DV da agência) e escrever na descrição
+    //     "(Campo Não Obrigatório – Informação Opcional)". E o `P002`, código do banco do favorecido,
+    //     não tem asterisco, embora agência e conta sem banco não signifiquem nada.
     //
-    // ACUMULA as duas pendências, como o boleto faz logo abaixo e pela mesma razão: quem tem Pix sem
-    // chave E sem conta precisa ver as duas de uma vez, não uma volta ao cadastro por vez. A chave
-    // vem primeiro por ser o dado que define a ROTA — sem ela o operador escolheu Pix por engano.
+    // **A arbitragem veio do banco, por escrito** (laudo da equipe Multipag Pix/VAN, 05/09/2026):
+    // banco, agência e conta do favorecido podem sair ZERADOS quando o Pix é iniciado por chave. O
+    // emissor passou a fazê-lo (`PIX_ZEROED_PAYEE_ACCOUNT`), e é isso que autoriza esta régua a
+    // relaxar — nesta ordem, nunca na inversa: enquanto o Segmento A lia a conta do cadastro, um
+    // pré-voo permissivo aprovaria o que o montador recusaria com `numeric-field-invalid`, DEPOIS do
+    // `allocateNsa`. É exatamente a divergência que a #837 fechou, e a razão de a #945 fixar os
+    // passos em sequência.
+    //
+    // A dependência transversal que existia também caiu: `payeeIspbFor` derivava o ISPB do código de
+    // compensação do cadastro, e desde a #923 o ISPB é constante do layout. Não sobrou nada na rota
+    // Pix que leia o bloco bancário do favorecido.
     //
     // Chave em branco é chave ausente: o cadastro guarda `''` com mais frequência que `null` (ver o
     // CHECK do bloco bancário, em `types.ts`). E conta completa NÃO substitui a chave — quem escolheu
     // PIX no lançamento paga por PIX, e trocar a rota mudaria o custo e o prazo que ele aceitou.
+    //
+    // ⚠️ Efeito colateral DESEJADO, e que aparece na tela: some o `check-digit-mismatch` na rota Pix.
+    // Favorecido com DV divergente era bloqueado aqui; passa a pagar, e está certo — o DV não vai no
+    // arquivo. A régua de DV continua valendo onde o dígito é escrito, que é a transferência.
+    // ⚠️ AS DUAS CONDIÇÕES DO EMISSOR (#948, CA1/CA2) SÃO VERIFICADAS AQUI, e não são zelo: as duas
+    // recusas correspondentes vêm DEPOIS do `allocateNsa`, então cada tentativa queima um número da
+    // série antes de o operador descobrir por quê. A régua vem de `pix-key.ts` — a MESMA fonte que o
+    // emissor consome —, e é isso que impede as duas de divergirem outra vez.
+    //
+    // Nenhuma das duas é defesa contra dado malformado: as duas são alcançáveis por cadastro
+    // perfeitamente legítimo. O cadastro aceita chave bem mais longa que as 99 posições do `G101`, e
+    // o vocabulário de tipos de chave é de `partners`, que pode crescer sem que o `G100` cresça junto.
     case 'pix': {
-      const keyGap = isBlank(candidate.payee?.pixKey?.key ?? null)
-        ? missingField(route, 'pix-key')
-        : null;
-      const parts = decomposePayeeAccount(candidate.payee);
-      if (keyGap === null && parts.ok) return ready(route);
+      const key = candidate.payee?.pixKey?.key ?? null;
+      const keyType = candidate.payee?.pixKey?.keyType ?? null;
 
-      return incomplete(
-        route,
-        immutable([...(keyGap === null ? [] : keyGap.gaps), ...(parts.ok ? [] : parts.error)]),
-      );
+      // Chave em branco é chave ausente: o cadastro guarda `''` com mais frequência que `null` (ver o
+      // CHECK do bloco bancário, em `types.ts`). E conta completa NÃO substitui a chave — quem
+      // escolheu PIX no lançamento paga por PIX, e trocar a rota mudaria o custo e o prazo aceitos.
+      //
+      // Sem chave, PARA AQUI em vez de acumular: as duas verificações seguintes são sobre a chave que
+      // não existe, e listá-las mandaria o operador corrigir o comprimento de um campo vazio.
+      if (isBlank(key)) return incomplete(route, missingField(route, 'pix-key').gaps);
+
+      const gaps: PayoutGap[] = [];
+
+      // `malformed`, e NÃO `unmappable` — desvio deliberado da letra da CA1 da #948, que dizia
+      // `unmappable`. Os dois motivos existem para dizer coisas diferentes ao operador
+      // (`types.ts`): `unmappable` é "ninguém sabe converter isto", `malformed` é "está lá e precisa
+      // ser corrigido". A chave longa demais É conversível e É uma chave — o que ela não é, é
+      // representável no campo. E usar `unmappable` nas duas condições as tornaria indistinguíveis na
+      // tela, que é justamente o que a lista de lacunas por CAMPO existe para evitar.
+      if (!pixKeyFitsField(key ?? '')) gaps.push({ field: 'pix-key', reason: 'malformed' });
+
+      // `unmappable` é o encaixe exato: o cadastro tem um tipo de chave que este layout não prevê, e
+      // não há o que corrigir no valor — é preciso outra chave. Cobre também o `keyType` VAZIO, que o
+      // reader recusa derrubando a geração inteira (a CA8, que sai de graça aqui).
+      if (!isPayablePixKeyType(keyType ?? ''))
+        gaps.push({ field: 'pix-key', reason: 'unmappable' });
+
+      return gaps.length === 0 ? ready(route) : incomplete(route, immutable(gaps));
     }
 
     // Única rota que depende da conta estruturada — e, portanto, a única em que o desencaixe do

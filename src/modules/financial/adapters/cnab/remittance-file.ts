@@ -40,12 +40,13 @@ import {
   segmentJ,
   segmentJ52,
   PIX_ACCOUNT_TYPE_CHECKING,
+  PIX_ZEROED_PAYEE_ACCOUNT,
   type BilletParty,
   type CnabSegmentError,
   type Payee,
   type PayeeAddress,
+  type PayeeIdentity,
 } from './multipag-segments.ts';
-import { payeeIspbFor, type PayeeIspbError } from './payee-ispb.ts';
 import { pixInitiationFor, type PixInitiationError } from './pix-initiation.ts';
 
 // O layout não especifica o terminador de linha — nem no corpo, nem nas notas gerais. CRLF é a
@@ -118,22 +119,25 @@ export type BilletPayment = Readonly<{
 
 // Pagamento por chave Pix, na forma `45` (#838).
 //
-// ⚠️ CARREGA `payee` COMPLETO, e é a parte contra-intuitiva desta rota. A decisão da P.O. de 13/08
-// (#708) dizia que "PIX paga por chave, não olha agência ou conta", e isso vale para o NEGÓCIO —
-// não para o arquivo: o golden do banco (`GOLDEN_TEST_MULTIPAG_PIX_240`) traz banco, agência, DV,
-// conta e DV do favorecido preenchidos no Segmento A, e o layout (p. 39) marca os quatro com
-// asterisco de obrigatório. A chave endereça o pagamento no SPI; o Segmento A continua sendo o
-// registro de crédito, e identifica a conta. O pré-voo foi alinhado a isto em
-// `domain/payout/payout-readiness.ts`, e desalinhá-los reabre a divergência da #837.
+// ⚠️ NÃO carrega bloco bancário — e a versão anterior deste tipo carregava, com o argumento de que o
+// golden `GOLDEN_TEST_MULTIPAG_PIX_240` traz banco, agência, DV, conta e DV preenchidos no Segmento A
+// e o layout marca os campos com asterisco. **O laudo do Bradesco de 05/09/2026 arbitrou contra**
+// (#945): esses campos podem sair zerados no Pix iniciado por chave, e é o que `segmentA` recebe
+// desta rota, via `PIX_ZEROED_PAYEE_ACCOUNT`.
+//
+// A decisão da P.O. de 13/08 (#708) — "PIX paga por chave, não olha agência ou conta" — estava certa
+// desde o começo; o que faltava era separar *campo posicional do CNAB* de *dado necessário para
+// identificar o recebedor*. O preenchimento das 021-042 é regra de serialização, não requisito de
+// cadastro, e é por isso que ele mora no montador e não neste tipo.
 //
 // O `keyType` chega CRU, do vocabulário de `partners`, e é traduzido aqui — não antes. Quem conhece
-// o domínio `G100` é o adapter, e é o mesmo arranjo do ISPB: nenhum dos dois é dado do título, os
-// dois são derivados de algo que o título já carrega. Um `initiation: string` na entrada seria a
-// sexta reincidência do padrão que a rule `cnab.md` registra — um campo que o chamador só poderia
-// preencher a partir do que ele já passou.
+// o domínio `G100` é o adapter. O ISPB não chega nem cru nem derivado: desde a #923 é constante do
+// layout (`PIX_ISPB_ZEROS`). Um `initiation: string` na entrada seria a sexta reincidência do padrão
+// que a rule `cnab.md` registra — um campo que o chamador só poderia preencher a partir do que ele
+// já passou.
 export type PixPayment = Readonly<{
   route: 'pix';
-  payee: Payee;
+  payee: PayeeIdentity;
   pixKey: string;
   pixKeyType: string;
   paymentDate: Date;
@@ -186,12 +190,14 @@ export type RemittanceFileError =
   // saída: truncar colapsaria duas referências distintas na mesma string, e o casamento do retorno
   // apontaria para o título errado — sem nada indicando que houve truncamento.
   | 'remittance-reference-overflow'
-  // Os dois erros da tradução do Pix (#838), entrando por inteiro pela mesma razão do envelope: cada
-  // um manda o operador a um lugar diferente. `payee-ispb-unknown` diz que o banco do favorecido não
-  // está na tabela do Bacen — e a saída é atualizar a fonte, ou corrigir o código no cadastro;
-  // `remittance-pix-key-type-unsupported` diz que o tipo da chave não existe no domínio `G100`.
-  // Achatá-los em `cnab-translation-failed` mandaria abrir chamado de código nos dois casos.
-  | PayeeIspbError
+  // O erro da tradução do Pix (#838), entrando por inteiro pela mesma razão do envelope: ele manda o
+  // operador a um lugar próprio. `remittance-pix-key-type-unsupported` diz que o tipo da chave não
+  // existe no domínio `G100`; achatá-lo em `cnab-translation-failed` mandaria abrir chamado de código.
+  //
+  // Eram DOIS até a #923. O `payee-ispb-unknown` saiu junto com a tabela de-para: com o ISPB virando
+  // constante do layout, não há mais banco a desconhecer. Era a recusa mais cara das três da #948 —
+  // vinha depois do `allocateNsa`, então cada favorecido de banco fora da tabela queimava um número
+  // da série antes de o operador descobrir que não daria.
   | PixInitiationError;
 
 export type RemittanceFile = Readonly<{
@@ -374,19 +380,16 @@ const detailsOf = (
       const initiation = pixInitiationFor(payment.pixKeyType);
       if (!initiation.ok) return initiation;
 
-      // O ISPB é DERIVADO do código de compensação do favorecido (#923), não recebido: o cadastro
-      // guarda o código de banco, e traduzir é trabalho de quem monta o arquivo. Recebê-lo pronto
-      // deixaria o chamador livre para passar um ISPB que não corresponde ao banco do Segmento A —
-      // dois campos do mesmo registro afirmando instituições diferentes.
-      const ispb = payeeIspbFor(payment.payee.bankCode);
-      if (!ispb.ok) return ispb;
-
+      // O ISPB deixou de ser derivado (#923): é constante do layout, e os dois lugares que o pedem
+      // — o `P015` do Segmento B e o complemento do `G031` aqui — leem o mesmo `PIX_ISPB_ZEROS`
+      // lá dentro. Some com ele a recusa `payee-ispb-unknown`, que era emitida DEPOIS do
+      // `allocateNsa` e queimava um número da série por banco fora da tabela.
+      //
       // A Informação 2 (G031) do Segmento A: inscrição do favorecido + ISPB + tipo de conta. Mesma
       // inscrição que o Segmento B grava em 018-032 — passar as duas da mesma origem é o que garante
       // que não divirjam dentro do par, exatamente como o nome do cedente no par J + J-52.
       const info = pixPaymentInfo({
         payeeDocument: payment.payee.document,
-        payeeIspb: ispb.value,
         accountType: PIX_ACCOUNT_TYPE_CHECKING,
       });
       if (!info.ok) return info;
@@ -395,7 +398,16 @@ const detailsOf = (
         bankCode,
         batchNumber,
         recordNumber: firstRecordNumber,
-        payee: payment.payee,
+        // ⚠️ O bloco bancário do favorecido sai ZERADO, por laudo do banco de 05/09/2026 (#945) — ver
+        // `PIX_ZEROED_PAYEE_ACCOUNT`. O spread é explícito, e não um default lá dentro do `segmentA`,
+        // porque a decisão é DA ROTA: o Segmento A da transferência continua escrevendo a conta real,
+        // e um montador que decidisse sozinho teria de conhecer a forma de lançamento — que é
+        // exatamente o acoplamento que `segmentBPix` existe para evitar.
+        //
+        // Note que `payment.payee` é `RemittancePayeeIdentity` e NÃO TEM as cinco posições: o spread
+        // não sobrescreve dado do cadastro, ele fornece o que o tipo não carrega. É o compilador
+        // garantindo que ninguém volte a alimentar estas posições a partir do favorecido.
+        payee: { ...payment.payee, ...PIX_ZEROED_PAYEE_ACCOUNT },
         paymentDate: payment.paymentDate,
         valueCents: payment.valueCents,
         // `009` (SPI), derivada da forma como em toda rota. O golden confirma, e o manual não a
@@ -420,7 +432,6 @@ const detailsOf = (
         payee: payment.payee,
         initiation: initiation.value,
         pixKey: payment.pixKey,
-        payeeIspb: ispb.value,
       });
       if (!b.ok) return b;
 

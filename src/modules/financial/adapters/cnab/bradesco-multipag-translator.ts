@@ -46,10 +46,8 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     // no campo — não "falhou a tradução" (#838).
     case 'pix-key-unrepresentable':
       return 'cnab-pix-key-unrepresentable';
-    // Os dois erros de TRADUÇÃO da rota Pix. Sobem nomeados pela mesma régua: um manda ao cadastro
-    // (ou à fonte do Bacen), o outro diz que o tipo da chave não existe no domínio do layout.
-    case 'payee-ispb-unknown':
-      return 'cnab-payee-ispb-unknown';
+    // O erro de TRADUÇÃO da rota Pix, que sobe nomeado: diz que o tipo da chave não existe no
+    // domínio do layout. Eram dois até a #923 — o `payee-ispb-unknown` saiu com a tabela de-para.
     case 'remittance-pix-key-type-unsupported':
       return 'cnab-pix-key-type-unsupported';
     // `remittance-mixed-file-modalities` converge para o desfecho genérico, e é escolha, não

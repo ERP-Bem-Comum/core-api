@@ -8,6 +8,7 @@
 //
 // Esta camada é ACL (ADR-0006): recebe dados já resolvidos e não conhece agregado nem repositório.
 import { ok, err, type Result } from '../../../../shared/primitives/result.ts';
+import { PIX_KEY_MAX_WIDTH } from '../../domain/payout/pix-key.ts';
 import {
   alpha,
   blanks,
@@ -65,17 +66,58 @@ const MOVEMENT_INSTRUCTION_BLOCKED = '09';
 
 const CURRENCY_BRL = 'BRL'; // G040
 
-export type Payee = Readonly<{
+// QUEM É o favorecido — nome e inscrição. Separado do bloco bancário porque há registro que precisa
+// só disto: o Segmento B, nas duas modalidades, identifica o favorecido por inscrição e nunca escreve
+// conta (o convencional traz endereço e valores; o de Pix, a chave). Enquanto os dois andavam juntos
+// num tipo só, um pagamento por chave era obrigado a carregar agência e conta para montar um registro
+// que não as usa — que é a inversão que a #945 desfaz.
+export type PayeeIdentity = Readonly<{
   name: string;
   documentType: '1' | '2'; // 1 = CPF, 2 = CNPJ
   document: string;
+}>;
+
+// ONDE cai o dinheiro, quando o registro precisa dizê-lo. Só o Segmento A tem estas posições
+// (021-042), e só ele recebe este tipo.
+//
+// `accountAgencyDigit` NÃO existe aqui de propósito — ver a coluna 043 em `segmentA` (#754).
+export type PayeeBankAccount = Readonly<{
   bankCode: string;
   agency: string;
   agencyDigit: string;
   accountNumber: string;
   accountDigit: string;
-  // `accountAgencyDigit` NÃO existe aqui de propósito — ver a coluna 043 em `segmentA` (#754).
 }>;
+
+export type Payee = PayeeIdentity & PayeeBankAccount;
+
+// ─── O bloco bancário do favorecido no Pix por chave — ZEROS, por laudo do banco ─────────────
+//
+// Fonte: laudo da equipe Multipag Pix/VAN do Bradesco, 05/09/2026, sobre o arquivo de teste enviado
+// em 02/09. A pergunta foi literal — *"possibilidade de envio de banco, agência e conta do favorecido
+// zerados quando o PIX for iniciado por chave"* — e a resposta também: *"é possível enviar os campos
+// referentes ao banco, agência e conta do favorecido preenchidos com zeros"*. Conferido posição a
+// posição no `.REM` que o banco aprovou.
+//
+// ⚠️ NÃO é "o cadastro está vazio, então vai zero". É o oposto: a rota `45` iniciada por chave NÃO LÊ
+// o bloco bancário do favorecido, tenha ele um ou não. Um favorecido pode perfeitamente ter conta
+// cadastrada — muitos têm, por serem também favorecidos de TED —, e ainda assim estas posições saem
+// zeradas, porque quem endereça o pagamento no SPI é a chave. Escrever zeros por DECISÃO e escrever
+// zeros por ausência de dado produzem o mesmo arquivo hoje e divergem no dia em que o cadastro
+// estiver completo; só o primeiro continua correto.
+//
+// ⚠️ A COLUNA 043 NÃO ENTRA AQUI, e a omissão é a parte que se perde numa leitura rápida do laudo. A
+// resposta nomeia CINCO campos — banco, agência, conta e os dois DVs —, e o DV agência/conta (G012)
+// não é um deles: ele continua em BRANCO, pela regra do #754 extraída do validador oficial
+// (`cnab-validator#2`). Zerar o bloco "inteiro" por simetria preencheria uma posição que o banco
+// recusa. Por isso este tipo é `PayeeBankAccount`, que não tem o campo, e não um objeto solto.
+export const PIX_ZEROED_PAYEE_ACCOUNT: PayeeBankAccount = {
+  bankCode: '000',
+  agency: '00000',
+  agencyDigit: '0',
+  accountNumber: '000000000000',
+  accountDigit: '0',
+};
 
 export type PayeeAddress = Readonly<{
   street?: string;
@@ -123,7 +165,10 @@ export type SegmentBInput = Readonly<{
   bankCode: string;
   batchNumber: number;
   recordNumber: number;
-  payee: Payee;
+  // `PayeeIdentity`, e não `Payee`: este registro identifica o favorecido por inscrição (018-032) e
+  // não tem posição alguma de conta. Um `Payee` completo aqui pediria ao chamador dados que a linha
+  // não escreve — e é o que obrigava o Pix por chave a carregar bloco bancário (#945).
+  payee: PayeeIdentity;
   // G044 e G042, colunas 128-135 e 136-150 — o VENCIMENTO e o VALOR NOMINAIS do título, no grupo
   // "Dados Complementares – Pagamento" (layout p.25, campos 17.3B e 18.3B; descrições na p.103).
   // Ambos declarados **Obrigatório – Remessa / Retorno**, e ambos saíam zerados: é o defeito 5 da
@@ -317,7 +362,9 @@ export type SegmentBPixInput = Readonly<{
   bankCode: string; // banco do CEDENTE do arquivo, isto é, o pagador (001-003)
   batchNumber: number;
   recordNumber: number;
-  payee: Payee;
+  // `PayeeIdentity` pela mesma razão do Segmento B convencional, e aqui ela é a própria tese da
+  // #945: quem endereça o pagamento é a CHAVE, em 128-226. Este registro não tem onde escrever conta.
+  payee: PayeeIdentity;
   // G100, colunas 015-017 — os DOIS dígitos do domínio, já traduzidos por `pixInitiationFor`. Este
   // registro escreve o que recebeu e não tem opinião sobre qual iniciação é a certa, exatamente como
   // o Segmento A faz com `tedPurpose` e `complementPurpose`: quem deriva conhece a rota, quem monta
@@ -326,10 +373,12 @@ export type SegmentBPixInput = Readonly<{
   initiation: string;
   // G101, colunas 128-226 — a chave, como o cadastro a guarda. 99 posições Alfa alinhadas à esquerda.
   pixKey: string;
-  // P015, colunas 233-240 — ISPB do PSP do recebedor, derivado do código de compensação por
-  // `payeeIspbFor` (#923). Obrigatório na modalidade, e sem default pelo mesmo motivo do `dueDate`
-  // acima: um `?` com `?? ''` compilaria em todo chamador e emitiria oito brancos.
-  payeeIspb: string;
+  // O `payeeIspb` SAIU da assinatura (#923), e a remoção é o ponto — não uma simplificação. Enquanto
+  // o campo existiu, alguém tinha de produzir o valor, e a única fonte disponível era uma tabela
+  // local banco→ISPB que responde à pergunta errada: ela diz "qual o ISPB do banco X?" quando o
+  // arquivo pergunta "qual o ISPB da instituição que detém ESTA chave?". As duas respostas coincidem
+  // só enquanto a chave não sofrer portabilidade, e quando divergem nada sinaliza. Ver
+  // `PIX_ISPB_ZEROS`, abaixo.
 }>;
 
 // Dois dígitos, e a guarda é de COERÊNCIA INTERNA — o valor vem de `pixInitiationFor`, não do
@@ -339,7 +388,34 @@ const isPixInitiation = (raw: string): boolean =>
   new RegExp(`^\\d{${String(PIX_INITIATION_WIDTH)}}$`).test(raw);
 
 // 99 posições é o TAMANHO DO CAMPO, e aqui ele é um limite real, não um alinhamento.
-const PIX_KEY_WIDTH = 99;
+// A largura vem do DOMÍNIO (`payout/pix-key.ts`), e não de um `99` local, pela razão da #948: o
+// pré-voo precisa da mesma medida para antecipar `pix-key-unrepresentable` antes do `allocateNsa`, e
+// domínio não alcança adapter. Duas constantes com o mesmo valor seriam duas réguas — e uma delas
+// mudaria sozinha no dia em que o layout mudasse.
+const PIX_KEY_WIDTH = PIX_KEY_MAX_WIDTH;
+
+// ─── O ISPB na modalidade Pix — ZEROS, por laudo do banco (#923) ─────────────────────────────
+//
+// Vale para os DOIS lugares em que o layout pede o ISPB do PSP do recebedor: o `P015` do Segmento B
+// (233-240) e o complemento do `G031` na Informação 2 do Segmento A (192-199, dentro do bloco
+// 178-217). Um só literal porque é um só fato — dois valores separados divergiriam, e o arquivo
+// afirmaria duas instituições diferentes para o mesmo pagamento.
+//
+// **Fonte, e ela é a mais alta que este repositório reconhece:** laudo da equipe Multipag Pix/VAN do
+// Bradesco, 05/09/2026, respondendo à pergunta literal *"ISPB preenchido com 00000000, conforme
+// orientação recebida"* com *"os questionamentos encaminhados abaixo também estão corretos e em
+// conformidade com o layout"*. Antes disso o emissor derivava o valor de uma tabela embarcada
+// (#934), alinhado ao golden — que preenche o campo porque PODE, não porque precisa. O manual v08
+// concorda: o `P015` é obrigatório só para "TED para instituição financeira que não possui código
+// COMPE", que não é esta rota.
+//
+// ⚠️ **NÃO reintroduzir uma tabela banco→ISPB se o campo voltar a ser exigido de verdade.** A origem
+// correta é o DICT, por resolução da chave — é ele que sabe em qual instituição a chave está HOJE.
+// Chave sofre portabilidade, reivindicação de posse e troca de conta vinculada; uma tabela derivada
+// do banco cadastrado acerta enquanto os dois coincidirem e erra em silêncio quando deixam de
+// coincidir. O acesso ao DICT é dos participantes do Pix, então isso dependeria de API do
+// Bradesco/VAN — e é por isso que a volta do campo é decisão de produto, não uma linha a mais aqui.
+const PIX_ISPB_ZEROS = '00000000';
 
 export const segmentBPix = (input: SegmentBPixInput): Result<string, CnabSegmentError> => {
   const { payee: p } = input;
@@ -383,7 +459,7 @@ export const segmentBPix = (input: SegmentBPixInput): Result<string, CnabSegment
     // 227-232 UG centralizadora (SIAPE). ZERADO, não em branco — o layout marca o campo Num sem
     // obrigatoriedade, e é zerado que o golden do banco grava. A modalidade não é SIAPE.
     num(0, 6),
-    digits(input.payeeIspb, 8), // 233-240 ISPB do PSP do recebedor (P015)
+    digits(PIX_ISPB_ZEROS, 8), // 233-240 ISPB do PSP do recebedor (P015) — zeros, laudo de 05/09
   ]);
 };
 
@@ -410,7 +486,9 @@ export const segmentBPix = (input: SegmentBPixInput): Result<string, CnabSegment
 // produziria um bloco que o inspetor aprova e o banco lê como outro favorecido.
 export type PixPaymentInfoInput = Readonly<{
   payeeDocument: string;
-  payeeIspb: string;
+  // Sem `payeeIspb`: o `I` do `CCCCCCCCCCCCCCIIIIIIIIRR` é o mesmo `PIX_ISPB_ZEROS` do `P015`, e
+  // recebê-lo aqui deixaria o chamador livre para escrever um ISPB no Segmento A diferente do que o
+  // Segmento B do mesmo par declara. Ver a nota de `PIX_ISPB_ZEROS`.
   accountType: string;
 }>;
 
@@ -436,7 +514,7 @@ export const pixPaymentInfo = (input: PixPaymentInfoInput): Result<string, CnabS
     // manual manda por extenso ("11 dígitos com 0 a esq"). Alinhar à esquerda produziria um número de
     // inscrição que não é o de ninguém.
     digits(input.payeeDocument, PIX_INFO_DOCUMENT_WIDTH),
-    digits(input.payeeIspb, PIX_INFO_ISPB_WIDTH),
+    digits(PIX_ISPB_ZEROS, PIX_INFO_ISPB_WIDTH),
     num(input.accountType, PIX_INFO_ACCOUNT_TYPE_WIDTH),
   ]);
 
