@@ -666,6 +666,15 @@ export const finCedenteAccounts = mysqlTable(
     convenio: varchar('convenio', { length: 30 }).notNull(),
     document: varchar('document', { length: 20 }).notNull(),
     status: varchar('status', { length: 8 }).notNull(),
+    // #995 B4 — o discriminador do soft delete na UNIQUE de chave natural. `'LIVE'` enquanto a conta
+    // existe (ativa ou encerrada); o próprio `id` quando `Deleted`. Ver a UNIQUE, abaixo, para o
+    // mecanismo e para por que NULL não serve. Derivado em `cedente-account.mapper.ts`, num só lugar.
+    //
+    // ⚠️ `uuidKey` e não `varchar(36)` cru: a coluna guarda o `id` da própria linha quando `Deleted`,
+    // e comparação de identificador é BYTE A BYTE — `utf8mb4_unicode_ci` acharia `A` igual a `a` e
+    // dois ids distintos poderiam colidir na UNIQUE, prendendo a chave natural de novo. É a régua
+    // que `tests/cleanup/identifier-collation-from-type.test.ts` cobra para toda coluna de 36.
+    naturalKeySlot: uuidKey('natural_key_slot').notNull().default('LIVE'),
     nextNsa: int('next_nsa').notNull(),
     // Extensão conciliação (019) — nullable (ALTER ADD COLUMN não-quebrante, migration 0009).
     type: varchar('type', { length: 16 }),
@@ -677,18 +686,42 @@ export const finCedenteAccounts = mysqlTable(
     openingBalanceDate: date('opening_balance_date', { mode: 'string' }),
   },
   (t) => [
-    check('fin_cedente_accounts_status_chk', sql`${t.status} IN ('Active','Closed')`),
+    check('fin_cedente_accounts_status_chk', sql`${t.status} IN ('Active','Closed','Deleted')`),
     check('fin_cedente_accounts_next_nsa_chk', sql`${t.nextNsa} >= 1`),
     check(
       'fin_cedente_accounts_type_chk',
       sql`${t.type} IS NULL OR ${t.type} IN ('corrente','poupanca','investimento','cartao','outro')`,
     ),
-    // FR-016: unicidade por chave natural (banco + agência + conta + dígito).
+    check(
+      'fin_cedente_accounts_status_deleted_chk',
+      sql`${t.status} <> 'Deleted' OR ${t.naturalKeySlot} = ${t.id}`,
+    ),
+    // FR-016: unicidade por chave natural (banco + agência + conta + dígito) — agora com o
+    // discriminador do soft delete (#995, B4).
+    //
+    // ⚠️ POR QUE UMA QUINTA COLUNA, e por que ela não é gambiarra: o B4 exige que a conta EXCLUÍDA
+    // libere a chave (recadastrar com os mesmos dados passa a ser aceito), enquanto a ENCERRADA
+    // continua ocupando-a. Um índice sobre as quatro colunas não distingue os dois casos — a linha
+    // soft-deleted seguiria bloqueando.
+    //
+    // A saída que preserva a garantia NO BANCO é discriminar por valor:
+    //   · linha viva (`Active`/`Closed`) → `natural_key_slot = 'LIVE'`, constante ⇒ duas contas com a
+    //     mesma chave colidem, que é o invariante do FR-016;
+    //   · linha `Deleted` → `natural_key_slot = id`, único por linha ⇒ nunca colide com ninguém.
+    //
+    // ⚠️ NÃO usar NULL no lugar de `'LIVE'`. Em MySQL, linhas com NULL numa coluna do índice único
+    // NÃO são consideradas duplicatas — o efeito seria o INVERSO do desejado: as vivas deixariam de
+    // colidir entre si e a unicidade sumiria em silêncio.
+    //
+    // A derivação vive num lugar SÓ, `cedente-account.mapper.ts`, e o CHECK acima é a rede: uma linha
+    // `Deleted` cujo slot não seja o próprio id é recusada pelo banco, em vez de ocupar a chave para
+    // sempre por um caminho de escrita que esqueceu de derivar.
     uniqueIndex('fin_cedente_accounts_natural_key_uq').on(
       t.bankCode,
       t.agency,
       t.accountNumber,
       t.accountDigit,
+      t.naturalKeySlot,
     ),
   ],
 );

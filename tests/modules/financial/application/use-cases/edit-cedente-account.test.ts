@@ -3,7 +3,10 @@ import { strict as assert } from 'node:assert';
 
 import { type Result, ok } from '#src/shared/index.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
-import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
+import {
+  create as createCedente,
+  close as closeCedente,
+} from '#src/modules/financial/domain/cedente/cedente-account.ts';
 import { checkCedenteConvenio } from '#src/modules/financial/domain/cedente/remittance-eligibility.ts';
 // W0 RED (019): o use-case editCedenteAccount ainda não existe.
 import { editCedenteAccount } from '#src/modules/financial/application/use-cases/edit-cedente-account.ts';
@@ -145,6 +148,92 @@ describe('edit-cedente-account — o convênio preenche, mas não troca (#722/#8
         `convênio ${JSON.stringify(convenio)}: a edição e a remessa discordam`,
       );
     }
+  });
+});
+
+/**
+ * O CONVÊNIO VOLTA A SER EDITÁVEL NA CONTA ENCERRADA (#995, B8.1).
+ *
+ * A trava do #722 existe porque o convênio viaja no NOME de toda remessa transmitida — reescrevê-lo
+ * numa conta ATIVA faria as remessas antigas apontarem para um contrato que a conta não declara
+ * mais. Em conta ENCERRADA não há remessa nova a nomear, e travar ali não protege nada: só força
+ * `UPDATE` direto no banco de produção, que foi o que aconteceu em 06/09.
+ */
+describe('edit-cedente-account — o convênio na conta encerrada (#995 B8.1)', () => {
+  const editConvenio = async (account: unknown, convenio: string) =>
+    editCedenteAccount(deps(account, false) as never)({
+      id: String((account as { id: unknown }).id),
+      convenio,
+    });
+
+  const closedAccount = (convenio: string) => {
+    const closed = closeCedente(buildAccount(convenio));
+    if (!closed.ok) throw new Error('setup: close');
+    return closed.value;
+  };
+
+  it('conta ENCERRADA aceita trocar um convênio válido — a trava do #722 não a alcança', async () => {
+    const account = closedAccount('123456');
+    const r = await editConvenio(account, '654321');
+
+    assert.equal(r.ok, true, 'conta encerrada não tem remessa nova a nomear');
+    if (r.ok) assert.equal(r.value.convenio, '654321');
+  });
+
+  // O outro lado, e é o invariante que NÃO pode afrouxar: em conta ativa a recusa continua.
+  it('conta ATIVA com convênio válido continua recusando a troca', async () => {
+    const account = buildAccount('123456');
+    const r = await editConvenio(account, '654321');
+
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'cedente-convenio-already-set');
+  });
+
+  /*
+   * ⚠️ B8.2 — LIMPAR o convênio é o que DESATIVA a numeração da linha morta.
+   *
+   * Vazio foi escolhido no lugar de `000000` porque já significa isso em todo o caminho:
+   * `checkCedenteConvenio` o recusa com `cedente-convenio-missing` ANTES do `allocateNsa` — e é essa
+   * ordem que importa, porque o número não volta. `000000` seria aceito pela régua (não é vazio, é
+   * numérico, cabe em 6), então a linha zerada continuaria contando como apta a pagar, e a recusa
+   * viria do BANCO, depois do NSA queimado. Mesmo padrão da #942.
+   */
+  it('B8.2: limpar o convênio da conta encerrada desativa a numeração dela', async () => {
+    const account = closedAccount('123456');
+    const r = await editConvenio(account, '');
+
+    assert.equal(r.ok, true, 'a borda ou o use case ainda barram limpar o campo');
+    if (r.ok) {
+      assert.equal(r.value.convenio, '');
+      // A prova de que "desativou": a régua da remessa passa a recusar, e com nome próprio.
+      const readiness = checkCedenteConvenio(r.value);
+      assert.equal(readiness.ok, false);
+      if (!readiness.ok) assert.equal(readiness.error, 'cedente-convenio-missing');
+    }
+  });
+
+  // O contraponto que impede o B8.2 de virar buraco: limpar NÃO é privilégio de conta encerrada por
+  // acaso — em conta ATIVA com convênio válido, limpar é uma TROCA, e a trava do #722 a recusa.
+  // Sem este caso, alguém poderia desativar a numeração da conta que está pagando.
+  it('B8.2: conta ATIVA não pode ser desativada pela limpeza do convênio', async () => {
+    const account = buildAccount('123456');
+    const r = await editConvenio(account, '');
+
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'cedente-convenio-already-set');
+  });
+
+  // ⚠️ A trava FR-008 é OUTRA e continua valendo: ela olha dado bancário, não convênio. Uma conta
+  // encerrada COM histórico não vira porta aberta para reescrever agência ou conta.
+  it('encerrada não vira passe livre: dado bancário segue travado por histórico', async () => {
+    const account = closedAccount('123456');
+    const r = await editCedenteAccount(deps(account, true) as never)({
+      id: String(account.id),
+      agency: '4321',
+    });
+
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'cedente-account-bank-data-locked');
   });
 });
 

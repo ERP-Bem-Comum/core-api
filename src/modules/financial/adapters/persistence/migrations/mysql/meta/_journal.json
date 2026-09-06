@@ -407,6 +407,13 @@
       "when": 1788718100073,
       "tag": "0057_lying_vindicator",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1788723766782,
+      "tag": "0058_melodic_nick_fury",
+      "breakpoints": true
     }
   ]
 }

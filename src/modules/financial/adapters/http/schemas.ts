@@ -875,7 +875,21 @@ export type CreateCedenteAccountBody = z.infer<typeof createCedenteAccountBodySc
 export const editCedenteAccountBodySchema = z.object({
   // #722: preenchível quando ausente, para a conta cadastrada sem ele passar a gerar remessa. Trocar
   // um convênio já preenchido é recusado no use case — ele viaja no nome de toda remessa transmitida.
-  convenio: z.string().min(1).max(20).optional(),
+  //
+  // ⚠️ SEM `min(1)` (#995, B8.2): a string VAZIA é o valor que DESATIVA a numeração de uma conta
+  // encerrada, e o `min(1)` a recusava na borda — empurrando a operação para `UPDATE` no banco.
+  //
+  // Vazio já significa "sem convênio" em todo o caminho, e é por isso que ele foi escolhido no lugar
+  // de `000000`: `checkCedenteConvenio` o recusa com `cedente-convenio-missing` ANTES do
+  // `allocateNsa` (o número não volta), e o front já o exclui do seletor "Conta que paga". O
+  // `000000`, além de não ter nenhuma dessas propriedades, é o valor RESERVADO de mascaramento de
+  // fixture deste repositório (`tests/cleanup/bank-fixture-masking.test.ts`), alinhado com o
+  // `van-agent` — dar-lhe um segundo sentido colidiria com dez arquivos e com o outro lado do
+  // contrato.
+  //
+  // Quem PODE limpar continua sendo decidido no use case, não aqui: conta ATIVA com convênio válido
+  // segue recusando qualquer troca (#722), inclusive para vazio.
+  convenio: z.string().max(20).optional(),
   bankCode: z.string().min(1).max(10).optional(),
   agency: z.string().min(1).max(10).optional(),
   // #856: preenchível na conta já cadastrada, que nasceu sem DV porque não havia coluna. TROCAR um

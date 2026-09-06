@@ -35,11 +35,14 @@ export const createInMemoryCedenteAccountStore = (
     ): Promise<Result<CedenteAccount | null, CedenteAccountStoreError>> =>
       Promise.resolve(ok(accounts.get(id) ?? null)),
 
+    // #995 B4 — a conta EXCLUÍDA não ocupa mais a chave natural. Espelha o predicado do adapter
+    // Drizzle; sem ele, o fake aprovaria um recadastro que o MySQL recusaria (ou o contrário).
     findByNaturalKey: async (
       key: CedenteAccountNaturalKey,
     ): Promise<Result<CedenteAccount | null, CedenteAccountStoreError>> => {
       for (const account of accounts.values()) {
         if (
+          account.status !== 'Deleted' &&
           account.bankCode === key.bankCode &&
           account.agency === key.agency &&
           account.accountNumber === key.accountNumber &&
@@ -51,8 +54,10 @@ export const createInMemoryCedenteAccountStore = (
       return Promise.resolve(ok(null));
     },
 
+    // A excluída sai da listagem (grid e filtro "Encerradas") e continua resolvendo por `findById` —
+    // sair da lista não é sair do sistema (#995, B4/B5).
     list: async (): Promise<Result<readonly CedenteAccount[], CedenteAccountStoreError>> =>
-      Promise.resolve(ok([...accounts.values()])),
+      Promise.resolve(ok([...accounts.values()].filter((a) => a.status !== 'Deleted'))),
 
     // `nextNsa` FICA FORA do path de update, espelhando a regra do adapter Drizzle (ver
     // `cedente-account-store.drizzle.ts` §`save`): o único caminho de escrita do contador é
