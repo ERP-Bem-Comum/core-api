@@ -56,6 +56,18 @@ describe('canonicalNaturalKey — a forma que faz duas escritas coincidirem', ()
     assert.equal(key('237'), key('237'));
   });
 
+  // ⚠️ `padStart` só COMPLETA, nunca corta. Uma primeira versão não tirava os zeros antes de
+  // completar, e `'0237'` continuava `'0237'`, sem bater com `'237'` — a borda aceita os dois
+  // (`z.string().min(1).max(10)`). Um extrato legado de largura fixa grava `'0237'`; o operador
+  // digita `237`, e a duplicata que esta chave existe para pegar passava de novo.
+  it('banco: excesso de zeros à esquerda também colapsa — a forma é IDEMPOTENTE', () => {
+    const base = { agency: '1234', accountNumber: '5', accountDigit: '0' };
+    const key = (bankCode: string) => canonicalNaturalKey({ ...base, bankCode });
+
+    assert.equal(key('0237'), key('237'));
+    assert.equal(key('00007'), key('007'));
+  });
+
   // ── Agência: só os dígitos, sem zeros à esquerda ───────────────────────────────────────────
   //
   // O DV tem coluna própria desde a #856, então separador aqui é resíduo de cadastro antigo.
@@ -87,13 +99,54 @@ describe('canonicalNaturalKey — a forma que faz duas escritas coincidirem', ()
     assert.notEqual(key('12345'), key('1234'));
   });
 
-  // ── Conta: sem zeros à esquerda ─────────────────────────────────────────────────────────────
+  // ── Conta: sem zeros à esquerda, e sem o DV concatenado ────────────────────────────────────
   it('conta: zeros à esquerda somem', () => {
     const base = { bankCode: '237', agency: '1234', accountDigit: '0' };
     const key = (accountNumber: string) => canonicalNaturalKey({ ...base, accountNumber });
 
     assert.equal(key('0012345'), key('12345'));
     assert.equal(key('000001'), key('1'));
+  });
+
+  /*
+   * ⚠️ A CONTA SOFRE DO MESMO PROBLEMA DA AGÊNCIA, e a assimetria era defeito, não desenho.
+   *
+   * O ETL que embutiu o DV em `agency` embutiu na CONTA também. `digitsOnly('0088123-3')` daria
+   * `'00881233'` — conta e dígito colados —, enquanto o operador digita `'88123'` + `'3'`. As duas
+   * escritas da MESMA conta continuariam divergindo, e a duplicata passaria.
+   *
+   * O dígito é RECUPERADO do número só quando a coluna própria está VAZIA: com ela preenchida, ela
+   * manda (é a fonte mais recente).
+   */
+  it('conta: DV embutido é separado, e recuperado quando a coluna do dígito está vazia', () => {
+    const legacyEmbedded = {
+      bankCode: '237',
+      agency: '1234',
+      accountNumber: '0088123-3',
+      accountDigit: '',
+    };
+    const typed = {
+      bankCode: '237',
+      agency: '1234',
+      accountNumber: '88123',
+      accountDigit: '3',
+    };
+
+    assert.ok(
+      isSameCedenteAccount(legacyEmbedded, typed),
+      'o DV embutido na conta foi concatenado ao número',
+    );
+  });
+
+  // A coluna preenchida VENCE o que está embutido — ela é o dado mais recente, e deixar o embutido
+  // mandar faria uma correção de dígito pela tela não surtir efeito na comparação.
+  it('conta: a coluna do dígito, quando preenchida, vence o embutido', () => {
+    const base = { bankCode: '237', agency: '1234', accountNumber: '88123-3' };
+
+    assert.notEqual(
+      canonicalNaturalKey({ ...base, accountDigit: '9' }),
+      canonicalNaturalKey({ ...base, accountDigit: '3' }),
+    );
   });
 
   // ⚠️ Zero NÃO colapsa em vazio. `'000'` é dado presente e mal preenchido; virar `''` o tornaria

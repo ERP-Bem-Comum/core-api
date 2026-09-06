@@ -85,9 +85,21 @@ export const createDrizzleCedenteAccountStore = (
         const wanted = canonicalNaturalKey(key);
         for (const row of rows) {
           const mapped = toDomain(row);
+          // ⚠️ LINHA INMAPEÁVEL É PULADA, NÃO DERRUBA A BUSCA — e a diferença é de RAIO DE DANO.
+          //
+          // Enquanto o filtro era SQL, só a linha candidata era mapeada: uma linha ruim em outro
+          // lugar da tabela era invisível para esta operação. Com a varredura, abortar na primeira
+          // falha faz UMA linha legada com `type` fora do union (ou status, ou id não-UUID) derrubar
+          // TODO cadastro de conta com 503 — a checagem de duplicata morre antes de chegar na linha
+          // que procurava, e o operador não tem como saber por quê.
+          //
+          // Pular preserva o raio anterior: a busca responde sobre as linhas que ela consegue ler, e
+          // a linha ruim fica no log para quem for consertá-la. O custo teórico é a duplicata passar
+          // se a colisão for JUSTAMENTE com a linha inmapeável — e nesse caso o cadastro já está
+          // quebrado de um jeito que esta função não conserta.
           if (!mapped.ok) {
             logStore('findByNaturalKey:map', mapped.error);
-            return err('cedente-account-store-unavailable');
+            continue;
           }
           if (canonicalNaturalKey(mapped.value) === wanted) return ok(mapped.value);
         }
