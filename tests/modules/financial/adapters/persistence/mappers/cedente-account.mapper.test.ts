@@ -37,6 +37,9 @@ const rowOf = (
   convenio: account.convenio,
   document: account.document,
   status: account.status as string,
+  // #995 B4 — o discriminador da UNIQUE de chave natural. `'LIVE'` no fixture porque o padrão é a
+  // conta viva; os casos de exclusão passam o próprio id, que é o que o mapper deriva.
+  naturalKeySlot: account.status === 'Deleted' ? (account.id as string) : 'LIVE',
   nextNsa: account.nextNsa,
   // #856 — DV da agência (posição 058); nullable, e a conta migrada nasce sem ele.
   agencyDigit: account.agencyDigit ?? null,

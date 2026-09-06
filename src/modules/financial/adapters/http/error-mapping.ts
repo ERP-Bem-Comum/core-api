@@ -72,6 +72,11 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'cedente-account-already-closed',
   'cedente-account-duplicate',
   'cedente-account-bank-data-locked',
+  // #995 B2/B3 — conflitos de ESTADO na máquina Active/Closed/Deleted. 409 e não 422: o pedido está
+  // bem-formado; o que não serve é o estado em que a conta está.
+  'cedente-account-not-closed',
+  'cedente-account-not-closed-for-delete',
+  'cedente-account-already-deleted',
   // #722: convênio preenche uma vez. Trocar é conflito com o estado — ele identifica o contrato no
   // banco e viaja no nome de toda remessa já transmitida.
   'cedente-convenio-already-set',
@@ -331,9 +336,21 @@ const SLUG_MESSAGES: Record<string, string> = {
   // #293: não se lança pagamento contra conta encerrada.
   'cedente-account-closed': 'A conta-cedente está encerrada e não pode ser usada para pagamento.',
   // Conta-cedente (019 — CRUD).
+  // ⚠️ #995 B7 — a mensagem DIZ que a conta existente pode estar encerrada, e diz o que fazer.
+  // Antes ela afirmava só "já existe", e quem lia não tinha como saber: a conta não aparecia no
+  // grid ativo, o recadastro era recusado, e não havia caminho visível. Foi assim que um
+  // encerramento por engano virou beco em produção (06/09) e terminou em `UPDATE` no banco.
   'cedente-account-duplicate':
-    'Já existe uma conta-cedente com esta chave bancária (banco/agência/conta/dígito).',
+    'Já existe uma conta-cedente com esta chave bancária (banco/agência/conta/dígito) — e ela pode estar ENCERRADA. Localize-a no filtro de encerradas e escolha reabrir, se quiser voltar a usá-la, ou excluir, para liberar estes dados para um cadastro novo.',
   'cedente-account-already-closed': 'A conta-cedente já está encerrada.',
+  // #995 B2/B3 — as três recusas da máquina de estados. Cada uma termina numa AÇÃO diferente, e é a
+  // ação que o operador precisa ler; achatá-las numa frase só não diria o que fazer em nenhuma.
+  'cedente-account-not-closed':
+    'Esta conta-cedente não está encerrada, então não há o que reabrir. Se ela foi excluída, não há como voltar atrás — cadastre-a novamente.',
+  'cedente-account-not-closed-for-delete':
+    'Só é possível excluir uma conta-cedente já encerrada. Encerre-a primeiro — a exclusão não tem volta, e por isso exige os dois passos.',
+  'cedente-account-already-deleted':
+    'Esta conta-cedente já foi excluída. O histórico dela continua disponível, mas ela não volta ao cadastro — para usar estes dados bancários de novo, faça um cadastro novo.',
   'cedente-account-bank-data-locked':
     'A conta-cedente já tem histórico: os dados bancários não podem mais ser alterados.',
   'invalid-account-type': 'Tipo de conta inválido (esperado: corrente, poupanca ou investimento).',

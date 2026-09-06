@@ -2336,6 +2336,46 @@ const financialRoutes =
         return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
       },
     });
+
+    // POST /financial/cedente-accounts/:id/reopen — desfaz o encerramento (#995 B1).
+    //
+    // ⚠️ POST e não PATCH: é uma TRANSIÇÃO de estado nomeada, irmã do `close`, e não a edição de um
+    // campo. O `PATCH` do recurso segue sem aceitar `status` — o que impede que reabrir vire efeito
+    // colateral de quem só queria trocar o apelido.
+    scope.route({
+      method: 'POST',
+      url: '/financial/cedente-accounts/:id/reopen',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountWrite)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        response: { 200: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.reopenCedenteAccount({ id: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // DELETE /financial/cedente-accounts/:id — exclui (#995 B3). SOFT delete: a linha permanece.
+    //
+    // ⚠️ Responde 200 com o recurso, e não 204: a conta continua EXISTINDO (é soft delete), e o
+    // corpo é o que permite ao front confirmar o novo `status` sem uma segunda chamada. Um 204 diria
+    // "não há mais nada aqui", que é falso — o histórico segue alcançável por este mesmo id.
+    scope.route({
+      method: 'DELETE',
+      url: '/financial/cedente-accounts/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountWrite)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        response: { 200: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.deleteCedenteAccount({ id: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
+      },
+    });
   };
 
 export const financialHttpPlugin =

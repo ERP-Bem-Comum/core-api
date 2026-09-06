@@ -2,7 +2,17 @@ import type { CedenteAccountId } from './cedente-account-id.ts';
 
 // Conta-cedente (conta-débito Bradesco da organização) — referência de identidade que liga
 // documento → conta de pagamento (D-CEDENTE). Valores em EN (C1).
-export type CedenteAccountStatus = 'Active' | 'Closed';
+// ⚠️ TRÊS estados, e `Deleted` NÃO é "sumiu" — é SOFT DELETE (#995, B3). A linha permanece, porque
+// remessa, conciliação e extrato apontam para ela: apagar de verdade destruiria o rastro do que foi
+// enviado ao banco, que é o oposto do propósito desses vínculos (as FKs são `RESTRICT` justamente
+// por isso — `.claude/rules/adapters.md`).
+//
+// O que muda em `Deleted`, e é o contrato que a P.O. definiu em 06/09:
+//   · SAI do grid de contas, inclusive do filtro "Encerradas";
+//   · CONTINUA alcançável por id, para o histórico ser lido;
+//   · LIBERA a chave natural — cadastrar de novo com os mesmos dados passa a ser aceito;
+//   · NÃO é reversível (ao contrário de `Closed`, que volta por `reopen`).
+export type CedenteAccountStatus = 'Active' | 'Closed' | 'Deleted';
 
 // Tipo de conta bancária (extensão conciliação 019). Opcional no agregado para não quebrar
 // contas criadas pela 016/CNAB, que não o registravam (FR-013).
@@ -76,4 +86,11 @@ export type CedenteAccountError =
   | 'invalid-nsa'
   | 'invalid-account-type'
   | 'opening-balance-requires-date'
-  | 'cedente-account-already-closed';
+  | 'cedente-account-already-closed'
+  // #995 B2 — reabrir só faz sentido a partir de `Closed`. Nome próprio porque a ação do operador é
+  // outra: se já está ativa, não há o que reabrir; se está excluída, não há volta.
+  | 'cedente-account-not-closed'
+  // #995 B3 — excluir exige encerrar antes. É a mesma disciplina do encerramento: a saída é um
+  // caminho de duas etapas, e a mensagem diz qual falta.
+  | 'cedente-account-not-closed-for-delete'
+  | 'cedente-account-already-deleted';

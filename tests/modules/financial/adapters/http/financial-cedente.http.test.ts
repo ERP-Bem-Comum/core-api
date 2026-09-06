@@ -221,6 +221,129 @@ describe('financial/http — cedente-accounts (019) — W0 RED', () => {
     );
   });
 
+  /*
+   * REABRIR E EXCLUIR (#995, B1/B3/B4/B5) — o ciclo completo pela borda.
+   *
+   * ⚠️ ESTE BLOCO EXISTE PARA FECHAR UM BECO MEDIDO EM PRODUÇÃO (06/09). Uma conta encerrada por
+   * engano ficava inacessível pelos DOIS caminhos: não havia rota para reabrir, e o recadastro batia
+   * em `cedente-account-duplicate` porque a linha encerrada continua ocupando a chave natural. A
+   * saída foi `UPDATE` direto no banco — o tipo de intervenção que a #879 já mostrou custar caro.
+   */
+  const createAccount = async (over: Record<string, unknown>) => {
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body(over),
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    return (res.json() as { id: string }).id;
+  };
+
+  const transition = async (id: string, path: 'close' | 'reopen') =>
+    handle.app.inject({
+      method: 'POST',
+      url: `/api/v2/financial/cedente-accounts/${id}/${path}`,
+      headers: { authorization: `Bearer ${WRITER}` },
+    });
+
+  const remove = async (id: string) =>
+    handle.app.inject({
+      method: 'DELETE',
+      url: `/api/v2/financial/cedente-accounts/${id}`,
+      headers: { authorization: `Bearer ${WRITER}` },
+    });
+
+  it('#995 B1: encerrar e REABRIR devolve a conta ao ativo', async () => {
+    const id = await createAccount({ accountNumber: '770011', nickname: 'Conta a reabrir' });
+    assert.equal((await transition(id, 'close')).statusCode, 200);
+
+    const reopened = await transition(id, 'reopen');
+    assert.equal(reopened.statusCode, 200, reopened.body);
+    assert.equal((reopened.json() as { status: string }).status, 'Active');
+  });
+
+  it('#995 B2: reabrir conta ATIVA → 409', async () => {
+    const id = await createAccount({ accountNumber: '770022', nickname: 'Conta ativa' });
+
+    const res = await transition(id, 'reopen');
+    assert.equal(res.statusCode, 409, res.body);
+  });
+
+  it('#995 B3: excluir conta ATIVA → 409 (encerre antes)', async () => {
+    const id = await createAccount({ accountNumber: '770033', nickname: 'Conta ativa' });
+
+    const res = await remove(id);
+    assert.equal(res.statusCode, 409, res.body);
+  });
+
+  /*
+   * ⚠️ O CASO CENTRAL — B4 + B5 juntos, porque separá-los deixaria passar a meia-correção.
+   *
+   * Excluir tem de fazer as DUAS coisas: tirar a conta do grid E liberar a chave natural. Um teste
+   * só da listagem passaria com a chave ainda presa, e o operador continuaria no beco — que é
+   * exatamente o estado que motivou a issue.
+   *
+   * E o histórico segue alcançável por id: sair da lista não é sair do sistema.
+   */
+  it('#995 B4/B5: a conta excluída sai da lista, LIBERA a chave, e segue legível por id', async () => {
+    const naturalKey = { accountNumber: '770044', nickname: 'Conta a excluir' };
+    const id = await createAccount(naturalKey);
+    assert.equal((await transition(id, 'close')).statusCode, 200);
+
+    const deleted = await remove(id);
+    assert.equal(deleted.statusCode, 200, deleted.body);
+    assert.equal((deleted.json() as { status: string }).status, 'Deleted');
+
+    // B4 — sumiu do grid (a listagem serve o filtro "Encerradas" também).
+    const list = await handle.app.inject({
+      method: 'GET',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(list.statusCode, 200);
+    const ids = (list.json() as readonly { id: string }[]).map((a) => a.id);
+    assert.ok(!ids.includes(id), 'a conta excluída continua aparecendo na listagem');
+
+    // B4 — a chave natural foi liberada: o MESMO cadastro passa a ser aceito.
+    const recreated = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body(naturalKey),
+    });
+    assert.equal(
+      recreated.statusCode,
+      201,
+      `a chave natural continua presa pela conta excluída: ${recreated.body}`,
+    );
+
+    // B5 — o histórico segue alcançável pelo id antigo.
+    const read = await handle.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/cedente-accounts/${id}`,
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(read.statusCode, 200, 'a conta excluída deixou de ser legível por id');
+    assert.equal((read.json() as { status: string }).status, 'Deleted');
+  });
+
+  // ⚠️ O outro lado do B4/B7: a conta ENCERRADA continua ocupando a chave. É o invariante que dá
+  // sentido às duas ações — se encerrar já liberasse, não haveria por que existir o excluir.
+  it('#995 B7: conta ENCERRADA continua ocupando a chave — o caminho é reabrir ou excluir', async () => {
+    const naturalKey = { accountNumber: '770055', nickname: 'Conta encerrada' };
+    const id = await createAccount(naturalKey);
+    assert.equal((await transition(id, 'close')).statusCode, 200);
+
+    const recreated = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body(naturalKey),
+    });
+    assert.equal(recreated.statusCode, 409, recreated.body);
+  });
+
   it('CA-US2: POST /cedente-accounts/:id/close → rota existe (≠ 404)', async () => {
     const id = '11111111-1111-4111-8111-111111111111';
     const res = await handle.app.inject({

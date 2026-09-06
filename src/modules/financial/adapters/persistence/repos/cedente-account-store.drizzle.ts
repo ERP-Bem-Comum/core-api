@@ -3,7 +3,7 @@
 // Boundary: todo try/catch converte para Result; nenhum Error cruza a borda
 // (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -69,6 +69,14 @@ export const createDrizzleCedenteAccountStore = (
               eq(finCedenteAccounts.agency, key.agency),
               eq(finCedenteAccounts.accountNumber, key.accountNumber),
               eq(finCedenteAccounts.accountDigit, key.accountDigit),
+              // #995 B4 — a conta EXCLUÍDA não ocupa mais a chave. Sem este predicado, o
+              // `createCedenteAccount` continuaria recusando o recadastro com
+              // `cedente-account-duplicate`, e a exclusão não teria efeito nenhum sobre o cadastro.
+              //
+              // ⚠️ Duas guardas para o mesmo fato, e não é redundância: aqui é a régua de NEGÓCIO,
+              // que decide o que o operador vê; a UNIQUE com `natural_key_slot` é a garantia no
+              // BANCO, que impede duas linhas vivas mesmo se este `where` for reescrito errado.
+              ne(finCedenteAccounts.status, 'Deleted'),
             ),
           )
           .limit(1);
@@ -87,9 +95,15 @@ export const createDrizzleCedenteAccountStore = (
       }
     },
 
+    // ⚠️ A EXCLUÍDA NÃO APARECE (#995, B4) — nem no grid, nem no filtro "Encerradas", que é servido
+    // por esta mesma listagem. Ela continua alcançável por `findById`, e é assim que o histórico é
+    // lido (B5): sair da lista não é sair do sistema.
     list: async (): Promise<Result<readonly CedenteAccount[], CedenteAccountStoreError>> => {
       try {
-        const rows = await db.select().from(finCedenteAccounts);
+        const rows = await db
+          .select()
+          .from(finCedenteAccounts)
+          .where(ne(finCedenteAccounts.status, 'Deleted'));
         const accounts: CedenteAccount[] = [];
         for (const row of rows) {
           const mapped = toDomain(row);
