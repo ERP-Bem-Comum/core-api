@@ -2,6 +2,7 @@ import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { PaymentMethod } from '../document/types.ts';
 import { type DigitableLineError, resolveBarcode } from './digitable-line.ts';
 import { decomposePayeeAccount } from './payee-account.ts';
+import { isPayablePixKeyType, pixKeyFitsField } from './pix-key.ts';
 import { hasRemittanceIssuer } from './van-routes.ts';
 import type {
   PayoutCandidate,
@@ -161,10 +162,44 @@ const checkRouteData = (candidate: PayoutCandidate, route: VanRoute): RouteDataC
     // ⚠️ Efeito colateral DESEJADO, e que aparece na tela: some o `check-digit-mismatch` na rota Pix.
     // Favorecido com DV divergente era bloqueado aqui; passa a pagar, e está certo — o DV não vai no
     // arquivo. A régua de DV continua valendo onde o dígito é escrito, que é a transferência.
-    case 'pix':
-      return isBlank(candidate.payee?.pixKey?.key ?? null)
-        ? incomplete(route, missingField(route, 'pix-key').gaps)
-        : ready(route);
+    // ⚠️ AS DUAS CONDIÇÕES DO EMISSOR (#948, CA1/CA2) SÃO VERIFICADAS AQUI, e não são zelo: as duas
+    // recusas correspondentes vêm DEPOIS do `allocateNsa`, então cada tentativa queima um número da
+    // série antes de o operador descobrir por quê. A régua vem de `pix-key.ts` — a MESMA fonte que o
+    // emissor consome —, e é isso que impede as duas de divergirem outra vez.
+    //
+    // Nenhuma das duas é defesa contra dado malformado: as duas são alcançáveis por cadastro
+    // perfeitamente legítimo. O cadastro aceita chave bem mais longa que as 99 posições do `G101`, e
+    // o vocabulário de tipos de chave é de `partners`, que pode crescer sem que o `G100` cresça junto.
+    case 'pix': {
+      const key = candidate.payee?.pixKey?.key ?? null;
+      const keyType = candidate.payee?.pixKey?.keyType ?? null;
+
+      // Chave em branco é chave ausente: o cadastro guarda `''` com mais frequência que `null` (ver o
+      // CHECK do bloco bancário, em `types.ts`). E conta completa NÃO substitui a chave — quem
+      // escolheu PIX no lançamento paga por PIX, e trocar a rota mudaria o custo e o prazo aceitos.
+      //
+      // Sem chave, PARA AQUI em vez de acumular: as duas verificações seguintes são sobre a chave que
+      // não existe, e listá-las mandaria o operador corrigir o comprimento de um campo vazio.
+      if (isBlank(key)) return incomplete(route, missingField(route, 'pix-key').gaps);
+
+      const gaps: PayoutGap[] = [];
+
+      // `malformed`, e NÃO `unmappable` — desvio deliberado da letra da CA1 da #948, que dizia
+      // `unmappable`. Os dois motivos existem para dizer coisas diferentes ao operador
+      // (`types.ts`): `unmappable` é "ninguém sabe converter isto", `malformed` é "está lá e precisa
+      // ser corrigido". A chave longa demais É conversível e É uma chave — o que ela não é, é
+      // representável no campo. E usar `unmappable` nas duas condições as tornaria indistinguíveis na
+      // tela, que é justamente o que a lista de lacunas por CAMPO existe para evitar.
+      if (!pixKeyFitsField(key ?? '')) gaps.push({ field: 'pix-key', reason: 'malformed' });
+
+      // `unmappable` é o encaixe exato: o cadastro tem um tipo de chave que este layout não prevê, e
+      // não há o que corrigir no valor — é preciso outra chave. Cobre também o `keyType` VAZIO, que o
+      // reader recusa derrubando a geração inteira (a CA8, que sai de graça aqui).
+      if (!isPayablePixKeyType(keyType ?? ''))
+        gaps.push({ field: 'pix-key', reason: 'unmappable' });
+
+      return gaps.length === 0 ? ready(route) : incomplete(route, immutable(gaps));
+    }
 
     // Única rota que depende da conta estruturada — e, portanto, a única em que o desencaixe do
     // cadastro vira impedimento de pagamento.

@@ -8,6 +8,7 @@
 //
 // Esta camada é ACL (ADR-0006): recebe dados já resolvidos e não conhece agregado nem repositório.
 import { ok, err, type Result } from '../../../../shared/primitives/result.ts';
+import { PIX_KEY_MAX_WIDTH } from '../../domain/payout/pix-key.ts';
 import {
   alpha,
   blanks,
@@ -387,7 +388,11 @@ const isPixInitiation = (raw: string): boolean =>
   new RegExp(`^\\d{${String(PIX_INITIATION_WIDTH)}}$`).test(raw);
 
 // 99 posições é o TAMANHO DO CAMPO, e aqui ele é um limite real, não um alinhamento.
-const PIX_KEY_WIDTH = 99;
+// A largura vem do DOMÍNIO (`payout/pix-key.ts`), e não de um `99` local, pela razão da #948: o
+// pré-voo precisa da mesma medida para antecipar `pix-key-unrepresentable` antes do `allocateNsa`, e
+// domínio não alcança adapter. Duas constantes com o mesmo valor seriam duas réguas — e uma delas
+// mudaria sozinha no dia em que o layout mudasse.
+const PIX_KEY_WIDTH = PIX_KEY_MAX_WIDTH;
 
 // ─── O ISPB na modalidade Pix — ZEROS, por laudo do banco (#923) ─────────────────────────────
 //

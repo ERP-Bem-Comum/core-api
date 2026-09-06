@@ -1,5 +1,7 @@
 import { ok, err, type Result } from '#src/shared/index.ts';
 
+import type { PayablePixKeyType } from '../../domain/payout/pix-key.ts';
+
 /*
  * A forma de iniciação do Pix (`G100`), derivada do tipo da chave do favorecido (#838, CA3).
  *
@@ -46,20 +48,36 @@ export type PixInitiationError = 'remittance-pix-key-type-unsupported';
 //      posições o banco lê com outra régua. Se essa rota entrar um dia, entra por decisão de produto
 //      e por um caminho próprio — não por uma linha a mais neste mapa.
 //
-// ⚠️ `Map`, e NÃO um objeto literal, e a razão é de segurança, não de estilo. Um
-// `Record<string, string>` herda de `Object.prototype`, e `keyType` chega como string arbitrária:
-// `record['toString']` devolveria uma FUNÇÃO, que não é `undefined` e passaria pela guarda abaixo
-// como se fosse código `G100` válido. Um mapa banco→ISPB que vivia aqui ao lado escapava disso por
-// ter uma guarda de forma (`^\d{3}$`) que barrava `'toString'` antes do acesso — ele saiu na #923,
-// mas a lição fica. Aqui não existe forma numérica a validar, então a estrutura é que precisa não
-// ter protótipo.
-const INITIATION_BY_KEY_TYPE: ReadonlyMap<string, string> = new Map([
-  ['phone', '01'],
-  ['email', '02'],
-  ['cpf', '03'],
-  ['cnpj', '03'],
-  ['random-key', '04'],
-]);
+// ⚠️ `Record` PRIMEIRO, `Map` DEPOIS — e cada metade resolve um problema diferente. Perder qualquer
+// uma reabre um defeito distinto.
+//
+// **O `Record<PayablePixKeyType, string>` dá EXAUSTIVIDADE.** A lista de tipos pagáveis não vive mais
+// aqui: vive em `domain/payout/pix-key.ts`, porque o pré-voo precisa dela e domínio não alcança
+// adapter (#948, CA2 — mesmo arranjo de `hasRemittanceIssuer`). Com a fonte lá e o mapa aqui, faltava
+// o que impede as duas de divergirem: um tipo novo entrando na lista do domínio faria o pré-voo
+// aprovar uma chave que este arquivo recusaria — exatamente a divergência que a fatia fecha. `Record`
+// EXIGE a chave; o `Map` literal que existia aqui aceitava faltar.
+//
+// **O `Map` dá SEGURANÇA DE PROTÓTIPO.** `keyType` chega como string arbitrária, e um `Record`
+// consultado direto herda de `Object.prototype`: `record['toString']` devolveria uma FUNÇÃO, que não
+// é `undefined` e passaria pela guarda abaixo como se fosse código `G100` válido. `new Map(entries)`
+// não tem protótipo a herdar. Um mapa banco→ISPB que vivia aqui ao lado escapava disso por ter uma
+// guarda de forma (`^\d{3}$`); ele saiu na #923, mas a lição fica — aqui não há forma numérica a
+// validar, então a estrutura é que precisa não ter protótipo.
+//
+// A tradução NÃO é 1:1, e o `Record` deixa as duas assimetrias visíveis do mesmo jeito que o literal
+// deixava: `cpf` e `cnpj` apontam para `03`, e não há origem para `05`.
+const INITIATION_BY_PAYABLE_KEY_TYPE: Record<PayablePixKeyType, string> = {
+  phone: '01',
+  email: '02',
+  cpf: '03',
+  cnpj: '03',
+  'random-key': '04',
+};
+
+const INITIATION_BY_KEY_TYPE: ReadonlyMap<string, string> = new Map(
+  Object.entries(INITIATION_BY_PAYABLE_KEY_TYPE),
+);
 
 export const pixInitiationFor = (keyType: string): Result<string, PixInitiationError> => {
   const initiation = INITIATION_BY_KEY_TYPE.get(keyType);
