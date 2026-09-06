@@ -14,8 +14,8 @@ import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payou
  *
  * Já havia rede por campo: `pix-key-single-source` (#948) é o exemplar. Ela nasceu DEPOIS do defeito
  * que impede, e é essa a limitação: cobre o que já se descobriu. A CA3 pede a outra coisa — varrer a
- * união INTEIRA de recusas do emissor e cobrar,
- * de cada variante, uma resposta à pergunta "e o pré-voo, barra isto antes do `allocateNsa`?".
+ * união INTEIRA de recusas do emissor e cobrar, de cada variante, uma resposta à pergunta "e o
+ * pré-voo, barra isto antes do `allocateNsa`?".
  *
  * ⚠️ O MECANISMO É O `Record<CnabTranslateError, Coverage>` ABAIXO, e não os `assert`. Uma recusa
  * nova na união não compila até ser classificada aqui — o compilador cobra a resposta antes de o
