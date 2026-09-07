@@ -1603,6 +1603,15 @@ export const remittancePreviewResponseSchema = z
         })
         .strict(),
     ),
+    // O que a seleção tem e os lotes NÃO explicam (#948, CA5). Publicados para que a tela possa
+    // provar `lotes + não planejado = seleção` em vez de pedir que o operador acredite nela.
+    //
+    // ⚠️ Não substituem `blockedCount` e companhia, e a diferença de PERGUNTA é o que justifica os
+    // dois conjuntos existirem: aqueles classificam o título pela AÇÃO do operador (completar
+    // cadastro, retirar da seleção, aprovar); estes medem o LOTE. O mesmo título pode contar nos
+    // dois, e isso não é dupla contagem — são respostas a "o que preciso fazer?" e "a soma bate?".
+    unplannedCount: z.number().int().nonnegative(),
+    unplannedTotalCents: centsStringSchema,
   })
   .strict();
 
