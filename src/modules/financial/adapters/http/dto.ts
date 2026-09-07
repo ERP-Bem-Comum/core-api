@@ -585,6 +585,13 @@ const LAUNCH_FORM_LABEL: Readonly<Record<string, string>> = {
   '30': 'Boleto do próprio banco',
   '31': 'Boleto de outro banco',
   '41': 'TED outra titularidade',
+  // ⚠️ FALTAVA, e a ausência apareceu na primeira validação em tela do Pix: o lote saía como `45`
+  // cru. O fallback fez o que devia — foi honesto sobre não saber traduzir, em vez de esconder num
+  // traço —, e é exatamente por isso que a lacuna foi vista em vez de passar batida.
+  //
+  // O nome é o do manual (`batch-profile.ts:84`, G029 p. 100), e não uma invenção da borda: é o que
+  // o operador encontra se procurar a modalidade na documentação do banco.
+  '45': 'Pix Transferência',
 };
 
 export const remittancePreviewToDto = (
@@ -615,6 +622,11 @@ export const remittancePreviewToDto = (
     count: b.count,
     totalCents: String(b.totalCents),
   })),
+  // #948 CA5 — o par que fecha a conta da tela. Transportados, nunca recalculados: derivá-los aqui
+  // de `lines` produziria um segundo critério de "não planejado", e as duas contas divergiriam no
+  // dia em que o agrupamento mudasse — com a tela sem nada indicando qual delas está certa.
+  unplannedCount: preview.unplannedCount,
+  unplannedTotalCents: String(preview.unplannedTotalCents),
 });
 
 /**

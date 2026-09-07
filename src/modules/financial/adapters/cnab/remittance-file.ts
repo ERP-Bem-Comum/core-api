@@ -18,6 +18,7 @@ import {
   tedPurposeFor,
   complementPurposeFor,
   fileGroupFor,
+  isPixFileGroup,
   pixIdentificationFor,
   type BatchProfileError,
   type CnabBatchProfile,
@@ -186,6 +187,12 @@ export type RemittanceFileError =
   // dois arquivos distintos, que é retransmissão aos olhos do banco. Quem reparte é quem consegue
   // alocar um NSA por arquivo, e isso vive no use case. Ver `planRemittanceFiles`.
   | 'remittance-mixed-file-modalities'
+  // Seleção que mistura Pix com qualquer outra modalidade (CA4 da #948, decidida pela P.O. em
+  // 03/09/2026). Erro PRÓPRIO, e não o `mixed-file-modalities` acima, porque os dois descrevem
+  // momentos opostos: aquele é a defesa do MONTADOR contra quem não repartiu, e chegar lá significa
+  // defeito de código; este é a régua da SELEÇÃO, e chegar aqui significa que o operador escolheu
+  // títulos que não cabem numa remessa só. A ação é dele, e a mensagem tem de dizer isso.
+  | 'remittance-pix-requires-exclusive-file'
   // Um componente da referência de G064 não coube na sua largura (#752, CA5). Recusar é a única
   // saída: truncar colapsaria duas referências distintas na mesma string, e o casamento do retorno
   // apontaria para o título errado — sem nada indicando que houve truncamento.
@@ -578,6 +585,24 @@ export const planRemittanceFiles = (
     } else {
       indices.push(inputIndex);
     }
+  }
+
+  // ⚠️ O PIX NÃO SE REPARTE — ELE RECUSA (CA4 da #948, decisão da P.O. de 03/09/2026).
+  //
+  // Para as outras modalidades, repartir é o comportamento certo e está VALIDADO EM PRODUÇÃO: o
+  // golden de TED/transferência/boleto sai com formas `01`, `41` e `31` em lotes do mesmo arquivo, e
+  // uma seleção que exija mais de um arquivo gera os dois. Nada disso muda aqui.
+  //
+  // O Pix é diferente por decisão de PROCESSO, não de layout: ele sai em remessa exclusiva, com NSA
+  // próprio, e a P.O. escolheu RECUSAR a seleção mista em vez de gerar os dois arquivos calados. O
+  // desenho anterior — emitir o não-Pix e declarar o que ficou de fora — foi substituído porque o
+  // operador não confirmava nada: ele clicava "gerar" sobre uma seleção e recebia um arquivo com
+  // menos títulos, tendo de descobrir quais na tela seguinte.
+  //
+  // A barreira de tela vive no web-app, e esta régua não a substitui: a rota é alcançável sem passar
+  // por tela nenhuma, e uma regra que só existe no cliente não é regra.
+  if (order.length > 1 && order.some(isPixFileGroup)) {
+    return err('remittance-pix-requires-exclusive-file');
   }
 
   return ok(order.map((group) => ({ paymentIndices: byGroup.get(group) as readonly number[] })));
