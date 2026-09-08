@@ -137,7 +137,10 @@ describe('decomposePayeeAccount — whitespace invisível não decide pagamento'
       const r = decomposePayeeAccount(
         target({
           bank: `${ws}237${ws}`,
-          agency: `${ws}1234-5${ws}`,
+          // `3` é o DV que o Bradesco calcula para a agência `1234`, pela mesma p. 30 que dá o da
+          // conta. Antes era `5`, e passava só porque nada conferia o dígito da agência — a fixture
+          // carregava, sem saber, o defeito que o banco recusou em 08/09/2026.
+          agency: `${ws}1234-3${ws}`,
           accountNumber: `${ws}123456${ws}`,
           // `0` é o DV que o Bradesco calcula para `123456` (#734). O que este caso mede é o
           // whitespace ser aparado antes de qualquer leitura — inclusive antes do cálculo do
@@ -147,14 +150,16 @@ describe('decomposePayeeAccount — whitespace invisível não decide pagamento'
       );
       assert.ok(isOk(r), `esperava aprovar com ${nome}`);
       assert.equal(r.value.agency, '01234');
-      assert.equal(r.value.agencyDigit, '5');
+      assert.equal(r.value.agencyDigit, '3');
     });
   }
 
   // Zero-width space NÃO é whitespace para o JS nem para o ICU do MySQL. Fica recusado nos dois
   // lados — e o teste existe para que a simetria seja deliberada, não coincidência.
   it('recusa zero-width space, que não é whitespace em lugar nenhum', () => {
-    const r = decomposePayeeAccount(target({ agency: `1234-5${ZWSP}` }));
+    // O DV é o CORRETO de propósito: com `1234-5` o teste passaria pelo motivo errado — recusaria
+    // por dígito divergente e ninguém veria que o ZWSP deixou de ser detectado.
+    const r = decomposePayeeAccount(target({ agency: `1234-3${ZWSP}` }));
     assert.ok(!isOk(r));
   });
 
