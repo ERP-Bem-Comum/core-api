@@ -72,6 +72,7 @@ const ids = {
   director: '',
   operator: '',
   approverNoLimit: '',
+  mixedNullAndLimit: '',
 };
 
 if (!integrationEnabled()) {
@@ -116,12 +117,14 @@ if (!integrationEnabled()) {
       if (!saved.ok) throw new Error(`seed role: ${saved.error}`);
     }
 
-    // Usuarios: u1 so Gerente; u2 Gerente+Diretor (MAX); u3 so Operador; u4 Aprovador sem alcada.
+    // Usuarios: u1 so Gerente; u2 Gerente+Diretor (MAX); u3 so Operador; u4 Aprovador sem alcada;
+    // u5 Gerente + Aprovador sem alcada (o cruzamento null x numero — CA6f).
     const u1 = mkUser('u1@x.com', [manager]);
     const u2 = mkUser('u2@x.com', [manager, director]);
     const u3 = mkUser('u3@x.com', [operator]);
     const u4 = mkUser('u4@x.com', [approverNoLimit]);
-    for (const u of [u1, u2, u3, u4]) {
+    const u5 = mkUser('u5@x.com', [manager, approverNoLimit]);
+    for (const u of [u1, u2, u3, u4, u5]) {
       const saved = await userStore.repository.save(u);
       if (!saved.ok) throw new Error(`seed user: ${saved.error}`);
     }
@@ -129,6 +132,7 @@ if (!integrationEnabled()) {
     ids.director = String(u2.id);
     ids.operator = String(u3.id);
     ids.approverNoLimit = String(u4.id);
+    ids.mixedNullAndLimit = String(u5.id);
   });
 
   describe('createDrizzleUserReadStore.getApproverAuthority — MySQL real (CA6)', () => {
@@ -170,6 +174,20 @@ if (!integrationEnabled()) {
       }
     });
 
+    it('CA6f: papel SEM alcada + papel COM alcada -> null (sem teto absorve o MAX)', async () => {
+      // `null` e "sem teto" (regra binaria #299 enforcada em approval-policy.ts:28), nao ausencia
+      // de dado. Descarta-lo antes do MAX fazia o papel a MAIS restringir quem ja era irrestrito:
+      // u4 (so approverNoLimit) aprovava qualquer valor, e u5 (o mesmo papel + Gerente) passava a
+      // ser barrado em 100000. Ganhar papel nao pode tirar permissao.
+      const store = createDrizzleUserReadStore(handle!);
+      const r = await store.getApproverAuthority(ids.mixedNullAndLimit);
+      assert.equal(r.ok, true);
+      if (r.ok) {
+        assert.equal(r.value?.canApprove, true);
+        assert.equal(r.value?.limitCents, null);
+      }
+    });
+
     it('CA6e: usuario inexistente -> ok(null)', async () => {
       const store = createDrizzleUserReadStore(handle!);
       const r = await store.getApproverAuthority('00000000-0000-4000-8000-000000000000');
@@ -185,10 +203,13 @@ if (!integrationEnabled()) {
       assert.equal(r.ok, true);
       if (r.ok) {
         const byId = new Map(r.value.map((a) => [a.userId, a]));
-        assert.equal(byId.size, 3); // manager, director, approverNoLimit (operator fora)
+        assert.equal(byId.size, 4); // manager, director, approverNoLimit, mixed (operator fora)
         assert.equal(byId.get(ids.manager)?.limitCents, 100000);
         assert.equal(byId.get(ids.director)?.limitCents, 300000);
         assert.equal(byId.get(ids.approverNoLimit)?.limitCents, null);
+        // Mesma regra do CA6f na listagem: o dropdown de Aprovador nao pode anunciar um teto
+        // que o usuario nao tem — as duas leituras compartilham o `maxLimit`.
+        assert.equal(byId.get(ids.mixedNullAndLimit)?.limitCents, null);
         assert.equal(byId.has(ids.operator), false);
       }
     });

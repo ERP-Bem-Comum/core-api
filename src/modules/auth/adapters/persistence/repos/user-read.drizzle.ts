@@ -27,9 +27,18 @@ const logRead = (scope: string, cause: unknown): void => {
   process.stderr.write(`[auth-user-read:${scope}] ${String(cause)}\n`);
 };
 
-// MAX das alçadas ignorando null; conjunto sem valor definido → null (sem alçada).
+// Alçada efetiva entre os papéis aprovadores. `null` NÃO é ausência de dado: é "sem teto", a regra
+// binária da #299 que `approval-policy.ts:28` enforça. Por isso ele ABSORVE o máximo em vez de ser
+// descartado — um papel irrestrito torna o usuário irrestrito, e nenhum teto menor o reduz.
+//
+// Descartar o `null` antes do `Math.max` fazia o oposto: acrescentar um papel COM alçada a quem já
+// tinha um SEM alçada passava a barrá-lo no valor do papel novo. Ganhar papel tirava permissão.
 const maxLimit = (limits: readonly (number | null)[]): number | null => {
-  const defined = limits.filter((c): c is number => c !== null);
+  const defined: number[] = [];
+  for (const cents of limits) {
+    if (cents === null) return null;
+    defined.push(cents);
+  }
   return defined.length === 0 ? null : Math.max(...defined);
 };
 
