@@ -19,7 +19,10 @@ export type AuthUserNameView = Readonly<{ id: string; name: string | null }>;
  * cross-módulo pelo financial (ADR-0006). Estado remoto mínimo (Vernon, "Think Minimalistic"):
  * o consumidor recebe só { canApprove, limitCents }, nunca o User/Role internos.
  *   - canApprove: usuário tem ≥1 papel com 'payable:approve';
- *   - limitCents: MAX da alçada entre os papéis aprovadores; null = sem alçada (não aprova).
+ *   - limitCents: teto efetivo entre os papéis aprovadores. `null` = SEM TETO — aprova qualquer
+ *     valor (regra binária da #299, enforçada em `financial/domain/document/approval-policy.ts`).
+ *     Um papel sem alçada absorve o máximo: quem acumula um irrestrito e um com teto projeta-se
+ *     como irrestrito, porque ganhar papel não pode tirar permissão.
  */
 export type ApproverAuthorityView = Readonly<{
   userId: string;

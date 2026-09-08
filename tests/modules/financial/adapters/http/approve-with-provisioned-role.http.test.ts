@@ -48,8 +48,12 @@ import { applyMigrations as applyFinancialMigrations } from '#src/modules/financ
 import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
 import type { AuthMysqlHandle } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
 import { adminDevPermissions } from '#src/modules/auth/adapters/http/dev-seed.ts';
+import { mysqlTestUrl } from '#tests/support/mysql-conn.ts';
+import { sql } from 'drizzle-orm';
 
-const CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
+// Fonte ÚNICA da conn de teste (#500). Interpolar a porta à mão reintroduz o bug que o helper
+// existe para impedir: `MYSQL_PORT=''` passa pelo `??` e produz `mysql://…@127.0.0.1:/core`.
+const CONN = mysqlTestUrl();
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 
 const ADMIN_EMAIL = 'admin.provision@example.com';
@@ -68,7 +72,7 @@ if (!integrationEnabled()) {
   process.stdout.write('[financial:approve-provisioned] MYSQL_INTEGRATION != 1 — pulando.\n');
 } else {
   let app: AppHandle;
-  let handle: AuthMysqlHandle;
+  let handle: AuthMysqlHandle | undefined;
 
   // Fechamento INCREMENTAL: cada recurso registra seu closer assim que nasce. Um `teardown` montado
   // só no fim do `before` não fecha nada quando o `before` falha no meio — os pools já abertos
@@ -82,6 +86,22 @@ if (!integrationEnabled()) {
     closers.length = 0;
   };
 
+  /** Handle já inicializado. Falha alto e claro em vez de espalhar `!` pelo arquivo. */
+  const openHandle = (): AuthMysqlHandle => {
+    if (handle === undefined) throw new Error('handle nao inicializado — before falhou antes dele');
+    return handle;
+  };
+
+  // Este arquivo também ESCREVE em `fin_*` (dois documentos + seus títulos e trilha). A rule de
+  // testes exige limpar na entrada toda tabela cujo espaço de chave o arquivo escreve — e a segunda
+  // prova (passar duas vezes sem recriar o banco) depende disso. Filhas antes das mães, por causa
+  // das FKs. `fin_categories`/`fin_cost_centers` NÃO entram: têm seed de migration, que não volta.
+  const resetFinancialTables = async (): Promise<void> => {
+    for (const table of ['fin_document_timeline', 'fin_payables', 'fin_documents', 'fin_outbox']) {
+      await openHandle().db.execute(sql.raw(`DELETE FROM \`${table}\``));
+    }
+  };
+
   before(async () => {
     // Os `build*HttpDeps` com driver mysql NÃO migram (CORE-MIGRATE-BOOT-INVERT) — o schema é
     // provisionado antes, como o job `migrate` faz em produção.
@@ -92,18 +112,20 @@ if (!integrationEnabled()) {
 
     const h = await openAuthMysql({ connectionString: CONN, applyMigrations: false });
     if (!h.ok) throw new Error(`openAuthMysql: ${h.error}`);
-    handle = h.value;
-    closers.push(() => handle.close());
+    const open = h.value;
+    handle = open;
+    closers.push(() => open.close());
 
     // Limpeza na ENTRADA, por tabela (rules/testing.md).
-    await handle.db.delete(handle.schema.authUserRole);
-    await handle.db.delete(handle.schema.authRolePermission);
-    await handle.db.delete(handle.schema.authRefreshToken);
-    await handle.db.delete(handle.schema.authPasswordReset);
-    await handle.db.delete(handle.schema.authOutbox);
-    await handle.db.delete(handle.schema.authUser);
-    await handle.db.delete(handle.schema.authRole);
-    await handle.db.delete(handle.schema.authPermission);
+    await open.db.delete(open.schema.authUserRole);
+    await open.db.delete(open.schema.authRolePermission);
+    await open.db.delete(open.schema.authRefreshToken);
+    await open.db.delete(open.schema.authPasswordReset);
+    await open.db.delete(open.schema.authOutbox);
+    await open.db.delete(open.schema.authUser);
+    await open.db.delete(open.schema.authRole);
+    await open.db.delete(open.schema.authPermission);
+    await resetFinancialTables();
 
     const authDeps = await buildAuthHttpDeps({
       driver: 'mysql',
@@ -175,14 +197,23 @@ if (!integrationEnabled()) {
   });
 
   after(async () => {
-    // Este arquivo é o ÚNICO fora do `reset-lockout` que escreve em `auth_password_reset` (o token
-    // do convite). Seis suítes irmãs fazem `delete from auth_user` SEM limpar essa filha, e a FK é
-    // RESTRICT: o resíduo daqui as derruba com `ER_ROW_IS_REFERENCED_2` (1451). A limpeza na entrada
-    // protege ESTE arquivo; esta, na saída, protege os vizinhos — que dependem de a tabela estar
-    // vazia sem nunca garantirem isso.
-    await handle.db.delete(handle.schema.authPasswordReset).catch(() => undefined);
-    await handle.db.delete(handle.schema.authOutbox).catch(() => undefined);
-    await teardown();
+    // `handle` só existe se o `before` passou das migrations. Sem o guard, um `before` que falhe
+    // antes disso faz este hook estourar TypeError síncrono — que o `.catch` NÃO intercepta — e o
+    // `teardown()` da última linha nunca roda: exatamente o travamento que o fechamento incremental
+    // existe para evitar. Por isso o `try/finally`.
+    try {
+      if (handle !== undefined) {
+        // Este arquivo é o ÚNICO fora do `reset-lockout` que escreve em `auth_password_reset` (o
+        // token do convite). Seis suítes irmãs fazem `delete from auth_user` SEM limpar essa filha,
+        // e a FK é RESTRICT: o resíduo daqui as derrubaria com `ER_ROW_IS_REFERENCED_2` (1451). A
+        // limpeza na entrada protege ESTE arquivo; esta, na saída, protege os vizinhos.
+        await handle.db.delete(handle.schema.authPasswordReset).catch(() => undefined);
+        await handle.db.delete(handle.schema.authOutbox).catch(() => undefined);
+        await resetFinancialTables().catch(() => undefined);
+      }
+    } finally {
+      await teardown();
+    }
   });
 
   const login = async (email: string, password: string): Promise<string> => {
@@ -197,7 +228,8 @@ if (!integrationEnabled()) {
 
   /** Lê o token de ativação do `auth_outbox` — a mesma fonte do worker `email-dispatch`. */
   const activationTokenOf = async (userId: string): Promise<string> => {
-    const rows = await handle.db.select().from(handle.schema.authOutbox);
+    const open = openHandle();
+    const rows = await open.db.select().from(open.schema.authOutbox);
     const mine = rows.filter((r) => r.aggregateId === userId);
     assert.ok(mine.length > 0, 'nenhum evento no auth_outbox para o usuario criado');
     const withUrl = mine
@@ -374,8 +406,23 @@ if (!integrationEnabled()) {
         payload: { version: doc.version },
       });
 
-      // Sob `enforced` o guard barra antes do use case: 403. O que importa e NAO ser 200.
-      assert.notEqual(approveRes.statusCode, 200, 'conta sem papel aprovou — o gate nao vale');
+      // Sob `enforced`, o guard da rota barra ANTES do use case: 403, e nada mais.
+      // `notEqual(200)` não serviria: passaria com 401 (token ruim), 404 (documento errado) ou 500,
+      // nenhum dos quais prova que foi o RBAC que negou — o teste ficaria verde pelo motivo errado.
+      assert.equal(
+        approveRes.statusCode,
+        403,
+        `esperado 403 do guard: ${approveRes.statusCode} ${approveRes.body}`,
+      );
+
+      // E o documento não pode ter mudado de estado por uma tentativa recusada.
+      const releitura = await app.inject({
+        method: 'GET',
+        url: `/api/v2/financial/documents/${doc.id}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      assert.equal(releitura.statusCode, 200);
+      assert.equal((releitura.json() as { status: string }).status, 'Open');
     });
   });
 }

@@ -44,17 +44,32 @@ export const escalate = (
   netValue: Money.Money,
   candidates: readonly ApproverAuthority[],
 ): Result<ApproverAuthority, ApprovalError> => {
-  const sufficient = candidates.filter(
+  const eligible = candidates.filter((c) => c.canApprove);
+
+  // Com teto definido: o de MENOR limite que ainda cobre o líquido — é o que impede escalar ao
+  // diretor quando o gerente basta.
+  const bounded = eligible.filter(
     (c): c is ApproverAuthority & Readonly<{ limit: Money.Money }> =>
-      c.canApprove && c.limit !== null && !Money.greaterThan(netValue, c.limit),
+      c.limit !== null && !Money.greaterThan(netValue, c.limit),
   );
-  const first = sufficient[0];
-  if (first === undefined) {
-    return err(
-      candidates.length <= 1 ? 'approver-limit-exceeded' : 'no-approver-with-sufficient-limit',
+  const first = bounded[0];
+  if (first !== undefined) {
+    return ok(
+      bounded.reduce((best, c) => (Money.greaterThan(best.limit, c.limit) ? c : best), first),
     );
   }
-  return ok(
-    sufficient.reduce((best, c) => (Money.greaterThan(best.limit, c.limit) ? c : best), first),
+
+  // `limit === null` é SEM TETO (regra binária da #299, enforçada em `checkApprover` acima), logo
+  // cobre qualquer líquido e é candidato legítimo. Fica por ÚLTIMO justamente por ser irrestrito:
+  // "o menor que basta" o coloca no fim da ordem, nunca fora dela.
+  //
+  // Excluí-lo — o que o filtro `c.limit !== null` fazia — recusava a criação do documento havendo
+  // aprovador apto, e passou a alcançar mais gente quando `maxLimit` deixou de descartar o `null`:
+  // quem acumula um papel irrestrito e um com teto agora se projeta como irrestrito, e sumia daqui.
+  const unbounded = eligible.find((c) => c.limit === null);
+  if (unbounded !== undefined) return ok(unbounded);
+
+  return err(
+    candidates.length <= 1 ? 'approver-limit-exceeded' : 'no-approver-with-sufficient-limit',
   );
 };
