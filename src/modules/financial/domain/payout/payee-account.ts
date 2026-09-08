@@ -183,8 +183,17 @@ const NO_AGENCY: AgencyParts = { agency: '', agencyDigit: '' };
 // continua sendo a única leitura válida quando o DV EXISTE — `12345` nunca vira `1234` + `5`.
 //
 // ⚠️ O `bankCode` entra aqui pelo mesmo motivo que entrou em `readAccount` (#734): sem saber QUAL
-// banco calcula, o dígito só pode ser conferido por forma. Com ele, os dois defeitos que a recusa
-// de 08/09/2026 expôs passam a ser vistos antes do banco — e nenhum deles é DV ausente.
+// banco calcula, o dígito só pode ser conferido por forma. Com ele, os dois defeitos de agência que
+// a recusa de 08/09/2026 expôs — DV embutido no campo, DV declarado que não fecha — passam a ser
+// vistos antes do banco, e nenhum deles é DV ausente.
+//
+// ⚠️ **Só do lado do FAVORECIDO.** O mesmo laudo apontou as colunas 053-057 dos três headers, que
+// são a agência do CEDENTE, e ela continua validada só por forma em `cedente/remittance-eligibility.ts`
+// — uma conta-cedente gravada com o dígito colado no número ainda queima NSA e chega ao banco em
+// todo arquivo que emitir. É a #1006, deliberadamente fora deste diff: ligar o gate no cedente sem
+// a #819 encalha o operador entre a remessa recusada e um cadastro que a edição tranca por
+// histórico. Quem ler este arquivo e concluir que a recusa de 08/09 está coberta ponta a ponta
+// estará lendo metade.
 const readAgency = (raw: string, bankCode: string): FieldRead<AgencyParts> => {
   if (raw === '') return { value: NO_AGENCY, gaps: [gap('payee-agency', 'missing')] };
 
@@ -211,7 +220,16 @@ const readAgency = (raw: string, bankCode: string): FieldRead<AgencyParts> => {
   //
   // A lacuna é `malformed` — o operador precisa CORRIGIR o que está lá, separando os dois campos.
   // Não é `check-digit-mismatch`: o dígito não está errado, está no lugar errado.
-  if (agencyHasEmbeddedCheckDigit(bankCode, agency)) {
+  //
+  // ⚠️ O argumento é `split.base`, o campo COMO O CADASTRO O ESCREVEU — jamais `agency`, que já
+  // passou por `padStart(5, '0')`. Com o valor preenchido a guarda de largura do detector nunca
+  // dispara, e uma agência legítima de quatro dígitos `abcd` passa a ser lida como `0abc` + `d`:
+  // sempre que `DV('0abc') === d` ela é recusada. São 900 das 9000 agências de quatro dígitos —
+  // uma em cada dez, `1007` e `1236` entre elas. E a recusa é a pior possível, porque a correção
+  // que ela sugere é separar `1236` em `123-6`, o que escreveria `00123` nas posições 024-028.
+  // Recusar cadastro bom já seria ruim; ENSINAR o operador a corromper o destino é o modo de falha
+  // que o cabeçalho deste arquivo existe para impedir.
+  if (agencyHasEmbeddedCheckDigit(bankCode, split.base)) {
     return { value: NO_AGENCY, gaps: [gap('payee-agency', 'malformed')] };
   }
 

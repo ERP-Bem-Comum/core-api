@@ -169,6 +169,14 @@ describe('agência — o cálculo do manual vale para os dois campos (regressão
     // Acusá-la transformaria a verificação em exigência de campo opcional.
     assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '1234'), false);
     assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '0920'), false);
+
+    // ⚠️ Estes dois são a razão de a guarda de largura existir, e não uma variação dos de cima.
+    // `DV('0123')` é `6` e `DV('0100')` é `7`, então `1236` e `1007` lidos como cinco posições
+    // seriam acusados — e são agências legítimas de quatro dígitos. Uma em cada dez cai nessa
+    // classe. Quem passar ao detector a agência já com `padStart(5, '0')` reabre exatamente isso,
+    // e as duas primeiras asserções deste caso continuarão verdes enquanto acontece.
+    assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '1236'), false);
+    assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '1007'), false);
   });
 
   it('não acusa fora do 237 — a aritmética é do Bradesco', () => {

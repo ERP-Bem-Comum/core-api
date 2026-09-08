@@ -567,10 +567,28 @@ describe('checkPayoutReadiness — DV da agência embutido ou divergente (regres
     // A regra que mais importa preservar: o defeito era o dígito no lugar errado, jamais o dígito
     // ausente. Uma correção que exigisse o DV recusaria cadastro que o banco considera completo — e
     // o próprio laudo é a testemunha, por nunca ter apontado a posição do DV.
-    for (const agency of ['1234', '0920', '12345']) {
+    //
+    // ⚠️ `1236` e `1007` NÃO são exemplos a mais: são a classe que a primeira versão desta mudança
+    // recusava. O detector recebia a agência já com `padStart(5, '0')`, então lia `1236` como
+    // `0123` + `6` — e `DV('0123')` É `6`. Uma em cada dez agências de quatro dígitos caía nisso, e
+    // os três valores originais deste loop (`1234`, `0920`, `12345`) passavam por todos, o que
+    // deixou a suíte verde sobre o defeito. Ao mexer aqui, manter ao menos um valor cujo penúltimo
+    // prefixo fecha o módulo 11: é ele que prova que a guarda de largura está viva.
+    for (const agency of ['1234', '0920', '12345', '1236', '1007']) {
       const r = checkPayoutReadiness(candidate({ payee: target({ ...fullAccount(), agency }) }));
       assert.equal(r.status, 'ready', agency);
     }
+  });
+
+  it('a guarda de largura vive no caminho de PRODUÇÃO, não só na chamada direta', () => {
+    // O teste unitário de `agencyHasEmbeddedCheckDigit` chama o detector com o valor sem padding —
+    // caminho que `readAgency` nunca toma. Sozinho, ele afirmava uma guarda que estava morta em
+    // produção. Este caso fecha por fora: entra pela régua real e prova que o campo de quatro
+    // dígitos chega ao detector como quatro dígitos.
+    const r = decomposePayeeAccount(target({ ...fullAccount(), agency: '1236' }));
+    assert.ok(isOk(r));
+    assert.equal(r.value.agency, '01236');
+    assert.equal(r.value.agencyDigit, '');
   });
 });
 
