@@ -31,7 +31,11 @@ import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/ty
 // recusados pelo dígito e o arquivo inteiro fica vermelho por um motivo que não é o dele.
 const withBank = (bank: string): PayeePaymentTarget => ({
   bank,
-  agency: '1234-5',
+  // O DV `3` é o que o cálculo do manual dá para `1234` — e a exigência é a mesma que o comentário
+  // acima já fazia para a conta, agora que a agência também é conferida. Com `1234-5` (o valor
+  // anterior) todo caso cujo `bank` resolve para 237 falhava por dígito divergente, e o vermelho
+  // apontava para a extração do código do banco, que estava certa.
+  agency: '1234-3',
   accountNumber: '123456',
   checkDigit: '0',
   pixKey: null,

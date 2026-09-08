@@ -34,7 +34,9 @@ const PAYEE_DOCUMENT = 'inscricao-opaca';
 
 const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',
-  agency: '1234-5',
+  // `3` é o DV que o Bradesco calcula para a agência `1234` (manual p. 30) — a mesma exigência que
+  // já valia para o DV da conta desde a #734, agora que `readAgency` também confere por cálculo.
+  agency: '1234-3',
   accountNumber: '123456',
   checkDigit: '0',
   pixKey: null,
