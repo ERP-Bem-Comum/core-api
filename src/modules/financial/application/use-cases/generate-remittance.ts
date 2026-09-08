@@ -7,6 +7,7 @@ import {
   checkCedenteRemittanceReadiness,
   type CedenteRemittanceGap,
 } from '../../domain/cedente/remittance-eligibility.ts';
+import { inscriptionType } from '../../domain/payout/inscription.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
 import type { RemittancePaymentData } from '../ports/remittance-payment-reader.ts';
 import type { CedenteAccountStore } from '../ports/cedente-account-store.ts';
@@ -81,6 +82,9 @@ export type GenerateRemittanceError =
   // aprovou, contornando a separação de funções que o `payable:approve` garante.
   | 'document-not-approved'
   | 'remittance-mixed-payment-dates'
+  // Pix misturado com outra modalidade na mesma seleção (#948 CA4). Irmão do anterior: os dois são
+  // regras de SELEÇÃO, recusadas antes do NSA, e nos dois a ação do operador é refazer a seleção.
+  | 'remittance-pix-requires-exclusive-file'
   // Título de rota que o emissor ainda não cobre (PIX, guia). Não é dado faltando: é o arquivo que
   // ainda não sabe emitir aquela forma, e o operador não tem o que corrigir no cadastro.
   | 'remittance-launch-form-unsupported'
@@ -155,11 +159,34 @@ export const generateRemittance =
       // A rota sem emissor sobe com nome próprio — é o que o operador entende ("o arquivo ainda não
       // sabe emitir esta forma"), e não há dado a corrigir no cadastro. As demais causas são falha
       // de montagem: o pré-voo já as mostra título a título.
-      return err(
-        plan.error === 'cnab-launch-form-unsupported'
-          ? 'remittance-launch-form-unsupported'
-          : 'remittance-build-failed',
-      );
+      // ⚠️ O `switch` substituiu o ternário porque as causas nomeadas viraram DUAS, e a terceira que
+      // entrasse cairia calada no genérico — o compilador não cobra ramo faltando num ternário.
+      //
+      // E SEM `default`, de propósito: com ele, a variante seguinte da união entraria em silêncio no
+      // desfecho genérico e ninguém saberia que havia uma decisão a tomar. Enumerado, o
+      // `switch-exhaustiveness-check` obriga quem acrescentar a recusa a escolher o nome que o
+      // operador vai ler. Foi assim que este bloco ganhou o `pix-requires-exclusive-file`.
+      switch (plan.error) {
+        case 'cnab-launch-form-unsupported':
+          return err('remittance-launch-form-unsupported');
+        // #948 CA4 — a única recusa desta etapa que não é sobre DADO: a seleção mistura Pix com
+        // outra modalidade, e o Pix sai em remessa exclusiva. Nada foi montado e nenhum NSA foi
+        // alocado, então refazer a seleção é tudo que o operador precisa.
+        case 'cnab-pix-requires-exclusive-file':
+          return err('remittance-pix-requires-exclusive-file');
+        // As demais são falha de montagem, e o pré-voo já as mostra título a título. Chegar em
+        // qualquer uma delas AQUI — na partição, que não monta nada — significa que `batchProfileFor`
+        // recusou o perfil de um pagamento, e é o mesmo desfecho que o montador daria adiante.
+        case 'cnab-file-name-failed':
+        case 'cnab-translation-failed':
+        case 'cnab-malformed-file':
+        case 'cnab-convenio-missing':
+        case 'cnab-convenio-overflow':
+        case 'cnab-billet-party-unidentified':
+        case 'cnab-pix-key-unrepresentable':
+        case 'cnab-pix-key-type-unsupported':
+          return err('remittance-build-failed');
+      }
     }
 
     const generatedAt = deps.now();
@@ -169,19 +196,47 @@ export const generateRemittance =
     // cedentes diferentes, que é o tipo de divergência que nenhum teste procura.
     const cedente = {
       bankCode: account.value.bankCode,
-      documentType: '2',
+      // 018 — G005. DERIVADO da inscrição, não afirmado (#856, CA4). Era `'2'` literal: todo cedente
+      // saía declarado pessoa jurídica, e um cedente pessoa física produzia arquivo bem-formado cujo
+      // tipo de inscrição não corresponde ao titular. A régua é a MESMA que o reader usa para o
+      // favorecido — uma função só, no domínio, medindo o comprimento da inscrição normalizada.
+      documentType: inscriptionType(account.value.document),
       document: account.value.document,
       convenio: account.value.convenio,
       agency: account.value.agency,
-      agencyDigit: '',
+      // 058 — G009. Sai do CADASTRO desde a #856; era `''` literal, e o dígito que o operador digita
+      // na tela desde 25/08 (specs/107 do web-app) não tinha onde ser gravado.
+      //
+      // Ausente continua sendo BRANCO, e isso é o layout, não desistência: `Alfa` vazio é brancos
+      // (p. 14), e a agência pode legitimamente não ter DV. O que mudou é que o branco passou a
+      // significar "esta agência não tem dígito" em vez de "o sistema não sabe".
+      //
+      // ⚠️ Nunca `'0'` por omissão. `05-armadilhas-e-divergencias.md` §2 é explícito: "se o DV for
+      // `0`, enviar `0`; se a agência realmente não tiver DV, enviar branco. Nunca zero por padrão
+      // sem confirmar" — zero é um dígito afirmado, e afirmar o errado é pior que não afirmar.
+      agencyDigit: account.value.agencyDigit ?? '',
       accountNumber: account.value.accountNumber,
       accountDigit: account.value.accountDigit,
+      // 072 — G012. BRANCO, e a ausência é justificada, não esquecida (#856, CA2 · ramo facultativo).
+      //
+      // O campo não é "o segundo DV do cedente": `G012` (layout v08, p. 96) o define como a **2ª
+      // posição do DV** para bancos cujo dígito de conta tem duas posições — o exemplo do próprio
+      // manual é `45981-36`, com `3` na 071 e `6` na 072. O DV de conta do Bradesco tem UMA posição:
+      // `bradescoAccountCheckDigits` (Manual de Procedimentos 4008-523-0096 v16, p. 30) devolve um
+      // único caractere, `0`–`9` ou `P`. Não existe segunda posição a gravar.
+      //
+      // Confirmado do outro lado, no arquivo que o banco aceitou: a inquiry-0033 mediu 18 submissões
+      // ao Validador Universal em 25/08/2026, com os DVs de agência/conta vazios em três cenários e
+      // **nenhuma crítica** a eles.
+      //
+      // ⚠️ Por isso NÃO ganhou coluna, ao contrário da 058: uma coluna aqui pediria ao operador um
+      // dígito que a conta dele não tem, e o que ele digitasse iria para o arquivo.
       accountAgencyDigit: '',
       companyName: CEDENTE_COMPANY_NAME,
-      // ⚠️ Continua saindo com 30 brancos sempre que a coluna é NULL — o caso de TODA conta vinda
-      // do ETL, que nunca preenche o campo. Fica assim de propósito: o destinatário do arquivo é o
-      // próprio banco, e afirmar que o branco é inofensivo exige o layout, não dedução. Registrado
-      // na #856 junto com os DVs de 058/072 e o tipo de inscrição.
+      // ⚠️ Sai com 30 brancos quando a coluna é NULL — o caso de TODA conta vinda do ETL, que nunca
+      // preenche o campo. Fica assim de propósito: 103-132 é o nome do BANCO, o destinatário do
+      // arquivo é o próprio banco, e o layout (p. 15, G014) não marca o campo como obrigatório —
+      // é uma das duas colunas sem asterisco do header, ao lado do nome da empresa.
       bankName: account.value.bankName ?? '',
     } as const;
 
@@ -259,19 +314,28 @@ export const generateRemittance =
           // comentário do `allocateNsa` acima), mas a recusa parcial não é — e é por isso que a
           // gravação é UMA para todas as remessas, em `saveAll`, e não uma por arquivo.
           //
-          // ⚠️ OS TRÊS DA ROTA PIX (#838) convergem para o MESMO desfecho, e a convergência é escolha
-          // registrada, não efeito de `default`: nos três o operador vai ao cadastro do favorecido, e
-          // a tela é a do pré-voo. O que os distingue — chave que não cabe no campo, banco fora da
-          // tabela do Bacen, tipo de chave fora do domínio do layout — importa para quem lê o log do
-          // emissor, e é por isso que eles sobem NOMEADOS até aqui em vez de serem achatados na
-          // origem. Chegar em qualquer um deles é rede de segurança: o reader já recusou antes do NSA.
+          // ⚠️ OS DOIS DA ROTA PIX (#838) convergem para o MESMO desfecho, e a convergência é escolha
+          // registrada, não efeito de `default`: nos dois o operador vai ao cadastro do favorecido, e
+          // a tela é a do pré-voo. O que os distingue — chave que não cabe no campo, tipo de chave
+          // fora do domínio do layout — importa para quem lê o log do emissor, e é por isso que eles
+          // sobem NOMEADOS até aqui em vez de serem achatados na origem. Chegar em qualquer um deles
+          // é rede de segurança: o reader já recusou antes do NSA.
+          //
+          // Eram três; o `cnab-payee-ispb-unknown` saiu na #923 junto com a tabela de-para de ISPB.
           case 'cnab-billet-party-unidentified':
           case 'cnab-pix-key-unrepresentable':
-          case 'cnab-payee-ispb-unknown':
           case 'cnab-pix-key-type-unsupported':
             return err('remittance-payments-unavailable');
           case 'cnab-translation-failed':
             return err('remittance-build-failed');
+          // ⚠️ INALCANÇÁVEL DAQUI, e o `case` existe porque o compilador o exige — a exaustividade
+          // deste `switch` é o que garante que uma recusa nova não caia num `default` calado.
+          //
+          // A seleção mista é recusada por `planFiles`, antes do NSA; chegar aqui significaria que
+          // alguém montou sem repartir. Sobe com o MESMO nome do outro caminho de propósito: se um
+          // dia acontecer, o operador lê a mesma frase, em vez de dois nomes para a mesma escolha.
+          case 'cnab-pix-requires-exclusive-file':
+            return err('remittance-pix-requires-exclusive-file');
         }
       }
 

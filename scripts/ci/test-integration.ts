@@ -145,6 +145,11 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // Alocação de NSA sob concorrência real: prova que o SELECT ... FOR UPDATE serializa e que dois
     // pedidos simultâneos nunca recebem o mesmo número. NSA repetido = retransmissão para o banco.
     'tests/modules/financial/adapters/persistence/nsa-allocation.drizzle-mysql.test.ts',
+    // Backfill da migration 0057 (#943, CA4): a sequência de cada convênio nasce em MAX(next_nsa).
+    // ⚠️ Existe porque as migrations rodam contra banco VAZIO no `before` de cada arquivo — um
+    // `INSERT … SELECT` sobre tabela vazia passa sem inserir nada. Em produção ela roda sobre contas
+    // reais, no job de migration, ANTES de o app subir: falhar ali derruba o deploy.
+    'tests/modules/financial/adapters/persistence/convenio-nsa-backfill.drizzle-mysql.test.ts',
     // Remessa (migration 0044): cabeçalho + vínculos na mesma transação, anti-join de documento
     // preso no BANCO, e os UNIQUEs de NSA-por-conta e nome de arquivo.
     'tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts',

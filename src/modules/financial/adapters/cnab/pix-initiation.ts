@@ -1,5 +1,7 @@
 import { ok, err, type Result } from '#src/shared/index.ts';
 
+import type { PayablePixKeyType } from '../../domain/payout/pix-key.ts';
+
 /*
  * A forma de iniciação do Pix (`G100`), derivada do tipo da chave do favorecido (#838, CA3).
  *
@@ -8,8 +10,8 @@ import { ok, err, type Result } from '#src/shared/index.ts';
  * cinco valores cada, de donos diferentes — `PixKeyType` é de `partners`
  * (`domain/shared/payment-target.ts:10`) e o `G100` é do banco (`03-dominios-campos.md:254`).
  *
- * ⚠️ VIVE NO ADAPTER, e não no domínio, pela mesma razão que `payee-ispb.ts`: a tradução é da
- * fronteira com o banco, e é aqui que ela morre quando o layout mudar. O `financial` mantém o
+ * ⚠️ VIVE NO ADAPTER, e não no domínio, pela mesma razão que as demais constantes do layout: a
+ * tradução é da fronteira com o banco, e é aqui que ela morre quando o layout mudar. O `financial` mantém o
  * `keyType` OPACO de propósito (`domain/payout/types.ts:57-62`) — o payout decide aptidão, e para
  * isso basta haver chave. Interpretar o tipo é trabalho de quem emite o registro, que é este arquivo.
  *
@@ -46,19 +48,36 @@ export type PixInitiationError = 'remittance-pix-key-type-unsupported';
 //      posições o banco lê com outra régua. Se essa rota entrar um dia, entra por decisão de produto
 //      e por um caminho próprio — não por uma linha a mais neste mapa.
 //
-// ⚠️ `Map`, e NÃO um objeto literal, e a razão é de segurança, não de estilo. Um
-// `Record<string, string>` herda de `Object.prototype`, e `keyType` chega como string arbitrária:
-// `record['toString']` devolveria uma FUNÇÃO, que não é `undefined` e passaria pela guarda abaixo
-// como se fosse código `G100` válido. O `payee-ispb.ts` escapa disso por ter uma guarda de forma
-// (`^\d{3}$`) que barra `'toString'` antes do acesso — e há teste lá fixando exatamente esse caso.
-// Aqui não existe forma numérica a validar, então a estrutura é que precisa não ter protótipo.
-const INITIATION_BY_KEY_TYPE: ReadonlyMap<string, string> = new Map([
-  ['phone', '01'],
-  ['email', '02'],
-  ['cpf', '03'],
-  ['cnpj', '03'],
-  ['random-key', '04'],
-]);
+// ⚠️ `Record` PRIMEIRO, `Map` DEPOIS — e cada metade resolve um problema diferente. Perder qualquer
+// uma reabre um defeito distinto.
+//
+// **O `Record<PayablePixKeyType, string>` dá EXAUSTIVIDADE.** A lista de tipos pagáveis não vive mais
+// aqui: vive em `domain/payout/pix-key.ts`, porque o pré-voo precisa dela e domínio não alcança
+// adapter (#948, CA2 — mesmo arranjo de `hasRemittanceIssuer`). Com a fonte lá e o mapa aqui, faltava
+// o que impede as duas de divergirem: um tipo novo entrando na lista do domínio faria o pré-voo
+// aprovar uma chave que este arquivo recusaria — exatamente a divergência que a fatia fecha. `Record`
+// EXIGE a chave; o `Map` literal que existia aqui aceitava faltar.
+//
+// **O `Map` dá SEGURANÇA DE PROTÓTIPO.** `keyType` chega como string arbitrária, e um `Record`
+// consultado direto herda de `Object.prototype`: `record['toString']` devolveria uma FUNÇÃO, que não
+// é `undefined` e passaria pela guarda abaixo como se fosse código `G100` válido. `new Map(entries)`
+// não tem protótipo a herdar. Um mapa banco→ISPB que vivia aqui ao lado escapava disso por ter uma
+// guarda de forma (`^\d{3}$`); ele saiu na #923, mas a lição fica — aqui não há forma numérica a
+// validar, então a estrutura é que precisa não ter protótipo.
+//
+// A tradução NÃO é 1:1, e o `Record` deixa as duas assimetrias visíveis do mesmo jeito que o literal
+// deixava: `cpf` e `cnpj` apontam para `03`, e não há origem para `05`.
+const INITIATION_BY_PAYABLE_KEY_TYPE: Record<PayablePixKeyType, string> = {
+  phone: '01',
+  email: '02',
+  cpf: '03',
+  cnpj: '03',
+  'random-key': '04',
+};
+
+const INITIATION_BY_KEY_TYPE: ReadonlyMap<string, string> = new Map(
+  Object.entries(INITIATION_BY_PAYABLE_KEY_TYPE),
+);
 
 export const pixInitiationFor = (keyType: string): Result<string, PixInitiationError> => {
   const initiation = INITIATION_BY_KEY_TYPE.get(keyType);
@@ -67,7 +86,7 @@ export const pixInitiationFor = (keyType: string): Result<string, PixInitiationE
   // ("aleatória serve para qualquer coisa"), nem brancos, nem o próprio `keyType` truncado: os três
   // produzem arquivo bem-formado que o banco recusa depois de transmitido, e o inspetor não pega
   // porque não é defeito de forma. É a mesma classe do `?? ''` que virou endereço em branco em 100%
-  // das remessas (#858) e do zero-padding recusado em `payee-ispb.ts:35-39`.
+  // das remessas (#858).
   //
   // ⚠️ O compilador não protege este caminho: `keyType` chega como `string` porque o `financial`
   // mantém o tipo opaco e não importa a união de `partners` (`domain/payout/types.ts:57-62`). A

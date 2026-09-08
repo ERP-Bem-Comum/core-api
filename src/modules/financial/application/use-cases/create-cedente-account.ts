@@ -17,6 +17,7 @@ export type CreateCedenteAccountInput = Readonly<{
   type?: string; // raw — validado pelo domínio (invalid-account-type)
   typeLabel?: string; // #206: texto livre p/ identificar conta `outro`/`cartao`
   agency: string;
+  agencyDigit?: string; // #856 — posição 058 do header CNAB; a agência pode não ter DV.
   accountNumber: string;
   accountDigit: string;
   convenio?: string;
@@ -57,6 +58,7 @@ export const createCedenteAccount =
       accountDigit: input.accountDigit,
       convenio: input.convenio ?? '',
       document: input.document,
+      ...(input.agencyDigit !== undefined ? { agencyDigit: input.agencyDigit } : {}),
       ...(input.type !== undefined ? { type: input.type as AccountType } : {}),
       ...(input.typeLabel !== undefined ? { typeLabel: input.typeLabel } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),

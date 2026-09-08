@@ -227,6 +227,9 @@ import { createCedenteAccount } from '../../application/use-cases/create-cedente
 import { listCedenteAccounts } from '../../application/use-cases/list-cedente-accounts.ts';
 import { listCedenteAccountsWithBalance } from '../../application/use-cases/list-cedente-accounts-with-balance.ts';
 import { closeCedenteAccount } from '../../application/use-cases/close-cedente-account.ts';
+// #995 B1/B3 — desfazer o encerramento e excluir (soft delete). Irmãos do close.
+import { reopenCedenteAccount } from '../../application/use-cases/reopen-cedente-account.ts';
+import { deleteCedenteAccount } from '../../application/use-cases/delete-cedente-account.ts';
 import { editCedenteAccount } from '../../application/use-cases/edit-cedente-account.ts';
 import { getAccountStatement } from '../../application/use-cases/get-account-statement.ts';
 import { getTransactionReconciliation } from '../../application/use-cases/get-transaction-reconciliation.ts';
@@ -372,6 +375,8 @@ export type FinancialHttpDeps = Readonly<{
   findCedenteAccountById: CedenteAccountStore['findById'];
   /** Conta-cedente (019) — POST /cedente-accounts/:id/close. */
   closeCedenteAccount: ReturnType<typeof closeCedenteAccount>;
+  reopenCedenteAccount: ReturnType<typeof reopenCedenteAccount>;
+  deleteCedenteAccount: ReturnType<typeof deleteCedenteAccount>;
   /** Conta-cedente (019) — PATCH /cedente-accounts/:id. */
   editCedenteAccount: ReturnType<typeof editCedenteAccount>;
   /** Read-model do extrato (#139) — GET /cedente-accounts/:id/statement. */
@@ -1129,6 +1134,8 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     }),
     findCedenteAccountById: pools.cedenteStore.findById,
     closeCedenteAccount: closeCedenteAccount({ cedenteStore: pools.cedenteStore }),
+    reopenCedenteAccount: reopenCedenteAccount({ cedenteStore: pools.cedenteStore }),
+    deleteCedenteAccount: deleteCedenteAccount({ cedenteStore: pools.cedenteStore }),
     editCedenteAccount: editCedenteAccount({
       cedenteStore: pools.cedenteStore,
       accountHistory: createStatementBackedAccountHistory(pools.statementRepo),

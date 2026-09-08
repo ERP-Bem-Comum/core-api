@@ -12,6 +12,7 @@
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { DocumentType, PaymentMethod } from '#src/modules/financial/domain/document/types.ts';
+import { splitCheckDigit } from '#src/modules/financial/domain/payout/payee-account.ts';
 import type { LegacyAccountRow, LegacyPayableRow } from '../legacy/rows.ts';
 import type { QuarantineReason } from '../quarantine/reason.ts';
 import { EXCLUDED_PAYABLE_LEGACY_IDS } from './exclusions.ts';
@@ -28,6 +29,8 @@ export type CedenteAccountPlan = Readonly<{
   input: Readonly<{
     bankCode: string;
     agency: string;
+    // #856 — o DV da agência, separado do número. Ausente quando o legado não trazia separador.
+    agencyDigit?: string;
     accountNumber: string;
     accountDigit: string;
     convenio: string;
@@ -54,15 +57,32 @@ export const mapLegacyAccountRow = (
     errors.push({ tag: 'EnumUnknown', field: 'bank', attempted: row.bank });
   }
 
+  // F7: a agência legada vem com o DV EMBUTIDO, no formato `NNNN-D`.
+  //
+  // ⚠️ ELA ERA GRAVADA INTEIRA, e isso corrompia toda remessa daquela conta em silêncio (#856). O
+  // emissor escreve `digits(agency, 5)`, que faz `replace(/\D/g,'')` antes do pad: `1234-5` virava
+  // `12345` nas posições 053-057, onde o banco espera `01234`. Cinco dígitos, cabe no campo, nenhum
+  // gate acusa — e o arquivo vai ao banco apontando outra agência. O comentário anterior dizia que o
+  // dígito ia "no campo próprio"; não ia, porque campo próprio não existia. Agora existe.
+  //
+  // A decomposição é `splitCheckDigit`, do domínio — a MESMA que lê a conta do favorecido. Uma
+  // segunda gramática aqui divergiria da de lá no dia em que uma das duas mudasse.
+  // ⚠️ O QUE NÃO DECOMPÕE NÃO VAI PARA QUARENTENA, e a escolha é a lição da #879. A conta-cedente
+  // serve à CONCILIAÇÃO sem agência válida; barrar a migração por um campo que só a remessa exige
+  // repetiria o beco do `'LEGADO'` — conta ausente do sistema, sem via de correção pela tela. Segue
+  // como veio, e quem recusa é `checkCedenteAgency` na hora de gerar, com lacuna nomeada, mensagem
+  // PT-BR dizendo onde corrigir, e ANTES de queimar NSA.
+  const agencyParts = splitCheckDigit(row.agency.trim());
+
   if (errors.length > 0 || bankCode === undefined) return err(errors);
 
   return ok({
     legacyId: row.id,
     input: {
       bankCode,
-      // F7: agência legada vem com DV embutido ('0288-7') E dv separado — preservamos
-      // a agência como veio (domínio só exige não-blank) e o dv no campo próprio.
-      agency: row.agency,
+      agency: agencyParts?.base ?? row.agency,
+      // `null` é "o legado não trouxe DV", e vira ausência — nunca `'0'`, que é um dígito afirmado.
+      ...(agencyParts?.digit != null ? { agencyDigit: agencyParts.digit } : {}),
       accountNumber: row.accountNumber,
       accountDigit: row.dv,
       // D6: o convênio real do Bradesco não existe no legado, e o correto é nascer VAZIO.

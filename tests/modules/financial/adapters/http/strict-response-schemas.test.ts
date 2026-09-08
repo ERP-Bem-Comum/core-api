@@ -205,6 +205,9 @@ describe('cedenteAccountResponseSchema — .strict() (#384)', () => {
     type: 'corrente',
     typeLabel: null,
     agency: '0001',
+    // #856 — presente na leitura para o front exibir o cadastro completo na edição. `null` é o
+    // estado de toda conta migrada: nasceu sem DV porque não havia coluna.
+    agencyDigit: null,
     accountNumber: '12345',
     accountDigit: '6',
     convenio: '',

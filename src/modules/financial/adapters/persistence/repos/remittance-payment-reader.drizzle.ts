@@ -36,6 +36,14 @@ import { isApprovedForRemittance } from '#src/modules/financial/domain/document/
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
 import { resolveBarcode } from '#src/modules/financial/domain/payout/digitable-line.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
+// ⚠️ DO DOMÍNIO, NÃO CÓPIAS LOCAIS (#856). As duas eram privadas deste arquivo enquanto só o
+// favorecido as usava; o CEDENTE passou a precisar da mesma derivação, e duas cópias idênticas é a
+// configuração que a #863 documenta como causa — duas decisões sobre o mesmo dado, nenhuma citando a
+// outra, concordando por acidente até o dia em que uma mudasse.
+import {
+  normalizeInscription,
+  inscriptionType,
+} from '#src/modules/financial/domain/payout/inscription.ts';
 import type { PayeeContractor } from '../../http/payee-bank-composition.ts';
 import { finDocuments, finPayables } from '../schemas/mysql.ts';
 
@@ -46,15 +54,6 @@ const logStore = (op: string, cause: unknown): void => {
 export type PayeeContractorLookup = (
   ref: Readonly<{ kind: PayeeKind | null; id: string | null }>,
 ) => Promise<Result<PayeeContractor | null, 'contractor-read-unavailable'>>;
-
-// O tipo de inscrição sai do COMPRIMENTO: 11 posições é pessoa física, 14 é pessoa jurídica.
-//
-// A limpeza preserva letras de propósito — desde 07/2026 a inscrição de pessoa jurídica pode contê-las
-// (ADR-0044). Filtrar só numerais encurtaria a string e faria uma inscrição válida ser classificada
-// como física, gravando o tipo errado no arquivo.
-const CPF_LENGTH = 11;
-const cleanDocument = (raw: string): string => raw.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
-const documentTypeOf = (raw: string): '1' | '2' => (raw.length === CPF_LENGTH ? '1' : '2');
 
 type PayableRow = Readonly<{
   payableId: string;
@@ -143,14 +142,14 @@ const toPaymentData = (
       // preferível ao campo vazio no arquivo.
       if (!parts.ok || contractor === null) return err('remittance-payment-incomplete');
 
-      const document = cleanDocument(contractor.document);
+      const document = normalizeInscription(contractor.document);
       return ok({
         payableId: row.payableId,
         documentId: row.documentId,
         route: 'transfer',
         payee: {
           name: contractor.name,
-          documentType: documentTypeOf(document),
+          documentType: inscriptionType(document),
           document,
           bankCode: parts.value.bankCode,
           agency: parts.value.agency,
@@ -188,7 +187,7 @@ const toPaymentData = (
       // título sai da seleção ANTES de o NSA ser alocado, em vez de derrubar a remessa inteira
       // depois de queimar um número de sequência que não volta.
       if (contractor === null) return err('remittance-payment-incomplete');
-      const beneficiaryDocument = cleanDocument(contractor.document);
+      const beneficiaryDocument = normalizeInscription(contractor.document);
       if (beneficiaryDocument === '') return err('remittance-payment-incomplete');
 
       return ok({
@@ -198,7 +197,7 @@ const toPaymentData = (
         barcode: barcode.value,
         // Nome e inscrição do CEDENTE do título: quem emitiu e recebe.
         beneficiaryName: contractor.name,
-        beneficiaryDocumentType: documentTypeOf(beneficiaryDocument),
+        beneficiaryDocumentType: inscriptionType(beneficiaryDocument),
         beneficiaryDocument,
         dueDate: paymentDate,
         valueCents,
@@ -207,51 +206,35 @@ const toPaymentData = (
     }
 
     case 'pix': {
-      // O Pix precisa da chave E do bloco bancário (#838), e a segunda metade é a que surpreende:
-      // o Segmento A do golden traz banco, agência, DV, conta e DV do favorecido preenchidos, com o
-      // layout marcando os quatro como obrigatórios (p. 39). A decisão da P.O. de 13/08 — "Pix paga
-      // por chave, não olha agência ou conta" — descreve o negócio, não o arquivo.
+      // O Pix precisa da CHAVE, e só dela (#945). A leitura do bloco bancário que existia aqui saiu
+      // junto com a exigência do pré-voo: quem endereça o pagamento no SPI é a chave, e as posições
+      // bancárias do Segmento A saem zeradas por laudo do banco (05/09/2026), sem consultar cadastro.
       //
-      // A decomposição passa pelo MESMO caminho do pré-voo, como a transferência e o boleto já
-      // fazem, e é isso que impede as duas réguas de divergirem: `checkPayoutReadiness` chama
-      // `decomposePayeeAccount` para a rota `pix` desde esta mesma mudança.
-      const parts = decomposePayeeAccount({
-        bank: contractor?.bankAccount?.bank ?? null,
-        agency: contractor?.bankAccount?.agency ?? null,
-        accountNumber: contractor?.bankAccount?.accountNumber ?? null,
-        checkDigit: contractor?.bankAccount?.checkDigit ?? null,
-        // A chave NÃO participa da decomposição da conta — são dois dados independentes do mesmo
-        // favorecido, e é o mesmo desenho que a transferência usa ao passar `null` aqui.
-        pixKey: null,
-        document: null,
-      });
-
-      // Inalcançável pelo caminho normal: `ready` na rota `pix` já significa que a chave existe e
-      // que a decomposição passou. Fica explícito porque as duas chamadas são independentes — e
-      // porque recusar aqui tira o título da seleção ANTES de o NSA ser alocado, que é a mesma razão
-      // pela qual o boleto recusa neste ponto e não no montador.
-      if (!parts.ok || contractor === null) return err('remittance-payment-incomplete');
+      // Passar a conta adiante quando o arquivo não a escreve não seria inócuo — seria a porta pela
+      // qual a exigência volta, porque o dado disponível no tipo é o que o próximo emissor vai
+      // querer usar. O `RemittancePixPayment` deixou de carregá-lo pela mesma razão.
+      //
+      // Recusar aqui, e não no montador, é o que tira o título da seleção ANTES de o NSA ser alocado
+      // — mesma razão pela qual o boleto recusa neste ponto.
+      if (contractor === null) return err('remittance-payment-incomplete');
 
       const pixKey = contractor.pixKey?.key ?? '';
       const pixKeyType = contractor.pixKey?.keyType ?? '';
       if (pixKey === '' || pixKeyType === '') return err('remittance-payment-incomplete');
 
-      const document = cleanDocument(contractor.document);
+      const document = normalizeInscription(contractor.document);
       if (document === '') return err('remittance-payment-incomplete');
 
       return ok({
         payableId: row.payableId,
         documentId: row.documentId,
         route: 'pix',
+        // Só a identidade: `RemittancePixPayment.payee` é `RemittancePayeeIdentity`, e o bloco
+        // bancário não tem para onde ir nesta rota.
         payee: {
           name: contractor.name,
-          documentType: documentTypeOf(document),
+          documentType: inscriptionType(document),
           document,
-          bankCode: parts.value.bankCode,
-          agency: parts.value.agency,
-          agencyDigit: parts.value.agencyDigit,
-          accountNumber: parts.value.accountNumber,
-          accountDigit: parts.value.accountDigit,
         },
         pixKey,
         // Viaja CRU, no vocabulário de `partners`. Quem traduz para o domínio `G100` é o adapter de

@@ -46,10 +46,8 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     // no campo — não "falhou a tradução" (#838).
     case 'pix-key-unrepresentable':
       return 'cnab-pix-key-unrepresentable';
-    // Os dois erros de TRADUÇÃO da rota Pix. Sobem nomeados pela mesma régua: um manda ao cadastro
-    // (ou à fonte do Bacen), o outro diz que o tipo da chave não existe no domínio do layout.
-    case 'payee-ispb-unknown':
-      return 'cnab-payee-ispb-unknown';
+    // O erro de TRADUÇÃO da rota Pix, que sobe nomeado: diz que o tipo da chave não existe no
+    // domínio do layout. Eram dois até a #923 — o `payee-ispb-unknown` saiu com a tabela de-para.
     case 'remittance-pix-key-type-unsupported':
       return 'cnab-pix-key-type-unsupported';
     // `remittance-mixed-file-modalities` converge para o desfecho genérico, e é escolha, não
@@ -64,6 +62,12 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     case 'remittance-reference-overflow':
     case 'remittance-mixed-file-modalities':
       return 'cnab-translation-failed';
+    // #948 CA4 — sobe nomeado, e é o contraste com a linha acima que explica por quê. As duas falam
+    // de mistura, e param em lugares opostos: `mixed-file-modalities` é a defesa do montador contra
+    // quem não repartiu — chegar lá é defeito de CÓDIGO, e o operador não tem o que fazer. Este vem
+    // da partição, antes do NSA, e é ESCOLHA DE SELEÇÃO: o operador refaz e segue.
+    case 'remittance-pix-requires-exclusive-file':
+      return 'cnab-pix-requires-exclusive-file';
   }
 };
 

@@ -41,6 +41,13 @@ export const create = (input: CreateInput): Result<CedenteAccount, CedenteAccoun
       document: input.document,
       status: input.status ?? 'Active',
       nextNsa,
+      // ⚠️ `''` COLAPSA EM AUSENTE, e não é normalização cosmética: o front envia o campo vazio
+      // quando o operador não digitou DV, e guardar `''` faria a conta parecer "com DV já definido"
+      // para a régua de preenchimento-uma-vez da edição — trancando o cadastro que a #856 existe
+      // para destravar. Sem DV é sem DV, venha como ausência ou como string vazia.
+      ...(input.agencyDigit !== undefined && input.agencyDigit.trim() !== ''
+        ? { agencyDigit: input.agencyDigit.trim() }
+        : {}),
       ...(input.type !== undefined ? { type: input.type } : {}),
       ...(input.typeLabel !== undefined ? { typeLabel: input.typeLabel } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
@@ -59,12 +66,53 @@ export const isActive = (account: CedenteAccount): boolean => account.status ===
 
 export const isClosed = (account: CedenteAccount): boolean => account.status === 'Closed';
 
+// #995 B3 — soft delete. A linha some do grid, não do banco.
+export const isDeleted = (account: CedenteAccount): boolean => account.status === 'Deleted';
+
 export const close = (
   account: CedenteAccount,
 ): Result<CedenteAccount, 'cedente-account-already-closed'> =>
   account.status === 'Active'
     ? ok(immutable<CedenteAccount>({ ...account, status: 'Closed' }))
     : err('cedente-account-already-closed');
+
+/**
+ * `Closed` → `Active` (#995, B1).
+ *
+ * ⚠️ PRESERVA TUDO, e o que mais importa é o que ela NÃO toca: `nextNsa`. Reabrir reiniciando o
+ * contador seria a #943 entrando pela porta dos fundos — NSA reemitido é retransmissão aos olhos do
+ * banco. Como a reabertura é um `{...account, status}`, o contador vem junto por construção; e desde
+ * a #943 ele nem mora mais aqui, mora em `fin_convenio_nsa`. As duas coisas se reforçam.
+ *
+ * Só a partir de `Closed`. Conta ativa não tem o que reabrir; conta EXCLUÍDA não volta — é a
+ * assimetria que dá sentido a existirem duas ações (a P.O., 06/09): encerrar é reversível de
+ * propósito, excluir não é.
+ */
+export const reopen = (
+  account: CedenteAccount,
+): Result<CedenteAccount, 'cedente-account-not-closed'> =>
+  account.status === 'Closed'
+    ? ok(immutable<CedenteAccount>({ ...account, status: 'Active' }))
+    : err('cedente-account-not-closed');
+
+/**
+ * `Closed` → `Deleted` (#995, B3). SOFT delete: a linha permanece.
+ *
+ * Só a partir de `Closed`, e o erro tem nome PRÓPRIO em vez de reusar o `not-closed` da reabertura:
+ * a ação do operador é diferente — ali ele queria reabrir e a conta já estava ativa; aqui ele quer
+ * excluir e precisa encerrar antes. Uma mensagem só serviria mal às duas.
+ */
+export const softDelete = (
+  account: CedenteAccount,
+): Result<
+  CedenteAccount,
+  'cedente-account-not-closed-for-delete' | 'cedente-account-already-deleted'
+> => {
+  if (account.status === 'Deleted') return err('cedente-account-already-deleted');
+  if (account.status !== 'Closed') return err('cedente-account-not-closed-for-delete');
+
+  return ok(immutable<CedenteAccount>({ ...account, status: 'Deleted' }));
+};
 
 export type AllocateNsaError = 'cedente-account-not-active' | 'nsa-exhausted';
 

@@ -350,6 +350,7 @@ const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
   type: a.type ?? null,
   typeLabel: a.typeLabel ?? null,
   agency: a.agency,
+  agencyDigit: a.agencyDigit ?? null,
   accountNumber: a.accountNumber,
   accountDigit: a.accountDigit,
   convenio: a.convenio,
@@ -2089,6 +2090,7 @@ const financialRoutes =
           accountNumber: b.accountNumber,
           accountDigit: b.accountDigit,
           document: b.document,
+          ...(b.agencyDigit !== undefined ? { agencyDigit: b.agencyDigit } : {}),
           ...(b.typeLabel !== undefined ? { typeLabel: b.typeLabel } : {}),
           ...(b.bankName !== undefined ? { bankName: b.bankName } : {}),
           ...(b.convenio !== undefined ? { convenio: b.convenio } : {}),
@@ -2306,12 +2308,20 @@ const financialRoutes =
           ...(b.convenio !== undefined ? { convenio: b.convenio } : {}),
           ...(b.bankCode !== undefined ? { bankCode: b.bankCode } : {}),
           ...(b.agency !== undefined ? { agency: b.agency } : {}),
+          ...(b.agencyDigit !== undefined ? { agencyDigit: b.agencyDigit } : {}),
           ...(b.accountNumber !== undefined ? { accountNumber: b.accountNumber } : {}),
           ...(b.accountDigit !== undefined ? { accountDigit: b.accountDigit } : {}),
           ...(b.type !== undefined ? { type: b.type } : {}),
           ...(b.typeLabel !== undefined ? { typeLabel: b.typeLabel } : {}),
           ...(b.nickname !== undefined ? { nickname: b.nickname } : {}),
           ...(b.bankName !== undefined ? { bankName: b.bankName } : {}),
+          // Money em string de centavos na borda (convenção do módulo) → número no domínio.
+          ...(b.openingBalanceCents !== undefined
+            ? { openingBalanceCents: Number(b.openingBalanceCents) }
+            : {}),
+          ...(b.openingBalanceDate !== undefined
+            ? { openingBalanceDate: b.openingBalanceDate }
+            : {}),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
@@ -2329,6 +2339,46 @@ const financialRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.closeCedenteAccount({ id: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /financial/cedente-accounts/:id/reopen — desfaz o encerramento (#995 B1).
+    //
+    // ⚠️ POST e não PATCH: é uma TRANSIÇÃO de estado nomeada, irmã do `close`, e não a edição de um
+    // campo. O `PATCH` do recurso segue sem aceitar `status` — o que impede que reabrir vire efeito
+    // colateral de quem só queria trocar o apelido.
+    scope.route({
+      method: 'POST',
+      url: '/financial/cedente-accounts/:id/reopen',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountWrite)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        response: { 200: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.reopenCedenteAccount({ id: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // DELETE /financial/cedente-accounts/:id — exclui (#995 B3). SOFT delete: a linha permanece.
+    //
+    // ⚠️ Responde 200 com o recurso, e não 204: a conta continua EXISTINDO (é soft delete), e o
+    // corpo é o que permite ao front confirmar o novo `status` sem uma segunda chamada. Um 204 diria
+    // "não há mais nada aqui", que é falso — o histórico segue alcançável por este mesmo id.
+    scope.route({
+      method: 'DELETE',
+      url: '/financial/cedente-accounts/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountWrite)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        response: { 200: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.deleteCedenteAccount({ id: req.params.id });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
       },

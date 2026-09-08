@@ -1,0 +1,1 @@
+ALTER TABLE `fin_cedente_accounts` ADD `agency_digit` varchar(2);

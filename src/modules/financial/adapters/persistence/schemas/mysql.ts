@@ -649,11 +649,32 @@ export const finCedenteAccounts = mysqlTable(
     id: uuidKey('id').primaryKey().notNull(),
     bankCode: varchar('bank_code', { length: 8 }).notNull(),
     agency: varchar('agency', { length: 12 }).notNull(),
+    // DV da agência — posição 058 do header CNAB (#856). NULLABLE por duas razões independentes:
+    // a agência pode legitimamente não ter DV, e toda conta já cadastrada nasceu sem ele (não havia
+    // coluna, e o front descartava o dígito que o operador digitava).
+    //
+    // ⚠️ COLUNA PRÓPRIA, e não sufixo de `agency`. `agency` tem 12 posições e caberia `1234-5` — mas
+    // o emissor escreve `digits(agency, 5)`, que remove o separador e grava `12345` nas posições
+    // 053-057, onde o banco espera `01234`. Nenhum gate acusa. Ver `remittance-eligibility.ts`.
+    //
+    // ⚠️ FORA da UNIQUE de chave natural, de propósito: a identidade da conta é banco+agência+conta
+    // +dígito da CONTA (FR-016), e o DV da agência é atributo dela, não parte de quem ela é. Incluí-lo
+    // faria a mesma conta bancária caber duas vezes na tabela — uma com dígito, outra sem.
+    agencyDigit: varchar('agency_digit', { length: 2 }),
     accountNumber: varchar('account_number', { length: 20 }).notNull(),
     accountDigit: varchar('account_digit', { length: 4 }).notNull(),
     convenio: varchar('convenio', { length: 30 }).notNull(),
     document: varchar('document', { length: 20 }).notNull(),
     status: varchar('status', { length: 8 }).notNull(),
+    // #995 B4 — o discriminador do soft delete na UNIQUE de chave natural. `'LIVE'` enquanto a conta
+    // existe (ativa ou encerrada); o próprio `id` quando `Deleted`. Ver a UNIQUE, abaixo, para o
+    // mecanismo e para por que NULL não serve. Derivado em `cedente-account.mapper.ts`, num só lugar.
+    //
+    // ⚠️ `uuidKey` e não `varchar(36)` cru: a coluna guarda o `id` da própria linha quando `Deleted`,
+    // e comparação de identificador é BYTE A BYTE — `utf8mb4_unicode_ci` acharia `A` igual a `a` e
+    // dois ids distintos poderiam colidir na UNIQUE, prendendo a chave natural de novo. É a régua
+    // que `tests/cleanup/identifier-collation-from-type.test.ts` cobra para toda coluna de 36.
+    naturalKeySlot: uuidKey('natural_key_slot').notNull().default('LIVE'),
     nextNsa: int('next_nsa').notNull(),
     // Extensão conciliação (019) — nullable (ALTER ADD COLUMN não-quebrante, migration 0009).
     type: varchar('type', { length: 16 }),
@@ -665,21 +686,89 @@ export const finCedenteAccounts = mysqlTable(
     openingBalanceDate: date('opening_balance_date', { mode: 'string' }),
   },
   (t) => [
-    check('fin_cedente_accounts_status_chk', sql`${t.status} IN ('Active','Closed')`),
+    check('fin_cedente_accounts_status_chk', sql`${t.status} IN ('Active','Closed','Deleted')`),
     check('fin_cedente_accounts_next_nsa_chk', sql`${t.nextNsa} >= 1`),
     check(
       'fin_cedente_accounts_type_chk',
       sql`${t.type} IS NULL OR ${t.type} IN ('corrente','poupanca','investimento','cartao','outro')`,
     ),
-    // FR-016: unicidade por chave natural (banco + agência + conta + dígito).
+    check(
+      'fin_cedente_accounts_status_deleted_chk',
+      sql`${t.status} <> 'Deleted' OR ${t.naturalKeySlot} = ${t.id}`,
+    ),
+    // FR-016: unicidade por chave natural (banco + agência + conta + dígito) — agora com o
+    // discriminador do soft delete (#995, B4).
+    //
+    // ⚠️ POR QUE UMA QUINTA COLUNA, e por que ela não é gambiarra: o B4 exige que a conta EXCLUÍDA
+    // libere a chave (recadastrar com os mesmos dados passa a ser aceito), enquanto a ENCERRADA
+    // continua ocupando-a. Um índice sobre as quatro colunas não distingue os dois casos — a linha
+    // soft-deleted seguiria bloqueando.
+    //
+    // A saída que preserva a garantia NO BANCO é discriminar por valor:
+    //   · linha viva (`Active`/`Closed`) → `natural_key_slot = 'LIVE'`, constante ⇒ duas contas com a
+    //     mesma chave colidem, que é o invariante do FR-016;
+    //   · linha `Deleted` → `natural_key_slot = id`, único por linha ⇒ nunca colide com ninguém.
+    //
+    // ⚠️ NÃO usar NULL no lugar de `'LIVE'`. Em MySQL, linhas com NULL numa coluna do índice único
+    // NÃO são consideradas duplicatas — o efeito seria o INVERSO do desejado: as vivas deixariam de
+    // colidir entre si e a unicidade sumiria em silêncio.
+    //
+    // A derivação vive num lugar SÓ, `cedente-account.mapper.ts`, e o CHECK acima é a rede: uma linha
+    // `Deleted` cujo slot não seja o próprio id é recusada pelo banco, em vez de ocupar a chave para
+    // sempre por um caminho de escrita que esqueceu de derivar.
     uniqueIndex('fin_cedente_accounts_natural_key_uq').on(
       t.bankCode,
       t.agency,
       t.accountNumber,
       t.accountDigit,
+      t.naturalKeySlot,
     ),
   ],
 );
+
+// ─── fin_convenio_nsa ─────────────────────────────────────────────────────────
+//
+// O CONTADOR DE NSA, e ele é do CONVÊNIO — não da conta-cedente (#943).
+//
+// O mesmo contrato multipag vale para VÁRIAS contas de pagamento (confirmado com o gerente do
+// Bradesco em 02/09/2026). Enquanto o contador viveu em `fin_cedente_accounts.next_nsa`, cada conta
+// nova nascia em 1 e duas contas irmãs emitiam o mesmo número sob o mesmo contrato — que o banco lê
+// como retransmissão, não como remessa nova.
+//
+// ⚠️ E o defeito quebrava ANTES de chegar ao banco: `fin_remittance_payables.your_number` é
+// `<convênio><NSA><sequência>`, com UNIQUE global e SEM componente de tempo. Duas contas do mesmo
+// convênio, ambas em `000001`, geravam a MESMA referência e o segundo INSERT era recusado — 503
+// opaco, conta sem conseguir gerar remessa (#942, medido em produção).
+//
+// A PK é o CONVÊNIO, e não um id sintético, por três razões que se reforçam: o convênio É a
+// identidade do contrato junto ao banco; `fin_cedente_accounts` não tem índice em `convenio`, e a PK
+// daqui resolve a busca; e o lock de linha do `SELECT … FOR UPDATE` passa a serializar exatamente
+// entre as contas irmãs, que é onde o defeito mora.
+//
+// ⚠️ O convênio é TEXTO DIGITADO no cadastro de cada conta, não entidade própria — não há FK a
+// declarar, e nada impede (nem deve impedir) duas contas carregarem o mesmo número: é o desenho
+// pretendido. A consequência a conhecer: convênio digitado errado cria uma sequência nova em 1, e o
+// sintoma que aparece primeiro é o NSA reiniciando, não o cadastro errado.
+//
+// ⚠️ CHARSET/COLLATE — inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
+//   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci.
+export const finConvenioNsa = mysqlTable(
+  'fin_convenio_nsa',
+  {
+    convenio: varchar('convenio', { length: 30 }).primaryKey().notNull(),
+    // O PRÓXIMO a alocar, não o último emitido. A distinção é o que torna o backfill correto:
+    // `MAX(next_nsa)` das contas do convênio é ≥ qualquer número já emitido por qualquer uma delas.
+    nextNsa: int('next_nsa').notNull(),
+  },
+  (t) => [
+    // Espelha `fin_cedente_accounts_next_nsa_chk`: o campo tem seis dígitos no header (158-163), e o
+    // teto vive no VO `Nsa`. O CHECK é a rede no banco para quem escrever fora do domínio.
+    check('fin_convenio_nsa_next_nsa_chk', sql`${t.nextNsa} >= 1`),
+  ],
+);
+
+export type FinConvenioNsaRow = typeof finConvenioNsa.$inferSelect;
+export type NewFinConvenioNsaRow = typeof finConvenioNsa.$inferInsert;
 
 // ─── fin_bank_statements ──────────────────────────────────────────────────────
 //
