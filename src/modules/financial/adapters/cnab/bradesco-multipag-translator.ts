@@ -62,6 +62,12 @@ const translateErrorFor = (error: RemittanceFileError): CnabTranslateError => {
     case 'remittance-reference-overflow':
     case 'remittance-mixed-file-modalities':
       return 'cnab-translation-failed';
+    // #948 CA4 — sobe nomeado, e é o contraste com a linha acima que explica por quê. As duas falam
+    // de mistura, e param em lugares opostos: `mixed-file-modalities` é a defesa do montador contra
+    // quem não repartiu — chegar lá é defeito de CÓDIGO, e o operador não tem o que fazer. Este vem
+    // da partição, antes do NSA, e é ESCOLHA DE SELEÇÃO: o operador refaz e segue.
+    case 'remittance-pix-requires-exclusive-file':
+      return 'cnab-pix-requires-exclusive-file';
   }
 };
 
