@@ -2,8 +2,10 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import {
+  agencyHasEmbeddedCheckDigit,
   bradescoAccountCheckDigits,
   verifyAccountCheckDigit,
+  verifyAgencyCheckDigit,
 } from '#src/modules/financial/domain/payout/account-check-digit.ts';
 
 /**
@@ -109,5 +111,74 @@ describe('verifyAccountCheckDigit — o veredito de três estados', () => {
       status: 'not-verifiable',
       reason: 'account-not-numeric',
     });
+  });
+});
+
+/**
+ * REGRESSÃO — recusa do Validador Universal em 08/09/2026.
+ *
+ * O laudo apontou três linhas por agência inválida (`053 a 057` nos headers, `024 a 028` no
+ * segmento A do lote de crédito em conta) e **nenhuma** pela posição do DV, que estava em branco nas
+ * três. É a evidência que separa os dois defeitos e fixa o desenho testado aqui:
+ *
+ *   • o DV AUSENTE segue legítimo — G009 o declara opcional, e o banco confirmou pelo silêncio;
+ *   • o DV EMBUTIDO no campo numérico é o defeito, e só se prova por cálculo.
+ *
+ * ⚠️ Os valores abaixo são SINTÉTICOS, construídos para ter a propriedade — nunca copiados do
+ * arquivo recusado (CLAUDE.md, anti-padrão 9: os repositórios são públicos, e agência de parceiro é
+ * dado de cadastro). `1234` tem DV `3` pelo cálculo do manual, então `12343` reproduz a
+ * concatenação; `12345` não, e o contraste entre os dois é o que o teste mede.
+ */
+describe('agência — o cálculo do manual vale para os dois campos (regressão 08/09/2026)', () => {
+  const BRADESCO = '237';
+
+  it('verifyAgencyCheckDigit reproduz o exemplo LITERAL da agência, p. 30: 9999 → 6', () => {
+    // O manual exemplifica o módulo 11 com a agência e só depois estende à conta. Este assert fecha
+    // o círculo: a função da agência responde ao exemplo que foi escrito PARA a agência.
+    assert.deepEqual(verifyAgencyCheckDigit(BRADESCO, '9999', '6'), { status: 'match' });
+    assert.deepEqual(verifyAgencyCheckDigit(BRADESCO, '9999', '0'), {
+      status: 'mismatch',
+      expected: ['6'],
+    });
+  });
+
+  it('não afirma nada sobre a agência de banco fora do acervo', () => {
+    // O favorecido do lote de TED daquele mesmo arquivo era de outro banco, e o validador NÃO
+    // reclamou da agência dele. Recusar aqui inverteria quem paga o preço da lacuna de documentação.
+    assert.deepEqual(verifyAgencyCheckDigit('104', '9999', '9'), {
+      status: 'not-verifiable',
+      reason: 'unsupported-bank',
+    });
+  });
+
+  it('PROVA o DV embutido quando a aritmética fecha — este é o defeito medido', () => {
+    // `1234` + DV `3` colados num campo de 5 posições, com a posição do DV em branco. Foi esta forma
+    // que chegou ao banco.
+    assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '12343'), true);
+  });
+
+  it('NÃO acusa agência de cinco dígitos cujo último não é o DV dos anteriores', () => {
+    // A fronteira do teste anterior, e a razão de a regra ser aritmética e não de largura: `12345`
+    // ocupa as mesmas 5 posições e o DV de `1234` é `3`, não `5`. Continua aprovado, como o teste de
+    // `payout-readiness` já fixava antes desta mudança.
+    assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '12345'), false);
+  });
+
+  it('não acusa campo que não ocupa a largura inteira', () => {
+    // Agência de 4 dígitos com a posição do DV em branco é o cadastro que G009 declara completo.
+    // Acusá-la transformaria a verificação em exigência de campo opcional.
+    assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '1234'), false);
+    assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '0920'), false);
+  });
+
+  it('não acusa fora do 237 — a aritmética é do Bradesco', () => {
+    // Mesmo valor, outro banco: a suspeita desaparece. Aplicar o cálculo de um banco ao campo de
+    // outro fabricaria lacuna a partir de aritmética que não vale ali.
+    assert.equal(agencyHasEmbeddedCheckDigit('104', '12343'), false);
+    assert.equal(agencyHasEmbeddedCheckDigit('001', '12343'), false);
+  });
+
+  it('não acusa campo não-numérico — quem recusa a forma é readAgency, antes daqui', () => {
+    assert.equal(agencyHasEmbeddedCheckDigit(BRADESCO, '12A43'), false);
   });
 });

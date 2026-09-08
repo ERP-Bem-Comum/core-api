@@ -98,3 +98,54 @@ export const verifyAccountCheckDigit = (
     ? immutable({ status: 'match' as const })
     : immutable({ status: 'mismatch' as const, expected });
 };
+
+// ─── Agência ──────────────────────────────────────────────────────────────────────────────────────
+//
+// O MESMO cálculo, e isto é fonte primária, não inferência: o manual p. 30 abre com "Agência
+// Bradesco: Módulo 11 Universal, com pesos 2 a 7" e exemplifica com a AGÊNCIA (`9999 → 6`); só
+// depois diz da conta que "o critério a ser adotado deve ser o mesmo ao da agência". A função acima
+// nasceu com o nome da conta porque a conta foi o consumidor que a #734 precisava — o algoritmo
+// sempre foi dos dois campos. Delegar em vez de copiar é o que impede as duas de divergirem no dia
+// em que uma mudar.
+//
+// ⚠️ Verificar o DV da agência NÃO torna o campo obrigatório. G009 declara o dígito "Campo Não
+// Obrigatório – Informação Opcional", e o Validador Universal confirma pela ausência: na recusa de
+// 08/09/2026 ele apontou as colunas 053-057 (a agência) e 024-028 (a do favorecido), e **nunca** a
+// posição do DV, que estava em branco nas três linhas. Ausente segue aceito; o que se verifica é o
+// dígito que o cadastro AFIRMA.
+export const verifyAgencyCheckDigit = (
+  bankCode: string,
+  agencyDigits: string,
+  informedDigit: string,
+): CheckDigitVerdict => verifyAccountCheckDigit(bankCode, agencyDigits, informedDigit);
+
+// Largura da agência no segmento A (024-028) e no header (053-057). Vale como GATILHO da suspeita
+// abaixo, nunca como veredito: o manual não declara quantos dígitos tem uma agência Bradesco, e
+// afirmar "são quatro" seria justamente o tipo de premissa que este repositório já pagou caro.
+const AGENCY_FIELD_WIDTH = 5;
+
+/**
+ * O campo de agência traz o DV embutido, PROVADO por aritmética?
+ *
+ * Responde `true` só quando o campo ocupa a largura inteira **e** o último dígito é exatamente o DV
+ * módulo 11 dos anteriores. Nesse ponto a leitura deixa de ser palpite: `12343` é `1234` + DV `3`,
+ * e a chance de um campo legítimo cair aí por acaso é de 1 em 11 — contra a certeza de que, quando
+ * cai, o operador tem algo a conferir.
+ *
+ * ⚠️ Isto NÃO decompõe, e a recusa em decompor é a regra que atravessa `payee-account.ts`: **nada é
+ * inventado**. Saber que `12343` provavelmente é `1234-3` não autoriza escrever `01234` na posição
+ * 024-028 — um dígito errado ali não falha o arquivo, paga a conta de outra pessoa. A função existe
+ * para produzir uma lacuna que devolve a decisão a quem tem a informação, o operador.
+ *
+ * Fora do 237 devolve `false` sempre: o algoritmo é do Bradesco, e aplicá-lo a outro banco
+ * fabricaria suspeita a partir de aritmética que não vale ali.
+ */
+export const agencyHasEmbeddedCheckDigit = (bankCode: string, agencyDigits: string): boolean => {
+  if (bankCode !== BANK_BRADESCO) return false;
+  if (agencyDigits.length !== AGENCY_FIELD_WIDTH) return false;
+  if (!DIGITS_ONLY_RE.test(agencyDigits)) return false;
+
+  const base = agencyDigits.slice(0, AGENCY_FIELD_WIDTH - 1);
+  const last = agencyDigits.slice(AGENCY_FIELD_WIDTH - 1);
+  return bradescoAccountCheckDigits(base).includes(last);
+};

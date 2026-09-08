@@ -1,6 +1,11 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
-import { type CheckDigitVerdict, verifyAccountCheckDigit } from './account-check-digit.ts';
+import {
+  type CheckDigitVerdict,
+  agencyHasEmbeddedCheckDigit,
+  verifyAccountCheckDigit,
+  verifyAgencyCheckDigit,
+} from './account-check-digit.ts';
 import type { PayeePaymentTarget, PayoutGap } from './types.ts';
 
 // Decomposição do bloco bancário do cadastro nos campos POSICIONAIS que o segmento A exige.
@@ -120,33 +125,6 @@ const readBankCode = (raw: string): FieldRead<string> => {
   return { value: '', gaps: [gap('payee-bank-code', 'unmappable')] };
 };
 
-type AgencyParts = Readonly<{ agency: string; agencyDigit: string }>;
-
-const NO_AGENCY: AgencyParts = { agency: '', agencyDigit: '' };
-
-// ⚠️ O DV da agência é OPCIONAL, e isso vem da fonte primária: G009 diz literalmente "(Campo Não
-// Obrigatório – Informação Opcional)" (`jun-19-layout-multipag.pdf` p. 95, local-only). Um cadastro
-// com `12345` e sem DV está completo aos olhos do banco — exigi-lo aqui recusaria pagamento por um
-// campo que o layout dispensa, que é o oposto do que a decisão (a) da P.O. pede na #708.
-//
-// Isso também dissolve a ambiguidade que antes obrigava a pedir separador: sem DV a agência é o
-// campo inteiro, e a posição 029 sai em branco (`Alfa` = brancos à direita, p. 14). O separador
-// continua sendo a única leitura válida quando o DV EXISTE — `12345` nunca vira `1234` + `5`.
-const readAgency = (raw: string): FieldRead<AgencyParts> => {
-  if (raw === '') return { value: NO_AGENCY, gaps: [gap('payee-agency', 'missing')] };
-
-  const split = splitCheckDigit(raw);
-  if (split === null || split.base.length > AGENCY_WIDTH) {
-    return { value: NO_AGENCY, gaps: [gap('payee-agency', 'malformed')] };
-  }
-  const agency = split.base.padStart(AGENCY_WIDTH, '0');
-  return { value: { agency, agencyDigit: split.digit ?? '' }, gaps: [] };
-};
-
-type AccountParts = Readonly<{ accountNumber: string; accountDigit: string }>;
-
-const NO_ACCOUNT: AccountParts = { accountNumber: '', accountDigit: '' };
-
 // Traduz o veredito do cálculo (issue #734) em lacunas. É o único ponto onde a POLÍTICA vive: o
 // cálculo diz o que é verdade sobre o dígito, e esta função decide o que o sistema faz com isso.
 //
@@ -166,17 +144,83 @@ const NO_ACCOUNT: AccountParts = { accountNumber: '', accountDigit: '' };
 //     produziria um ramo que nunca executa, e ramo que nunca executa é regra que ninguém testa.
 //
 // Fora do 237, portanto, nada muda: a conta segue validada por FORMA, como sempre foi.
-const checkDigitGaps = (verdict: CheckDigitVerdict): readonly PayoutGap[] => {
+//
+// O `field` é PARÂMETRO desde que a agência passou a ser conferida pelo mesmo cálculo: a política é
+// uma só — `mismatch` bloqueia, `not-verifiable` não —, e ela vale para os dois campos. Duplicar a
+// função para trocar um literal faria as duas divergirem no dia em que a política mudar, e a #820
+// já pergunta se ela vai mudar.
+//
+// ⚠️ A agência aponta `payee-agency`, não um campo de dígito próprio: `payee-agency-digit` **não
+// existe** no union, de propósito (`types.ts:20`). O DV da agência é opcional pelo layout, então
+// nunca é lacuna por ausência — mas quando o cadastro o afirma, o valor afirmado é do campo agência,
+// e é para lá que a interface leva o operador.
+const checkDigitGaps = (
+  field: 'payee-agency' | 'payee-account-digit',
+  verdict: CheckDigitVerdict,
+): readonly PayoutGap[] => {
   switch (verdict.status) {
     // Dígito conferido e correto: nada a apontar.
     case 'match':
       return [];
     case 'mismatch':
-      return [gap('payee-account-digit', 'check-digit-mismatch')];
+      return [gap(field, 'check-digit-mismatch')];
     case 'not-verifiable':
       return [];
   }
 };
+
+type AgencyParts = Readonly<{ agency: string; agencyDigit: string }>;
+
+const NO_AGENCY: AgencyParts = { agency: '', agencyDigit: '' };
+
+// ⚠️ O DV da agência é OPCIONAL, e isso vem da fonte primária: G009 diz literalmente "(Campo Não
+// Obrigatório – Informação Opcional)" (`jun-19-layout-multipag.pdf` p. 95, local-only). Um cadastro
+// com `12345` e sem DV está completo aos olhos do banco — exigi-lo aqui recusaria pagamento por um
+// campo que o layout dispensa, que é o oposto do que a decisão (a) da P.O. pede na #708.
+//
+// Isso também dissolve a ambiguidade que antes obrigava a pedir separador: sem DV a agência é o
+// campo inteiro, e a posição 029 sai em branco (`Alfa` = brancos à direita, p. 14). O separador
+// continua sendo a única leitura válida quando o DV EXISTE — `12345` nunca vira `1234` + `5`.
+//
+// ⚠️ O `bankCode` entra aqui pelo mesmo motivo que entrou em `readAccount` (#734): sem saber QUAL
+// banco calcula, o dígito só pode ser conferido por forma. Com ele, os dois defeitos que a recusa
+// de 08/09/2026 expôs passam a ser vistos antes do banco — e nenhum deles é DV ausente.
+const readAgency = (raw: string, bankCode: string): FieldRead<AgencyParts> => {
+  if (raw === '') return { value: NO_AGENCY, gaps: [gap('payee-agency', 'missing')] };
+
+  const split = splitCheckDigit(raw);
+  if (split === null || split.base.length > AGENCY_WIDTH) {
+    return { value: NO_AGENCY, gaps: [gap('payee-agency', 'malformed')] };
+  }
+  const agency = split.base.padStart(AGENCY_WIDTH, '0');
+
+  // DV declarado pelo cadastro (só existe com separador). Conferido pelo mesmo cálculo da conta —
+  // um `1234-5` cujo dígito real é `3` não é formato ruim, é dígito errado, e a distinção entre
+  // `malformed` e `check-digit-mismatch` é o que faz a interface mandar o operador ao lugar certo.
+  if (split.digit !== null) {
+    return {
+      value: { agency, agencyDigit: split.digit },
+      gaps: checkDigitGaps('payee-agency', verifyAgencyCheckDigit(bankCode, agency, split.digit)),
+    };
+  }
+
+  // Sem separador. A ausência de DV é LEGÍTIMA (G009 o declara opcional) e segue aceita — exceto
+  // quando o campo inteiro está ocupado e a aritmética prova que o último dígito é o DV dos
+  // anteriores. Aí não é agência de cinco dígitos: é o dígito grudado no número, e foi assim que a
+  // agência do favorecido chegou ao Validador Universal em 08/09/2026, com a posição 029 em branco.
+  //
+  // A lacuna é `malformed` — o operador precisa CORRIGIR o que está lá, separando os dois campos.
+  // Não é `check-digit-mismatch`: o dígito não está errado, está no lugar errado.
+  if (agencyHasEmbeddedCheckDigit(bankCode, agency)) {
+    return { value: NO_AGENCY, gaps: [gap('payee-agency', 'malformed')] };
+  }
+
+  return { value: { agency, agencyDigit: '' }, gaps: [] };
+};
+
+type AccountParts = Readonly<{ accountNumber: string; accountDigit: string }>;
+
+const NO_ACCOUNT: AccountParts = { accountNumber: '', accountDigit: '' };
 
 // A conta aceita o DV por dois caminhos: embutido no próprio número (`123456-7`) ou no campo
 // `check_digit`. O embutido tem precedência — é o que o operador enxergou ao digitar.
@@ -207,7 +251,10 @@ const readAccount = (
     // campo separado.
     return {
       value: { accountNumber, accountDigit: split.digit },
-      gaps: checkDigitGaps(verifyAccountCheckDigit(bankCode, accountNumber, split.digit)),
+      gaps: checkDigitGaps(
+        'payee-account-digit',
+        verifyAccountCheckDigit(bankCode, accountNumber, split.digit),
+      ),
     };
   }
   if (rawDigit === '') {
@@ -228,7 +275,10 @@ const readAccount = (
   // sempre o `check_digit` que vira o DV do arquivo — e é nele que o dígito da agência foi copiado.
   return {
     value: { accountNumber, accountDigit },
-    gaps: checkDigitGaps(verifyAccountCheckDigit(bankCode, accountNumber, accountDigit)),
+    gaps: checkDigitGaps(
+      'payee-account-digit',
+      verifyAccountCheckDigit(bankCode, accountNumber, accountDigit),
+    ),
   };
 };
 
@@ -258,7 +308,7 @@ export const decomposePayeeAccount = (
   target: PayeePaymentTarget | null,
 ): Result<PayeeAccountParts, readonly PayoutGap[]> => {
   const bank = readBankCode(trimmed(target?.bank));
-  const agency = readAgency(trimmed(target?.agency));
+  const agency = readAgency(trimmed(target?.agency), bank.value);
   // Banco ilegível entrega `''`, e `''` não é 237 — a verificação do DV devolve `not-verifiable` em
   // vez de tentar calcular com o algoritmo errado. A lacuna do banco já foi registrada acima.
   const account = readAccount(

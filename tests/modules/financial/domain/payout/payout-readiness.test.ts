@@ -46,8 +46,13 @@ const billetPayee = (): PayeePaymentTarget => target({ document: PAYEE_DOCUMENT 
 // (módulo 11, pesos 2-7 — `account-check-digit.ts`), e `0` é o que o algoritmo do Bradesco produz
 // para a conta `123456`. Trocar um pelo outro sem recalcular derruba toda esta suíte — o que é o
 // gate funcionando, não ruído. Fixture com DV inventado descrevia um cadastro que o banco recusa.
+// ⚠️ O DV da agência é `3`, não um dígito qualquer: desde que `readAgency` confere o dígito pelo
+// mesmo cálculo da conta, uma fixture "completa" com DV arbitrário deixaria de ser completa. Era
+// `1234-5` enquanto nada calculava — e o `5` nunca foi o dígito de `1234`, o que é exatamente a
+// classe de defeito que chegou ao Validador Universal em 08/09/2026. A conta (`123456`, DV `0`) já
+// nascera aritmeticamente correta pela #734; agora a agência também é.
 const fullAccount = (): PayeePaymentTarget =>
-  target({ bank: '237', agency: '1234-5', accountNumber: '123456', checkDigit: '0' });
+  target({ bank: '237', agency: '1234-3', accountNumber: '123456', checkDigit: '0' });
 
 // Banco cujo algoritmo de DV NÃO está no acervo — a verificação devolve `not-verifiable` e a conta
 // segue validada só por FORMA. É a fixture certa para todo caso cuja matéria é a leitura do campo,
@@ -476,7 +481,7 @@ describe('checkPayoutReadiness — decomposição da agência (CA4)', () => {
   // embutido no próprio campo, com separador explícito.
   it('separa agência e DV quando o separador está presente', () => {
     const r = checkPayoutReadiness(
-      candidate({ payee: target({ ...fullAccount(), agency: '1234-5' }) }),
+      candidate({ payee: target({ ...fullAccount(), agency: '1234-3' }) }),
     );
     assert.equal(r.status, 'ready');
   });
@@ -514,6 +519,58 @@ describe('checkPayoutReadiness — decomposição da agência (CA4)', () => {
     );
     assert.equal(r.status, 'incomplete');
     assert.equal(reasonFor(r, 'payee-agency'), 'malformed');
+  });
+});
+
+/**
+ * REGRESSÃO — a agência que o Validador Universal recusou em 08/09/2026.
+ *
+ * O arquivo saiu com o DV da agência do favorecido colado no campo numérico de 5 posições e a
+ * posição 029 em branco. O banco recusou apontando `024 a 028` — a agência —, e **não** a posição do
+ * DV. O pré-voo aprovava, porque conferia a agência só por FORMA: cinco dígitos cabem em cinco
+ * posições, e era tudo o que se perguntava.
+ *
+ * ⚠️ Fixtures sintéticas. `1234` tem DV `3` pelo cálculo do manual (p. 30), então `12343` tem a
+ * propriedade do defeito sem carregar o dado de cadastro do arquivo real (anti-padrão 9).
+ */
+describe('checkPayoutReadiness — DV da agência embutido ou divergente (regressão 08/09/2026)', () => {
+  it('recusa a agência com o DV colado no número, antes de o arquivo chegar ao banco', () => {
+    const r = checkPayoutReadiness(
+      candidate({ payee: target({ ...fullAccount(), agency: '12343' }) }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'payee-agency'), 'malformed');
+  });
+
+  it('recusa o DV declarado que não fecha o módulo 11, e por motivo PRÓPRIO', () => {
+    // `check-digit-mismatch`, não `malformed`: mandar o operador "corrigir o formato" de `1234-5` o
+    // manda consertar o que já está bem formado. O que ele precisa saber é que o dígito não
+    // corresponde à agência. Mesma distinção que a #734 estabeleceu para a conta.
+    const r = checkPayoutReadiness(
+      candidate({ payee: target({ ...fullAccount(), agency: '1234-5' }) }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'payee-agency'), 'check-digit-mismatch');
+  });
+
+  it('NÃO recusa a mesma agência num banco fora do acervo', () => {
+    // A prova de que a recusa vem da aritmética do Bradesco, e não de uma regra de largura que o
+    // manual não declara. O TED daquele arquivo era para outro banco e passou intacto — inclusive
+    // no laudo, que não citou a linha dele.
+    const r = checkPayoutReadiness(
+      candidate({ payee: target({ ...unverifiableBank(), agency: '12343' }) }),
+    );
+    assert.equal(r.status, 'ready');
+  });
+
+  it('NÃO transforma DV ausente em lacuna — G009 declara o campo opcional', () => {
+    // A regra que mais importa preservar: o defeito era o dígito no lugar errado, jamais o dígito
+    // ausente. Uma correção que exigisse o DV recusaria cadastro que o banco considera completo — e
+    // o próprio laudo é a testemunha, por nunca ter apontado a posição do DV.
+    for (const agency of ['1234', '0920', '12345']) {
+      const r = checkPayoutReadiness(candidate({ payee: target({ ...fullAccount(), agency }) }));
+      assert.equal(r.status, 'ready', agency);
+    }
   });
 });
 
