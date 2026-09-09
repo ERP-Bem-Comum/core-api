@@ -85,14 +85,32 @@ describe('financial/domain/document/approval-policy — escalate (US3 cascata)',
     if (r.ok) assert.equal(r.value.userId, C);
   });
 
-  it('CA3: ignora sem permissão (canApprove false) e sem alçada (limit null)', () => {
+  it('CA3: ignora sem permissão; com teto suficiente PRECEDE o sem teto', () => {
     const r = escalate(money(5000), [
       cand(A, false, 100000),
       cand(B, true, null),
       cand(C, true, 6000),
     ]);
     assert.equal(r.ok, true);
+    // C vence B não porque B seja inelegível — `null` é SEM TETO e cobre qualquer valor —, mas
+    // porque "o menor que basta" põe o irrestrito no fim da ordem. Sem permissão (A) é que fica de
+    // fora de verdade.
     if (r.ok) assert.equal(r.value.userId, C);
+  });
+
+  it('CA6: nenhum com teto basta → escala para o SEM TETO em vez de recusar', () => {
+    // Regressão de #881: o filtro `c.limit !== null` excluía o irrestrito da cascata, e a criação do
+    // documento falhava havendo aprovador apto. Ficou mais visível quando `maxLimit` deixou de
+    // descartar o `null`: quem acumula um papel irrestrito e um com teto projeta-se como irrestrito.
+    const r = escalate(money(5000), [cand(A, true, 1000), cand(B, true, null)]);
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.userId, B);
+  });
+
+  it('CA7: sem teto mas SEM permissão não é candidato', () => {
+    const r = escalate(money(5000), [cand(A, true, 1000), cand(B, false, null)]);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'no-approver-with-sufficient-limit');
   });
 
   it('CA4a: nenhum suficiente e >1 candidato → no-approver-with-sufficient-limit', () => {
