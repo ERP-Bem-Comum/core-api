@@ -175,7 +175,12 @@ export type CnabTranslateError =
   // não há defeito de código — o operador escolheu títulos que não cabem numa remessa só, e a ação
   // dele é refazer a seleção. Achatá-la em `cnab-translation-failed` produziria "falha ao montar",
   // que descreve o sistema em vez de descrever a escolha.
-  | 'cnab-pix-requires-exclusive-file';
+  | 'cnab-pix-requires-exclusive-file'
+  // #863 — inscrição alfanumérica num campo que o layout declara `Num`. Categoria PRÓPRIA, e não uma
+  // terceira do bloco acima, porque a ação de quem recebe é a única do módulo que NÃO é "corrigir o
+  // cadastro": o CNPJ está certo, e quem não acompanhou foi o layout do banco. Quem trata este erro
+  // escala ao gerente da conta; mandar o operador ao cadastro seria mandá-lo consertar o que já está.
+  | 'cnab-inscription-alphanumeric-unsupported';
 
 // ─── A partição em arquivos (CA4 da #838) ──────────────────────────────────────────────────────
 //

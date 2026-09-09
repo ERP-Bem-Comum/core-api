@@ -38,7 +38,7 @@ const target = (over: Partial<PayeePaymentTarget> = {}): PayeePaymentTarget => (
   accountNumber: '567890',
   checkDigit: '0',
   pixKey: null,
-  document: '00000000000191', // inscrição sintética; o repositório é público
+  document: '11222333000181', // sintético (exemplo de `.claude/rules/domain.md`); repo é público
   ...over,
 });
 
@@ -102,6 +102,15 @@ const COVERAGE: Record<CnabTranslateError, Coverage> = {
           payee: target({ pixKey: { keyType: 'iban', key: 'BR1234567890' } }),
         }),
         'tipo de chave fora do domínio G100',
+      );
+    },
+  },
+  'cnab-inscription-alphanumeric-unsupported': {
+    kind: 'preflight',
+    probe: () => {
+      blocks(
+        readinessOf({ payee: target({ document: '12ABC34501DE35' }) }),
+        'CNPJ alfanumérico num campo que o layout declara Num (ADR-0044)',
       );
     },
   },
@@ -225,6 +234,6 @@ describe('#948 CA3 — toda recusa do emissor tem resposta do pré-voo', () => {
   // sonda nenhuma. Este caso fixa que a rede continua MEDINDO alguma coisa.
   it('a rede não fica sem sondas executáveis', () => {
     const probed = Object.values(COVERAGE).filter((c) => c.kind === 'preflight');
-    assert.ok(probed.length >= 3, `só ${probed.length} variantes executam o pré-voo`);
+    assert.ok(probed.length >= 4, `só ${probed.length} variantes executam o pré-voo`);
   });
 });

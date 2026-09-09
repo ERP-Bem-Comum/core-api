@@ -15,6 +15,7 @@ import {
   cents,
   dateDDMMYYYY,
   digits,
+  inscription,
   joinFields,
   num,
   text,
@@ -316,7 +317,7 @@ export const segmentB = (input: SegmentBInput): Result<string, CnabSegmentError>
     text('B', 1), // 014     segmento
     blanks(3), // 015-017 CNAB
     num(p.documentType, 1), // 018     tipo de inscrição do favorecido
-    digits(p.document, 14), // 019-032 nº de inscrição do favorecido
+    inscription(p.document, 14), // 019-032 nº de inscrição do favorecido
     text(a?.street ?? '', 30), // 033-062 logradouro
     num(a?.number ?? 0, 5), // 063-067 número
     text(a?.complement ?? '', 15), // 068-082 complemento
@@ -448,7 +449,7 @@ export const segmentBPix = (input: SegmentBPixInput): Result<string, CnabSegment
     // valor do domínio.
     text(input.initiation, 3),
     num(p.documentType, 1), // 018     tipo de inscrição do favorecido (G005)
-    digits(p.document, 14), // 019-032 nº de inscrição do favorecido (G006)
+    inscription(p.document, 14), // 019-032 nº de inscrição do favorecido (G006)
     // 033-067 TXID e 068-127 identificação do pagamento entre usuários — os dois OPCIONAIS no
     // layout, e os dois em branco por não haver fonte. O golden traz texto livre em 068-127, o que
     // prova que o campo aceita conteúdo, não que ele o exija. Inventar aqui seria escrever no arquivo
@@ -513,7 +514,7 @@ export const pixPaymentInfo = (input: PixPaymentInfoInput): Result<string, CnabS
     // `digits`, e não `text`: CPF de 11 posições entra zero-padded à esquerda até 14, que é o que o
     // manual manda por extenso ("11 dígitos com 0 a esq"). Alinhar à esquerda produziria um número de
     // inscrição que não é o de ninguém.
-    digits(input.payeeDocument, PIX_INFO_DOCUMENT_WIDTH),
+    inscription(input.payeeDocument, PIX_INFO_DOCUMENT_WIDTH),
     digits(PIX_ISPB_ZEROS, PIX_INFO_ISPB_WIDTH),
     num(input.accountType, PIX_INFO_ACCOUNT_TYPE_WIDTH),
   ]);
@@ -658,7 +659,8 @@ const J52_NAME_WIDTH = 40;
 // uma string não-vazia que produz 40 posições em branco. Um `name.trim() !== ''` sobre o valor cru
 // aprovaria esse caso e emitiria o registro anônimo que esta guarda existe para impedir.
 //
-// A inscrição não entra: `digits()` já a recusa vazia, com erro próprio.
+// A inscrição não entra: `inscription()` já a recusa vazia, com erro próprio (#863 — era `digits()`
+// até a inscrição ganhar campo próprio).
 const identifies = (party: BilletParty): boolean => alpha(party.name, J52_NAME_WIDTH).trim() !== '';
 
 // O Sacador Avalista (132-187) é o terceiro responsável pelo título original, e o emissor não o
@@ -690,9 +692,14 @@ export const segmentJ52 = (input: SegmentJ52Input): Result<string, CnabSegmentEr
   // coberto por teste que chame `segmentJ52` na unha — e sem esse teste, é código morto que o gate
   // não acusa. Ele existe em `multipag-segment-j52.test.ts`.
   //
-  // Guarda o NOME, e só ele, porque a INSCRIÇÃO já falha sozinha: `digits()` recusa string vazia com
-  // `numeric-field-invalid`, e recusa também a que não sobra dígito nenhum. Repetir a checagem aqui
-  // nomearia uma distinção que não existe do lado de quem recebe.
+  // Guarda o NOME, e só ele, porque a INSCRIÇÃO já falha sozinha: `inscription()` recusa string
+  // vazia com `numeric-field-invalid`, e recusa também aquela de que não sobra alfanumérico nenhum.
+  // Repetir a checagem aqui nomearia uma distinção que não existe do lado de quem recebe.
+  //
+  // ⚠️ Era `digits()` até a #863. A troca acrescentou um SEGUNDO desfecho a este campo —
+  // `inscription-alphanumeric-unsupported`, para o CNPJ com letras —, e ele não é intercambiável com
+  // o primeiro: aquele manda ao cadastro, este manda ESCALAR ao banco. Quem vier somar checagem aqui
+  // precisa preservar os dois.
   if (!identifies(input.payer) || !identifies(input.beneficiary))
     return err('billet-party-unidentified');
 
@@ -709,10 +716,10 @@ export const segmentJ52 = (input: SegmentJ52Input): Result<string, CnabSegmentEr
     num(J52_MOVEMENT_CODE, 2), // 016-017 código de movimento remessa (*C004)
     num(J52_OPTIONAL_RECORD_ID, 2), // 018-019 identificação do registro opcional (G067)
     num(input.payer.documentType, 1), // 020     SACADO — tipo de inscrição (*G005)
-    digits(input.payer.document, 15), // 021-035 SACADO — nº de inscrição (*G006)
+    inscription(input.payer.document, 15), // 021-035 SACADO — nº de inscrição (*G006)
     text(input.payer.name, J52_NAME_WIDTH), // 036-075 SACADO — nome (G013)
     num(input.beneficiary.documentType, 1), // 076     CEDENTE — tipo de inscrição (*G005)
-    digits(input.beneficiary.document, 15), // 077-091 CEDENTE — nº de inscrição (*G006)
+    inscription(input.beneficiary.document, 15), // 077-091 CEDENTE — nº de inscrição (*G006)
     text(input.beneficiary.name, J52_NAME_WIDTH), // 092-131 CEDENTE — nome (G013)
     ...SACADOR_AVALISTA_ABSENT, // 132-187 SACADOR AVALISTA — ausente
     blanks(53), // 188-240 CNAB (G004)

@@ -13,6 +13,7 @@ import {
   cents,
   dateDDMMYYYY,
   digits,
+  inscription,
   joinFields,
   num,
   text,
@@ -160,7 +161,7 @@ export const fileHeader = (input: FileHeaderInput): Result<string, CnabRecordErr
     num(0, 1), // 008     tipo de registro
     blanks(9), // 009-017 uso FEBRABAN
     num(c.documentType, 1), // 018     tipo de inscrição
-    digits(c.document, 14), // 019-032 nº de inscrição
+    inscription(c.document, 14), // 019-032 nº de inscrição
     convenioField(c.convenio), // 033-052 convênio (G007)
     digits(c.agency, 5), // 053-057 agência
     text(c.agencyDigit, 1), // 058     DV agência
@@ -200,7 +201,7 @@ export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordE
     num(p.batchLayoutVersion, 3), // 014-016 versão do layout de lote — varia por rota
     blanks(1), // 017     CNAB
     num(c.documentType, 1), // 018     tipo de inscrição
-    digits(c.document, 14), // 019-032 nº de inscrição
+    inscription(c.document, 14), // 019-032 nº de inscrição
     convenioField(c.convenio), // 033-052 convênio (G007)
     digits(c.agency, 5), // 053-057 agência
     text(c.agencyDigit, 1), // 058     DV agência

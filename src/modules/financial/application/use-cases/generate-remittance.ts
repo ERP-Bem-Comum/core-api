@@ -177,6 +177,13 @@ export const generateRemittance =
         // As demais são falha de montagem, e o pré-voo já as mostra título a título. Chegar em
         // qualquer uma delas AQUI — na partição, que não monta nada — significa que `batchProfileFor`
         // recusou o perfil de um pagamento, e é o mesmo desfecho que o montador daria adiante.
+        //
+        // ⚠️ #863 — a inscrição alfanumérica entra NESTE grupo, e no `switch` do montador, lá embaixo,
+        // não entra. A diferença não é de causa, é de desfecho disponível: lá o genérico é
+        // `remittance-payments-unavailable`, que mandaria o operador conferir um pré-voo onde não há
+        // nada a consertar, e por isso ela precisa sair do grupo; aqui o genérico já É
+        // `remittance-build-failed` — a montagem não é possível e a saída é escalar ao banco. Dar-lhe
+        // ramo próprio aqui produziria duas linhas com o mesmo `return`.
         case 'cnab-file-name-failed':
         case 'cnab-translation-failed':
         case 'cnab-malformed-file':
@@ -185,6 +192,7 @@ export const generateRemittance =
         case 'cnab-billet-party-unidentified':
         case 'cnab-pix-key-unrepresentable':
         case 'cnab-pix-key-type-unsupported':
+        case 'cnab-inscription-alphanumeric-unsupported':
           return err('remittance-build-failed');
       }
     }
@@ -326,6 +334,17 @@ export const generateRemittance =
           case 'cnab-pix-key-unrepresentable':
           case 'cnab-pix-key-type-unsupported':
             return err('remittance-payments-unavailable');
+          // ⚠️ #863 — CNPJ ALFANUMÉRICO, e é o ÚNICO caso do módulo que NÃO converge com os de cima,
+          // ainda que também venha do favorecido. `remittance-payments-unavailable` diz ao operador
+          // "há títulos sem os dados necessários; confira o pré-voo" — e aqui isso seria FALSO nas
+          // duas metades: o dado está lá e está certo, e conferir o pré-voo não revela nada que ele
+          // possa consertar. O CNPJ com letras é válido desde 07/2026 (ADR-0044); quem não acompanhou
+          // foi o layout do banco, que declara o campo `Num` na v08 (jul/2025).
+          //
+          // `remittance-build-failed` é o desfecho honesto: a montagem não é possível, e a saída é
+          // escalar — a pergunta ao Bradesco sobre a forma de emissão está registrada na #863 e ainda
+          // não foi respondida. No dia em que for, este `case` provavelmente desaparece.
+          case 'cnab-inscription-alphanumeric-unsupported':
           case 'cnab-translation-failed':
             return err('remittance-build-failed');
           // ⚠️ INALCANÇÁVEL DAQUI, e o `case` existe porque o compilador o exige — a exaustividade
