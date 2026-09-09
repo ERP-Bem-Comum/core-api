@@ -8,6 +8,12 @@ import {
   normalizeInscription,
 } from '#src/modules/financial/domain/payout/inscription.ts';
 import { inscription } from '#src/modules/financial/adapters/cnab/positional.ts';
+import {
+  fileHeader,
+  batchHeader,
+  type CedenteHeaderData,
+} from '#src/modules/financial/adapters/cnab/multipag-records.ts';
+import { segmentB, segmentBPix } from '#src/modules/financial/adapters/cnab/multipag-segments.ts';
 
 /*
  * #863 / CA11 da #948 — o pré-voo e o emissor decidem a inscrição pela mesma régua.
@@ -23,7 +29,11 @@ import { inscription } from '#src/modules/financial/adapters/cnab/positional.ts'
  */
 
 const ALPHANUMERIC = '12ABC34501DE35'; // CNPJ alfanumérico da RFB (ADR-0044), sintético
-const NUMERIC = '00000000000191'; // inscrição sintética; repositório é público
+// Sintético de verdade: é o exemplo do próprio repositório (`.claude/rules/domain.md`), sem
+// correspondência a inscrição emitida. O valor anterior tinha DV válido e casava com o CNPJ raiz de
+// uma instituição financeira real — anti-padrão #9 do CLAUDE.md, e os repositórios são públicos.
+// `isCnabEmittableInscription` só exige dígitos, então nada aqui dependia de ser um CNPJ existente.
+const NUMERIC = '11222333000181';
 const MASKED = '12.345.678/0001-99';
 
 describe('#863 — a inscrição alfanumérica é recusada, nunca destruída', () => {
@@ -36,8 +46,13 @@ describe('#863 — a inscrição alfanumérica é recusada, nunca destruída', (
   });
 
   it('a regressão que este caso existe para impedir: as letras somem e o resto vira inscrição válida', () => {
-    // O comportamento ANTIGO, escrito por extenso. Se alguém trocar `inscription` de volta por
-    // `digits`, este caso falha apontando exatamente o que voltaria a acontecer.
+    // O comportamento ANTIGO, escrito por extenso — para quem ler saber o que estava em jogo.
+    //
+    // ⚠️ ESTE CASO NÃO É A REDE DE REGRESSÃO, e a versão anterior deste comentário dizia que era.
+    // Ele chama `inscription()` DIRETO: prova que a função recusa, não que alguém a use. Reverter
+    // qualquer call site de volta para `digits()` deixaria este caso verde. Quem cobre o uso é o
+    // bloco "os call sites do emissor" abaixo — a distinção entre USO e MENÇÃO, que é justamente
+    // como o defeito original sobreviveu.
     const whatDigitsWouldHaveDone = ALPHANUMERIC.replace(/\D/g, '').padStart(14, '0');
 
     assert.equal(whatDigitsWouldHaveDone, '00000123450135');
@@ -106,5 +121,100 @@ describe('#863 — a inscrição alfanumérica é recusada, nunca destruída', (
   it('a normalização é a MESMA dos dois lados, caixa inclusive', () => {
     assert.equal(normalizeInscription('12abc34501de35'), ALPHANUMERIC);
     assert.equal(normalizeInscription('12.345.678/0001-99'), '12345678000199');
+  });
+});
+
+/*
+ * OS CALL SITES DO EMISSOR — a rede que os casos acima NÃO são.
+ *
+ * Os casos anteriores exercitam `inscription()` isolada. Nenhum deles chama um registro do arquivo,
+ * então reverter qualquer chamada de volta para `digits()` os deixaria todos verdes: eles provam
+ * que a régua EXISTE, não que o emissor a USA.
+ *
+ * Aqui cada registro que escreve inscrição é montado com documento alfanumérico e tem de RECUSAR.
+ * É por registro, e não por uma varredura de texto no fonte, porque o que precisa ser verdade é
+ * comportamento — um `grep` por `digits(` acusaria também quem só menciona o nome, e continuaria
+ * verde se alguém introduzisse um terceiro helper com o mesmo defeito.
+ *
+ * ⚠️ E não basta o teste de ponta a ponta (`generate-remittance.test.ts`, CA3): lá a recusa é do
+ * PRÉ-VOO, que barra antes de o emissor ser chamado. A camada de baixo — a que de fato produziria o
+ * arquivo aceito com a inscrição de outro — só é alcançada montando os registros direto, como aqui.
+ */
+
+const CEDENTE_ALPHANUMERIC: CedenteHeaderData = {
+  bankCode: '237',
+  documentType: '2',
+  document: ALPHANUMERIC,
+  convenio: '000000', // máscara reservada — `tests/cleanup/bank-fixture-masking.test.ts`
+  agency: '1234',
+  agencyDigit: '5',
+  accountNumber: '567890',
+  accountDigit: '1',
+  accountAgencyDigit: '2',
+  companyName: 'ASSOCIACAO BEM COMUM',
+};
+
+const PAYEE_ALPHANUMERIC = {
+  name: 'FORNECEDOR TESTE',
+  documentType: '2',
+  document: ALPHANUMERIC,
+} as const;
+
+const TRANSFER_PROFILE = {
+  serviceType: '20',
+  launchForm: '41',
+  batchLayoutVersion: '045',
+  paymentIndicator: '01',
+} as const;
+
+const AT = new Date(Date.UTC(2026, 8, 8, 12, 0, 0));
+
+describe('#863 — os registros do emissor recusam inscrição alfanumérica', () => {
+  it('fileHeader (019-032, cedente) recusa', () => {
+    const r = fileHeader({
+      cedente: CEDENTE_ALPHANUMERIC,
+      bankName: 'BRADESCO',
+      nsa: 1,
+      generatedAt: AT,
+      pixIdentification: null,
+    });
+    assert.ok(isErr(r), 'o header do arquivo aceitou inscrição alfanumérica do cedente');
+    assert.equal(r.error, 'inscription-alphanumeric-unsupported');
+  });
+
+  it('batchHeader (019-032, cedente) recusa', () => {
+    const r = batchHeader({
+      cedente: CEDENTE_ALPHANUMERIC,
+      batchNumber: 1,
+      profile: TRANSFER_PROFILE,
+    });
+    assert.ok(isErr(r), 'o header de lote aceitou inscrição alfanumérica do cedente');
+    assert.equal(r.error, 'inscription-alphanumeric-unsupported');
+  });
+
+  it('segmentB (018-032, favorecido) recusa', () => {
+    const r = segmentB({
+      bankCode: '237',
+      batchNumber: 1,
+      recordNumber: 2,
+      payee: PAYEE_ALPHANUMERIC,
+      dueDate: AT,
+      titleValueCents: 10000,
+    });
+    assert.ok(isErr(r), 'o Segmento B aceitou inscrição alfanumérica do favorecido');
+    assert.equal(r.error, 'inscription-alphanumeric-unsupported');
+  });
+
+  it('segmentBPix (018-032, favorecido) recusa', () => {
+    const r = segmentBPix({
+      bankCode: '237',
+      batchNumber: 1,
+      recordNumber: 2,
+      payee: PAYEE_ALPHANUMERIC,
+      initiation: '04',
+      pixKey: 'chave@exemplo.test',
+    });
+    assert.ok(isErr(r), 'o Segmento B de Pix aceitou inscrição alfanumérica do favorecido');
+    assert.equal(r.error, 'inscription-alphanumeric-unsupported');
   });
 });

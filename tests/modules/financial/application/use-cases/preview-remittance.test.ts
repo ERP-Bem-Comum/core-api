@@ -34,7 +34,7 @@ import { createRemittanceBatchPlanner } from '#src/modules/financial/adapters/cn
 // inscrição". A régua passou a perguntar uma segunda coisa: se a inscrição pode ser escrita num campo
 // `Num` do CNAB sem virar outra. Ela continua não validando CPF/CNPJ — só recusa o que `digits()`
 // destruiria em silêncio —, mas um valor sem nenhum dígito deixou de servir de fixture neutra.
-const PAYEE_DOCUMENT = '00000000000191';
+const PAYEE_DOCUMENT = '11222333000181'; // sintético (`.claude/rules/domain.md`); repo é público
 
 const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',

@@ -38,7 +38,7 @@ const target = (over: Partial<PayeePaymentTarget> = {}): PayeePaymentTarget => (
   accountNumber: '567890',
   checkDigit: '0',
   pixKey: null,
-  document: '00000000000191', // inscrição sintética; o repositório é público
+  document: '11222333000181', // sintético (exemplo de `.claude/rules/domain.md`); repo é público
   ...over,
 });
 

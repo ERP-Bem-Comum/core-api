@@ -36,7 +36,7 @@ const EMPTY_TARGET: PayeePaymentTarget = {
 // validando CPF/CNPJ — não confere dígito, não confere comprimento, não sabe o que é uma inscrição
 // válida. Ela só recusa o que `digits()` DESTRUIRIA em silêncio. Um valor sem nenhum dígito, como o
 // anterior, não distinguia os dois casos: ele falharia pelas duas razões ao mesmo tempo.
-const PAYEE_DOCUMENT = '00000000000191';
+const PAYEE_DOCUMENT = '11222333000181'; // sintético (`.claude/rules/domain.md`); repo é público
 
 // CNPJ alfanumérico, no formato que a Receita emite desde 07/2026 (ADR-0044): doze posições
 // alfanuméricas mais dois dígitos verificadores numéricos. É inscrição VÁLIDA — e é exatamente por
