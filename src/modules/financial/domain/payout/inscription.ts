@@ -26,6 +26,19 @@
 export const normalizeInscription = (raw: string): string =>
   raw.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
 
+/**
+ * "HÁ inscrição aqui?" — pela mesma definição de vazio que o emissor usa.
+ *
+ * ⚠️ EXISTE PORQUE `trim()` E ESTA PERGUNTA NÃO SÃO A MESMA COISA, e a diferença já produziu
+ * divergência entre as duas pontas: `'---'`, `'.'` e `'./-'` sobrevivem ao `trim()` e normalizam para
+ * vazio. O emissor os vê como campo sem conteúdo (`num('')` → `numeric-field-invalid`); um pré-voo
+ * que perguntasse `trim() === ''` os veria como inscrição PRESENTE, e — não sendo numéricos —
+ * concluiria "alfanumérica", mandando escalar ao banco um cadastro que só está incompleto.
+ *
+ * Quem decide presença de inscrição pergunta aqui, dos dois lados.
+ */
+export const hasInscription = (raw: string): boolean => normalizeInscription(raw) !== '';
+
 const DIGITS_ONLY = /^\d+$/;
 
 /**
@@ -41,6 +54,11 @@ const DIGITS_ONLY = /^\d+$/;
  *     '12ABC34501DE35'  →  '00000123450135'   ← outra inscrição, 14 dígitos, arquivo perfeito
  *
  * O banco aceita. O cedente declarado no arquivo não é o titular da conta que paga.
+ *
+ * ⚠️ O LAUDO DO BRADESCO DE 05/09/2026 AGRAVOU ISTO, ainda que não falasse dele. Ficou estabelecido
+ * que, no Pix, o PSP do recebedor cruza a inscrição do arquivo com o titular da chave no DICT,
+ * recusando com `PF` quando não bate. Uma inscrição deformada deixou de ser só um dado errado no
+ * arquivo: é a recusa do pagamento, sem que nada no ERP aponte a causa.
  *
  * Documento alfanumérico responde `false`, e a recusa é DELIBERADA — não uma limitação a contornar:
  *

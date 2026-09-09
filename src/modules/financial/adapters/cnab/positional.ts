@@ -10,8 +10,19 @@
 //   - alfanum.  → TRUNCA. Nome de empresa/favorecido maior que o campo é cortado pelo layout por
 //                 desenho; recusar o arquivo inteiro por causa de um nome longo seria pior.
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import {
+  isCnabEmittableInscription,
+  normalizeInscription,
+} from '../../domain/payout/inscription.ts';
 
-export type PositionalFieldError = 'numeric-field-overflow' | 'numeric-field-invalid';
+export type PositionalFieldError =
+  | 'numeric-field-overflow'
+  | 'numeric-field-invalid'
+  // Inscrição (CPF/CNPJ) com letras num campo que o layout declara `Num` (#863). Erro PRÓPRIO, e não
+  // `numeric-field-invalid`, porque a ação de quem recebe é OUTRA: não há defeito no emissor nem
+  // formato a corrigir no cadastro — o documento está certo, e é o LAYOUT DO BANCO que ainda não o
+  // prevê. Achatá-lo no erro genérico mandaria o operador consertar uma inscrição válida.
+  | 'inscription-alphanumeric-unsupported';
 
 const DIGITS_ONLY = /^\d+$/;
 
@@ -177,6 +188,36 @@ export const timeHHMMSS = (at: Date): Result<string, PositionalFieldError> =>
 // Continua sendo erro o que sobrar vazio ou não couber: normalizar não é engolir.
 export const digits = (value: string, size: number): Result<string, PositionalFieldError> =>
   num(value.replace(/\D/g, ''), size);
+
+// ⚠️ INSCRIÇÃO (CPF/CNPJ) NÃO USA `digits()` — e este parágrafo é a razão de existir um campo
+// próprio, porque a diferença entre os dois é invisível na linha de chamada (#863).
+//
+// Para agência, conta e CEP, `digits()` faz o certo: o que ela remove é máscara, e máscara não é
+// conteúdo. Para inscrição, desde que a Receita passou a emitir CNPJ alfanumérico (ADR-0044), o que
+// ela remove pode ser CONTEÚDO — e o resultado é o pior desfecho possível, porque continua sendo um
+// número de 14 posições perfeitamente bem formado:
+//
+//     digits('12ABC34501DE35', 14)  →  '00000123450135'   ← outra inscrição, e ninguém percebe
+//
+// O arquivo é aceito, o pagamento sai, e o favorecido chega ao banco identificado por outro
+// documento. Nada no caminho reclama: o inspetor de forma aprova, o validador do banco aprova, e o
+// erro só aparece na conciliação — ou, no Pix, como recusa `PF` do DICT, sem causa apontada.
+//
+// A regra de "isto pode ser escrito num campo Num?" vive no DOMÍNIO
+// (`domain/payout/inscription.ts`), e não aqui, porque o pré-voo precisa da MESMA régua para recusar
+// antes do `allocateNsa`. Este campo é só a metade que sabe escrever.
+export const inscription = (value: string, size: number): Result<string, PositionalFieldError> => {
+  const normalized = normalizeInscription(value);
+
+  // ⚠️ O VAZIO NÃO É ASSUNTO DESTE ERRO, e a carve-out é obrigatória: sem ela, campo em branco
+  // passaria a sair como `inscription-alphanumeric-unsupported`, mandando escalar ao banco um caso
+  // que é simplesmente cadastro faltando. Vazio e estouro continuam sendo o que sempre foram — quem
+  // os nomeia é `num`, e há teste do Segmento J-52 fixando exatamente isso.
+  if (normalized !== '' && !isCnabEmittableInscription(normalized))
+    return err('inscription-alphanumeric-unsupported');
+
+  return num(normalized, size);
+};
 
 // ── Combinadores de registro ────────────────────────────────────────────────────────────────────
 // Vivem aqui, e não no módulo de registros, porque envelope (header/trailer) e detalhe (segmentos)

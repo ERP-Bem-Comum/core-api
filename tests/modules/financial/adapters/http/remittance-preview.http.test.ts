@@ -75,7 +75,7 @@ const reader = createInMemoryRemittancePreviewReader([
       accountNumber: null,
       checkDigit: null,
       pixKey: null,
-      document: 'inscricao-opaca',
+      document: '11222333000181', // sintético (`.claude/rules/domain.md`); repo é público
     },
   },
   // ⚠️ O bloco bancário é PREENCHIDO de propósito, e passou a ser desde a #838: o Pix exige chave E
