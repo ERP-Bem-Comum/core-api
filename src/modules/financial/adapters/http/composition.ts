@@ -151,6 +151,7 @@ import {
 import { resolveUserName } from './user-name-composition.ts';
 // #289: adapta o ApproverAuthorityReadPort do auth (ACL) → ApproverAuthorityReader do financial.
 import { createAuthApproverAuthorityReader } from '../read/approver-authority-reader.auth.ts';
+import { withRbacBypass } from '../read/approver-authority-reader.rbac-bypass.ts';
 import { createInMemoryCategoryReadStore } from '../persistence/repos/category-read.in-memory.ts';
 import { createDrizzleCategoryReadStore } from '../persistence/repos/category-read.drizzle.ts';
 import { REFERENCE_CATEGORY_SEED } from '../persistence/seed/reference-categories.ts';
@@ -267,6 +268,15 @@ export type FinancialCompositionConfig = Readonly<{
   /** Port de leitura do NOME de usuário + alçada do aprovador (#207/#289 — ADR-0032).
    *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
   authUserReadPort?: AuthUserReadPort & ApproverAuthorityReadPort;
+  /** `AUTH_RBAC_MODE=bypass` (ADR-0052) — o processo roda com a autorização por permissão desligada.
+   *  Ausente/`false` → a alçada é enforçada normalmente (#609). `true` → `canApprove` deixa de barrar
+   *  (`withRbacBypass`), porque o `/me` já anuncia o catálogo inteiro e recusar aqui contradiz o que
+   *  o sistema acabou de prometer ao usuário. O TETO continua valendo — mas quem não tem papel
+   *  aprovador tem teto `null`, que é SEM TETO: sob bypass, todo autenticado aprova qualquer valor.
+   *  Alcança SÓ o ato de aprovar — a validação do `approverRef` indicado (`saveDocument`/
+   *  `submitDraft`) é roteamento e segue enforçada; ver `depsForApprove` em `makeDeps`.
+   *  O financial não conhece `RbacMode` (vocabulário do `auth`); recebe o booleano já resolvido. */
+  rbacBypass?: boolean;
   /** M2 · RN-M2-09/10 — read-port do `budget-plans` (ADR-0051): valida o CAMINHO da taxonomia no
    *  confirm da conciliação. Injetado em testes; driver mysql constrói automaticamente se ausente. */
   budgetPlansReadPort?: BudgetPlansReadPort;
@@ -964,7 +974,11 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   };
 };
 
-const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps => {
+const makeDeps = (
+  pools: Pools,
+  clock: Clock = ClockReal(),
+  rbacBypass = false,
+): FinancialHttpDeps => {
   // #127: NENHUM use-case recebe mais `outbox` — todo evento de domínio do financial é gravado no
   // `fin_outbox` na MESMA tx do agregado/unit-of-work (atomicidade — ADR-0015), via os repos
   // (`save`/`delete`/`confirm`/`confirmManualEntry`/`undo`/`close`). No driver memory cada repo usa
@@ -987,6 +1001,20 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     contractCategorizationReader: pools.contractCategorizationReader,
     ...(approverAuthorityReader !== undefined ? { approverAuthorityReader } : {}),
   };
+  // ADR-0069 (bypass): o afrouxamento vale SÓ para o gate do ATO de aprovar, e por isso o decorator
+  // é composto AQUI e não no `deps` acima. O mesmo port responde a DUAS perguntas diferentes:
+  //
+  //   `approveDocument`  → o usuário AUTENTICADO que chama pode aprovar este valor?  (#609, authz)
+  //   `saveDocument`/`submitDraft` → o `approverRef` INDICADO tem alçada?            (#289/#297)
+  //
+  // A segunda é ROTEAMENTO — quem vai receber o documento —, e é o mesmo motivo que deixa `list`
+  // intacto. Afrouxá-la gravaria `approverRef` apontando para quem não é aprovador, e a linha
+  // SOBREVIVE ao religar da flag: o #634 não desfaz dado já persistido. O bypass afrouxa o que é
+  // decidido no ato; nunca o que fica escrito no banco.
+  const depsForApprove =
+    approverAuthorityReader !== undefined && rbacBypass
+      ? { ...deps, approverAuthorityReader: withRbacBypass(approverAuthorityReader) }
+      : deps;
   // Lançamento manual (US5): reaproveitado pelo confirmBatch (1 template × N transações).
   const record = recordManualEntry({
     reconciliationRepo: pools.reconciliationRepo,
@@ -1034,7 +1062,7 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     // #162: delega ao próprio `adjustDocument`, então carrega as mesmas deps — inclusive a remessa.
     // Na prática só percorre o caminho leve (dueDate), que não consulta hold.
     bulkUpdateDueDate: bulkUpdateDueDate({ ...deps, remittances: pools.remittanceRepo }),
-    approveDocument: approveDocument(deps),
+    approveDocument: approveDocument(depsForApprove),
     registerManualPayment: registerManualPayment(deps),
     updatePayableDueDate: updatePayableDueDate(deps), // #270: mesmas deps (repo + clock)
     undoApproval: undoApproval(deps),
@@ -1254,11 +1282,12 @@ export const buildFinancialHttpDeps = async (
         ...(config.taxonomyPaths !== undefined ? { taxonomyPaths: config.taxonomyPaths } : {}),
       }),
       config.clock,
+      config.rbacBypass ?? false,
     );
   }
 
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {
     throw new Error('financial-composition: driver mysql exige writerUrl');
   }
-  return makeDeps(await buildMysqlPools(config), config.clock);
+  return makeDeps(await buildMysqlPools(config), config.clock, config.rbacBypass ?? false);
 };

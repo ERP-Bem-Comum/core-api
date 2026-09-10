@@ -1,6 +1,6 @@
 {
   "name": "core-api",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "Backend do ERP Bem Comum — modular monolith em Node.js e TypeScript, com borda HTTP em Fastify e persistência MySQL via Drizzle.",
   "license": "MIT",
   "repository": {
@@ -43,7 +43,7 @@
     "release:notes": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/release-notes.ts",
     "audit": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
-    "test": "node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/**/*.test.ts'",
+    "test": "node --test --test-concurrency=6 --experimental-strip-types --enable-source-maps --no-warnings 'tests/**/*.test.ts'",
     "test:integration": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts contracts",
     "worker:outbox": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/contracts/worker/run.ts",
     "worker:outbox:partners": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/partners/worker/run.ts",
@@ -120,8 +120,8 @@
     "fastify-zod-openapi": "5.6.1",
     "hash-wasm": "4.12.0",
     "jose": "6.2.3",
-    "mysql2": "3.22.3",
-    "nodemailer": "9.0.1",
+    "mysql2": "3.23.1",
+    "nodemailer": "9.1.1",
     "resend": "6.12.4",
     "unpdf": "1.6.2",
     "zod": "4.4.3",
