@@ -6,6 +6,48 @@ a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é reg
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·
 versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
+## [1.0.0-rc.3] — 2026-09-09
+
+### Adicionado
+
+- **financial:** o saldo de abertura passa a ser editável — o caminho que evitava a duplicata ([#999](https://github.com/ERP-Bem-Comum/core-api/pull/999))
+- **financial:** reabrir e excluir conta-cedente, e o convênio editável na encerrada (#995 B1/B3/B8) ([#998](https://github.com/ERP-Bem-Comum/core-api/pull/998))
+
+### Corrigido
+
+- **financial:** sob o bypass do RBAC, a alçada deixa de recusar quem o /me acabou de liberar ([#1015](https://github.com/ERP-Bem-Comum/core-api/pull/1015))
+- **auth,financial:** papel sem alçada deixa de restringir quem já era irrestrito ([#1011](https://github.com/ERP-Bem-Comum/core-api/pull/1011))
+- **financial:** CNPJ alfanumérico deixa de virar outra inscrição em silêncio (#863) — traslado do #983 ([#1010](https://github.com/ERP-Bem-Comum/core-api/pull/1010))
+- **financial:** o DV da agência do favorecido passa a ser conferido por cálculo ([#1008](https://github.com/ERP-Bem-Comum/core-api/pull/1008))
+- **financial:** o pré-voo do Pix ganha governança, exclusividade de arquivo e a conta que fecha (#948 CA3–CA6) ([#1004](https://github.com/ERP-Bem-Comum/core-api/pull/1004))
+- **financial:** a chave natural da conta-cedente ganha forma canônica (#995, bloco A) ([#1001](https://github.com/ERP-Bem-Comum/core-api/pull/1001))
+- **financial:** a sequência de NSA passa a ser do convênio — destrava a conta irmã em produção ([#997](https://github.com/ERP-Bem-Comum/core-api/pull/997))
+- **financial:** os campos do cedente no header CNAB ganham fonte de dado ([#994](https://github.com/ERP-Bem-Comum/core-api/pull/994))
+- **financial:** o pré-voo do Pix passa a checar as duas condições da chave ([#982](https://github.com/ERP-Bem-Comum/core-api/pull/982))
+- **financial:** o Pix por chave para de exigir conta, e o ISPB vira zeros (#923, #945) ([#981](https://github.com/ERP-Bem-Comum/core-api/pull/981))
+- **etl:** plano-filho não vira raiz órfã quando o pai não migra ([#951](https://github.com/ERP-Bem-Comum/core-api/pull/951))
+- **e2e:** os smokes param de destruir o banco e os secrets do dev ([#950](https://github.com/ERP-Bem-Comum/core-api/pull/950))
+
+### Alterado
+
+- integra o fix do convênio migrado (#937) e o bump de segurança do fastify ([#944](https://github.com/ERP-Bem-Comum/core-api/pull/944))
+
+### Interno
+
+- **inquiries:** a inquiry-0037 versiona o laudo do Multipag Pix e o arquivo que o banco aprovou ([#986](https://github.com/ERP-Bem-Comum/core-api/pull/986))
+- **deps:** Bump mysql2 from 3.22.3 to 3.23.1 ([#973](https://github.com/ERP-Bem-Comum/core-api/pull/973))
+- **harness:** remove instrução morta e mecaniza o que sobrou ([#976](https://github.com/ERP-Bem-Comum/core-api/pull/976))
+- **inquiries:** as respostas da P.O. voltam para a 0032 e para o índice ([#959](https://github.com/ERP-Bem-Comum/core-api/pull/959))
+- **handbook:** organiza a árvore de documentação — context/ removido com lápide, datado em Discussions, docs/ e llms.txt deixam de ensinar o extinto ([#970](https://github.com/ERP-Bem-Comum/core-api/pull/970))
+- **workers:** o grupo `van` entrou e três descrições ficaram em "3 grupos" ([#949](https://github.com/ERP-Bem-Comum/core-api/pull/949))
+
+### Não classificado
+
+1 merge(s) do range sem linha de mensagem convencional no corpo —
+listados aqui para que a ausência seja visível, e não deduzida:
+
+- `3d070bad` — Merge branch 'main' into dev
+
 ## [1.0.0-rc.2] — 2026-09-01
 
 ### Adicionado
