@@ -1,6 +1,6 @@
 # ADR-0052: Modo de operação `AUTH_RBAC_MODE=bypass` — desligar a autorização por permissão, mantendo a autenticação
 
-- **Status:** Accepted
+- **Status:** Accepted — **parcialmente estendido pelo [ADR-0069](./0069-approval-policy-follows-rbac-bypass-supersedes-0052-partial.md)** (2026-09-09), que leva o `bypass` além da borda HTTP até a permissão `payable:approve` lida pela `approval-policy` do domínio. Tudo o que está aqui segue vigente; o que muda é o **alcance** do modo.
 - **Date:** 2026-07-16
 - **Deciders:** Tech Lead (Gabriel — decisão do dono do sistema, 2026-07-16; bypass total ratificado no W2/M1)
 - **Complementa:** [ADR-0024/0025](./) (borda HTTP + hooks de auth) · não substitui a decisão de RBAC (DD-USER-02) — a adiciona um modo de operação alternativo, com o enforcement como **default**.

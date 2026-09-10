@@ -160,7 +160,9 @@ const main = async (): Promise<void> => {
   // roda. Fixar dentro da função apagou aquela propriedade junto, e derrubou os 11 testes que a
   // guardavam sem ter relação alguma com o objetivo da mudança.
   //
-  // Para religar: apague a linha marcada abaixo. `AUTH_RBAC_MODE` volta a valer sozinha.
+  // Para religar: são DUAS linhas marcadas `← religar` neste arquivo — esta e o `rbacBypass: true`
+  // da composição do `financial` (ADR-0069). Só depois das duas `AUTH_RBAC_MODE` volta a valer
+  // sozinha. Apagar só esta religa a rota e o `/me`, e deixa a policy do domínio afrouxada.
   const configuredRbacMode = resolveRbacMode(process.env);
   const rbacMode: RbacMode = 'bypass'; // ← religar: apagar e usar `configuredRbacMode` abaixo
 
@@ -244,6 +246,21 @@ const main = async (): Promise<void> => {
   const financialDeps = await buildFinancialHttpDeps({
     driver: 'mysql',
     writerUrl: financial.connectionString,
+    // ADR-0069: sob bypass a alçada do aprovador deixa de barrar por PERMISSÃO. Sem isto, o `/me`
+    // anuncia `payable:approve` a todo autenticado (list-user-permissions.ts:35) enquanto a policy
+    // do domínio lê o banco cru e recusa — a recusa contradiz o que o próprio `/me` acabou de dizer.
+    //
+    // Alcança SÓ o ato de aprovar. A validação do `approverRef` INDICADO (`saveDocument`/
+    // `submitDraft`) é roteamento e segue enforçada — ver `depsForApprove` na composição do
+    // `financial`. Afrouxá-la gravaria linha que sobrevive ao religar, e o #634 não desfaz banco.
+    //
+    // Literal `true`, e não `rbacMode === 'bypass'`, pela mesma razão do banner acima: com o modo
+    // fixado por código, o compilador prova a comparação sempre verdadeira e o ESLint a recusa.
+    //
+    // ⚠️ ← religar: este literal é a SEGUNDA das duas linhas marcadas `← religar`. Apagar só a
+    // outra deixa o afrouxamento do domínio de pé com o RBAC já enforçado — e nada mecânico acusa:
+    // não há erro de tipo, teste vermelho nem lint. Trocar por `rbacMode === 'bypass'`.
+    rbacBypass: true,
   });
 
   // Módulo budget-plans (BGP-PLAN-CRUD, issue #315) → /api/v2/budget-plans. Greenfield V2
