@@ -34,7 +34,7 @@ const mkSupplier = (serviceRating: string | null, ratingComment: string | null) 
     id: SupplierId.generate(),
     name: 'Alpha',
     email: 'alpha@x.com',
-    cnpj: '11.222.333/0001-81',
+    document: '11.222.333/0001-81',
     corporateName: 'Alpha LTDA',
     fantasyName: 'Alpha',
     serviceCategory: 'INFORMATICA',
@@ -163,7 +163,7 @@ describe('SUPPLIERS-RATING — POST validação', () => {
       payload: {
         name: 'Novo',
         email: 'novo@x.com',
-        cnpj: '11222333000181',
+        document: '11222333000181',
         corporateName: 'Novo LTDA',
         fantasyName: 'Novo',
         serviceCategory: 'INFORMATICA',

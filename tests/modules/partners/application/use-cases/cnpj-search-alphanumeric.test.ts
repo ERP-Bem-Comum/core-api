@@ -35,7 +35,7 @@ const supplier = (cnpj: string) => {
     id: SupplierId.generate(),
     name: 'ACME Alimentos',
     email: 'contato@acme.com.br',
-    cnpj,
+    document: cnpj,
     corporateName: 'ACME Alimentos LTDA',
     fantasyName: 'ACME',
     serviceCategory: 'INFORMATICA',

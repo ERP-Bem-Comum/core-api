@@ -34,7 +34,7 @@ const mk = (over: { name: string; cnpj: string; serviceCategory: string }) =>
     id: SupplierId.generate(),
     name: over.name,
     email: `${over.name.toLowerCase().replace(/[^a-z]/g, '')}@fornecedor.com.br`,
-    cnpj: over.cnpj,
+    document: over.cnpj,
     corporateName: `${over.name} LTDA`,
     fantasyName: over.name,
     serviceCategory: over.serviceCategory,

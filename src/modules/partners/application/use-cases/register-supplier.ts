@@ -1,8 +1,9 @@
 /**
  * Use case `registerSupplier` — cria um fornecedor (nasce Active).
  *
- * Sequência: `Supplier.register` (valida campos texto, email, CNPJ, serviceCategory
- * e a invariante de payment target) → guard de CNPJ duplicado via `findByCnpj` →
+ * Sequência: `Supplier.register` (valida campos texto, email, documento CPF/CNPJ com a
+ * identidade PF × PJ, serviceCategory e a invariante de payment target) → guard de
+ * documento duplicado via `findByDocument` →
  * `save`. Tempo injetado via `Clock`. Curried `(deps) => (cmd)` (padrão `approvePayable`).
  */
 
@@ -25,9 +26,9 @@ import type {
 export type RegisterSupplierCommand = Readonly<{
   name: string;
   email: string;
-  cnpj: string;
-  corporateName: string;
-  fantasyName: string;
+  document: string;
+  corporateName: string | null;
+  fantasyName: string | null;
   serviceCategory: string;
   bankAccount: BankAccountInput | null;
   pixKey: PixKeyInput | null;
@@ -36,7 +37,7 @@ export type RegisterSupplierCommand = Readonly<{
 }>;
 
 export type RegisterSupplierError =
-  | 'register-supplier-cnpj-duplicate'
+  | 'register-supplier-document-duplicate'
   | SupplierError
   | SupplierRepositoryError;
 
@@ -56,7 +57,7 @@ export const registerSupplier =
       id: SupplierId.generate(),
       name: cmd.name,
       email: cmd.email,
-      cnpj: cmd.cnpj,
+      document: cmd.document,
       corporateName: cmd.corporateName,
       fantasyName: cmd.fantasyName,
       serviceCategory: cmd.serviceCategory,
@@ -68,9 +69,11 @@ export const registerSupplier =
     });
     if (!registered.ok) return registered;
 
-    const existing = await deps.supplierRepo.findByCnpj(registered.value.supplier.cnpj);
+    const existing = await deps.supplierRepo.findByDocument(
+      registered.value.supplier.identity.document,
+    );
     if (!existing.ok) return existing;
-    if (existing.value !== null) return err('register-supplier-cnpj-duplicate');
+    if (existing.value !== null) return err('register-supplier-document-duplicate');
 
     const saved = await deps.supplierRepo.save(registered.value.supplier, [registered.value.event]);
     if (!saved.ok) return saved;

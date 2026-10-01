@@ -1,10 +1,10 @@
 // Adapter Drizzle de SupplierRepository (módulo partners).
 //
-//   - findById/findByCnpj/list: SELECT + mapper.
+//   - findById/findByDocument/list: SELECT + mapper.
 //   - save: UMA transação — SELECT-then-UPDATE-or-INSERT do supplier (ADR-0020 — sem ON
 //     DUPLICATE KEY) + appendOutboxInTx dos eventos publicáveis, na MESMA tx (atomicidade
-//     estado+outbox — ADR-0015/0043). UNIQUE `par_suppliers_cnpj_idx` → ER_DUP_ENTRY (1062)
-//     → rollback total → supplier-cnpj-duplicate.
+//     estado+outbox — ADR-0015/0043). UNIQUE `par_suppliers_document_idx` → ER_DUP_ENTRY (1062)
+//     → rollback total → supplier-document-duplicate.
 //
 // ADR-0020: sem ODKU. ADR-0014: só par_*. Boundary: try/catch → Result (zero throw).
 
@@ -13,7 +13,7 @@ import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import type { Cnpj } from '#src/shared/kernel/cnpj.ts';
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import type {
   SupplierRepository,
   SupplierRepositoryError,
@@ -31,7 +31,7 @@ import { supplierEventsToOutboxMessages } from '../mappers/supplier-outbox.mappe
 import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
 import type { SupplierRow } from '../schemas/mysql.ts';
 
-const isCnpjDupEntry = (e: unknown): boolean => {
+const isDocumentDupEntry = (e: unknown): boolean => {
   const candidates: unknown[] = [e];
   if (e instanceof Error && e.cause !== undefined) candidates.push(e.cause);
   for (const c of candidates) {
@@ -40,7 +40,7 @@ const isCnpjDupEntry = (e: unknown): boolean => {
       if (
         obj['errno'] === 1062 &&
         typeof obj['sqlMessage'] === 'string' &&
-        obj['sqlMessage'].includes('par_suppliers_cnpj_idx')
+        obj['sqlMessage'].includes('par_suppliers_document_idx')
       ) {
         return true;
       }
@@ -84,17 +84,17 @@ export const createDrizzleSupplierStore = (
       }
     },
 
-    findByCnpj: async (cnpj: Cnpj) => {
+    findByDocument: async (document: SupplierDocument.SupplierDocument) => {
       try {
         const rows = await db
           .select()
           .from(table)
-          .where(eq(table.cnpj, cnpj as unknown as string))
+          .where(eq(table.document, SupplierDocument.toRaw(document)))
           .limit(1);
         const row = rows[0];
         return row === undefined ? ok(null) : reconstruct(row);
       } catch (cause) {
-        logRepo('findByCnpj', cause);
+        logRepo('findByDocument', cause);
         return err('supplier-repo-unavailable');
       }
     },
@@ -122,7 +122,7 @@ export const createDrizzleSupplierStore = (
       const messages = supplierEventsToOutboxMessages(events, supplier);
       try {
         // UMA transação: persist do supplier + append do outbox. Se qualquer passo
-        // lançar (ex.: ER_DUP_ENTRY no CNPJ), o Drizzle faz rollback de tudo —
+        // lançar (ex.: ER_DUP_ENTRY no documento), o Drizzle faz rollback de tudo —
         // estado e outbox somem juntos (atomicidade — ADR-0015/0043).
         await db.transaction(async (tx) => {
           const existing = await tx
@@ -145,7 +145,7 @@ export const createDrizzleSupplierStore = (
         });
         return ok(undefined);
       } catch (cause) {
-        if (isCnpjDupEntry(cause)) return err('supplier-cnpj-duplicate');
+        if (isDocumentDupEntry(cause)) return err('supplier-document-duplicate');
         logRepo('save', cause);
         return err('supplier-repo-unavailable');
       }

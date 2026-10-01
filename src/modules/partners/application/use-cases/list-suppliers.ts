@@ -7,6 +7,7 @@
  */
 
 import { type Result, ok } from '#src/shared/index.ts';
+import { documentOf } from '#src/modules/partners/domain/supplier/supplier.ts';
 import type { Supplier } from '#src/modules/partners/domain/supplier/types.ts';
 import type {
   SupplierRepository,
@@ -21,23 +22,27 @@ export type SupplierListFilter = Readonly<{
   categories?: readonly string[];
 }>;
 
-// `search` casa name / fantasyName / corporateName (substring case-insensitive) OU cnpj.
-// #288: apelido = fantasyName; razão social = corporateName.
+// Nomes pesquisáveis do fornecedor. #288: apelido = fantasyName; razão social = corporateName —
+// que só a PJ tem (#1022).
+const searchableNames = (s: Supplier): readonly string[] => {
+  switch (s.identity.personType) {
+    case 'individual':
+      return [s.name];
+    case 'company':
+      return [s.name, s.identity.fantasyName, s.identity.corporateName];
+  }
+};
+
+// `search` casa os nomes (substring case-insensitive) OU o documento (CPF ou CNPJ).
 const matchesSearch = (s: Supplier, search: string | undefined): boolean => {
   const q = search?.trim() ?? '';
   if (q === '') return true;
   const term = q.toLowerCase();
-  if (
-    s.name.toLowerCase().includes(term) ||
-    s.fantasyName.toLowerCase().includes(term) ||
-    s.corporateName.toLowerCase().includes(term)
-  ) {
-    return true;
-  }
+  if (searchableNames(s).some((name) => name.toLowerCase().includes(term))) return true;
   // ADR-0044: o CNPJ é alfanumérico. Remover só a MÁSCARA — tirar letras faria a busca pelo
-  // CNPJ real não encontrar o cadastro. O VO guarda uppercase sem máscara.
-  const cnpjTerm = q.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
-  return cnpjTerm.length > 0 && String(s.cnpj).toUpperCase().includes(cnpjTerm);
+  // CNPJ real não encontrar o cadastro. O VO guarda uppercase sem máscara; o do CPF é numérico.
+  const documentTerm = q.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  return documentTerm.length > 0 && documentOf(s).includes(documentTerm);
 };
 
 export const supplierMatchesFilter = (s: Supplier, filter: SupplierListFilter): boolean => {

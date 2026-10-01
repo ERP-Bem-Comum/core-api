@@ -2,30 +2,52 @@
 //
 //   - supplierToInsert(supplier, now): NewSupplierRow — payment target achatado em
 //     colunas (bank_account_*/pix_*); active/deactivated_at derivados; `now` injetado.
-//   - supplierFromRow(row): Result<Supplier, SupplierMapperError> — reidrata id/cnpj/
-//     serviceCategory e reconstrói os VOs de payment target na borda, delega a
-//     Supplier.rehydrate (reaplica invariantes).
+//   - supplierFromRow(row): Result<Supplier, SupplierMapperError> — reidrata id/documento
+//     (CPF ou CNPJ)/serviceCategory e reconstrói os VOs de payment target na borda, delega a
+//     Supplier.rehydrate (reaplica invariantes, inclusive a identidade PF × PJ).
+//
+// Identidade (#1022): o agregado não tem razão social/nome fantasia na PF — o campo não existe.
+// Na coluna, essa ausência é NULL; o `switch` abaixo é o único ponto que traduz um no outro.
 //
 // ADR-0020: sem JSON (payment target achatado em colunas). ADR-0014: só par_*. Zero throw na borda.
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
-import * as Cnpj from '#src/shared/kernel/cnpj.ts';
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-category.ts';
 import * as ServiceRating from '#src/modules/partners/domain/supplier/service-rating.ts';
 import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
-import type { Supplier as SupplierEntity } from '#src/modules/partners/domain/supplier/types.ts';
+import type {
+  Supplier as SupplierEntity,
+  SupplierIdentity,
+} from '#src/modules/partners/domain/supplier/types.ts';
 import type { SupplierRow, NewSupplierRow } from '../schemas/mysql.ts';
 
 export type SupplierMapperError =
   | 'supplier-mapper-invalid-id'
-  | 'supplier-mapper-invalid-cnpj'
+  | 'supplier-mapper-invalid-document'
   | 'supplier-mapper-invalid-service-category'
   | 'supplier-mapper-invalid-service-rating'
   | 'supplier-mapper-invalid-payment-target'
   | 'supplier-mapper-invalid-state';
+
+const identityColumns = (
+  identity: SupplierIdentity,
+): Pick<NewSupplierRow, 'document' | 'corporateName' | 'fantasyName'> => {
+  const document = SupplierDocument.toRaw(identity.document);
+  switch (identity.personType) {
+    case 'individual':
+      return { document, corporateName: null, fantasyName: null };
+    case 'company':
+      return {
+        document,
+        corporateName: identity.corporateName,
+        fantasyName: identity.fantasyName,
+      };
+  }
+};
 
 export const supplierToInsert = (supplier: SupplierEntity, now: Date): NewSupplierRow => {
   const bank = supplier.bankAccount;
@@ -34,9 +56,7 @@ export const supplierToInsert = (supplier: SupplierEntity, now: Date): NewSuppli
     id: supplier.id as unknown as string,
     name: supplier.name,
     email: supplier.email,
-    cnpj: supplier.cnpj as unknown as string,
-    corporateName: supplier.corporateName,
-    fantasyName: supplier.fantasyName,
+    ...identityColumns(supplier.identity),
     serviceCategory: supplier.serviceCategory,
     active: supplier.status === 'Active',
     deactivatedAt: supplier.status === 'Inactive' ? supplier.deactivatedAt : null,
@@ -81,8 +101,8 @@ export const supplierFromRow = (
   const id = SupplierId.rehydrate(row.id);
   if (!id.ok) return err('supplier-mapper-invalid-id');
 
-  const cnpj = Cnpj.parse(row.cnpj);
-  if (!cnpj.ok) return err('supplier-mapper-invalid-cnpj');
+  const document = SupplierDocument.parse(row.document);
+  if (!document.ok) return err('supplier-mapper-invalid-document');
 
   const category = ServiceCategory.parse(row.serviceCategory);
   if (!category.ok) return err('supplier-mapper-invalid-service-category');
@@ -104,7 +124,7 @@ export const supplierFromRow = (
     id: id.value,
     name: row.name,
     email: row.email,
-    cnpj: cnpj.value,
+    document: document.value,
     corporateName: row.corporateName,
     fantasyName: row.fantasyName,
     serviceCategory: category.value,

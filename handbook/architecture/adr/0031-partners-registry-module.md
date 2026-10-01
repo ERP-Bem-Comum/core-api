@@ -2,7 +2,7 @@
 
 # ADR-0031: Módulo `partners` — fronteira de Cadastros/Counterparties (supplier, financier, collaborator) migrada do legado
 
-- **Status:** Accepted
+- **Status:** Accepted — **parcialmente superado pelo [ADR-0070](./0070-supplier-individual-cpf-supersedes-0031-partial.md)** (2026-10-01): o documento do Fornecedor passa a ser CPF **ou** CNPJ (`par_suppliers.document`), e o campo sensível da edição deixa de ser `cnpj`. `Financier` e o resto deste ADR seguem vigentes.
 - **Date:** 2026-06-01
 - **Deciders:** Gabriel Aderaldo + Arquiteto técnico
 - **Decide:** primeira das 4 fronteiras do legacy API ainda não migradas (ver [`../../domain/10-mapeamento-legado-schema.md`](../../domain/10-mapeamento-legado-schema.md))

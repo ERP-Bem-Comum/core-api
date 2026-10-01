@@ -22,8 +22,13 @@ tests {
     expect(res.getBody().id).to.equal(bru.getVar("supplierCreatedId"));
   });
 
-  test("CA3 — cnpj esta correto", function () {
-    expect(res.getBody().cnpj).to.equal("11222333000181");
+  test("CA3 — document esta correto e o fornecedor e PJ (#1022)", function () {
+    expect(res.getBody().document).to.equal("11222333000181");
+    expect(res.getBody().personType).to.equal("PJ");
+  });
+
+  test("#1022 — alias deprecated cnpj espelha document", function () {
+    expect(res.getBody().cnpj).to.equal(res.getBody().document);
   });
 
   test("CA3 — supplier esta ativo apos criacao", function () {

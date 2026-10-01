@@ -31,7 +31,7 @@ const UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000000';
 const VALID_BODY = {
   name: 'Fornecedor X',
   email: 'contato@fornecedor.com.br',
-  cnpj: '11222333000181',
+  document: '11222333000181',
   corporateName: 'Fornecedor X LTDA',
   fantasyName: 'FX',
   serviceCategory: 'INFORMATICA',

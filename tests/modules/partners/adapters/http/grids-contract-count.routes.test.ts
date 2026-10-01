@@ -84,7 +84,7 @@ const mkSupplier = (name: string, cnpj: string): Seeded => {
     id,
     name,
     email: `${name.toLowerCase()}@fornecedor.com.br`,
-    cnpj,
+    document: cnpj,
     corporateName: `${name} LTDA`,
     fantasyName: name,
     serviceCategory: 'INFORMATICA',

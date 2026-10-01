@@ -38,7 +38,7 @@ const aSupplier = (cnpj: string) => {
     id: SupplierId.generate(),
     name: 'Fornecedor X',
     email: 'contato@fornecedor.com.br',
-    cnpj,
+    document: cnpj,
     corporateName: 'Fornecedor X LTDA',
     fantasyName: 'FX',
     serviceCategory: 'INFORMATICA',

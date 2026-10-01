@@ -2,14 +2,14 @@
  * Operações do agregado `Supplier` (Fornecedor). Consumir via
  * `import * as Supplier from './supplier.ts'`. IDs/instantes injetados.
  *
- *   - `register` — smart constructor: nasce Active. Invariante "destino de
- *     pagamento" (bankAccount OU pixKey).
+ *   - `register` — smart constructor: nasce Active. Invariantes "identidade PF × PJ"
+ *     (`identityFrom`) e "destino de pagamento" (bankAccount OU pixKey).
  *   - `deactivate`/`reactivate` — ciclo de vida (soft-delete).
  */
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { immutable } from '#src/shared/primitives/immutable.ts';
-import * as Cnpj from '#src/shared/kernel/cnpj.ts';
+import * as SupplierDocument from './supplier-document.ts';
 import * as ServiceCategory from './service-category.ts';
 import * as ServiceRating from './service-rating.ts';
 import * as PaymentTarget from '../shared/payment-target.ts';
@@ -22,6 +22,7 @@ import type {
   RegisterSupplierInput,
   RehydrateSupplierInput,
   Supplier,
+  SupplierIdentity,
 } from './types.ts';
 import type { SupplierEvent } from './events.ts';
 import type { SupplierError } from './errors.ts';
@@ -39,12 +40,53 @@ const parseRating = (raw: string | null): Result<ServiceRatingValue | null, Supp
   return r.ok ? ok(r.value) : err('invalid-service-rating');
 };
 
-// Comentário livre: trim; vazio/whitespace → null (sem ruído no banco).
-const normalizeComment = (raw: string | null): string | null => {
+// Texto opcional da entrada: trim; ausente (`null`) ou só espaços → `null` ("não informado",
+// sem ruído no banco). Vale para o comentário da avaliação e para razão social/nome fantasia.
+const presentText = (raw: string | null): string | null => {
   if (raw === null) return null;
   const trimmed = raw.trim();
   return trimmed.length === 0 ? null : trimmed;
 };
+
+/**
+ * Identidade PF × PJ (#1022) — o documento decide quais campos existem:
+ *   - CPF: razão social e nome fantasia NÃO existem. Preenchidos → recusa explícita
+ *     (`*-not-allowed-for-pf`), nunca descarte silencioso de dado que o usuário digitou.
+ *   - CNPJ: os dois são obrigatórios, como sempre foram.
+ * Branco conta como ausente nos dois lados — a tela desativa os campos e pode mandar `""`.
+ */
+export const identityFrom = (
+  document: SupplierDocument.SupplierDocument,
+  corporateNameRaw: string | null,
+  fantasyNameRaw: string | null,
+): Result<SupplierIdentity, SupplierError> => {
+  const corporateName = presentText(corporateNameRaw);
+  const fantasyName = presentText(fantasyNameRaw);
+  switch (document.kind) {
+    case 'cpf':
+      if (corporateName !== null) return err('supplier-corporate-name-not-allowed-for-pf');
+      if (fantasyName !== null) return err('supplier-fantasy-name-not-allowed-for-pf');
+      return ok({ personType: 'individual', document });
+    case 'cnpj':
+      if (corporateName === null) return err('supplier-corporate-name-required');
+      if (fantasyName === null) return err('supplier-fantasy-name-required');
+      return ok({ personType: 'company', document, corporateName, fantasyName });
+  }
+};
+
+const parseIdentity = (
+  rawDocument: string,
+  corporateName: string | null,
+  fantasyName: string | null,
+): Result<SupplierIdentity, SupplierError> => {
+  const document = SupplierDocument.parse(rawDocument);
+  if (!document.ok) return document;
+  return identityFrom(document.value, corporateName, fantasyName);
+};
+
+/** Documento canônico do fornecedor (CPF ou CNPJ, sem máscara). */
+export const documentOf = (supplier: Supplier): string =>
+  SupplierDocument.toRaw(supplier.identity.document);
 
 export const register = (
   input: RegisterSupplierInput,
@@ -52,11 +94,9 @@ export const register = (
   if (isBlank(input.name)) return err('supplier-name-required');
   if (isBlank(input.email)) return err('supplier-email-required');
   if (!EMAIL_RE.test(input.email.trim())) return err('supplier-email-invalid');
-  if (isBlank(input.corporateName)) return err('supplier-corporate-name-required');
-  if (isBlank(input.fantasyName)) return err('supplier-fantasy-name-required');
 
-  const cnpj = Cnpj.parse(input.cnpj);
-  if (!cnpj.ok) return err('invalid-cnpj');
+  const identity = parseIdentity(input.document, input.corporateName, input.fantasyName);
+  if (!identity.ok) return identity;
 
   const category = ServiceCategory.parse(input.serviceCategory);
   if (!category.ok) return err('invalid-service-category');
@@ -84,14 +124,12 @@ export const register = (
     id: input.id,
     name: input.name.trim(),
     email: input.email.trim(),
-    cnpj: cnpj.value,
-    corporateName: input.corporateName.trim(),
-    fantasyName: input.fantasyName.trim(),
+    identity: identity.value,
     serviceCategory: category.value,
     bankAccount,
     pixKey,
     serviceRating: rating.value,
-    ratingComment: normalizeComment(input.ratingComment ?? null),
+    ratingComment: presentText(input.ratingComment ?? null),
     status: 'Active',
   });
 
@@ -100,16 +138,17 @@ export const register = (
     event: {
       type: 'SupplierRegistered',
       supplierId: supplier.id,
-      cnpj: supplier.cnpj,
+      document: supplier.identity.document,
       occurredAt: input.registeredAt,
     },
   });
 };
 
 /**
- * Edição cadastral (PUT total): revalida campos/email/CNPJ/categoria + invariante de payment
- * target, reconstrói o agregado preservando `id` e o estado (Active/Inactive + deactivatedAt).
- * RBAC do campo vital (CNPJ) é decidido fora (use case/borda). Emite `SupplierEdited`.
+ * Edição cadastral (PUT total): revalida campos/email/documento/categoria + invariantes de
+ * identidade PF × PJ e de payment target, reconstrói o agregado preservando `id` e o estado
+ * (Active/Inactive + deactivatedAt). Trocar PF ↔ PJ é trocar o documento: RBAC do campo vital
+ * é decidido fora (use case/borda). Emite `SupplierEdited`.
  */
 export const edit = (
   supplier: Supplier,
@@ -119,11 +158,9 @@ export const edit = (
   if (isBlank(input.name)) return err('supplier-name-required');
   if (isBlank(input.email)) return err('supplier-email-required');
   if (!EMAIL_RE.test(input.email.trim())) return err('supplier-email-invalid');
-  if (isBlank(input.corporateName)) return err('supplier-corporate-name-required');
-  if (isBlank(input.fantasyName)) return err('supplier-fantasy-name-required');
 
-  const cnpj = Cnpj.parse(input.cnpj);
-  if (!cnpj.ok) return err('invalid-cnpj');
+  const identity = parseIdentity(input.document, input.corporateName, input.fantasyName);
+  if (!identity.ok) return identity;
 
   const category = ServiceCategory.parse(input.serviceCategory);
   if (!category.ok) return err('invalid-service-category');
@@ -151,14 +188,12 @@ export const edit = (
     id: supplier.id,
     name: input.name.trim(),
     email: input.email.trim(),
-    cnpj: cnpj.value,
-    corporateName: input.corporateName.trim(),
-    fantasyName: input.fantasyName.trim(),
+    identity: identity.value,
     serviceCategory: category.value,
     bankAccount,
     pixKey,
     serviceRating: rating.value,
-    ratingComment: normalizeComment(input.ratingComment ?? null),
+    ratingComment: presentText(input.ratingComment ?? null),
   };
 
   const edited: Supplier =
@@ -202,8 +237,11 @@ export const reactivate = (
 };
 
 // Reconstrói o agregado a partir de dados persistidos (sem emitir evento). Reaplica
-// as invariantes: ao menos um destino de pagamento; Inactive exige deactivatedAt.
+// as invariantes: identidade PF × PJ; ao menos um destino de pagamento; Inactive exige deactivatedAt.
 export const rehydrate = (input: RehydrateSupplierInput): Result<Supplier, SupplierError> => {
+  const identity = identityFrom(input.document, input.corporateName, input.fantasyName);
+  if (!identity.ok) return identity;
+
   if (input.bankAccount === null && input.pixKey === null) {
     return err('supplier-payment-target-required');
   }
@@ -212,9 +250,7 @@ export const rehydrate = (input: RehydrateSupplierInput): Result<Supplier, Suppl
     id: input.id,
     name: input.name,
     email: input.email,
-    cnpj: input.cnpj,
-    corporateName: input.corporateName,
-    fantasyName: input.fantasyName,
+    identity: identity.value,
     serviceCategory: input.serviceCategory,
     bankAccount: input.bankAccount,
     pixKey: input.pixKey,

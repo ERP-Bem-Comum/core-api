@@ -35,7 +35,7 @@ const aSupplier = (name: string, cnpj: string) =>
       id: SupplierId.generate(),
       name,
       email: `${name.toLowerCase()}@f.com`,
-      cnpj,
+      document: cnpj,
       corporateName: `${name} LTDA`,
       fantasyName: name,
       serviceCategory: 'INFORMATICA',
