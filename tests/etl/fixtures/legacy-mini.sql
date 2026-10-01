@@ -41,8 +41,8 @@ CREATE TABLE `suppliers` (
   `updatedAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
--- CNPJs DEVEM ser distintos entre suppliers: par_suppliers tem UNIQUE(cnpj) no destino
--- (par_suppliers_cnpj_idx). Reusar o mesmo CNPJ faria o 2º supplier cair em quarentena
+-- CNPJs DEVEM ser distintos entre suppliers: par_suppliers tem UNIQUE(document) no destino
+-- (par_suppliers_document_idx). Reusar o mesmo CNPJ faria o 2º supplier cair em quarentena
 -- por ER_DUP_ENTRY, quebrando a reconciliação/idempotência da ETL.
 -- Avaliação (ETL-SUPPLIER-RATING-MAPPING): supplier 1 exercita 5+comentário; supplier 2 NULL/NULL.
 INSERT INTO `suppliers` VALUES

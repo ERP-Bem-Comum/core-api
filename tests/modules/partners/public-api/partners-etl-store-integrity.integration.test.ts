@@ -38,7 +38,7 @@ const aSupplier = (cnpj: string) => {
     id: SupplierId.generate(),
     name: 'Fornecedor X',
     email: 'contato@fornecedor.com.br',
-    cnpj,
+    document: cnpj,
     corporateName: 'Fornecedor X LTDA',
     fantasyName: 'FX',
     serviceCategory: 'INFORMATICA',
@@ -103,7 +103,7 @@ if (integrationEnabled()) {
       const first = await port.suppliers.provision(aSupplier(cnpj), 100);
       assert.equal(first.ok && first.value === 'created', true);
 
-      // legacy_id 200 (distinto) com o MESMO cnpj -> colide em par_suppliers_cnpj_idx
+      // legacy_id 200 (distinto) com o MESMO documento -> colide em par_suppliers_document_idx
       const second = await port.suppliers.provision(aSupplier(cnpj), 200);
       assert.equal(second.ok, false);
       if (!second.ok) {

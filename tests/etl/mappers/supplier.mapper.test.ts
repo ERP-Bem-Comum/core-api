@@ -225,3 +225,48 @@ describe('mapLegacySupplierRow — avaliação de serviço (ETL-SUPPLIER-RATING-
     assert.ok(r.error.some((e) => e.tag === 'EnumUnknown' && e.field === 'service_evaluation'));
   });
 });
+
+// #1022 — a coluna legada `cnpj` pode trazer CPF (fornecedor pessoa física). Documentos sintéticos.
+describe('mapLegacySupplierRow — fornecedor pessoa física (#1022)', () => {
+  const CPF = '12345678909';
+  // CPF válido cujos 11 dígitos, completados com zeros, também formam um CNPJ válido — a forma de
+  // um CNPJ legado que perdeu os zeros à esquerda. Calculado com os VOs do kernel.
+  const AMBIGUOUS = '00123456797';
+
+  it('CPF → PF, descartando razão social/nome fantasia forçados pelo NOT NULL legado', () => {
+    const r = mapLegacySupplierRow(base({ cnpj: CPF }));
+    assert.ok(r.ok);
+    assert.deepEqual(r.value.aggregate.identity, {
+      personType: 'individual',
+      document: { kind: 'cpf', value: CPF },
+    });
+  });
+
+  it('CPF que também é CNPJ sem os zeros à esquerda → quarentena, não PF (decisão humana)', () => {
+    const r = mapLegacySupplierRow(base({ cnpj: AMBIGUOUS }));
+    assert.ok(!r.ok);
+    assert.ok(
+      r.error.some(
+        (e) => e.tag === 'ExcludedByDecision' && e.field === 'cnpj' && e.decisionRef === 'ADR-0070',
+      ),
+    );
+  });
+
+  it('documento inválido + razão social vazia → os DOIS reasons na mesma quarentena', () => {
+    const r = mapLegacySupplierRow(base({ cnpj: '123', corporateName: '' }));
+    assert.ok(!r.ok);
+    assert.ok(r.error.some((e) => e.tag === 'CnpjInvalid'));
+    assert.ok(
+      r.error.some((e) => e.tag === 'RequiredFieldMissing' && e.field === 'corporate_name'),
+    );
+  });
+
+  it('CPF válido + e-mail inválido → só o e-mail (PF não exige razão social)', () => {
+    const r = mapLegacySupplierRow(base({ cnpj: CPF, email: 'sem-arroba', corporateName: '' }));
+    assert.ok(!r.ok);
+    assert.deepEqual(
+      r.error.map((e) => e.field),
+      ['email'],
+    );
+  });
+});

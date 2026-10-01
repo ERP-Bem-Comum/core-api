@@ -3,16 +3,18 @@
  * (Active/Inactive), igual ao `Financier`. Invariante "destino de pagamento":
  * ao menos um entre `bankAccount`/`pixKey` (imposta no `register`).
  *
- * `cnpj` reusa o VO `Cnpj` do kernel. `serviceCategory` literal (D2). Campos de
- * texto já validados na construção.
+ * Identidade PF × PJ (#1022) é union discriminada por `personType`: a pessoa física
+ * (CPF) NÃO TEM razão social nem nome fantasia — os campos não existem no tipo, em vez
+ * de existirem vazios. Só a pessoa jurídica (CNPJ) os carrega, e obrigatórios.
+ * `serviceCategory` literal (D2). Campos de texto já validados na construção.
  *
  * Origem: legado `suppliers` (database.dbml:153-176).
  */
 
-import type { Cnpj } from '#src/shared/kernel/cnpj.ts';
 import type { SupplierId } from './supplier-id.ts';
 import type { ServiceCategory } from './service-category.ts';
 import type { ServiceRating } from './service-rating.ts';
+import type { CnpjDocument, CpfDocument, SupplierDocument } from './supplier-document.ts';
 import type {
   BankAccount,
   PixKey,
@@ -20,13 +22,24 @@ import type {
   PixKeyInput,
 } from '../shared/payment-target.ts';
 
+/** Pessoa física — identificada por CPF; sem razão social e sem nome fantasia. */
+export type IndividualIdentity = Readonly<{ personType: 'individual'; document: CpfDocument }>;
+
+/** Pessoa jurídica — identificada por CNPJ; razão social e nome fantasia obrigatórios. */
+export type CompanyIdentity = Readonly<{
+  personType: 'company';
+  document: CnpjDocument;
+  corporateName: string;
+  fantasyName: string;
+}>;
+
+export type SupplierIdentity = IndividualIdentity | CompanyIdentity;
+
 type SupplierCore = Readonly<{
   id: SupplierId;
   name: string;
   email: string;
-  cnpj: Cnpj;
-  corporateName: string;
-  fantasyName: string;
+  identity: SupplierIdentity;
   serviceCategory: ServiceCategory;
   bankAccount: BankAccount | null;
   pixKey: PixKey | null;
@@ -42,13 +55,15 @@ export type InactiveSupplier = SupplierCore & Readonly<{ status: 'Inactive'; dea
 
 export type Supplier = ActiveSupplier | InactiveSupplier;
 
+// Na entrada, `corporateName`/`fantasyName` chegam crus e opcionais: quem decide se podem
+// ou devem existir é o documento (PF recusa preenchidos; PJ exige). Ausência é `null`.
 export type RegisterSupplierInput = Readonly<{
   id: SupplierId;
   name: string;
   email: string;
-  cnpj: string;
-  corporateName: string;
-  fantasyName: string;
+  document: string;
+  corporateName: string | null;
+  fantasyName: string | null;
   serviceCategory: string;
   bankAccount: BankAccountInput | null;
   pixKey: PixKeyInput | null;
@@ -61,9 +76,9 @@ export type RegisterSupplierInput = Readonly<{
 export type EditSupplierInput = Readonly<{
   name: string;
   email: string;
-  cnpj: string;
-  corporateName: string;
-  fantasyName: string;
+  document: string;
+  corporateName: string | null;
+  fantasyName: string | null;
   serviceCategory: string;
   bankAccount: BankAccountInput | null;
   pixKey: PixKeyInput | null;
@@ -71,16 +86,16 @@ export type EditSupplierInput = Readonly<{
   ratingComment?: string | null;
 }>;
 
-// Reidratação pela borda (mapper): `id`/`cnpj`/`serviceCategory`/payment target já
+// Reidratação pela borda (mapper): `id`/`document`/`serviceCategory`/payment target já
 // chegam tipados (revalidados no mapper). `rehydrate` só reconstrói o estado e
-// reaplica as invariantes (destino de pagamento; Inactive exige deactivatedAt).
+// reaplica as invariantes (identidade PF × PJ; destino de pagamento; Inactive exige deactivatedAt).
 export type RehydrateSupplierInput = Readonly<{
   id: SupplierId;
   name: string;
   email: string;
-  cnpj: Cnpj;
-  corporateName: string;
-  fantasyName: string;
+  document: SupplierDocument;
+  corporateName: string | null;
+  fantasyName: string | null;
   serviceCategory: ServiceCategory;
   bankAccount: BankAccount | null;
   pixKey: PixKey | null;

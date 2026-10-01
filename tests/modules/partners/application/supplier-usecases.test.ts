@@ -10,7 +10,7 @@ import { registerSupplier } from '#src/modules/partners/application/use-cases/re
 import { deactivateSupplier } from '#src/modules/partners/application/use-cases/deactivate-supplier.ts';
 import { reactivateSupplier } from '#src/modules/partners/application/use-cases/reactivate-supplier.ts';
 import { listSuppliers } from '#src/modules/partners/application/use-cases/list-suppliers.ts';
-import { findSupplierByCnpj } from '#src/modules/partners/application/use-cases/find-supplier-by-cnpj.ts';
+import { findSupplierByDocument } from '#src/modules/partners/application/use-cases/find-supplier-by-document.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
 const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
@@ -18,12 +18,12 @@ const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
 let repo: SupplierRepository;
 let store: ReturnType<typeof makeInMemorySupplierStore>;
 
-const validCmd = (cnpj = '11.222.333/0001-81') => ({
+const validCmd = (document = '11.222.333/0001-81') => ({
   name: 'Gráfica Boa Impressão',
   email: 'contato@boaimpressao.com.br',
-  cnpj,
-  corporateName: 'Boa Impressão Gráfica LTDA',
-  fantasyName: 'Boa Impressão',
+  document,
+  corporateName: 'Boa Impressão Gráfica LTDA' as string | null,
+  fantasyName: 'Boa Impressão' as string | null,
   serviceCategory: 'GRAFICA',
   bankAccount: {
     bank: '001',
@@ -65,13 +65,13 @@ describe('registerSupplier', () => {
     await registerSupplier({ supplierRepo: repo, clock })(validCmd());
     const dup = await registerSupplier({ supplierRepo: repo, clock })(validCmd());
     assert.equal(isErr(dup), true);
-    if (!dup.ok) assert.equal(dup.error, 'register-supplier-cnpj-duplicate');
+    if (!dup.ok) assert.equal(dup.error, 'register-supplier-document-duplicate');
   });
 
   it('rejeita CNPJ inválido', async () => {
     const r = await registerSupplier({ supplierRepo: repo, clock })(validCmd('11222333000180'));
     assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'invalid-cnpj');
+    if (!r.ok) assert.equal(r.error, 'invalid-supplier-document');
   });
 
   it('rejeita sem destino de pagamento (nem bankAccount nem pixKey)', async () => {
@@ -158,14 +158,16 @@ describe('queries', () => {
     if (r.ok) assert.equal(r.value.length, 1);
   });
 
-  it('findSupplierByCnpj acha por CNPJ e retorna null quando ausente', async () => {
+  it('findSupplierByDocument acha por CNPJ e retorna null quando ausente', async () => {
     await registerSupplier({ supplierRepo: repo, clock })(validCmd());
-    const found = await findSupplierByCnpj({ supplierRepo: repo })({ cnpj: '11222333000181' });
+    const found = await findSupplierByDocument({ supplierRepo: repo })({
+      document: '11222333000181',
+    });
     assert.equal(isOk(found), true);
     if (found.ok) assert.notEqual(found.value, null);
 
-    const missing = await findSupplierByCnpj({ supplierRepo: repo })({
-      cnpj: '04.252.011/0001-10',
+    const missing = await findSupplierByDocument({ supplierRepo: repo })({
+      document: '04.252.011/0001-10',
     });
     assert.equal(isOk(missing), true);
     if (missing.ok) assert.equal(missing.value, null);
@@ -179,6 +181,6 @@ describe('adapter InMemory', () => {
     const clone = { ...reg.value.supplier, id: '00000000-0000-4000-8000-000000000000' };
     const saved = await repo.save(clone as typeof reg.value.supplier, []);
     assert.equal(isErr(saved), true);
-    if (!saved.ok) assert.equal(saved.error, 'supplier-cnpj-duplicate');
+    if (!saved.ok) assert.equal(saved.error, 'supplier-document-duplicate');
   });
 });

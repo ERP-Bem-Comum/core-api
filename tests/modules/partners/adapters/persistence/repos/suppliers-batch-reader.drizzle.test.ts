@@ -1,6 +1,6 @@
 // Integração e2e do batch reader (#356, CA7): par_suppliers → createDrizzleSuppliersBatchReader →
 // getSuppliersView(refs) resolve N refs em 1 query (`WHERE id IN (...)`, anti-N+1) contra MySQL real.
-// items = refs existentes (só id/name/cnpj/service_category — minimização); missing = ausentes.
+// items = refs existentes (só id/name/document/service_category — minimização); missing = ausentes.
 // GATE: só com MYSQL_INTEGRATION=1.
 
 import { describe, before, after, it } from 'node:test';
@@ -32,13 +32,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const t = handle.schema.parSuppliers;
       // Limpa na ENTRADA por tabela, não por id: um irmão da suíte (supplier-repository, sem afterEach)
       // deixa resíduo com o MESMO CNPJ e id distinto — delete por id não o pega e colide na UNIQUE
-      // par_suppliers_cnpj_idx (#521). Contrato de isolamento intra-suíte do #535.
+      // par_suppliers_document_idx (#521). Contrato de isolamento intra-suíte do #535.
       await handle.db.delete(t);
       const row = (id: string, name: string, cnpj: string, cat: string) => ({
         id,
         name,
         email: `${name.toLowerCase()}@fornecedor.com.br`,
-        cnpj,
+        document: cnpj,
         corporateName: `${name} LTDA`,
         fantasyName: name,
         serviceCategory: cat,

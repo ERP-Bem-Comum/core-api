@@ -25,9 +25,9 @@ const baseInput = () => ({
   id: SupplierId.generate(),
   name: 'Fornecedor X',
   email: 'contato@fornecedor.com.br',
-  cnpj: '11.222.333/0001-81',
-  corporateName: 'Fornecedor X LTDA',
-  fantasyName: 'FX',
+  document: '11.222.333/0001-81',
+  corporateName: 'Fornecedor X LTDA' as string | null,
+  fantasyName: 'FX' as string | null,
   serviceCategory: 'INFORMATICA',
   bankAccount: bankInput() as ReturnType<typeof bankInput> | null,
   pixKey: null as ReturnType<typeof pixInput> | null,
@@ -45,7 +45,9 @@ describe('supplier.mapper — supplierToInsert', () => {
     const row = supplierToInsert(makeActive({ bankAccount: bankInput(), pixKey: null }), NOW);
     assert.equal(row.active, true);
     assert.equal(row.deactivatedAt, null);
-    assert.equal(row.cnpj, '11222333000181');
+    assert.equal(row.document, '11222333000181');
+    assert.equal(row.corporateName, 'Fornecedor X LTDA');
+    assert.equal(row.fantasyName, 'FX');
     assert.equal(row.bankAccountBank, '001');
     assert.equal(row.bankAccountAgency, '0001-2');
     assert.equal(row.bankAccountNumber, '123456');
@@ -78,7 +80,7 @@ describe('supplier.mapper — supplierFromRow', () => {
     id: '7f3a1234-5678-4abc-9def-fedcba987654',
     name: 'Fornecedor X',
     email: 'contato@fornecedor.com.br',
-    cnpj: '11222333000181',
+    document: '11222333000181',
     corporateName: 'Fornecedor X LTDA',
     fantasyName: 'FX',
     serviceCategory: 'INFORMATICA',
@@ -141,7 +143,7 @@ describe('supplier.mapper — supplierFromRow', () => {
     assert.equal(isOk(back), true);
     if (back.ok) {
       assert.equal(back.value.id, s.id);
-      assert.equal(back.value.cnpj, s.cnpj);
+      assert.deepEqual(back.value.identity, s.identity);
       assert.equal(back.value.bankAccount?.accountNumber, '123456');
     }
   });
@@ -161,8 +163,10 @@ describe('supplier.mapper — supplierFromRow', () => {
     assert.equal(isErr(supplierFromRow({ ...bankRow, id: 'not-a-uuid' })), true);
   });
 
-  it('rejeita cnpj inválido na row', () => {
-    assert.equal(isErr(supplierFromRow({ ...bankRow, cnpj: '11222333000180' })), true);
+  it('rejeita documento inválido na row', () => {
+    const r = supplierFromRow({ ...bankRow, document: '11222333000180' });
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'supplier-mapper-invalid-document');
   });
 
   it('rejeita row sem destino de pagamento (bank e pix nulos)', () => {

@@ -25,7 +25,7 @@ const buildActive = (cnpjRaw = '11222333000181'): SupplierAggregate => {
     id: '7f3a1234-5678-4abc-9def-fedcba987654' as never,
     name: 'Fornecedor X LTDA',
     email: 'contato@fornecedor.com.br',
-    cnpj: cnpjRaw,
+    document: cnpjRaw,
     corporateName: 'Fornecedor X LTDA',
     fantasyName: 'FX',
     serviceCategory: 'INFORMATICA',
@@ -43,7 +43,7 @@ describe('supplierEventsToOutboxMessages', () => {
     const event: SupplierEvent = {
       type: 'SupplierRegistered',
       supplierId: supplier.id,
-      cnpj: supplier.cnpj,
+      document: supplier.identity.document,
       occurredAt: REGISTERED_AT,
     };
 
@@ -85,7 +85,7 @@ describe('supplierEventsToOutboxMessages', () => {
     const payload = JSON.parse(m.payload) as Record<string, unknown>;
     assert.equal(payload['supplierRef'], String(supplier.id));
     assert.equal(payload['name'], supplier.name);
-    assert.equal(payload['document'], String(supplier.cnpj));
+    assert.equal(payload['document'], Supplier.documentOf(supplier));
     assert.equal(payload['occurredAt'], editedAt.toISOString());
   });
 
@@ -115,7 +115,7 @@ describe('supplierEventsToOutboxMessages', () => {
       {
         type: 'SupplierRegistered',
         supplierId: supplier.id,
-        cnpj: supplier.cnpj,
+        document: supplier.identity.document,
         occurredAt: REGISTERED_AT,
       },
       { type: 'SupplierDeactivated', supplierId: supplier.id, occurredAt: REGISTERED_AT },
@@ -137,7 +137,7 @@ describe('supplierEventsToOutboxMessages', () => {
       {
         type: 'SupplierRegistered',
         supplierId: supplier.id,
-        cnpj: supplier.cnpj,
+        document: supplier.identity.document,
         occurredAt: REGISTERED_AT,
       },
       { type: 'SupplierEdited', supplierId: supplier.id, occurredAt: REGISTERED_AT },

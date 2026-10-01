@@ -9,6 +9,7 @@ import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { openPartnersMysql } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleSupplierStore } from '../adapters/persistence/repos/supplier-repository.drizzle.ts';
+import { documentOf } from '../domain/supplier/supplier.ts';
 
 export type SupplierProjectionRecord = Readonly<{
   supplierRef: string;
@@ -30,7 +31,7 @@ export const listSuppliersForProjection = async (
       listed.value.map((supplier) => ({
         supplierRef: String(supplier.id),
         name: supplier.name,
-        document: String(supplier.cnpj),
+        document: documentOf(supplier),
       })),
     );
   } finally {

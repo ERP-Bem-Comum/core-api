@@ -2,7 +2,7 @@
  * SUPPLIERS-HTTP-EDIT — W0 (RED) — PUT /api/v1/suppliers/:id com RBAC elevado p/ campo vital.
  *
  * DEVE FALHAR: PUT, `editSupplier` no composition, `hasPermission` no SuppliersHttpHooks e
- * `updateSupplierBodySchema` ainda não existem. GREEN no W1. Vital = cnpj; payment-target é
+ * `updateSupplierBodySchema` ainda não existem. GREEN no W1. Vital = documento (CPF/CNPJ); payment-target é
  * editável via `supplier:write` (não-vital). POST→PUT no mesmo writer (memory).
  */
 
@@ -32,7 +32,7 @@ const CNPJ_B = '11444777000161';
 const body = (over: Record<string, unknown> = {}) => ({
   name: 'Fornecedor X',
   email: 'contato@fornecedor.com.br',
-  cnpj: CNPJ_A,
+  document: CNPJ_A,
   corporateName: 'Fornecedor X LTDA',
   fantasyName: 'FX',
   serviceCategory: 'INFORMATICA',
@@ -108,7 +108,7 @@ const create = async (
     method: 'POST',
     url: '/api/v1/suppliers',
     headers: { authorization: `Bearer ${token}` },
-    payload: body({ cnpj, email: `c${cnpj}@fornecedor.com.br` }),
+    payload: body({ document: cnpj, email: `c${cnpj}@fornecedor.com.br` }),
   });
   return (res.headers['location'] ?? '').slice('/api/v1/suppliers/'.length);
 };
@@ -157,7 +157,7 @@ describe('SUPPLIERS-HTTP-EDIT — PUT /api/v1/suppliers/:id', () => {
     await teardown();
   });
 
-  it('CA: write, sem mudar cnpj (muda name + troca payment p/ pix) -> 200', async () => {
+  it('CA: write, sem mudar documento (muda name + troca payment p/ pix) -> 200', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const id = await create(app, token, CNPJ_A);
@@ -175,28 +175,34 @@ describe('SUPPLIERS-HTTP-EDIT — PUT /api/v1/suppliers/:id', () => {
     await teardown();
   });
 
-  it('CA: write, mudando cnpj -> 403 (sensitive-forbidden)', async () => {
+  it('CA: write, mudando documento -> 403 (sensitive-forbidden)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const id = await create(app, token, CNPJ_A);
-    assert.equal(await put(app, token, id, body({ cnpj: CNPJ_B })).then((r) => r.statusCode), 403);
+    assert.equal(
+      await put(app, token, id, body({ document: CNPJ_B })).then((r) => r.statusCode),
+      403,
+    );
     await teardown();
   });
 
-  it('CA: director, mudando cnpj -> 200; cnpj novo já usado -> 409', async () => {
+  it('CA: director, mudando documento -> 200; documento novo já usado -> 409', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, DIRECTOR_EMAIL);
     const id = await create(app, token, CNPJ_A);
-    assert.equal(await put(app, token, id, body({ cnpj: CNPJ_B })).then((r) => r.statusCode), 200);
+    assert.equal(
+      await put(app, token, id, body({ document: CNPJ_B })).then((r) => r.statusCode),
+      200,
+    );
     const other = await create(app, token, CNPJ_A); // CNPJ_A livre de novo (id mudou p/ B)
     assert.equal(
-      await put(app, token, other, body({ cnpj: CNPJ_B })).then((r) => r.statusCode),
+      await put(app, token, other, body({ document: CNPJ_B })).then((r) => r.statusCode),
       409,
     );
     await teardown();
   });
 
-  it('CA: sem payment target -> 422; email inválido -> 422; cnpj curto -> 400', async () => {
+  it('CA: sem payment target -> 422; email inválido -> 422; documento curto -> 400', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const id = await create(app, token, CNPJ_A);
@@ -207,7 +213,10 @@ describe('SUPPLIERS-HTTP-EDIT — PUT /api/v1/suppliers/:id', () => {
       422,
     );
     assert.equal(await put(app, token, id, body({ email: 'nope' })).then((r) => r.statusCode), 422);
-    assert.equal(await put(app, token, id, body({ cnpj: '123' })).then((r) => r.statusCode), 400);
+    assert.equal(
+      await put(app, token, id, body({ document: '123' })).then((r) => r.statusCode),
+      400,
+    );
     await teardown();
   });
 });

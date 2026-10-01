@@ -13,6 +13,7 @@
 
 import { newUuid } from '#src/shared/utils/id.ts';
 import type { SupplierEvent } from '#src/modules/partners/domain/supplier/events.ts';
+import { documentOf } from '#src/modules/partners/domain/supplier/supplier.ts';
 import type { Supplier } from '#src/modules/partners/domain/supplier/types.ts';
 import type { OutboxMessage } from '#src/modules/partners/application/ports/outbox.ts';
 
@@ -43,7 +44,8 @@ const buildPayload = (
 ): SupplierIntegrationPayload => ({
   supplierRef: String(supplier.id),
   name: supplier.name,
-  document: String(supplier.cnpj),
+  // CPF ou CNPJ (#1022). O campo já se chamava `document` (ADR-0043): o consumidor não muda.
+  document: documentOf(supplier),
   occurredAt: event.occurredAt.toISOString(),
 });
 

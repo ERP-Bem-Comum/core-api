@@ -1034,7 +1034,7 @@ const makeDeps = (
   // const p/ narrow no closure do resolveSupplierByCnpj (método opcional no port). #FIN-OCR-AUTOFILL:
   // só quando o partners está disponível (driver mysql); memory → sem resolução (seleção manual). Um
   // closure compartilhado por ingest (#560) e parse (#580).
-  const resolveSupplierId = pools.contractorReadPort?.findSupplierIdByCnpj;
+  const resolveSupplierId = pools.contractorReadPort?.findSupplierIdByDocument;
   const resolveSupplierByCnpj =
     resolveSupplierId !== undefined
       ? async (taxId: string) => {

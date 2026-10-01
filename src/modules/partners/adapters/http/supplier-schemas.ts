@@ -8,6 +8,8 @@
 
 import * as z from 'zod/v4';
 
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
+
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5;
 
@@ -61,17 +63,32 @@ const pixKeySchema = z.object({
   key: z.string(),
 });
 
-/** Detalhe — espelha o schema `Supplier` legado. `id` UUID do core; `legacyId` int antigo. */
+/**
+ * Detalhe — espelha o schema `Supplier` legado. `id` UUID do core; `legacyId` int antigo.
+ *
+ * Fornecedor pessoa física (#1022): `document` + `personType` são os campos novos (aditivos).
+ * `cnpj` segue na resposta como alias DEPRECATED de `document` por um ciclo, para o front atual
+ * não quebrar enquanto migra. Na PF, `corporateName`/`fantasyName` vêm `null` — o campo não
+ * existe para pessoa física, e `null` é como o JSON diz "ausente" (nunca sentinela).
+ */
 export const supplierDetailSchema = z.object({
   id: z.uuid(),
   legacyId: z.number().int().nullable(),
   name: z.string(),
   email: z.string(),
-  cnpj: z
-    .string()
-    .meta({ description: 'CNPJ — 14 caracteres sem máscara, alfanumérico (ADR-0044)' }),
-  corporateName: z.string(),
-  fantasyName: z.string(),
+  document: z.string().meta({
+    description:
+      'CPF (11 caracteres numéricos, PF) ou CNPJ (14 caracteres alfanuméricos, PJ — ADR-0044), sem máscara',
+  }),
+  personType: z.enum(['PF', 'PJ']).meta({
+    description: 'Tipo de pessoa, derivado do documento (não é gravado): CPF → PF, CNPJ → PJ',
+  }),
+  cnpj: z.string().meta({
+    deprecated: true,
+    description: 'DEPRECATED — alias de `document` por um ciclo (#1022). Usar `document`.',
+  }),
+  corporateName: z.string().nullable().meta({ description: 'Razão social — `null` na PF' }),
+  fantasyName: z.string().nullable().meta({ description: 'Nome fantasia — `null` na PF' }),
   serviceCategory: z.string(),
   bankAccount: bankAccountSchema.nullable(),
   pixKey: pixKeySchema.nullable(),
@@ -120,26 +137,73 @@ const pixKeyInputSchema = z.object({
   key: z.string(),
 });
 
+// Shape do documento na borda: 11 (CPF) ou 14 (CNPJ) caracteres alfanuméricos — SEM máscara. O
+// alfanumérico não é enfeite: só com o tamanho, um CPF mascarado (`123.456.789-09`, 14 caracteres)
+// passava como se fosse CNPJ sem máscara, enquanto um CNPJ mascarado (18) caía em 400 — máscara
+// aceita para um documento e recusada para o outro. O DV e a escolha CPF × CNPJ são do domínio
+// (`SupplierDocument.parse` → 422 `invalid-supplier-document`).
+const supplierDocumentInputSchema = z
+  .string()
+  .refine(
+    (v) =>
+      /^[0-9A-Za-z]+$/.test(v) &&
+      (v.length === SupplierDocument.CPF_LENGTH || v.length === SupplierDocument.CNPJ_LENGTH),
+    { message: 'documento deve ter 11 (CPF) ou 14 (CNPJ) caracteres alfanuméricos, sem máscara' },
+  );
+
 /**
  * Body do POST /suppliers. Espelha `CreateSupplier` legado. A invariante "ao menos um
  * payment target" é do domínio (ausência de ambos → 422), não do Zod. `serviceCategory`
  * e `pixKey.keyType` como string (validados no domínio).
+ *
+ * Fornecedor pessoa física (#1022): `document` aceita CPF ou CNPJ. `cnpj` continua aceito como
+ * alias DEPRECATED por um ciclo, para o backend subir antes do front sem quebrar a tela atual —
+ * exige-se um dos dois, e iguais se vierem ambos. `corporateName`/`fantasyName` deixam de ser
+ * obrigatórios no shape: quem decide é o documento, no domínio (PF preenchido → 422; PJ sem → 422).
  */
-export const createSupplierBodySchema = z.object({
-  name: z.string().min(1),
-  email: z.string().min(1),
-  cnpj: z.string().length(14).meta({
-    description: 'CNPJ — 14 caracteres sem máscara, alfanumérico; DV validado no domínio',
-  }),
-  corporateName: z.string().min(1),
-  fantasyName: z.string().min(1),
-  serviceCategory: z.string().min(1),
-  bankAccount: bankAccountInputSchema.nullable().default(null),
-  pixKey: pixKeyInputSchema.nullable().default(null),
-  // Avaliação opcional. Domínio é autoridade do conjunto (rating inválido → 422).
-  serviceRating: z.string().nullable().default(null),
-  ratingComment: z.string().nullable().default(null),
-});
+export const createSupplierBodySchema = z
+  .object({
+    name: z.string().min(1),
+    email: z.string().min(1),
+    document: supplierDocumentInputSchema.optional().meta({
+      description:
+        'CPF (11 caracteres numéricos) ou CNPJ (14 caracteres alfanuméricos), sem máscara',
+    }),
+    cnpj: supplierDocumentInputSchema.optional().meta({
+      deprecated: true,
+      description: 'DEPRECATED — alias de `document` por um ciclo (#1022). Usar `document`.',
+    }),
+    corporateName: z.string().nullable().default(null),
+    fantasyName: z.string().nullable().default(null),
+    serviceCategory: z.string().min(1),
+    bankAccount: bankAccountInputSchema.nullable().default(null),
+    pixKey: pixKeyInputSchema.nullable().default(null),
+    // Avaliação opcional. Domínio é autoridade do conjunto (rating inválido → 422).
+    serviceRating: z.string().nullable().default(null),
+    ratingComment: z.string().nullable().default(null),
+  })
+  .superRefine((body, ctx) => {
+    if (body.document === undefined && body.cnpj === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['document'],
+        message: 'informe `document` (ou o alias deprecated `cnpj`)',
+      });
+    } else if (
+      body.document !== undefined &&
+      body.cnpj !== undefined &&
+      body.document !== body.cnpj
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cnpj'],
+        message: '`cnpj` é alias de `document`: os dois, se vierem, precisam ser iguais',
+      });
+    }
+  })
+  // Resolve o alias: daqui para dentro só existe `document`. O `?? ''` é inalcançável (o
+  // superRefine acima exige um dos dois) e, se um dia não for, o domínio o recusa com 422.
+  .transform(({ cnpj, document, ...rest }) => ({ ...rest, document: document ?? cnpj ?? '' }));
 
 export type CreateSupplierBody = z.infer<typeof createSupplierBodySchema>;
 

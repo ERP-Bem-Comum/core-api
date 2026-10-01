@@ -28,7 +28,7 @@ const NOPERM_EMAIL = 'sem.permissao@example.com';
 const VALID_BODY = {
   name: 'Fornecedor X',
   email: 'contato@fornecedor.com.br',
-  cnpj: '11222333000181',
+  document: '11222333000181',
   corporateName: 'Fornecedor X LTDA',
   fantasyName: 'FX',
   serviceCategory: 'INFORMATICA',
@@ -141,10 +141,19 @@ describe('SUPPLIERS-HTTP-REGISTER (S2) — POST /api/v1/suppliers', () => {
     await teardown();
   });
 
-  it('CA: shape inválido (cnpj curto) -> 400 (Zod)', async () => {
+  it('CA: alias deprecated `cnpj` no lugar de `document` -> 201 (#1022, um ciclo)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    const res = await postSupplier(app, token, { ...VALID_BODY, cnpj: '123' });
+    const { document, ...rest } = VALID_BODY;
+    const res = await postSupplier(app, token, { ...rest, cnpj: document });
+    assert.equal(res.statusCode, 201);
+    await teardown();
+  });
+
+  it('CA: shape inválido (documento curto) -> 400 (Zod)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const res = await postSupplier(app, token, { ...VALID_BODY, document: '123' });
     assert.equal(res.statusCode, 400);
     await teardown();
   });
@@ -152,7 +161,7 @@ describe('SUPPLIERS-HTTP-REGISTER (S2) — POST /api/v1/suppliers', () => {
   it('CA: CNPJ 14-díg DV inválido -> 422 (domínio)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    const res = await postSupplier(app, token, { ...VALID_BODY, cnpj: '11111111111111' });
+    const res = await postSupplier(app, token, { ...VALID_BODY, document: '11111111111111' });
     assert.equal(res.statusCode, 422);
     await teardown();
   });

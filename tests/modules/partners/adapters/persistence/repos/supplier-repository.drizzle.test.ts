@@ -10,7 +10,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
-import * as Cnpj from '#src/shared/kernel/cnpj.ts';
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import {
@@ -43,7 +43,7 @@ const buildActive = (
     id: SupplierId.generate(),
     name: 'Fornecedor X',
     email: 'contato@fornecedor.com.br',
-    cnpj: cnpjRaw,
+    document: cnpjRaw,
     corporateName: 'Fornecedor X LTDA',
     fantasyName: 'FX',
     serviceCategory: 'INFORMATICA',
@@ -86,7 +86,7 @@ if (integrationEnabled()) {
       const found = await repo.findById(s.id);
       assert.equal(isOk(found), true);
       if (found.ok && found.value !== null) {
-        assert.equal(found.value.cnpj, s.cnpj);
+        assert.deepEqual(found.value.identity, s.identity);
         assert.equal(found.value.status, 'Active');
         assert.equal(found.value.bankAccount?.accountNumber, '123456');
       }
@@ -104,13 +104,13 @@ if (integrationEnabled()) {
       }
     });
 
-    it('findByCnpj acha o persistido', async () => {
+    it('findByDocument acha o persistido', async () => {
       if (handle === null) return;
       const repo = createDrizzleSupplierStore(handle, clock);
       await repo.save(buildActive('11222333000181'), []);
-      const c = Cnpj.parse('11222333000181');
+      const c = SupplierDocument.parse('11222333000181');
       if (c.ok) {
-        const found = await repo.findByCnpj(c.value);
+        const found = await repo.findByDocument(c.value);
         assert.equal(isOk(found), true);
         if (found.ok) assert.notEqual(found.value, null);
       }
@@ -125,13 +125,13 @@ if (integrationEnabled()) {
       if (listed.ok) assert.equal(listed.value.length, 1);
     });
 
-    it('CNPJ duplicado (id distinto) → supplier-cnpj-duplicate', async () => {
+    it('CNPJ duplicado (id distinto) → supplier-document-duplicate', async () => {
       if (handle === null) return;
       const repo = createDrizzleSupplierStore(handle, clock);
       await repo.save(buildActive('11222333000181'), []);
       const dup = await repo.save(buildActive('11.222.333/0001-81'), []);
       assert.equal(isErr(dup), true);
-      if (!dup.ok) assert.equal(dup.error, 'supplier-cnpj-duplicate');
+      if (!dup.ok) assert.equal(dup.error, 'supplier-document-duplicate');
     });
   });
 
@@ -140,7 +140,7 @@ if (integrationEnabled()) {
     const registeredEvent = (s: ReturnType<typeof buildActive>): SupplierEvent => ({
       type: 'SupplierRegistered',
       supplierId: s.id,
-      cnpj: s.cnpj,
+      document: s.identity.document,
       occurredAt: clock.now(),
     });
 
@@ -165,7 +165,7 @@ if (integrationEnabled()) {
       const payload = JSON.parse(row.payload) as Record<string, unknown>;
       assert.equal(payload['supplierRef'], String(s.id));
       assert.equal(payload['name'], s.name);
-      assert.equal(payload['document'], String(s.cnpj));
+      assert.equal(payload['document'], Supplier.documentOf(s));
     });
 
     it('rollback da escrita → 0 rows de outbox (CNPJ duplicado aborta a tx)', async () => {
@@ -180,7 +180,7 @@ if (integrationEnabled()) {
       const dupSupplier = buildActive('11.222.333/0001-81');
       const dup = await repo.save(dupSupplier, [registeredEvent(dupSupplier)]);
       assert.equal(isErr(dup), true);
-      if (!dup.ok) assert.equal(dup.error, 'supplier-cnpj-duplicate');
+      if (!dup.ok) assert.equal(dup.error, 'supplier-document-duplicate');
 
       const outboxAfter = await handle.db.select().from(handle.schema.parOutbox);
       // Nenhuma row nova de outbox para o supplier duplicado (atomicidade).

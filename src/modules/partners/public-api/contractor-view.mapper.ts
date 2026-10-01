@@ -14,6 +14,7 @@
  * domínio mudou. A View reflete o domínio — agora de fato.
  */
 
+import { documentOf } from '../domain/supplier/supplier.ts';
 import type { Supplier } from '../domain/supplier/types.ts';
 import type { Financier } from '../domain/financier/types.ts';
 import type { Collaborator } from '../domain/collaborator/types.ts';
@@ -85,7 +86,7 @@ export const supplierToView = (supplier: Supplier, updatedAt: Date): SupplierVie
   id: supplier.id as unknown as string,
   name: supplier.name,
   email: supplier.email,
-  document: supplier.cnpj as unknown as string,
+  document: documentOf(supplier), // CPF (PF) ou CNPJ (PJ) — #1022
   serviceCategory: supplier.serviceCategory,
   bankAccount: supplier.bankAccount,
   pixKey: supplier.pixKey,

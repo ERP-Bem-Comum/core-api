@@ -10,6 +10,7 @@
  */
 
 import { ok, err, type Result } from '#src/shared/primitives/result.ts';
+import { documentOf } from '#src/modules/partners/domain/supplier/supplier.ts';
 import type { SupplierReadRecord } from '#src/modules/partners/application/ports/supplier-reader.ts';
 import type { FinancierReadRecord } from '#src/modules/partners/application/ports/financier-reader.ts';
 import type { CollaboratorReadRecord } from '#src/modules/partners/application/ports/collaborator-reader.ts';
@@ -59,7 +60,7 @@ const supplierItem = (r: SupplierReadRecord): PartnerListItem => ({
   type: 'supplier',
   id: r.supplier.id as unknown as string,
   name: r.supplier.name,
-  document: r.supplier.cnpj as unknown as string,
+  document: documentOf(r.supplier),
   active: r.supplier.status === 'Active',
 });
 
