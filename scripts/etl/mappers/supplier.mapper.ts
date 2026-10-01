@@ -12,6 +12,7 @@
  */
 
 import { type Result, ok, err, combine } from '#src/shared/primitives/result.ts';
+import { isValidCnpj } from '#src/shared/kernel/cnpj.ts';
 import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
@@ -122,11 +123,36 @@ const resolvePaymentTargets = (
 
 // CPF ou CNPJ na coluna legada `cnpj`. Inválido → quarentena com a tag de sempre (o campo de
 // origem segue sendo `cnpj`).
+//
+// ⚠️ CPF AMBÍGUO vai para quarentena, não para PF. Um CNPJ legado que perdeu os zeros à esquerda
+// (`000…` → 11 posições) e por acaso passa no DV de CPF seria migrado como pessoa física, com a
+// razão social real descartada e sem rastro. Se as 11 posições completadas com zeros formam um CNPJ
+// válido, o documento é ambíguo e a decisão volta para um humano (ADR-0070).
 const parseDocumentField = (
   raw: string,
 ): Result<SupplierDocument.SupplierDocument, QuarantineReason> => {
   const r = SupplierDocument.parse(raw);
-  return r.ok ? ok(r.value) : err({ tag: 'CnpjInvalid', field: 'cnpj', attempted: raw });
+  if (!r.ok) return err({ tag: 'CnpjInvalid', field: 'cnpj', attempted: raw });
+  if (
+    r.value.kind === 'cpf' &&
+    isValidCnpj(r.value.value.padStart(SupplierDocument.CNPJ_LENGTH, '0'))
+  ) {
+    return err({ tag: 'ExcludedByDecision', field: 'cnpj', decisionRef: 'ADR-0070' });
+  }
+  return ok(r.value);
+};
+
+// Nomes da PJ, obrigatórios. Usado também quando o documento é inválido: o legado é PJ por
+// padrão (coluna `cnpj`), e checar os nomes mesmo assim mantém a regra de juntar TODOS os erros
+// da linha numa quarentena só — senão quem corrige o documento descobre o nome numa 2ª rodada.
+const requireCompanyNames = (
+  row: LegacySupplierRow,
+): Result<readonly [string, string], readonly QuarantineReason[]> => {
+  const names = combine<readonly [string, string], QuarantineReason>([
+    requireField(row.corporateName, 'corporate_name'),
+    requireField(row.fantasyName, 'fantasy_name'),
+  ]);
+  return names.ok ? ok(names.value) : err(names.error);
 };
 
 // Razão social/nome fantasia que o domínio recebe. PF: `null` — o legado obrigava a preenchê-los
@@ -139,27 +165,26 @@ const identityFieldsFor = (
   switch (document.kind) {
     case 'cpf':
       return ok([null, null]);
-    case 'cnpj': {
-      const names = combine<readonly [string, string], QuarantineReason>([
-        requireField(row.corporateName, 'corporate_name'),
-        requireField(row.fantasyName, 'fantasy_name'),
-      ]);
-      return names.ok ? ok(names.value) : err(names.error);
-    }
+    case 'cnpj':
+      return requireCompanyNames(row);
   }
 };
 
 export const mapLegacySupplierRow = (row: LegacySupplierRow): MapperResult<SupplierEntity> => {
+  const documentField = parseDocumentField(row.cnpj);
   const fields = combine<
     readonly [string, string, SupplierDocument.SupplierDocument, ServiceCategoryType],
     QuarantineReason
   >([
     requireField(row.name, 'name'),
     requireEmail(row.email, 'email'),
-    parseDocumentField(row.cnpj),
+    documentField,
     parseServiceCategory(row.serviceCategory),
   ]);
-  const names = fields.ok ? identityFieldsFor(fields.value[2], row) : ok([null, null] as const);
+  // Os nomes dependem SÓ do documento: PF não os tem; PJ — ou documento inválido — os exige.
+  const names = documentField.ok
+    ? identityFieldsFor(documentField.value, row)
+    : requireCompanyNames(row);
 
   const targets = resolvePaymentTargets(row);
   const rating = translateServiceRating(row.serviceEvaluation);

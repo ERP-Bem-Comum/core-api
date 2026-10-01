@@ -309,6 +309,21 @@ describe('#1022 — fornecedor pessoa física (POST/GET/PUT /api/v1/suppliers)',
     }
   });
 
+  it('POST com documento mascarado → 400 para CPF e para CNPJ (a borda é sem máscara)', async () => {
+    // Um CPF mascarado tem 14 caracteres — o mesmo tamanho de um CNPJ sem máscara. Só o tamanho
+    // aceitaria a máscara para um documento e a recusaria para o outro.
+    const { app, login, teardown } = await makeApp();
+    try {
+      const token = await login(WRITER_EMAIL);
+      for (const document of ['123.456.789-09', '11.222.333/0001-81']) {
+        const res = await post(app, token, individualBody({ document }));
+        assert.equal(res.statusCode, 400, `document=${document}`);
+      }
+    } finally {
+      await teardown();
+    }
+  });
+
   it('CPF duplicado → 409 register-supplier-document-duplicate', async () => {
     const { app, login, teardown } = await makeApp();
     try {

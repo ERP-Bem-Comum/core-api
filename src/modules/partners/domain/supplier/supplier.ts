@@ -55,7 +55,7 @@ const presentText = (raw: string | null): string | null => {
  *   - CNPJ: os dois são obrigatórios, como sempre foram.
  * Branco conta como ausente nos dois lados — a tela desativa os campos e pode mandar `""`.
  */
-export const identityFrom = (
+const identityFrom = (
   document: SupplierDocument.SupplierDocument,
   corporateNameRaw: string | null,
   fantasyNameRaw: string | null,
@@ -84,9 +84,47 @@ const parseIdentity = (
   return identityFrom(document.value, corporateName, fantasyName);
 };
 
+/**
+ * Identidade de dado JÁ PERSISTIDO — a regra do CHECK do banco, e só ela: PF ⟺ os dois nomes
+ * `null`. NÃO aplica a exigência de "não-branco" da entrada (`identityFrom`): uma PJ gravada com
+ * razão social `''` por fora do domínio sempre reidratou, e passar a recusá-la derrubaria o
+ * `list()` inteiro por uma linha só. Validar entrada é papel de `register`/`edit`.
+ */
+const persistedIdentity = (
+  document: SupplierDocument.SupplierDocument,
+  corporateName: string | null,
+  fantasyName: string | null,
+): Result<SupplierIdentity, SupplierError> => {
+  switch (document.kind) {
+    case 'cpf':
+      if (corporateName !== null) return err('supplier-corporate-name-not-allowed-for-pf');
+      if (fantasyName !== null) return err('supplier-fantasy-name-not-allowed-for-pf');
+      return ok({ personType: 'individual', document });
+    case 'cnpj':
+      if (corporateName === null) return err('supplier-corporate-name-required');
+      if (fantasyName === null) return err('supplier-fantasy-name-required');
+      return ok({ personType: 'company', document, corporateName, fantasyName });
+  }
+};
+
 /** Documento canônico do fornecedor (CPF ou CNPJ, sem máscara). */
 export const documentOf = (supplier: Supplier): string =>
   SupplierDocument.toRaw(supplier.identity.document);
+
+/**
+ * Razão social e nome fantasia — só a PJ os tem; `null` na PF. Ponto único para os adapters
+ * (DTO, CSV, mapper, busca) traduzirem a ausência no que cada um usa (`null`, `''`, nada).
+ */
+export const companyNamesOf = (
+  identity: SupplierIdentity,
+): Readonly<{ corporateName: string; fantasyName: string }> | null => {
+  switch (identity.personType) {
+    case 'individual':
+      return null;
+    case 'company':
+      return { corporateName: identity.corporateName, fantasyName: identity.fantasyName };
+  }
+};
 
 export const register = (
   input: RegisterSupplierInput,
@@ -239,7 +277,7 @@ export const reactivate = (
 // Reconstrói o agregado a partir de dados persistidos (sem emitir evento). Reaplica
 // as invariantes: identidade PF × PJ; ao menos um destino de pagamento; Inactive exige deactivatedAt.
 export const rehydrate = (input: RehydrateSupplierInput): Result<Supplier, SupplierError> => {
-  const identity = identityFrom(input.document, input.corporateName, input.fantasyName);
+  const identity = persistedIdentity(input.document, input.corporateName, input.fantasyName);
   if (!identity.ok) return identity;
 
   if (input.bankAccount === null && input.pixKey === null) {

@@ -7,7 +7,7 @@
  */
 
 import { type Result, ok } from '#src/shared/index.ts';
-import { documentOf } from '#src/modules/partners/domain/supplier/supplier.ts';
+import { companyNamesOf, documentOf } from '#src/modules/partners/domain/supplier/supplier.ts';
 import type { Supplier } from '#src/modules/partners/domain/supplier/types.ts';
 import type {
   SupplierRepository,
@@ -25,12 +25,8 @@ export type SupplierListFilter = Readonly<{
 // Nomes pesquisáveis do fornecedor. #288: apelido = fantasyName; razão social = corporateName —
 // que só a PJ tem (#1022).
 const searchableNames = (s: Supplier): readonly string[] => {
-  switch (s.identity.personType) {
-    case 'individual':
-      return [s.name];
-    case 'company':
-      return [s.name, s.identity.fantasyName, s.identity.corporateName];
-  }
+  const names = companyNamesOf(s.identity);
+  return names === null ? [s.name] : [s.name, names.fantasyName, names.corporateName];
 };
 
 // `search` casa os nomes (substring case-insensitive) OU o documento (CPF ou CNPJ).

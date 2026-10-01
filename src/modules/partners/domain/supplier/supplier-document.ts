@@ -20,8 +20,9 @@ export type SupplierDocument = CpfDocument | CnpjDocument;
 
 export type SupplierDocumentError = 'invalid-supplier-document';
 
-const CPF_LENGTH = 11;
-const CNPJ_LENGTH = 14;
+/** Tamanhos da forma canônica, sem máscara — fonte única, reusada pela borda HTTP. */
+export const CPF_LENGTH = 11;
+export const CNPJ_LENGTH = 14;
 
 // Mesma máscara que os VOs do kernel removem (`.` `-` `/` espaços).
 const stripMask = (raw: string): string => raw.replace(/[.\-/\s]/g, '');

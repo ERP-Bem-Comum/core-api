@@ -193,4 +193,19 @@ describe('Supplier.rehydrate — identidade persistida (#1022)', () => {
     assert.ok(!r.ok);
     assert.equal(r.error, 'supplier-corporate-name-not-allowed-for-pf');
   });
+
+  it('PJ persistida com razão social em branco reidrata (o CHECK só exige NOT NULL)', () => {
+    // Recusar aqui derrubaria o `list()` inteiro por uma linha gravada por fora do domínio.
+    // Exigir "não-branco" é da ENTRADA (register/edit), não da leitura.
+    const cnpj = SupplierDocument.parse('11222333000181');
+    assert.ok(cnpj.ok);
+    const r = Supplier.rehydrate({
+      ...base(),
+      document: cnpj.value,
+      corporateName: '',
+      fantasyName: ' ',
+    });
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.equal(r.value.identity.personType, 'company');
+  });
 });

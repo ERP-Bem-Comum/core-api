@@ -8,6 +8,8 @@
 
 import * as z from 'zod/v4';
 
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
+
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5;
 
@@ -135,16 +137,19 @@ const pixKeyInputSchema = z.object({
   key: z.string(),
 });
 
-const CPF_LENGTH = 11;
-const CNPJ_LENGTH = 14;
-
-// Shape do documento na borda: 11 (CPF) ou 14 (CNPJ) caracteres, sem máscara. O DV e a escolha
-// CPF × CNPJ são do domínio (`SupplierDocument.parse` → 422 `invalid-supplier-document`).
+// Shape do documento na borda: 11 (CPF) ou 14 (CNPJ) caracteres alfanuméricos — SEM máscara. O
+// alfanumérico não é enfeite: só com o tamanho, um CPF mascarado (`123.456.789-09`, 14 caracteres)
+// passava como se fosse CNPJ sem máscara, enquanto um CNPJ mascarado (18) caía em 400 — máscara
+// aceita para um documento e recusada para o outro. O DV e a escolha CPF × CNPJ são do domínio
+// (`SupplierDocument.parse` → 422 `invalid-supplier-document`).
 const supplierDocumentInputSchema = z
   .string()
-  .refine((v) => v.length === CPF_LENGTH || v.length === CNPJ_LENGTH, {
-    message: 'documento deve ter 11 (CPF) ou 14 (CNPJ) caracteres, sem máscara',
-  });
+  .refine(
+    (v) =>
+      /^[0-9A-Za-z]+$/.test(v) &&
+      (v.length === SupplierDocument.CPF_LENGTH || v.length === SupplierDocument.CNPJ_LENGTH),
+    { message: 'documento deve ter 11 (CPF) ou 14 (CNPJ) caracteres alfanuméricos, sem máscara' },
+  );
 
 /**
  * Body do POST /suppliers. Espelha `CreateSupplier` legado. A invariante "ao menos um

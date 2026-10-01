@@ -106,11 +106,18 @@ A remoção do alias `cnpj` é decisão do próximo ciclo, quando o front (`web-
 - **CNAB/VAN:** sem mudança de código. `financial/domain/payout/inscription.ts` já deriva o tipo de
   inscrição do tamanho (11 → `1`).
 - **Leitura de nota (OCR):** `findSupplierIdByCnpj` vira `findSupplierIdByDocument` e resolve CPF
-  também — o emitente de um RPA é pessoa física.
+  também — o emitente de um RPA é pessoa física. ⚠️ Risco aceito: a cascata do leitor de PDF tem
+  fallbacks sobre o texto inteiro, e um CPF que não é do emitente (tomador, representante) e que
+  coincida com o de um fornecedor PF passa a **pré-selecioná-lo**. Antes, `Cnpj.parse` descartava
+  todo valor de 11 posições. É pré-seleção, revisável na tela, não lançamento; se aparecer na
+  prática, a correção é restringir o resolver ao campo do emitente, não recusar CPF.
 - **ETL legada:** a coluna legada `cnpj` pode trazer CPF; antes ia para quarentena (`CnpjInvalid`),
   agora entra como PF. O legado tinha razão social/nome fantasia `NOT NULL`, então a PF chega com os
   dois preenchidos à força; o ACL os **descarta** para PF, porque ali eles são enchimento de
-  formulário, não dado da pessoa. Se a ETL já rodou e pôs fornecedores PF em quarentena, eles
+  formulário, não dado da pessoa. **Exceção: CPF ambíguo vai para quarentena** (`ExcludedByDecision`,
+  ADR-0070) — se as 11 posições completadas com zeros formam um CNPJ válido, pode ser um CNPJ
+  legado que perdeu os zeros à esquerda (pelos pesos do módulo 11, só acontece com documento
+  iniciado em `00`), e importá-lo como PF descartaria a razão social real. Se a ETL já rodou e pôs fornecedores PF em quarentena, eles
   precisam ser recarregados depois desta entrega (#1022 §6).
 - **CSV:** a coluna do documento passa a se chamar `CPF/CNPJ`; razão social e nome fantasia saem
   vazios na PF.

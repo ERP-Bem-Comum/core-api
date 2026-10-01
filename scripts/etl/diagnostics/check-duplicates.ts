@@ -31,7 +31,13 @@ type DuplicateCheck = Readonly<{
 
 // As chaves que o destino impõe como UNIQUE (confirmadas na integração partners/auth).
 const CHECKS: readonly DuplicateCheck[] = [
-  { table: 'suppliers', column: 'cnpj', normalize: 'digits', targetUnique: 'par_suppliers.cnpj' },
+  // Coluna legada `cnpj` (pode trazer CPF) → `par_suppliers.document` desde a migration 0020 (#1022).
+  {
+    table: 'suppliers',
+    column: 'cnpj',
+    normalize: 'digits',
+    targetUnique: 'par_suppliers.document',
+  },
   { table: 'financiers', column: 'cnpj', normalize: 'digits', targetUnique: 'par_financiers.cnpj' },
   {
     table: 'collaborators',

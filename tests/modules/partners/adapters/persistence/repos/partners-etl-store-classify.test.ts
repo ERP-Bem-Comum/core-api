@@ -65,9 +65,9 @@ describe('classifyProvisionError (PARTNERS-ETL-STORE-INTEGRITY-ERROR)', () => {
   });
 
   it('1062 numa UNIQUE secundaria de CNPJ -> integrity-violation (dado do legado, NAO infra)', () => {
-    // Arrange — mesma entidade (suppliers), mas o 1062 caiu no cnpj_idx, nao no legacy_id_idx
+    // Arrange — mesma entidade (suppliers), mas o 1062 caiu no document_idx, nao no legacy_id_idx
     const cause = mysql2DupError(
-      "Duplicate entry '11222333000181' for key 'par_suppliers_cnpj_idx'",
+      "Duplicate entry '11222333000181' for key 'par_suppliers_document_idx'",
     );
     // Act
     const klass = classifyProvisionError(cause, LEGACY_IDX);
@@ -132,7 +132,7 @@ describe('classifyProvisionError (PARTNERS-ETL-STORE-INTEGRITY-ERROR)', () => {
   it('o reason que cruza a public-api e PII-free: classe nao carrega o valor duplicado', () => {
     // Arrange — sqlMessage contem o CNPJ (PII)
     const pii = '11222333000181';
-    const cause = mysql2DupError(`Duplicate entry '${pii}' for key 'par_suppliers_cnpj_idx'`);
+    const cause = mysql2DupError(`Duplicate entry '${pii}' for key 'par_suppliers_document_idx'`);
     // Act
     const klass = classifyProvisionError(cause, LEGACY_IDX);
     // Assert — a classe e um literal kebab-case fixo, jamais o valor

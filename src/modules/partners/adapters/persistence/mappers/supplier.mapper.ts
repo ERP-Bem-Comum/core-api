@@ -36,17 +36,12 @@ export type SupplierMapperError =
 const identityColumns = (
   identity: SupplierIdentity,
 ): Pick<NewSupplierRow, 'document' | 'corporateName' | 'fantasyName'> => {
-  const document = SupplierDocument.toRaw(identity.document);
-  switch (identity.personType) {
-    case 'individual':
-      return { document, corporateName: null, fantasyName: null };
-    case 'company':
-      return {
-        document,
-        corporateName: identity.corporateName,
-        fantasyName: identity.fantasyName,
-      };
-  }
+  const names = Supplier.companyNamesOf(identity);
+  return {
+    document: SupplierDocument.toRaw(identity.document),
+    corporateName: names?.corporateName ?? null,
+    fantasyName: names?.fantasyName ?? null,
+  };
 };
 
 export const supplierToInsert = (supplier: SupplierEntity, now: Date): NewSupplierRow => {
