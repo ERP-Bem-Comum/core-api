@@ -59,8 +59,8 @@ claims:
       holds_in: [core-api]
       absent_in: []
       evidence:
-        - 'compose.yaml:95 — serviço minio declarado'
-        - 'compose.yaml:98 — imagem minio/minio pinada por DIGEST (sha256), mais estrito que o exemplo do ADR, que usava :latest'
+        - 'compose.yaml:99 — serviço minio declarado'
+        - 'compose.yaml:102 — imagem pinada por DIGEST (sha256), mais estrito que o exemplo do ADR, que usava :latest; desde o ADR-0071 é o fork pgsty/silo, porque minio/minio sumiu do Docker Hub (#1026)'
         - 'compose.yaml:15 — comentário de uso: docker compose up -d sobe minio + mysql'
       verify: |
         grep -n "minio" compose.yaml | head -5
@@ -223,7 +223,7 @@ claims:
       holds_in: [core-api]
       absent_in: []
       evidence:
-        - 'compose.yaml:98 — image minio/minio:latest@sha256:14cea49... referenciada do registry, não copiada'
+        - 'compose.yaml:102 — image pgsty/silo:latest@sha256:635197cb... referenciada do registry, não copiada. Desde o ADR-0071 não é mais a imagem OFICIAL minio/minio (apagada do Docker Hub, #1026), e sim o fork Silo, AGPLv3 como o MinIO; o essencial da cláusula — referenciar, não copiar nem redistribuir — segue valendo'
         - 'ausência: nenhum binário nem código-fonte de MinIO no repositório'
         - 'nota: o Dockerfile do app não inclui MinIO — o serviço vive só no compose de dev'
       verify: |

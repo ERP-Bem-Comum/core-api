@@ -123,7 +123,8 @@ services:
       start_period: 10s
 
   minio:
-    image: minio/minio:RELEASE.2026-04-22T00-00-00Z   # pinar — nunca `latest`
+    # Fork Silo (ADR-0071): minio/minio sumiu do Docker Hub. Pinar por digest — nunca `latest` solto.
+    image: pgsty/silo:latest@sha256:<digest do índice multi-arch>
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
