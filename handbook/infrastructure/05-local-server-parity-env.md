@@ -265,8 +265,10 @@ O `minio-bootstrap` cria só o `contracts-documents`. Para o logo de programa, c
 
 ```bash
 # via console web: http://localhost:9001  (dev-access-key / dev-secret-key-min-8-chars) → Create Bucket
-# ou via mc dentro da rede do compose:
-docker run --rm --network core-api minio/mc sh -c "\
+# ou via mc dentro da rede do compose. Imagem = a mesma do `minio-bootstrap` (ADR-0071: `minio/mc`
+# sumiu do Docker Hub); o entrypoint dela é `mc`, daí o `--entrypoint /bin/sh`:
+docker run --rm --network core-api --entrypoint /bin/sh \
+  pgsty/mc:latest@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd -c "\
   mc alias set local http://minio:9000 dev-access-key dev-secret-key-min-8-chars && \
   mc mb --ignore-existing local/program-logos"
 ```

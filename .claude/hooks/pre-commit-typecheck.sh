@@ -40,18 +40,23 @@ echo "" >&2
 FAILED=0
 
 # ---------------------------------------------------------------------------
-# Resolver pnpm (preferido) ou fallback npx
+# Resolver pnpm — sem fallback: ausente, o gate falha fechado (ver o else de run_pnpm_script)
 # ---------------------------------------------------------------------------
-PNPM_CMD=""
+#
+# Chamada direta, com `--dir` entre aspas — NÃO um comando guardado em string. A versão anterior
+# fazia `PNPM_CMD="pnpm --dir=${CORE_API_DIR} --silent"` e expandia `${PNPM_CMD}` sem aspas: num
+# clone com espaço no caminho ("Área de trabalho") o `--dir` partia em dois e os quatro gates
+# morriam com `ENOENT ... lstat '/home/.../Área'`.
+HAVE_PNPM=0
 if command -v pnpm >/dev/null 2>&1; then
-  PNPM_CMD="pnpm --dir=${CORE_API_DIR} --silent"
+  HAVE_PNPM=1
 fi
 
 run_pnpm_script() {
   local script="$1"
   local label="$2"
-  if [ -n "${PNPM_CMD}" ]; then
-    if ! ${PNPM_CMD} "${script}" 2>&1 | sed 's/^/    /' >&2; then
+  if [ "${HAVE_PNPM}" -eq 1 ]; then
+    if ! pnpm --dir="${CORE_API_DIR}" --silent "${script}" 2>&1 | sed 's/^/    /' >&2; then
       echo "❌ ${label} falhou" >&2
       FAILED=1
     else

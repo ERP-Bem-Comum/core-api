@@ -9,7 +9,8 @@
  *      em texto claro nas env vars.
  * CA2: secrets `minio_root_user` / `minio_root_password` declarados no bloco
  *      top-level e referenciados nos serviços minio e minio-bootstrap.
- * CA3: imagem `minio/mc` referenciada com @sha256: (digest pin — ADR-0011).
+ * CA3: imagem do cliente `mc` do bootstrap referenciada com @sha256: (digest pin — ADR-0011).
+ *      Hoje é `pgsty/mc` (ADR-0071 — `minio/mc` sumiu do Docker Hub); o teste cobra o PAPEL.
  * CA4: entrypoint do minio-bootstrap não contém a string literal da senha;
  *      lê credenciais via $(cat /run/secrets/...) em runtime.
  * CA5: serviço `app` (profile `app`) declara healthcheck explícito.
@@ -197,18 +198,22 @@ describe(
   },
 );
 
-// ─── CA-3: minio/mc pinado por digest ─────────────────────────────────────
-describe('issue #51 — CA-3: minio/mc pinado por digest sha256 (ADR-0011)', { skip }, () => {
-  it('CA-3: imagem do minio-bootstrap contém @sha256:', () => {
-    const cfg = configWithApp();
-    const image = cfg?.services?.['minio-bootstrap']?.image ?? '';
-    assert.match(
-      image,
-      /@sha256:[0-9a-f]{64}/,
-      `imagem do minio-bootstrap não está pinada por digest. Imagem atual: "${image}". Use @sha256:<digest>.`,
-    );
-  });
-});
+// ─── CA-3: cliente mc do bootstrap pinado por digest ──────────────────────
+describe(
+  'issue #51 — CA-3: cliente mc do bootstrap pinado por digest sha256 (ADR-0011)',
+  { skip },
+  () => {
+    it('CA-3: imagem do minio-bootstrap contém @sha256:', () => {
+      const cfg = configWithApp();
+      const image = cfg?.services?.['minio-bootstrap']?.image ?? '';
+      assert.match(
+        image,
+        /@sha256:[0-9a-f]{64}/,
+        `imagem do minio-bootstrap não está pinada por digest. Imagem atual: "${image}". Use @sha256:<digest>.`,
+      );
+    });
+  },
+);
 
 // ─── CA-4: entrypoint do bootstrap não interpola senha em texto ───────────
 describe(
