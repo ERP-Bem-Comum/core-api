@@ -167,7 +167,7 @@ describe('CA-4 — o gate roda também quando o commit só apaga ou renomeia um 
 describe('CA-4 — gate que não pôde rodar não aprova (fail-closed)', () => {
   it('o ramo "pnpm ausente" marca falha em vez de seguir', () => {
     const content = readFileSync(PRE_COMMIT_SCRIPT, 'utf-8');
-    // O else do `if [ -n "${PNPM_CMD}" ]` é o caminho sem pnpm.
+    // O else do `if [ "${HAVE_PNPM}" -eq 1 ]` é o caminho sem pnpm.
     const elseBranch = content.slice(content.indexOf('  else'), content.indexOf('\n}'));
     assert.match(
       elseBranch,
@@ -226,7 +226,9 @@ describe('CA-4 — git commit é recusado com o gate vermelho e aceito com o gat
             'format:check': noop,
             lint: noop,
             test: noop,
-            typecheck: `${TSC_BIN} --noEmit`,
+            // Entre aspas: o script roda em `sh`, e um clone num caminho com espaço ("Área de
+            // trabalho") partia o caminho do tsc em dois — o GREEN falhava por ambiente, não por gate.
+            typecheck: `"${TSC_BIN}" --noEmit`,
             ...scriptOverrides,
           },
         },
