@@ -76,18 +76,21 @@ if [ "$needs_gate" -eq 0 ]; then
 fi
 
 # ── pré-condição: o gate precisa do pnpm no PATH do HOOK ─────────────────────
-# O hook roda em shell não-interativo: um pnpm que só existe no PATH montado pelo nvm (ou por
-# outro init de shell interativo) não está aqui. Sem esta checagem, o "comando não encontrado"
-# saía como QUATRO vermelhos — o gate classificando falta de ferramenta como regressão de código.
-# Continua bloqueando (nada foi verificado), mas diz a causa verdadeira.
+# O hook roda em shell não-interativo: um pnpm que só existe no PATH montado por um gerenciador de
+# versão (nvm, fnm…) ou por outro init de shell interativo não está aqui. Sem esta checagem, o
+# "comando não encontrado" saía como QUATRO vermelhos — o gate classificando falta de ferramenta
+# como regressão de código. Continua bloqueando (nada foi verificado), mas diz a causa verdadeira.
+# A mensagem manda ESCALAR, não consertar: o PATH é ambiente da máquina do humano, fora do repo, e
+# o agente que lê isto não deve sair alterando a home de ninguém. O PATH completo vai só ao log.
 if ! command -v pnpm >/dev/null 2>&1; then
   log "veredito: NÃO RODOU — \`pnpm\` não está no PATH do hook (PATH=${PATH})."
   {
     echo "🟠 GATE DE QUALIDADE NÃO RODOU — \`pnpm\` não encontrado no PATH do hook."
     echo ""
-    echo "Não é vermelho de código: nada foi verificado. O hook roda em shell não-interativo,"
-    echo "que não carrega o nvm. Ponha o pnpm num diretório do PATH de login (ex.: symlink em"
-    echo "~/.local/bin, como o node) e rode o gate de novo. PATH visto: ${PATH}"
+    echo "Não é vermelho de código: nada foi verificado. O hook roda em shell não-interativo, que não"
+    echo "carrega o gerenciador de versão do Node (nvm, fnm…). É ambiente da máquina, fora do repo:"
+    echo "ESCALE ao humano (saída 3 da regressão zero) — não altere a home/PATH por conta própria."
+    echo "Detalhe em ${LOGFILE}."
   } >&2
   exit 2
 fi

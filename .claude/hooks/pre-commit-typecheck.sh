@@ -40,7 +40,7 @@ echo "" >&2
 FAILED=0
 
 # ---------------------------------------------------------------------------
-# Resolver pnpm (preferido) ou fallback npx
+# Resolver pnpm — sem fallback: ausente, o gate falha fechado (ver o else de run_pnpm_script)
 # ---------------------------------------------------------------------------
 #
 # Chamada direta, com `--dir` entre aspas — NÃO um comando guardado em string. A versão anterior
