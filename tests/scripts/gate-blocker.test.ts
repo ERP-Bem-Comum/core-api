@@ -193,7 +193,10 @@ describe('CA-4 — git commit é recusado com o gate vermelho e aceito com o gat
   // fixture. Por padrão só o `typecheck` é real (tsc); os outros três são fakes
   // verdes — daí a lacuna que o review apontou em I-6, coberta pelo último caso.
   const buildFixtureRepo = (scriptOverrides: Readonly<Record<string, string>> = {}): string => {
-    const dir = mkdtempSync(join(tmpdir(), 'hrn-blocking-gate-'));
+    // Espaço no nome DE PROPÓSITO: o clone real vive em "Área de trabalho", e um `--dir=${X}` sem
+    // aspas no hook partia esse caminho em dois — os quatro gates morriam com ENOENT. Sem espaço
+    // aqui, o GREEN abaixo continuaria passando com a expansão sem aspas de volta.
+    const dir = mkdtempSync(join(tmpdir(), 'hrn blocking gate-'));
 
     // `env` sanitizado além do `cwd`: dentro de um `git commit` o hook roda esta suíte com
     // `GIT_DIR` exportado, e ele vence o `cwd` — estes cinco comandos reconfigurariam o

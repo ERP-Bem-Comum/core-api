@@ -124,7 +124,8 @@ services:
 
   minio:
     # Fork Silo (ADR-0071): minio/minio sumiu do Docker Hub. Pinar por digest — nunca `latest` solto.
-    image: pgsty/silo:latest@sha256:<digest do índice multi-arch>
+    # Digest vigente e comando de atualização: copiar de compose.yaml (serviço `minio`), não daqui.
+    image: pgsty/silo:latest@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

@@ -88,13 +88,9 @@ x-job-base: &x-job-base
 
 services:
   # ──────────────────────────────────────────────────────────────────────────
-  # MinIO — equivalente local do AWS S3 (ADR-0019), servido pelo fork Silo (ADR-0071).
-  # A MinIO apagou `minio/minio` e `minio/mc` do Docker Hub em 2026-09-11 e o espelho
-  # quay.io/minio exige login; o Silo (pgsty) é fork mantido, drop-in: mesmas envs
-  # `MINIO_*`, rotas `/minio/*`, API S3 e formato em disco — medido na #1026.
-  # Licença AGPLv3, a mesma do MinIO: uso interno em dev/homologação NÃO dispara
-  # cláusulas copyleft (ver ADR-0019 §"Análise de Licenciamento").
-  # O nome do serviço segue `minio`: é o papel (S3 local), não a marca da imagem.
+  # MinIO — equivalente local do AWS S3 (ADR-0019); imagem = fork drop-in Silo (ADR-0071:
+  # minio/minio sumiu do Docker Hub). Licença AGPLv3 nos dois: uso interno em dev/homologação
+  # NÃO dispara cláusulas copyleft (ver ADR-0019 §"Análise de Licenciamento").
   # ──────────────────────────────────────────────────────────────────────────
   minio:
     # ADR-0011 §"Pin de versões" — digest pin do index multi-arch (amd64 + arm64).
@@ -135,8 +131,7 @@ services:
       - core-api
 
   minio-bootstrap:
-    # ADR-0011 §"Pin de versões" — digest pin do index multi-arch (amd64 + arm64).
-    # Cliente `mc` mantido pelo mesmo fork (ADR-0071); `minio/mc` também sumiu do Docker Hub.
+    # ADR-0011 §"Pin de versões" — digest pin do index multi-arch. `mc` do fork Silo (ADR-0071).
     # Para atualizar: docker buildx imagetools inspect pgsty/mc:latest --format '{{.Manifest.Digest}}'
     image: pgsty/mc:latest@sha256:cfc83108c3abb371f8fb84d99c1fdc88f8c237e022409b0081fb7c0a3be634dd
     container_name: core-api-minio-bootstrap
