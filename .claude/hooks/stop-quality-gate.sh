@@ -75,6 +75,23 @@ if [ "$needs_gate" -eq 0 ]; then
   exit 0
 fi
 
+# ── pré-condição: o gate precisa do pnpm no PATH do HOOK ─────────────────────
+# O hook roda em shell não-interativo: um pnpm que só existe no PATH montado pelo nvm (ou por
+# outro init de shell interativo) não está aqui. Sem esta checagem, o "comando não encontrado"
+# saía como QUATRO vermelhos — o gate classificando falta de ferramenta como regressão de código.
+# Continua bloqueando (nada foi verificado), mas diz a causa verdadeira.
+if ! command -v pnpm >/dev/null 2>&1; then
+  log "veredito: NÃO RODOU — \`pnpm\` não está no PATH do hook (PATH=${PATH})."
+  {
+    echo "🟠 GATE DE QUALIDADE NÃO RODOU — \`pnpm\` não encontrado no PATH do hook."
+    echo ""
+    echo "Não é vermelho de código: nada foi verificado. O hook roda em shell não-interativo,"
+    echo "que não carrega o nvm. Ponha o pnpm num diretório do PATH de login (ex.: symlink em"
+    echo "~/.local/bin, como o node) e rode o gate de novo. PATH visto: ${PATH}"
+  } >&2
+  exit 2
+fi
+
 # ── gate: os comandos, na ordem mais barata primeiro ─────────────────────────
 log "veredito: EXECUTANDO — há .ts ou arquivo de config na lista."
 
