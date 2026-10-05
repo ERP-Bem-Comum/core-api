@@ -21,6 +21,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { findClasses, findMemberOrder, findNaming } from '../support/lint-gaps.ts';
@@ -115,5 +116,20 @@ describe('LINT-GAPS — class, casing e ordem de membros', () => {
 
   it('a varredura enxerga o repositório (guarda contra verde por vacuidade)', () => {
     assert.ok(scanned > 1500, `esperado 1500+ arquivos, a API devolveu ${String(scanned)}`);
+  });
+
+  it('o `typescript` está em versão EXATA (ADR-0072 D4)', () => {
+    // Estes gates leem a AST pela API `typescript/unstable/*`. Uma faixa (`^7.0.2`) deixa a
+    // resolução trocar essa superfície sem decisão — e foi exatamente o que aconteceu: o pin
+    // estava afirmado no ADR e no `ts-ast.ts`, e o manifesto dizia `^7.0.2` até a revisão.
+    const manifest = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf8')) as {
+      devDependencies?: Record<string, string>;
+    };
+    const spec = manifest.devDependencies?.['typescript'] ?? '(ausente)';
+    assert.match(
+      spec,
+      /^\d+\.\d+\.\d+$/,
+      `typescript declarado como "${spec}" — fixar a versão exata`,
+    );
   });
 });
