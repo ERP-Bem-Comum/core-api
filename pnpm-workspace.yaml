@@ -45,9 +45,21 @@ allowBuilds:
 #   Piso subido para 3.1.6 — a MÍNIMA que fecha as quatro. A 3.1.7 existe e o fastify 5.12.1 já a
 #   resolve, mas caiu na quarentena de `minimumReleaseAge` (publicada em 02/09 11:06 UTC); a faixa
 #   `<4` deixa ela entrar sozinha assim que amadurecer, sem exigir novo override.
+# - 5ª rodada (VIGENTE, medida pelo audit em 05/10/2026) — e o piso 3.1.6 virou ele mesmo o alvo:
+#   - GHSA-58mr-gqgx-xq4g: =3.1.6 — host confusion via colchete não fechado na authority (high)
+#   - GHSA-qw65-cvwx-89v3: >=3.0.0 <3.1.7 — authority injection via porta não validada no
+#     serialize (high)
+#   - GHSA-hrr3-gc8f-f4qj: >=3.0.0 <3.1.8 — normalização de caixa do host inconsistente via
+#     octetos percent-encoded (moderate)
+#   Piso subido para 3.1.8, a mínima que fecha as três.
 # - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial (1ª/2ª rodada)
 # - GHSA-rgw5-rvv9-x895: brace-expansion <5.0.9 — DoS por arrays intermediários sem limite,
-#   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª, VIGENTE)
+#   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª)
+# - 4ª rodada (VIGENTE, medida pelo audit em 05/10/2026), todas publicadas em 14/09/2026:
+#   - GHSA-6j4f-fj2g-mc7p: >=4.0.0 <5.0.10 — DoS por recursão sem limite em parseCommaParts (high)
+#   - GHSA-qhr7-859c-m2p7: >=4.0.0 <5.0.11 — DoS por recursão em grupos aninhados (high)
+#   - GHSA-q2hr-2g5m-vwhr: >=4.0.0 <5.0.12 — expansão quadrática do rewrite `{a},b}` (moderate)
+#   Piso subido para 5.0.12, a mínima que fecha as três.
 #   Transitiva de runtime via @fastify/swagger-ui → @fastify/static → glob → minimatch.
 #   Exposição real BAIXA: exige o atacante controlar o input do expand(); aqui o glob serve os
 #   assets do /docs, com padrões internos.
@@ -67,8 +79,8 @@ allowBuilds:
 #   entre 9 e 10, validado por boot + fastify.inject do /docs (ver ticket #573).
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
-  fast-uri: '>=3.1.6 <4'
-  brace-expansion: '>=5.0.9 <6'
+  fast-uri: '>=3.1.8 <4'
+  brace-expansion: '>=5.0.12 <6'
   find-my-way: '^9.7.0'
   '@fastify/static': '^10.1.2'
 
