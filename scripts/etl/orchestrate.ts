@@ -123,10 +123,10 @@ const quarantine = async (
 
 // Drena as `failures` de decode (reader) de uma entidade para a quarentena, contando
 // cada uma como `read` + `quarantined` (D12 — fonte 1 de 3).
-const drainDecodeFailures = async <T>(
+const drainDecodeFailures = async (
   sink: QuarantineSink,
   table: EntityName,
-  read: TableRead<T>,
+  read: TableRead<unknown>,
   tally: EntityTally,
 ): Promise<EntityTally> => {
   let next = tally;

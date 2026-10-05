@@ -79,7 +79,7 @@ export const makeFakeEntityStore = <A, Ref>(
 };
 
 // Store que falha SEMPRE no provision (para o caminho de erro de persistência → quarentena).
-export const makeFailingEntityStore = <A, Ref>(): LegacyEntityStore<A, Ref> => ({
+export const makeFailingEntityStore = <Ref>(): LegacyEntityStore<unknown, Ref> => ({
   findByLegacyId: () => Promise.resolve(ok(null)),
   provision: () => Promise.resolve(err<PartnersEtlStoreError>('partners-etl-store-unavailable')),
 });

@@ -83,9 +83,9 @@ describe('FINANCIAL WRITER integration — legado → core-api destino', { skip:
     const doc1 = depara.find((d) => d['entity'] === 'document' && d['legacyId'] === 1);
     assert.ok(doc1);
     const cat = doc1['legacyCategorization'] as Readonly<Record<string, unknown>> | null;
-    assert.ok(cat !== null && cat['legacyCostCenterId'] === 10);
+    assert.ok(cat?.['legacyCostCenterId'] === 10);
     const inst = doc1['legacyInstallments'] as Readonly<Record<string, unknown>> | null;
-    assert.ok(inst !== null && inst['count'] === 1 && inst['sumCents'] === 50000);
+    assert.ok(inst?.['count'] === 1 && inst['sumCents'] === 50000);
 
     // Aprovação ÓRFÃ (F2): payable 2 é LANÇADO mas tem registro de aprovação.
     const orphans = depara.filter((d) => d['entity'] === 'orphan-approval');

@@ -159,7 +159,7 @@ export const lifecyclePlanResponseSchema = z.object({
   year: z.number().int(),
   programRef: z.uuid(),
   status: budgetPlanStatusSchema,
-  version: z.string().meta({ description: 'Versão do plano (major.minor)', example: '2.0' }),
+  version: z.string().meta({ description: 'Versão do plano (major.minor)', examples: ['2.0'] }),
   scenarioName: z.string().nullable(),
   parentId: z.uuid().nullable(),
   totalInCents: z.number().int(),

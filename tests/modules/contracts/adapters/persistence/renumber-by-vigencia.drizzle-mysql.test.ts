@@ -163,7 +163,7 @@ if (integrationEnabled()) {
       assert.notEqual(nb, na, 'B não pode colidir com A');
       // B reatribuído para o ano-alvo 2024.
       const pb = parseSequentialNumber(nb);
-      assert.ok(pb !== null && pb.year === 2024, `B deve estar em /2024: ${nb}`);
+      assert.ok(pb?.year === 2024, `B deve estar em /2024: ${nb}`);
     });
 
     it('reconcilia ctr_contract_seq — nextSequentialNumber(2024) não colide com preservado', async () => {
@@ -183,10 +183,7 @@ if (integrationEnabled()) {
       const existing = new Set([await numberOf(h, A), await numberOf(h, B)]);
       assert.equal(existing.has(next.value), false, `${next.value} colidiria com preservado`);
       const p = parseSequentialNumber(next.value);
-      assert.ok(
-        p !== null && p.year === 2024 && p.seq >= 6,
-        `esperava >= 0006/2024: ${next.value}`,
-      );
+      assert.ok(p?.year === 2024 && p.seq >= 6, `esperava >= 0006/2024: ${next.value}`);
     });
 
     it('idempotente: 2ª execução → 0 afetados, números estáveis', async () => {

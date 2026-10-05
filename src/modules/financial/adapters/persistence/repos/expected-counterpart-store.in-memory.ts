@@ -18,7 +18,7 @@ import type {
 // `store` é injetável (Map) para COMPARTILHAR com o reconciliation-repo in-memory — a US2 (`match`) muta
 // a contrapartida na mesma unit-of-work que a perna de B (paridade da tx atômica do Drizzle).
 export const createInMemoryExpectedCounterpartStore = (
-  store: Map<string, ExpectedCounterpart> = new Map(),
+  store = new Map<string, ExpectedCounterpart>(),
   outbox: FinancialOutbox = createInMemoryOutbox().port,
 ): ExpectedCounterpartStore => {
   return {

@@ -107,7 +107,7 @@ export const undoReconciliation =
     if (!cpR.ok) return err(cpR.error);
     const counterpart = cpR.value;
 
-    if (counterpart !== null && counterpart.status === 'Pending') {
+    if (counterpart?.status === 'Pending') {
       // Nunca casada → descarta (nada órfão em B).
       const discarded = discard(counterpart);
       if (!discarded.ok) return err(discarded.error);
@@ -118,7 +118,7 @@ export const undoReconciliation =
         [...undone.value.events, ...discarded.value.events],
       );
       if (!saved.ok) return err(saved.error);
-    } else if (counterpart !== null && counterpart.status === 'Matched') {
+    } else if (counterpart?.status === 'Matched') {
       // Já casada → reabre a contrapartida e desfaz a perna B (a transação real volta a Pending).
       const reopened = reopen(counterpart);
       if (!reopened.ok) return err(reopened.error);
@@ -151,7 +151,7 @@ export const undoReconciliation =
       if (!cpDestR.ok) return err(cpDestR.error);
       const cpDest = cpDestR.value;
 
-      if (cpDest !== null && cpDest.status === 'Matched') {
+      if (cpDest?.status === 'Matched') {
         // Guard de simetria: só REABRE a expectativa (Matched → Pending) na conta de destino. NÃO
         // cascateia outra conciliação (a própria B já é o `undone` principal) e NÃO toca a origem/perna A.
         const reopened = reopen(cpDest);
