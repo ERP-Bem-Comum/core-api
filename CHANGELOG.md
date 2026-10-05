@@ -6,6 +6,16 @@ a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é reg
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·
 versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
+## [1.0.0-rc.4] — 2026-10-01
+
+### Adicionado
+
+- **partners:** fornecedor pessoa física (CPF) — SupplierDocument, PF sem Razão Social/Nome Fantasia ([#1025](https://github.com/ERP-Bem-Comum/core-api/pull/1025))
+
+### Corrigido
+
+- **infra:** S3 de dev/teste passa ao fork Silo — minio/minio sumiu do Docker Hub ([#1028](https://github.com/ERP-Bem-Comum/core-api/pull/1028))
+
 ## [1.0.0-rc.3] — 2026-09-09
 
 ### Adicionado
