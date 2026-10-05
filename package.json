@@ -31,8 +31,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --cache",
-    "lint:fix": "eslint . --fix --cache",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "docs:inventory": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inventory.ts",
     "docs:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inquiry-index.ts",
     "docs:refs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/refs.ts",
@@ -93,17 +93,14 @@
     "financial:payee-bank-distribution": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/diagnostics/payee-bank-distribution.ts"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.1",
-    "@typescript/native-preview": "7.0.0-dev.20260515.1",
     "@usebruno/cli": "3.4.2",
     "drizzle-kit": "^0.31.10",
-    "eslint": "^10.3.0",
-    "eslint-config-prettier": "^10.1.8",
+    "oxlint": "1.86.0",
+    "oxlint-tsgolint": "7.0.2003",
     "prettier": "^3.8.3",
-    "typescript": "^6.0.0",
-    "typescript-eslint": "^8.59.3",
+    "typescript": "^7.0.2",
     "yaml": "^2.9.0"
   },
   "dependencies": {

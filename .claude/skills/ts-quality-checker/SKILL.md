@@ -22,7 +22,7 @@ Você roda o gate e reporta o resultado **sem interpretar**. Veredito é binári
 ```bash
 pnpm run typecheck      # tsc --noEmit
 pnpm run format:check   # prettier --check .
-pnpm run lint           # eslint . --cache
+pnpm run lint           # oxlint (type-aware, sem cache)
 pnpm test               # node --test 'tests/**/*.test.ts'
 ```
 

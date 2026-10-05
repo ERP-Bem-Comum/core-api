@@ -89,10 +89,10 @@ echo "▶ [2/4] Type check (tsc --noEmit)..." >&2
 run_pnpm_script "typecheck" "typecheck"
 
 # ---------------------------------------------------------------------------
-# Check 3 — Lint (ESLint + typescript-eslint)
+# Check 3 — Lint (oxlint, type-aware via oxlint-tsgolint)
 # ---------------------------------------------------------------------------
 echo "" >&2
-echo "▶ [3/4] Lint (eslint)..." >&2
+echo "▶ [3/4] Lint (oxlint)..." >&2
 run_pnpm_script "lint" "lint"
 
 # ---------------------------------------------------------------------------

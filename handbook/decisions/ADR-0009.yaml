@@ -273,14 +273,14 @@ claims:
         então o teste falha — a saída HTTP MUST usar `fetch` nativo.
       expected_error: null
       blocker: null
-      enforced_by: ['eslint.config.js']
+      enforced_by: ['.oxlintrc.json']
     rule:
       status: proposed
       disposition: adopt
       text: |
         Saída HTTP MUST usar `fetch` nativo. MUST NOT adicionar cliente HTTP de terceiros.
       rationale: |
-        A metade proibitiva já é enforçada — o `no-restricted-imports` do `eslint.config.js` barra
+        A metade proibitiva já é enforçada — o `no-restricted-imports` do `.oxlintrc.json` barra
         libs do ADR-0011 §4 com a mensagem do ADR no erro. A metade positiva não é exercitada porque
         ainda não há chamada externa; o primeiro caso real será o microserviço de OCR.
 

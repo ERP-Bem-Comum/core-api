@@ -44,7 +44,7 @@ CLAUDE.md
 .editorconfig
 .prettierignore
 .prettierrc.json
-eslint.config.js
+.oxlintrc.json
 .eslintcache
 
 # Estado local do CLI (NUNCA enviar — pode conter dados sensíveis)

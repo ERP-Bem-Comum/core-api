@@ -8,7 +8,7 @@ cli-state.json
 
 # Worktrees git aninhados — cópias completas de src/tests de outras branches
 # (sessões paralelas). Têm seu próprio HEAD/formatação; nunca formatar pelo pai.
-# Mesma categoria de .claude/worktrees e .agents/worktrees no eslint.config.js.
+# Mesma categoria do `ignorePatterns` do .oxlintrc.json (`.claude/**`, `epic/**`).
 .claude/worktrees/
 .agents/worktrees/
 epic/

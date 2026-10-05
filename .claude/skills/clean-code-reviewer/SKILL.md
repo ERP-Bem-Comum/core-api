@@ -75,7 +75,7 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | Tópico | Onde olhar |
 | :--- | :--- |
 | Regras invariantes locais (zero `throw`/`class`/`any`, branded types, Result, switch exaustivo) — leia ANTES da review | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Regras invariantes" e §"Anti-padrões" |
-| Enforcement automatizado (typescript-eslint strict + type-checked + stylistic) | [`../../../eslint.config.js`](../../../eslint.config.js) — destacar: `no-restricted-syntax` (banimento de class), `switch-exhaustiveness-check`, `strict-boolean-expressions`, `prefer-readonly-parameter-types`, `consistent-type-imports`, `naming-convention`, `max-params: 4` |
+| Enforcement automatizado (oxlint type-aware, paridade com o antigo typescript-eslint strict + stylistic) | [`../../../.oxlintrc.json`](../../../.oxlintrc.json) — destacar: `switch-exhaustiveness-check`, `strict-boolean-expressions`, `prefer-readonly-parameter-types`, `consistent-type-imports`, `max-params: 4`; banimento de `class` e `naming-convention` em [`../../../tests/cleanup/lint-gaps.test.ts`](../../../tests/cleanup/lint-gaps.test.ts) |
 | Formatador (não revisar estilo manual — Prettier faz) | [`../../../.prettierrc.json`](../../../.prettierrc.json), [`../../../.prettierignore`](../../../.prettierignore) |
 | Skill irmã na review específica do core-api | [`../code-reviewer/SKILL.md`](../code-reviewer/SKILL.md) |
 | Skill irmã para reviewer de DB | [`../database-engineer/SKILL.md`](../database-engineer/SKILL.md) |

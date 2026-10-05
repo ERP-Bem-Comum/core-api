@@ -11,7 +11,7 @@
 #   - nenhum arquivo alterado                → exit 0 imediato
 #   - só .md / .yaml / .sh / qualquer não-.ts → exit 0 (format já roda no PostToolUse)
 #   - QUALQUER .ts, em qualquer diretório     → gate completo
-#   - tsconfig.json, eslint.config.js, package.json → gate completo
+#   - tsconfig.json, .oxlintrc.json, package.json → gate completo
 #   - .claude/rules/*.md                      → gate completo, apesar de ser .md: o bloco
 #     `verify:` dessas rules AFIRMA coisas sobre o código, e quem confere essas afirmações é
 #     `tests/cleanup/rules-self-verify.test.ts` — que só roda dentro de `pnpm test`. Sem esta
@@ -60,7 +60,7 @@ while IFS= read -r f; do
     # `src/*.ts|tests/*.ts|…` que existiam aqui eram código morto, subsumidas por ele.
     *.ts) needs_gate=1; break ;;
     .claude/rules/*.md) needs_gate=1; break ;;
-    tsconfig.json | eslint.config.js | package.json) needs_gate=1; break ;;
+    tsconfig.json | .oxlintrc.json | package.json) needs_gate=1; break ;;
   esac
 done <<< "$changed"
 
@@ -68,7 +68,7 @@ log "arquivos alterados: ${n_changed}"
 
 if [ "$needs_gate" -eq 0 ]; then
   log "veredito: PULADO — nenhum alterado aciona o gate (sem .ts, tsconfig.json,"
-  log "          eslint.config.js ou package.json). Formatação já rodou no PostToolUse."
+  log "          .oxlintrc.json ou package.json). Formatação já rodou no PostToolUse."
   log ""
   log "alterados:"
   printf '%s\n' "$changed" | sed 's/^/  /' >> "$LOGFILE"
