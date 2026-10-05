@@ -25,7 +25,7 @@ Fonte única. Não replicar esta tabela em outro arquivo.
 | Eventos de domínio                        | **EN passado** — `ContractCreated`                          |
 | Commit                                    | **PT-BR** com escopo — `feat(contracts): adiciona VO Money` |
 
-Casing é enforced por `@typescript-eslint/naming-convention` — desligado em `tests/**`.
+Casing é enforced por `tests/cleanup/lint-gaps.test.ts` (o `naming-convention`, que o oxlint não tem) — fora de `tests/**`.
 
 ## Política de regressão zero — invariante
 
@@ -45,7 +45,7 @@ Todo commit gerado por IA leva o trailer `Assisted-by: AGENT_NAME:MODEL_VERSION`
 
 ## Anti-padrões — os que exigem julgamento
 
-Os mecânicos (`npm`, sintaxe TS, casing, `class` no domínio, JSON/ENUM no MySQL) já são barrados por hook, `tsconfig`, ESLint e semgrep.
+Os mecânicos (`npm`, sintaxe TS, casing, `class` no domínio, JSON/ENUM no MySQL) já são barrados por hook, `tsconfig`, oxlint, gate de AST (`tests/cleanup/lint-gaps.test.ts`) e semgrep.
 
 1. **Escrever `npm` em doc, PR, script ou comentário** — sempre `pnpm`. O hook barra a execução, não o texto.
 2. **Misturar módulos numa sessão** (`ctr_*` e `fin_*` ao mesmo tempo) — quebra o isolamento por prefixo.

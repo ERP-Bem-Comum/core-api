@@ -48,7 +48,7 @@ const REPLACEMENT = '?';
  *   - `slice` corta por unidade UTF-16 e parte um emoji fora do BMP ao meio, deixando um par
  *     substituto solto;
  *   - o spread (`[...value]`) corta por code point e nao parte pares, mas **decompoe** sequencia com
- *     ZWJ — uma familia vira quatro emojis soltos no meio do diagnostico. E o que o ESLint
+ *     ZWJ — uma familia vira quatro emojis soltos no meio do diagnostico. E o que o lint
  *     (`no-misused-spread`) recusa, e ele esta certo;
  *   - `Intl.Segmenter` corta onde a pessoa que le enxerga uma letra.
  *

@@ -15,7 +15,7 @@ verify:
     expect: ['scripts/handbook/link-scan.ts']
 ---
 
-Runner: Node test runner nativo + `--experimental-strip-types`. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras ESLint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`, `naming-convention`) estão em `eslint.config.js`, no bloco `files: ['tests/**/*.ts']`.
+Runner: Node test runner nativo + `--experimental-strip-types`. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras de lint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`) estão no `.oxlintrc.json`, no override `files: ['tests/**/*.ts']`; o `naming-convention`, que o oxlint não tem, fica de fora de `tests/` no próprio gate `tests/cleanup/lint-gaps.test.ts`.
 
 ## Quatro naturezas de arquivo, e só uma roda no gate
 

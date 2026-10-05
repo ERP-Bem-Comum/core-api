@@ -12,7 +12,7 @@ verify:
       - 'src/server.ts'
 ---
 
-A borda HTTP é a **UX primária** ([ADR-0037](../../handbook/architecture/adr/0037-http-first-retire-embedded-cli.md)). A fronteira do Zod e o isolamento do shell transversal são cobrados por `tests/cleanup/http-edge-boundary.test.ts`; o glob de borda no `eslint.config.js` apenas **afrouxa** regras para os tipos do Fastify — não impõe nada.
+A borda HTTP é a **UX primária** ([ADR-0037](../../handbook/architecture/adr/0037-http-first-retire-embedded-cli.md)). A fronteira do Zod e o isolamento do shell transversal são cobrados por `tests/cleanup/http-edge-boundary.test.ts`; o override de borda no `.oxlintrc.json` apenas **afrouxa** regras para os tipos do Fastify — não impõe nada.
 
 ## Onde cada coisa mora ([ADR-0028](../../handbook/architecture/adr/0028-http-edge-shell-location.md))
 

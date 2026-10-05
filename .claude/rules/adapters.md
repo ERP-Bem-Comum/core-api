@@ -26,7 +26,7 @@ verify:
       - 'src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts'
 ---
 
-Única camada que toca infra real (Drizzle, mysql2, S3, FS, processo externo). `ENUM` e JSON nativos são barrados por [`.semgrep/rules.yml`](../../.semgrep/rules.yml); `class` por ESLint; o prefixo de tabela por `tests/cleanup/table-prefix-isolation.test.ts`; o pool boot-scoped está em [`shared-persistence.md`](./shared-persistence.md). Nada disso se repete aqui.
+Única camada que toca infra real (Drizzle, mysql2, S3, FS, processo externo). `ENUM` e JSON nativos são barrados por [`.semgrep/rules.yml`](../../.semgrep/rules.yml); `class` por `tests/cleanup/lint-gaps.test.ts`; o prefixo de tabela por `tests/cleanup/table-prefix-isolation.test.ts`; o pool boot-scoped está em [`shared-persistence.md`](./shared-persistence.md). Nada disso se repete aqui.
 
 - **A borda do adapter converte exceção em `Result` — e é a única que pode.** `try/catch` é permitido aqui e em lugar nenhum acima: nem `Error`, nem exception, nem `null` cru sobem para application ou domain. Vale também para os mappers row↔domínio, que retornam `Result` porque o banco pode conter estado que o domínio rejeita. Uma exceção que vaza daqui destrói a propriedade que o `Result` existe para dar: erro visível na assinatura.
 

@@ -16,8 +16,8 @@
  * devolve vazio. Duas rules (`application.md`, `contracts-module.md`) se apoiavam nela. A adesão
  * medida é de 247 arquivos e zero violações, sustentada só por disciplina.
  *
- * A segunda asserção cobre `interface` em port. `class` já é barrado globalmente por ESLint
- * (`no-restricted-syntax`), mas `interface` não é barrado por nada — e um port declarado como
+ * A segunda asserção cobre `interface` em port. `class` já é barrado globalmente pelo gate de AST
+ * (`tests/cleanup/lint-gaps.test.ts`), mas `interface` não é barrado por nada — e um port declarado como
  * `interface` aceita `implements`, o que reabre a porta para hierarquia de classes que o projeto
  * fechou ao escolher `type` + funções.
  */

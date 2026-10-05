@@ -420,7 +420,7 @@ export const createDrizzleOutboxRepository = (
   // ── moveToDeadLetter ──────────────────────────────────────────────────────
   // Implementação direta (sem safe()) para distinguir OutboxEventNotFound de
   // erros genéricos de I/O. Usa um Result<void, OutboxQueryError> retornado
-  // pela tx interna como canal de controle — sem `class` (ESLint proíbe).
+  // pela tx interna como canal de controle — sem `class` (o gate `lint-gaps` proíbe).
 
   const moveToDeadLetterFinal = async (
     consumerId: string,

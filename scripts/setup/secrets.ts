@@ -156,7 +156,7 @@ const promptSilent = async (label: string): Promise<string> =>
 
     let buffer = '';
 
-    // Function declarations (não arrow) — eslint permite hoisting (`functions: false`)
+    // Function declarations (não arrow) — o lint permite hoisting (`functions: false`)
     // e cleanup precisa referenciar onData (e vice-versa via remoção do listener).
     function cleanup(): void {
       stdin.removeListener('data', onData);

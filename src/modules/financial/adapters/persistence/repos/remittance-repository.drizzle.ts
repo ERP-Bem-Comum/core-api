@@ -34,8 +34,8 @@ const logRepo = (op: string, cause: unknown): void => {
 // ESPERADO sob concorrência — de "o banco caiu", e faz isso por identidade (`===`), não por
 // mensagem, que refatoração muda sem avisar.
 //
-// Instância única e `Error` de verdade, por duas restrições que se somam: `@typescript-eslint/
-// only-throw-error` recusa lançar símbolo, e `class` é barrada neste repositório, então `instanceof`
+// Instância única e `Error` de verdade, por duas restrições que se somam: o lint
+// (`only-throw-error`) recusa lançar símbolo, e `class` é barrada neste repositório, então `instanceof`
 // de um tipo próprio está fora. Uma constante compartilhada resolve as duas.
 //
 // ⚠️ O `stack` dela aponta para a carga deste módulo, não para o ponto do `throw` — o preço de ser

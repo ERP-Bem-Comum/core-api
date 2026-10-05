@@ -132,9 +132,9 @@ pnpm install                           # respeita pnpm-lock.yaml
 pnpm install --frozen-lockfile         # em CI
 
 # Gate de qualidade — os quatro, nesta ordem
-pnpm run typecheck                     # tsc --noEmit (strict completo)
+pnpm run typecheck                     # tsc --noEmit (TypeScript 7, strict completo)
 pnpm run format:check                  # prettier --check .
-pnpm run lint                          # eslint . (flat config, typescript-eslint strict + type-checked)
+pnpm run lint                          # oxlint (.oxlintrc.json, type-aware via oxlint-tsgolint)
 pnpm test                              # tests/**/*.test.ts via node:test + --experimental-strip-types
 
 # Servidor + processos de background
