@@ -31,5 +31,5 @@ if [ -z "${NODE_BIN}" ]; then
   exit 1
 fi
 
-exec "${NODE_BIN}" --experimental-strip-types --no-warnings \
+exec "${NODE_BIN}" \
   "${REPO_ROOT}/scripts/handbook/tombstone.ts"

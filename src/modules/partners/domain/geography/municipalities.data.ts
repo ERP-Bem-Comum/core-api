@@ -1,6 +1,6 @@
 // GERADO — não editar à mão.
 // Fonte: IBGE localidades/municipios (view=nivelado). Total: 5571.
-// Regenerar: node --experimental-strip-types scripts/data/generate-municipalities.ts
+// Regenerar: node scripts/data/generate-municipalities.ts
 
 // Tupla compacta [cod IBGE (7 dígitos), nome, sigla UF]. Normalização para o VO
 // Municipality acontece em municipality.ts (runtime).

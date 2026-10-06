@@ -15,7 +15,6 @@
  *
  * Rodar:
  *   NOTIFICATIONS_INTEGRATION=1 RESEND_API_KEY=re_... node --test \\
- *     --experimental-strip-types \\
  *     'tests/modules/notifications/adapters/email/resend.integration.test.ts'
  *
  * ASCII puro.

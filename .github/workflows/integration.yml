@@ -102,7 +102,7 @@ jobs:
         # → finally: down -v. O `down -v` é INOFENSIVO aqui (VM efêmera), destrutivo
         # só em dev (#500). Exit code != 0 = vermelho, MESMO com "fail 0/cancelled 1"
         # no sumário do node:test (o caso do #521). Confia-se SÓ no exit code.
-        run: node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts "${{ matrix.suite }}"
+        run: node scripts/ci/test-integration.ts "${{ matrix.suite }}"
 
       - name: Diagnóstico do compose em caso de falha
         # Roda só se o step anterior falhou (`if: failure()`). Sem mascarar exit code:

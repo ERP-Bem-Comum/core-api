@@ -12,7 +12,7 @@ node_modules/
 .pnpm-store/
 .npm/
 
-# Build artifacts ─ Fase 1 roda via --experimental-strip-types, sem dist/
+# Build artifacts ─ o runtime executa .ts direto (type stripping do Node), sem dist/
 dist/
 build/
 *.tsbuildinfo

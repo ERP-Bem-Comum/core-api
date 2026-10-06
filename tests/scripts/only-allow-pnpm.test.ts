@@ -20,7 +20,7 @@ const CWD = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 // foi herdado do runner pnpm: `npm_config_user_agent` (pnpm 10/npm/yarn) e
 // `npm_execpath` (fallback do pnpm 11, que deixa o UA vazio em lifecycle).
 const runWith = (userAgent: string, execPath = '') =>
-  spawnSync('node', ['--experimental-strip-types', '--no-warnings', SCRIPT], {
+  spawnSync('node', [SCRIPT], {
     cwd: CWD,
     encoding: 'utf-8',
     timeout: 30_000,

@@ -95,12 +95,19 @@ LABEL org.opencontainers.image.title="core-api" \
 
 # Variáveis de runtime.
 # - NODE_ENV=production: stripping de warnings, otimizações.
-# - NODE_NO_WARNINGS=1: silencia avisos experimentais (strip-types em Node 24).
-# - NODE_OPTIONS: habilita strip-types nativamente + suprime warning explícito
-#   (defesa em profundidade contra NODE_NO_WARNINGS ser desativado por debugger).
-ENV NODE_ENV=production \
-    NODE_NO_WARNINGS=1 \
-    NODE_OPTIONS="--experimental-strip-types --no-warnings"
+#
+# NÃO há mais NODE_OPTIONS nem NODE_NO_WARNINGS aqui, e as duas remoções foram medidas no runtime
+# do `devEngines` (ver `tests/cleanup/node-flags-not-redundant.test.ts`):
+#   - `--experimental-strip-types` é redundante: o stripping é DEFAULT desde o Node 23.6 — a prova
+#     é `--no-strip-types` existir como negação no `--help`. O ENTRYPOINT abaixo executa `.ts`
+#     direto, sem flag, porque o runtime já faz isso.
+#   - `NODE_NO_WARNINGS=1` + `--no-warnings` existiam para calar o `ExperimentalWarning` do
+#     stripping, que não é mais emitido. Mantê-los passou a significar **engolir
+#     `DeprecationWarning` em produção** — justamente o canal pelo qual o Node anuncia o que
+#     quebra na próxima major, e a informação que torna acionável a disciplina de subida de
+#     runtime do ADR-0073. Em contêiner, esse aviso vai para o stderr → log do ECS, que é onde
+#     deveria ter estado desde sempre.
+ENV NODE_ENV=production
 
 # Copia node_modules do estágio deps.
 COPY --from=deps /app/node_modules ./node_modules
@@ -137,8 +144,8 @@ STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
 
-# `tini` como PID 1, depois `node` com flags (NODE_OPTIONS habilita strip-types). ENTRYPOINT
-# é o binário Node direto (sem shell) — encaminha sinais corretamente sem shell-trap.
+# `tini` como PID 1, depois `node` executando o `.ts` direto (stripping é default no Node 24).
+# ENTRYPOINT é o binário Node direto (sem shell) — encaminha sinais corretamente sem shell-trap.
 #
 # CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida; o entrypoint é o servidor HTTP.
 # O worker de outbox roda em processo dedicado: `node src/modules/contracts/worker/run.ts`

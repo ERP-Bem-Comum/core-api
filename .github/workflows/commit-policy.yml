@@ -4,7 +4,7 @@ name: commit-policy
 #   - PR com label `ai-assisted` → todo commit do range precisa de Assisted-by bem-formado.
 #   - PR sem a label → só valida o FORMATO quando presente.
 # Roda tambem em labeled/unlabeled para reavaliar quando a label muda. Actions SHA-pinadas (ADR-0011).
-# Zero dependencia: script Node puro (--experimental-strip-types) lendo os trailers via `git log`.
+# Zero dependencia: script Node puro (`node arquivo.ts`, sem flag) lendo os trailers via `git log`.
 
 on:
   pull_request:
@@ -41,4 +41,4 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_AI_ASSISTED: ${{ contains(github.event.pull_request.labels.*.name, 'ai-assisted') }}
-        run: node --experimental-strip-types --no-warnings scripts/ci/check-commit-trailers.ts
+        run: node scripts/ci/check-commit-trailers.ts

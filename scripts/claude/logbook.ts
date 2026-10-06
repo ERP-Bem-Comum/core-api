@@ -12,9 +12,9 @@
  * incidente aberto — e não um problema desta máquina.
  *
  * Uso:
- *   node --experimental-strip-types scripts/claude/logbook.ts            # todas as sessões
- *   node --experimental-strip-types scripts/claude/logbook.ts --dead     # só as que não fecharam
- *   node --experimental-strip-types scripts/claude/logbook.ts <arquivo>  # outro diário
+ *   node scripts/claude/logbook.ts            # todas as sessões
+ *   node scripts/claude/logbook.ts --dead     # só as que não fecharam
+ *   node scripts/claude/logbook.ts <arquivo>  # outro diário
  */
 
 import { readFileSync } from 'node:fs';

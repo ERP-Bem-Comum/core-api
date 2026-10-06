@@ -316,13 +316,9 @@ const dockerDown = (): void => {
 };
 
 const runNodeTest = (suite: Suite): number => {
-  const flags = [
-    '--test',
-    ...(suite.concurrency1 ? ['--test-concurrency=1'] : []),
-    '--experimental-strip-types',
-    '--enable-source-maps',
-    '--no-warnings',
-  ];
+  // Sem flag de runtime: o type stripping é default no Node 24 e não há warning a silenciar.
+  // Medido em `tests/cleanup/node-flags-not-redundant.test.ts`.
+  const flags = ['--test', ...(suite.concurrency1 ? ['--test-concurrency=1'] : [])];
   return (
     spawnSync('node', [...flags, ...suite.paths], {
       stdio: 'inherit',

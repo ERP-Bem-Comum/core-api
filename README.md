@@ -135,7 +135,7 @@ pnpm install --frozen-lockfile         # em CI
 pnpm run typecheck                     # tsc --noEmit (TypeScript 7, strict completo)
 pnpm run format:check                  # prettier --check .
 pnpm run lint                          # oxlint (.oxlintrc.json, type-aware via oxlint-tsgolint)
-pnpm test                              # tests/**/*.test.ts via node:test + --experimental-strip-types
+pnpm test                              # tests/**/*.test.ts via node:test (executa .ts direto)
 
 # Servidor + processos de background
 pnpm run serve                         # sobe a borda HTTP (node src/server.ts); config via env

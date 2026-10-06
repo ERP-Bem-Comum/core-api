@@ -474,7 +474,7 @@ describe('PARTNERS-ETL-ORCHESTRATOR — reason fiel ao erro de port (Obs.2)', ()
 //    RED hoje: `migrateUserRow` (orchestrate.ts :259-263) só passa
 //    { legacyId, email, massApprove } ao provisionLegacyUser — descarta name/cpf/
 //    telephone (já presentes em `validated`) e o collaboratorRef já resolvido.
-//    Como `node --test --experimental-strip-types` NÃO type-checa, o teste CARREGA e
+//    Como o type stripping do Node NÃO type-checa (só apaga anotação), o teste CARREGA e
 //    o RED vem das ASSERÇÕES (os campos chegam `undefined` ao auth-port hoje). O gate
 //    `pnpm run typecheck` também fica RED (campos inexistentes em ProvisionLegacyUserInput).
 // ---------------------------------------------------------------------------

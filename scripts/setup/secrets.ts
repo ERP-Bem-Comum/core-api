@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-strip-types --no-warnings
+#!/usr/bin/env node
 // scripts/setup/secrets.ts
 //
 // Gera os 3 arquivos de secret consumidos pelo compose MySQL. Veja design

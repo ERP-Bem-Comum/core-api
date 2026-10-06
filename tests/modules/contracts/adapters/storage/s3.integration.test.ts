@@ -16,7 +16,7 @@
  *
  * Ou manualmente:
  *   STORAGE_INTEGRATION=1 docker compose up -d minio --wait
- *   STORAGE_INTEGRATION=1 node --test --experimental-strip-types --no-warnings \
+ *   STORAGE_INTEGRATION=1 node --test \
  *     'tests/modules/contracts/adapters/storage/s3.integration.test.ts'
  *
  * ASCII puro.

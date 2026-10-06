@@ -65,7 +65,7 @@ RO="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core"
 # Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
 echo "[e2e-all] Aplicando migrations (job migrate)..."
 MIGRATE_DATABASE_URL="$DB" \
-  node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
+  node src/jobs/migrate/run.ts || exit 1
 
 # Os SETE módulos vêm do helper (ADR-0068). Antes, `financial`, `budget-plans` e `reports` não eram
 # declarados aqui e subiam em memória sem aviso — a coleção Bruno exercitava rotas do `financial`
@@ -83,7 +83,7 @@ S3_ENDPOINT="http://127.0.0.1:${MINIO_API_PORT:-9000}" \
   AUTH_LOGIN_RATE_LIMIT_MAX=1000 \
   PORT=3100 \
   LOG_LEVEL=warn \
-  node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts &
+  node src/server.ts &
 SRV=$!
 disown "$SRV" 2>/dev/null || true
 

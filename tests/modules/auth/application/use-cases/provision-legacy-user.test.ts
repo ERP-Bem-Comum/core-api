@@ -195,7 +195,7 @@ describe('provisionLegacyUser', () => {
 // com { name?, cpf?, telephone?, collaboratorRef? } (string|null) e o use case DEGRADA
 // cpf/telephone inválido para null (NÃO quarentena/erro) + warning com o legacyId.
 //
-// Por que isto CARREGA e roda mesmo sem a API: `node --test --experimental-strip-types`
+// Por que isto CARREGA e roda mesmo sem a API: o type stripping do Node
 // NÃO type-checa — apenas remove anotações. O objeto-literal com os campos novos roda
 // (a impl atual ignora as props extras), e o RED vem das ASSERÇÕES (os campos do User
 // salvo seguem `null` hoje). O gate `pnpm run typecheck` também fica RED (propriedades
