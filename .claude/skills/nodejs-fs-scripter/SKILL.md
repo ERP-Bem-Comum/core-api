@@ -1,7 +1,7 @@
 ---
 name: nodejs-fs-scripter
 description: >
-  Escreve scripts Node.js (TypeScript, ESM, Node 24 + --experimental-strip-types)
+  Escreve scripts Node.js (TypeScript, ESM, Node 24 executando .ts direto, sem flag)
   que substituem Bash/SH para automação de filesystem — usando node:fs/promises
   como API canônica. Cobre o equivalente moderno de cat, ls, cp -r, mv, rm -rf,
   mkdir -p, find, glob, chmod, mktemp, tail, atomic writes e watch. Trata erros
@@ -42,7 +42,7 @@ Sempre a documentação oficial do Node 24 espelhada no handbook do projeto:
 | Tópico | Onde olhar |
 | :--- | :--- |
 | Regras transversais (zero `throw` em domínio, `import type`, extensão `.ts`, `Result<T,E>`, sem `any`, sem `class`) | [`../../../CLAUDE.md`](../../../CLAUDE.md) |
-| ESM + NodeNext + `--experimental-strip-types` (como invocar `.ts` direto) | [`./references/nodejs-tsx-scripts.md`](./references/nodejs-tsx-scripts.md) |
+| ESM + NodeNext + type stripping nativo (como invocar `.ts` direto) | [`./references/nodejs-tsx-scripts.md`](./references/nodejs-tsx-scripts.md) |
 | Mapa Bash → Node (catálogo de operações comuns) | [`./references/bash-to-node-mapping.md`](./references/bash-to-node-mapping.md) |
 | Tratamento de `NodeJS.ErrnoException` (códigos `ENOENT`, `EEXIST`, `EACCES`, …) e tradução para `Result` ou exit code | [`./references/errno-to-result.md`](./references/errno-to-result.md) |
 | Padrão `Result<T, E>` do projeto | [`src/shared/result.ts`](../../../src/shared/result.ts) |
@@ -94,7 +94,7 @@ scripts/                                  # ou tools/scripts/
 Execução padrão (Node 24 com strip-types, sem build step):
 
 ```bash
-pnpm exec node --experimental-strip-types --no-warnings scripts/limpar-pipelines-antigos.ts --older-than 30d
+pnpm exec node scripts/limpar-pipelines-antigos.ts --older-than 30d
 ```
 
 Atalho recomendado em `package.json#scripts`:
@@ -102,7 +102,7 @@ Atalho recomendado em `package.json#scripts`:
 ```json
 {
   "scripts": {
-    "script:clean-pipelines": "node --experimental-strip-types --no-warnings scripts/limpar-pipelines-antigos.ts"
+    "script:clean-pipelines": "node scripts/limpar-pipelines-antigos.ts"
   }
 }
 ```
@@ -112,7 +112,7 @@ Atalho recomendado em `package.json#scripts`:
 ## Anatomia de um script (template canônico)
 
 ```ts
-#!/usr/bin/env -S node --experimental-strip-types --no-warnings
+#!/usr/bin/env node
 // scripts/limpar-pipelines-antigos.ts
 //
 // Substitui:  find .claude/tmp -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \;
@@ -413,7 +413,7 @@ nodejs-fs-scripter   ◄── você está aqui (scripts de manutenção, build,
 
 ## Checklist antes de declarar pronto
 
-- [ ] Script roda com `pnpm exec node --experimental-strip-types --no-warnings scripts/<nome>.ts` sem warning de extensão.
+- [ ] Script roda com `pnpm exec node scripts/<nome>.ts` sem warning de extensão.
 - [ ] Todos os imports relativos terminam em `.ts`; imports só de tipo usam `import type` ou `import { type X }`.
 - [ ] Nenhum `throw` fora da função `main()` (e mesmo lá, preferir `return code`).
 - [ ] Exit codes seguem sysexits.h: `0`/`1`/`64`/`65`/`66`/`74`.

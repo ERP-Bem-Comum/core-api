@@ -98,7 +98,7 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | Contract tests parametrizados (1 suíte, 2 adapters)                         | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts` + `inmemory.test.ts` + `drizzle-mysql.test.ts` |
 | E2E rodando a CLI real                                                      | `tests/cli/contracts.cli.test.ts` (memory) · `tests/cli/contracts.cli.mysql.test.ts` (integration)                         |
 | Regressão dirigida por defeito                                              | `tests/regression/reports-2026-05-15.test.ts`                                                                              |
-| Runner: `node:test` nativo + `--experimental-strip-types` (sem Jest/Vitest) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/)                                                        |
+| Runner: `node:test` nativo, `.ts` direto sem flag (sem Jest/Vitest) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/)                                                        |
 
 ---
 

@@ -155,8 +155,8 @@ bonito. Fora do escopo atual, use a skill [`issue-report`](../skills/issue-repor
   PDF.
 - **Fatiar arquivo `.REM` por Bash é o caminho certo.** Não é código do repositório. Escreva o
   script no scratchpad da sessão, nunca dentro do repo.
-- **`pnpm`, jamais `npm`** — hook recusa. Scripts utilitários em TypeScript (`node
-  --experimental-strip-types`), nunca Python.
+- **`pnpm`, jamais `npm`** — hook recusa. Scripts utilitários em TypeScript, executados com
+  `node arquivo.ts` (sem flag), nunca Python.
 - **Gate antes de fechar:** `pnpm run typecheck && format:check && lint && test`. Vermelho é
   regressão a corrigir agora, tenha ou não vindo do seu diff — nunca `skip`, nunca hook desligado.
   Se travar, use a skill [`ts-quality-checker`](../skills/ts-quality-checker/SKILL.md).

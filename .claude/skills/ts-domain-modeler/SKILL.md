@@ -178,7 +178,7 @@ import type { Result } from '../../../../shared/result.ts';
 }
 ```
 
-Esse padrão é nativo Node 18+, funciona com `--experimental-strip-types`, e dispensa qualquer transpiler/mapper externo.
+Esse padrão é nativo Node 18+, funciona sob o type stripping do Node, e dispensa qualquer transpiler/mapper externo.
 
 ### Exemplo concreto do módulo `contracts`
 

@@ -37,8 +37,7 @@ gera.
 Para investigar um teste específico:
 
 ```bash
-node --test --experimental-strip-types --enable-source-maps --no-warnings \
-  --test-name-pattern="<regex>" tests/caminho/do/arquivo.test.ts
+node --test --test-name-pattern="<regex>" tests/caminho/do/arquivo.test.ts
 ```
 
 ---

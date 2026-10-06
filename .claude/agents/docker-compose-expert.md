@@ -198,10 +198,11 @@ COPY --chown=app:app package.json ./
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-  CMD node --experimental-strip-types --no-warnings -e "fetch('http://localhost:3000/health').then(r => r.ok ? 0 : process.exit(1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:3000/health').then(r => r.ok ? 0 : process.exit(1)).catch(() => process.exit(1))"
 
 # `tini` (PID 1 init) — opcional via flag init: true do compose, ou via ENTRYPOINT.
-ENTRYPOINT ["node", "--experimental-strip-types", "--no-warnings"]
+# Sem flag de runtime: o type stripping é default no Node 24.
+ENTRYPOINT ["node"]
 CMD ["src/server.ts"]
 ```
 
