@@ -45,9 +45,20 @@ allowBuilds:
 #   Piso subido para 3.1.6 — a MÍNIMA que fecha as quatro. A 3.1.7 existe e o fastify 5.12.1 já a
 #   resolve, mas caiu na quarentena de `minimumReleaseAge` (publicada em 02/09 11:06 UTC); a faixa
 #   `<4` deixa ela entrar sozinha assim que amadurecer, sem exigir novo override.
+#
+#   ⚠️ 5ª rodada, e o aviso se cumpriu pela QUINTA vez — exatamente como previsto acima, e pela
+#   razão já documentada: a esperança de que a 3.1.7 "entrasse sozinha ao amadurecer" não se
+#   realizou, porque faixa não empurra ninguém. O piso `>=3.1.6` seguiu satisfeito pela própria
+#   3.1.6, e `@fastify/ajv-compiler@4.0.6` continuou resolvendo para ela mesmo com o fastify em
+#   5.12.5. Corrigido em 06/10/2026: piso para **>=3.1.7** (resolve 3.1.8, publicada 15/09 e
+#   fora da quarentena). Advisory vigente corrige em >=3.1.7.
 # - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial (1ª/2ª rodada)
 # - GHSA-rgw5-rvv9-x895: brace-expansion <5.0.9 — DoS por arrays intermediários sem limite,
-#   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª, VIGENTE)
+#   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª)
+# - 4ª rodada (VIGENTE, corrigida em 06/10/2026): duas advisories `high` corrigidas em >=5.0.11 e
+#   >=5.0.10. Mesmo mecanismo das anteriores: o piso `>=5.0.9` era satisfeito pela própria 5.0.9 e
+#   `minimatch@10.2.5` seguia resolvendo para ela. Piso para **>=5.0.11** (resolve 5.0.12,
+#   publicada 14/09, fora da quarentena).
 #   Transitiva de runtime via @fastify/swagger-ui → @fastify/static → glob → minimatch.
 #   Exposição real BAIXA: exige o atacante controlar o input do expand(); aqui o glob serve os
 #   assets do /docs, com padrões internos.
@@ -67,8 +78,8 @@ allowBuilds:
 #   entre 9 e 10, validado por boot + fastify.inject do /docs (ver ticket #573).
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
-  fast-uri: '>=3.1.6 <4'
-  brace-expansion: '>=5.0.9 <6'
+  fast-uri: '>=3.1.7 <4'
+  brace-expansion: '>=5.0.11 <6'
   find-my-way: '^9.7.0'
   '@fastify/static': '^10.1.2'
 
