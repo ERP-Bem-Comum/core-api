@@ -1,4 +1,16 @@
-# syntax=docker/dockerfile:1.10
+# syntax=docker/dockerfile:1
+#
+# ⚠️ `:1` e NUNCA um minor fixo. A doc oficial é explícita: `docker/dockerfile:1` acompanha a
+# última 1.x.x e o BuildKit checa atualização a cada build, enquanto "if a specific version is
+# used, such as `1.2` or `1.2.1`, the Dockerfile needs to be updated manually to continue
+# receiving bugfixes and new features" (https://docs.docker.com/build/buildkit/frontend/).
+# Este arquivo ficou em `1.10` até 06/10/2026 — 17 minors atrás da ponta (`1.27.1`), sem receber
+# correção desde que a `1.11` saiu, e ninguém tinha como notar.
+#
+# Por que isto NÃO contraria o digest pin do ADR-0011, que vale para a imagem base abaixo: o
+# frontend do `# syntax` é baixado em tempo de BUILD e não entra na imagem final — ele não afeta a
+# reprodutibilidade do que roda em produção, que é o que aquele ADR protege. Um minor fixo aqui
+# não era nem imutável (recebe patches `1.10.x`) nem atualizado: era o pior dos dois mundos.
 #
 # core-api — módulo Contracts
 # ─────────────────────────────────────────────────────────────────────────────
