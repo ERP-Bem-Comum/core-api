@@ -16,7 +16,7 @@ verify:
 
 Estes arquivos carregam **decisão de segurança**, não configuração incidental. A política nasceu de um incidente real: o comprometimento do `axios` em março/2026 ([ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md)).
 
-As quatro settings de quarentena e a concordância de versão do pnpm entre `packageManager`, `engines.pnpm` e `ENV PNPM_VERSION` são cobradas por `tests/cleanup/supply-chain-settings.test.ts`. A lista de libs banidas do ADR-0011 §4 é enforced por `@typescript-eslint/no-restricted-imports`, com a mensagem do ADR dentro do erro. Nenhuma das duas se repete aqui.
+As quatro settings de quarentena e a concordância de versão do pnpm entre `packageManager`, `engines.pnpm` e `ENV PNPM_VERSION` são cobradas por `tests/cleanup/supply-chain-settings.test.ts`. A lista de libs banidas do ADR-0011 §4 é enforced por `no-restricted-imports` no `.oxlintrc.json`, com a mensagem do ADR dentro do erro. Nenhuma das duas se repete aqui.
 
 > ⚠️ **Cite [ADR-0029](../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md), não o ADR-0012.** O 0012 está **Superseded** desde 2026-05-30 — a escolha do pnpm continua válida, mas a norma vigente (major 11 + defaults) é o 0029.
 

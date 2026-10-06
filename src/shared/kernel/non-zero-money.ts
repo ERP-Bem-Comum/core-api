@@ -34,8 +34,10 @@ import type { Money } from './money.ts';
  *
  * Referência: `handbook/interviews/0001-functional-ddd-domain-refresh.md`,
  * Bloco D D5 (Invariantes contextuais) — DO D§25.
+ *
+ * O duplo underscore de `__nonZeroMoney` é exceção declarada do `naming-convention`, na allowlist
+ * de `tests/cleanup/lint-gaps.test.ts`.
  */
-// eslint-disable-next-line @typescript-eslint/naming-convention
 export type NonZeroMoney = Money & { readonly __nonZeroMoney: true };
 
 export type NonZeroMoneyError = 'money-must-be-non-zero';

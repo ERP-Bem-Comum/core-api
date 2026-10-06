@@ -7,7 +7,7 @@
 ## Por que rodar `.ts` direto, sem `tsc`/`esbuild`?
 
 - **Edita-roda em segundos.** Script de manutenção raramente precisa do pipeline de build.
-- **Tipos no autor, JS na execução.** Node 24 com `--experimental-strip-types` **descarta** as anotações sem checar — o `tsc --noEmit` do gate é quem valida tipo.
+- **Tipos no autor, JS na execução.** O Node 24 **descarta** as anotações sem checar, por padrão e sem flag — o `tsc --noEmit` do gate é quem valida tipo.
 - **Zero artefato.** Sem `dist/`, sem `.js` versionado, sem `.map`. `git diff` mostra a verdade.
 
 ---
@@ -16,7 +16,7 @@
 
 ```bash
 # direto:
-pnpm exec node --experimental-strip-types --no-warnings scripts/limpar.ts
+pnpm exec node scripts/limpar.ts
 
 # via script do package.json (preferido):
 pnpm run script:limpar
@@ -29,14 +29,15 @@ chmod +x scripts/limpar.ts
 Shebang canônico:
 
 ```ts
-#!/usr/bin/env -S node --experimental-strip-types --no-warnings
+#!/usr/bin/env node
 ```
 
-`env -S` permite múltiplas flags no shebang — sem ele, só uma flag passa.
+Sem flag, então sem `env -S` — ele existia só para passar múltiplas flags no shebang (um shebang
+aceita um argumento só). O type stripping é default desde o Node 23.6.
 
 ---
 
-## O que `--experimental-strip-types` faz e o que NÃO faz
+## O que o type stripping faz e o que NÃO faz
 
 | ✅ Funciona | ❌ Não funciona |
 | :--- | :--- |

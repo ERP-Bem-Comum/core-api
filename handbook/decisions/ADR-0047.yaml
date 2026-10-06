@@ -130,7 +130,7 @@ claims:
         diretamente, então o teste falha. O produtor MUST conhecer apenas o próprio outbox.
       expected_error: null
       blocker: null
-      enforced_by: ['eslint.config.js']
+      enforced_by: []
     rule:
       status: proposed
       disposition: adopt

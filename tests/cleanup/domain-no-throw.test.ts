@@ -11,8 +11,9 @@
  * O custo é assimétrico e por isso a regra é absoluta aqui. Esquecer de tratar um `Result` é erro
  * de compilação; esquecer de capturar uma exceção é incidente em produção.
  *
- * Este gate cobre a lacuna real: `class`, `any` e `switch` não-exaustivo JÁ são barrados por ESLint
- * (`no-restricted-syntax`, `no-explicit-any`, `switch-exhaustiveness-check`) e pelo `tsconfig`
+ * Este gate cobre a lacuna real: `class`, `any` e `switch` não-exaustivo JÁ são barrados pelo gate
+ * de AST `lint-gaps.test.ts` (`class`), pelo oxlint (`no-explicit-any`,
+ * `switch-exhaustiveness-check`) e pelo `tsconfig`
  * (`noFallthroughCasesInSwitch`) — mas NADA barrava `throw`. A norma se sustentava por disciplina,
  * com adesão de 100% em ~180 arquivos de domínio e kernel.
  *

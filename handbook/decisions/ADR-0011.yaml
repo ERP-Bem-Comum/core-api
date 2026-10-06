@@ -174,19 +174,19 @@ claims:
     kind: prohibition
     source_lines: ['58-68']
     applies_to:
-      - 'eslint.config.js'
+      - '.oxlintrc.json'
       - 'src/**/*.ts'
     reality:
       verdict: holds
       holds_in: [core-api]
       absent_in: []
       evidence:
-        - 'eslint.config.js:76 — @typescript-eslint/no-restricted-imports com severidade error'
-        - 'eslint.config.js:82 — entrada de axios com a MENSAGEM DO ADR no erro: "Proibida (ADR-0011 §4): supply chain compromise em mar/2026. Use fetch global."'
-        - 'eslint.config.js:87 — entrada de request, citando o ADR §4'
+        - '.oxlintrc.json:287 — eslint/no-restricted-imports com severidade error (portada do @typescript-eslint/no-restricted-imports na troca para o oxlint, ADR-0072)'
+        - '.oxlintrc.json:292 — entrada de axios com a MENSAGEM DO ADR no erro: "Proibida (ADR-0011 §4): supply chain compromise em mar/2026. Use fetch global."'
+        - '.oxlintrc.json:296 — entrada de request, citando o ADR §4'
         - 'ausência: axios e node-fetch não estão em package.json'
       verify: |
-        sed -n '75,95p' eslint.config.js
+        grep -n -A30 'no-restricted-imports' .oxlintrc.json
     testability:
       verdict: testable
       layer: static
@@ -195,7 +195,7 @@ claims:
         roda no gate.
       expected_error: null
       blocker: null
-      enforced_by: ['eslint.config.js']
+      enforced_by: ['.oxlintrc.json']
     rule:
       status: proposed
       disposition: drop

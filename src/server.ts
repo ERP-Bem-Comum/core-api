@@ -168,7 +168,7 @@ const main = async (): Promise<void> => {
 
   // O banner sai INCONDICIONALMENTE, e é a forma honesta enquanto a linha acima existir: envolvê-lo
   // num `if (rbacMode === 'bypass')` seria escrever uma condição que o compilador prova sempre
-  // verdadeira — o ESLint recusa, e com razão. Ao religar, o `if` volta junto com o modo dinâmico.
+  // verdadeira — o lint recusa, e com razão. Ao religar, o `if` volta junto com o modo dinâmico.
   process.stderr.write(rbacBypassBanner(process.env['NODE_ENV'] ?? 'undefined'));
 
   // A divergência entre o CONFIGURADO e o EFETIVO é o que o operador não consegue deduzir do banner:
@@ -181,7 +181,7 @@ const main = async (): Promise<void> => {
     );
   }
   // Os `driver: 'mysql'` daqui para baixo são literais, e não mais derivados de um ternário sobre a
-  // env: sob o ADR-0068 a guarda só devolve `mysql`, e o ESLint (`no-unnecessary-condition`) recusa
+  // env: sob o ADR-0068 a guarda só devolve `mysql`, e o lint (`no-unnecessary-condition`) recusa
   // a comparação que sobrou. A variante `'memory'` continua existindo em cada
   // `<Módulo>CompositionConfig` — mas só alcançável por injeção em teste, nunca por configuração.
   const authDeps = await buildAuthHttpDeps({
@@ -255,7 +255,7 @@ const main = async (): Promise<void> => {
     // `financial`. Afrouxá-la gravaria linha que sobrevive ao religar, e o #634 não desfaz banco.
     //
     // Literal `true`, e não `rbacMode === 'bypass'`, pela mesma razão do banner acima: com o modo
-    // fixado por código, o compilador prova a comparação sempre verdadeira e o ESLint a recusa.
+    // fixado por código, o compilador prova a comparação sempre verdadeira e o lint a recusa.
     //
     // ⚠️ ← religar: este literal é a SEGUNDA das duas linhas marcadas `← religar`. Apagar só a
     // outra deixa o afrouxamento do domínio de pé com o RBAC já enforçado — e nada mecânico acusa:

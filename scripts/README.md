@@ -1,7 +1,8 @@
 # scripts/
 
-Automação de **desenvolvimento, CI e operações** do core-api — TypeScript (Node 24 +
-`--experimental-strip-types`) e bash. **Não** é código de produção (esse vive em `src/`).
+Automação de **desenvolvimento, CI e operações** do core-api — TypeScript executado direto pelo
+Node 24 (`node arquivo.ts`; o type stripping é default, sem flag) e bash. **Não** é código de
+produção (esse vive em `src/`).
 
 > Programas auxiliares **compilados** (ex.: o dead-man's switch em Go) ficam em
 > [`../tools/`](../tools/README.md), não aqui. A distinção: `scripts/` = automação **interpretada**

@@ -9,8 +9,8 @@ dist/
 .idea/
 coverage/
 .tsbuildinfo
-# Cache do ESLint (~1 MB). Derivado do fonte e da config — nunca versionado.
-# No CI ele é restaurado por actions/cache, não pelo repositório (Inquiry-0029).
+# Resíduo do ESLint (removido no ADR-0072): clones anteriores à troca ainda têm o arquivo no
+# disco. Ignorado para não aparecer como não rastreado; o oxlint não usa cache.
 .eslintcache
 
 # Dados brutos temporários (ex.: dump IBGE baixado por scripts/data/fetch-*)

@@ -248,7 +248,7 @@ claims:
         `req`, `reply`, prompt), então o teste falha — a camada MUST ser agnóstica de UX.
       expected_error: null
       blocker: null
-      enforced_by: ['eslint.config.js']
+      enforced_by: []
     rule:
       status: proposed
       disposition: drop

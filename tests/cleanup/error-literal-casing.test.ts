@@ -6,7 +6,7 @@
  * `switch` do chamador, e o que separa o erro INTERNO (que o código casa) da mensagem AO HUMANO
  * (PT-BR, formatada na borda).
  *
- * O `@typescript-eslint/naming-convention` cobre o casing de IDENTIFICADOR — `const`, `type`,
+ * O `naming-convention` (gate de AST em `lint-gaps.test.ts`) cobre o casing de IDENTIFICADOR — `const`, `type`,
  * `function`. Ele não vê o VALOR de uma string literal, que é exatamente onde o erro vive. Um
  * `'ContractNotActive'` ou `'contrato_nao_ativo'` atravessava o repositório inteiro sem um vermelho.
  *

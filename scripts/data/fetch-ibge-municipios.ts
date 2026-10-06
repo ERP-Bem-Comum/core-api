@@ -1,7 +1,7 @@
 // Baixa o catálogo oficial de municípios do IBGE (view nivelado) e salva em
 // .tmp/ibge-municipios.json. Roda no terminal do dev (precisa de rede).
 //
-//   node --experimental-strip-types scripts/data/fetch-ibge-municipios.ts
+//   node scripts/data/fetch-ibge-municipios.ts
 //
 // É tooling de apoio ao ticket PARTNERS-MUNICIPALITY-LOOKUP — a transformação
 // JSON → municipalities.data.ts é feita pelo módulo de domínio, não aqui.

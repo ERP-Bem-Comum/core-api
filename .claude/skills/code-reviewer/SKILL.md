@@ -33,8 +33,8 @@ Em ordem decrescente de autoridade:
 | Tópico | Onde olhar |
 | :--- | :--- |
 | Regras transversais (zero throw, zero class, anti-padrões numerados) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Regras invariantes" e §"Anti-padrões" |
-| ESLint flat config + `typescript-eslint` strict + stylistic + type-checked (regras automaticamente enforced) | [`../../../eslint.config.js`](../../../eslint.config.js) — incluir `no-restricted-syntax` (class), `switch-exhaustiveness-check`, `strict-boolean-expressions`, `prefer-readonly-parameter-types`, `consistent-type-imports`, `naming-convention` |
-| Prettier (regras de estilo, ignorar conflitos com ESLint via `eslint-config-prettier`) | [`../../../.prettierrc.json`](../../../.prettierrc.json), [`../../../.prettierignore`](../../../.prettierignore) |
+| oxlint type-aware (regras automaticamente enforced) + gate de AST para o que o oxlint não tem | [`../../../.oxlintrc.json`](../../../.oxlintrc.json) — incluir `switch-exhaustiveness-check`, `strict-boolean-expressions`, `prefer-readonly-parameter-types`, `consistent-type-imports`; `class` e `naming-convention` em [`../../../tests/cleanup/lint-gaps.test.ts`](../../../tests/cleanup/lint-gaps.test.ts) |
+| Prettier (regras de estilo; o lint não liga categoria de estilo, então não há conflito) | [`../../../.prettierrc.json`](../../../.prettierrc.json), [`../../../.prettierignore`](../../../.prettierignore) |
 | tsconfig estrito (strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `isolatedModules`) | [`../../../tsconfig.json`](../../../tsconfig.json) |
 | ADRs imutáveis (vencem tudo) | [`handbook/architecture/adr/`](../../../handbook/architecture/adr/) — atenção especial a 0006, 0009, 0013, 0014, 0015, 0018, 0019 |
 | Reviews já realizadas (exemplos de severidade + escopo) | `tests/reports/REVIEW.md`, `tests/reports/E2E-SECURITY-REVIEW.md`, `tests/bdd/QA-REPORT.md` |

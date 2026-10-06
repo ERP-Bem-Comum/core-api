@@ -34,4 +34,4 @@ if [ -z "${NODE_BIN}" ]; then
 fi
 [ -x "${NODE_BIN}" ] || exit 0
 
-exec "${NODE_BIN}" --experimental-strip-types --no-warnings "${GATE}" "${MSG_FILE}"
+exec "${NODE_BIN}" "${GATE}" "${MSG_FILE}"

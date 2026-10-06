@@ -79,7 +79,7 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | Skill irmã no domínio puro | [`../ts-domain-modeler/SKILL.md`](../ts-domain-modeler/SKILL.md) |
 | Skill irmã na revisão da rede de segurança | [`../code-reviewer/SKILL.md`](../code-reviewer/SKILL.md) |
 | Skill irmã no gate automatizado | [`../ts-quality-checker/SKILL.md`](../ts-quality-checker/SKILL.md) |
-| Runner: `node:test` nativo + `--experimental-strip-types` (sem Jest, sem Vitest, sem fast-check ainda) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
+| Runner: `node:test` nativo, `.ts` direto sem flag (sem Jest, sem Vitest, sem fast-check ainda) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
 | Comandos: `pnpm test`, single-test via `--test-name-pattern` | [`../../rules/testing.md`](../../rules/testing.md) |
 | Estrutura mirror: `tests/` espelha `src/`. Sufixo `.test.ts` é descoberto. `.contract.ts` e `.suite.ts` são suites parametrizadas reutilizáveis (function factory que recebe `makeImpl`) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Convenções de testes" |
 | Subpath imports em testes: `import { Money } from '#src/modules/contracts/domain/shared/money.ts'` | [`../../../package.json`](../../../package.json) `imports` field |

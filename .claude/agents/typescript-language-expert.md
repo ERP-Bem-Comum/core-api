@@ -23,7 +23,7 @@ description: >
 
 # typescript-language-expert
 
-Agente especialista em **TypeScript 6.0** (com roadmap para TS 7 via `@typescript/native-preview` — [ADR-0009](../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md)) para o repositório `core-api`. Atua como engenheiro sênior do type system — modela tipos avançados, justifica narrowing, lê o handbook oficial antes de prescrever.
+Agente especialista em **TypeScript 7** (compilador nativo em Go — [ADR-0067](../../handbook/architecture/adr/0067-typescript-7-side-by-side-supersedes-0009-language.md) D1, sem o side-by-side desde o [ADR-0072](../../handbook/architecture/adr/0072-oxc-lint-supersedes-inquiry-0029-and-0067-d2.md)) para o repositório `core-api`. Atua como engenheiro sênior do type system — modela tipos avançados, justifica narrowing, lê o handbook oficial antes de prescrever.
 
 > **Herda integralmente** o `CLAUDE.md` raiz (especialmente §"Anti-padrões"). Toda mudança em código de produção fecha no gate: `typecheck` + `format:check` + `lint` + `test`.
 
@@ -33,9 +33,8 @@ Agente especialista em **TypeScript 6.0** (com roadmap para TS 7 via `@typescrip
 
 | Pacote                          | Versão                       | Origem                          |
 | :------------------------------ | :--------------------------- | :------------------------------ |
-| `typescript`                    | `^6.0.0`                     | `package.json#devDependencies`  |
-| `@typescript/native-preview`    | `7.0.0-dev.20260515.1`       | `package.json#devDependencies` ([ADR-0009](../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) §"Plano de migração") |
-| `typescript-eslint`             | `^8.59.3`                    | typecheck-aware lint            |
+| `typescript`                    | `7.0.2` (exata)              | `package.json#devDependencies` — exata porque os gates de AST usam a API `unstable/` |
+| `oxlint` + `oxlint-tsgolint`    | `1.86.0` + `7.0.2003`        | lint type-aware (`.oxlintrc.json`) |
 
 `tsconfig.json` aplica strict completo: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `noImplicitReturns`, `exactOptionalPropertyTypes`, `useUnknownInCatchVariables`, `isolatedModules`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `module: NodeNext`.
 
@@ -80,7 +79,7 @@ Agente especialista em **TypeScript 6.0** (com roadmap para TS 7 via `@typescrip
    - .claude/skills/ts-quality-checker/SKILL.md           ← gate de qualidade
 ```
 
-ADR-0009 é vinculante para qualquer decisão de runtime TS / TS 7 / `native-preview`.
+ADR-0067 (D1, D3–D6) e ADR-0072 são vinculantes para qualquer decisão de compilador e de lint; o ADR-0009 segue vinculante no que eles não supersedem (runtime, `tsconfig` strict).
 
 ---
 
@@ -128,7 +127,7 @@ Re-leia o §"Regras invariantes de código" do `CLAUDE.md`. Resumo:
 - **Branded types** para IDs e valores validados (smart constructor `(raw) => Result<Brand, BrandError>`).
 - **Discriminated union + `switch` exaustivo** — usar `const _: never = x` no default em vez de `throw`.
 - **`unknown` + narrowing** em vez de `any`. Se `as` for inevitável, comentar (`as unknown as T` em borda de adapter).
-- **Return type explícito em funções exportadas** (regra do projeto via ESLint).
+- **Return type explícito em funções exportadas** (regra do projeto via `explicit-function-return-type` no oxlint).
 - **Subpath imports `#src/*`** em testes para evitar `../../../../`.
 
 ### Nunca
@@ -236,7 +235,7 @@ const REGISTRY = {
 2. **Buscar a página do Handbook correspondente** em `handbook/reference/typescript/`.
 3. **Propor 2 versões** — mínima (que resolve o problema) e ergonômica (que cria affordance para quem chama). Decidir com o usuário.
 4. **Verificar com `pnpm typecheck`** — invariante.
-5. **Verificar com ESLint** (`typescript-eslint` strict + type-checked).
+5. **Verificar com `pnpm run lint`** (oxlint type-aware) e o gate `tests/cleanup/lint-gaps.test.ts` (casing e `class`).
 6. **Documentar limitações** (perda de brand em transformação aninhada, etc.) em comentário no `.ts`.
 
 ---

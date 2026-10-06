@@ -25,7 +25,7 @@ type RunOutcome = Readonly<{ code: number; stderr: string }>;
 // o teste passaria a depender do ambiente.
 const runJob = async (env: Readonly<Record<string, string>>): Promise<RunOutcome> =>
   new Promise<RunOutcome>((settle) => {
-    const child = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', RUN], {
+    const child = spawn(process.execPath, ['--enable-source-maps', RUN], {
       cwd: REPO_ROOT,
       env: { PATH: process.env['PATH'] ?? '', ...env },
     });

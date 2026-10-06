@@ -177,7 +177,7 @@ claims:
     source_lines: [79, 103, 150]
     applies_to:
       - 'src/modules/*/**/*.ts'
-      - 'eslint.config.js'
+      - '.oxlintrc.json'
     reality:
       verdict: partial
       holds_in:
@@ -189,7 +189,7 @@ claims:
         - 'ausência: nenhuma rule em .semgrep/rules.yml sobre fronteira de módulo'
         - 'nota: a invariante está de pé por disciplina, exatamente no ponto onde o ADR previu que disciplina não bastaria'
       verify: |
-        grep -n "no-cross-context\|public-api" eslint.config.js .semgrep/rules.yml
+        grep -n "no-cross-context\|public-api" .oxlintrc.json .semgrep/rules.yml
     testability:
       verdict: testable
       layer: static

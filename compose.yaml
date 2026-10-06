@@ -438,8 +438,11 @@ services:
   # hardening (no-new-privileges, cap_drop ALL, read_only, tmpfs /tmp), network
   # core-api, depends_on mysql+http healthy (schema migrado). WORKER_GROUP via
   # environment; DATABASE_URLs injetadas por wrapper sh + $(cat /run/secrets/...)
-  # + exec tini. NODE_OPTIONS="--experimental-strip-types --no-warnings" herdado
-  # do ENV da imagem. read_only: strip-types não grava em disco; mysql2 é JS puro.
+  # + exec tini. Nenhum serviço daqui declara NODE_OPTIONS: o stripping de tipos é default no
+  # Node 24, então o `node` da imagem executa `.ts` sem flag. O que vale em runtime é o
+  # NODE_OPTIONS="--enable-source-maps" do Dockerfile (ENV, linha 128), herdado por todos — a
+  # variável não está vazia, só não carrega flag de strip-types. read_only: strip-types não grava
+  # em disco; mysql2 é JS puro.
   # ──────────────────────────────────────────────────────────────────────────
 
   # Grupo A — outbox (contracts + partners). 1 pool compartilhado.
@@ -569,8 +572,8 @@ services:
   # da imagem é `tini -- node src/server.ts` — server.ts ESTÁ no entrypoint. Por isso
   # sobrescrevemos `entrypoint: [tini, --, node]` (PID 1 + runtime) e deixamos o
   # `command` apontar o script do job; sem o override, o `command` seria ANEXADO ao
-  # server.ts (subiria o servidor, não o sweeper). NODE_OPTIONS=--experimental-strip-types
-  # vem do ENV da imagem (herdado). Efetivo: `tini -- node src/jobs/.../run.ts`.
+  # server.ts (subiria o servidor, não o sweeper). Nenhuma flag é necessária no `node`: o
+  # stripping de tipos é default no Node 24. Efetivo: `tini -- node src/jobs/.../run.ts`.
   #
   # O sweeper usa CONTRACTS_DATABASE_URL_FILE (suportado pelo sweeper — único service
   # que suporta este mecanismo nativo). Os demais jobs usam o padrão sh+$(cat).

@@ -227,7 +227,7 @@ for (const file of yamlFiles) {
       });
 
       // Regra 1 do context/INDEX.md: o que já é mecânico não vira texto — mas tem de ser rastreável.
-      // Mecanismo é teste, rule semgrep, config eslint ou hook — qualquer um, desde que exista.
+      // Mecanismo é teste, rule semgrep, config do oxlint ou hook — qualquer um, desde que exista.
       it('enforced_by lista mecanismos que existem no repo', () => {
         assert.ok('enforced_by' in testability, 'campo enforced_by ausente');
         const mechanisms = asStringArray(testability['enforced_by'], `${id}#enforced_by`);

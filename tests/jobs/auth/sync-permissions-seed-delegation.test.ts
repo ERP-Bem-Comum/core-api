@@ -36,7 +36,7 @@ const enabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1' && CONN.
 
 const runSeed = async (): Promise<number> =>
   new Promise<number>((settle) => {
-    const child = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', SEED], {
+    const child = spawn(process.execPath, ['--enable-source-maps', SEED], {
       cwd: REPO_ROOT,
       stdio: 'ignore',
       env: {

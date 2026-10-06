@@ -114,7 +114,7 @@ módulo aceita `readerUrl` opcional" — e esse sim vira RED estático.
 
 ### `enforced_by` — o que já é mecânico não vira texto
 
-Regra 1 do `context/INDEX.md`: se teste, `eslint`, `tsc`, `semgrep` ou hook já garantem, a
+Regra 1 do `context/INDEX.md`: se teste, `oxlint`, `tsc`, `semgrep` ou hook já garantem, a
 alegação **não** precisa virar diretiva escrita — a verificação é a documentação. `enforced_by` lista
 o caminho desses mecanismos, e o gate confere que cada um existe de fato no repo.
 

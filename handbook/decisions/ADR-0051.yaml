@@ -129,7 +129,7 @@ claims:
         `budget-plans/public-api`.
       expected_error: null
       blocker: null
-      enforced_by: ['eslint.config.js']
+      enforced_by: ['tests/cleanup/module-boundary.test.ts']
     rule:
       status: proposed
       disposition: drop

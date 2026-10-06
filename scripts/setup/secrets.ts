@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --experimental-strip-types --no-warnings
+#!/usr/bin/env node
 // scripts/setup/secrets.ts
 //
 // Gera os 3 arquivos de secret consumidos pelo compose MySQL. Veja design
@@ -156,7 +156,7 @@ const promptSilent = async (label: string): Promise<string> =>
 
     let buffer = '';
 
-    // Function declarations (não arrow) — eslint permite hoisting (`functions: false`)
+    // Function declarations (não arrow) — o lint permite hoisting (`functions: false`)
     // e cleanup precisa referenciar onData (e vice-versa via remoção do listener).
     function cleanup(): void {
       stdin.removeListener('data', onData);

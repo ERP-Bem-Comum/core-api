@@ -12,7 +12,7 @@
  * silenciosamente (mas o IMPORT do adapter ainda quebra em W0, garantindo RED).
  *
  * Rodar:
- *   NOTIFICATIONS_INTEGRATION=1 node --test --experimental-strip-types \\
+ *   NOTIFICATIONS_INTEGRATION=1 node --test \\
  *     'tests/modules/notifications/adapters/email/nodemailer.integration.test.ts'
  *
  * ASCII puro.

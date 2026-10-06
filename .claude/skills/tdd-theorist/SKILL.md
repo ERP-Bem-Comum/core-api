@@ -81,7 +81,7 @@ Quando comparar escolas/abordagens, este projeto oferece evidência empírica de
 | **Cobertura vs Qualidade** | Sem threshold numérico; prova-se **cobertura por critério de aceite** | Cada critério de aceite (`- [ ]`) da issue vira um `it()`, e o caminho de erro conta como critério |
 | **Property-based testing** | Não adotado ainda (overhead > ganho na fase atual); reservado para `Money.add/subtract` e `Period.contains` se aparecer regressão | Caso adote: roda no mesmo `node:test` via `fast-check` (não instalado hoje) |
 | **Suite de contrato parametrizada** (consumida por múltiplos adapters) | Adotado — adapter InMemory e adapter real rodam o mesmo conjunto de cenários | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts`, `tests/modules/contracts/application/ports/document-storage.contract.ts` (sufixos `.suite.ts` e `.contract.ts` **não são** auto-descobertos pelo runner — são funções fábrica) |
-| **Runner: `node:test` vs Jest vs Vitest** | `node:test` nativo + `--experimental-strip-types` — zero deps, zero transpiler | `package.json` `"test": "node --test --experimental-strip-types --no-warnings 'tests/**/*.test.ts'"` |
+| **Runner: `node:test` vs Jest vs Vitest** | `node:test` nativo, `.ts` direto sem flag — zero deps, zero transpiler | `package.json` `"test": "node --test --test-concurrency=6 'tests/**/*.test.ts'"` |
 
 Referências cross-projeto: [`../../../CLAUDE.md`](../../../CLAUDE.md), [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/), [`../../rules/testing.md`](../../rules/testing.md) (contrato de isolamento e as quatro naturezas de arquivo de teste).
 
