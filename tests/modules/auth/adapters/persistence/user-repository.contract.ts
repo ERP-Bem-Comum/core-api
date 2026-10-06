@@ -18,6 +18,7 @@ import type { ActiveUser } from '#src/modules/auth/domain/identity/user/types.ts
 import * as User from '#src/modules/auth/domain/identity/user/user.ts';
 import * as UserId from '#src/modules/auth/domain/identity/user-id.ts';
 import * as Email from '#src/modules/auth/domain/identity/email.ts';
+import * as Cpf from '#src/modules/auth/domain/identity/cpf.ts';
 import * as PasswordHash from '#src/modules/auth/domain/credential/password-hash.ts';
 
 interface UserRepoSetup {
@@ -33,12 +34,25 @@ export interface UserRepoFactory {
 
 const AT = new Date('2026-05-27T12:00:00.000Z');
 
-const buildActive = (rawEmail: string): ActiveUser => {
+// CPFs sinteticos validos por checksum, ja em uso nas fixtures do modulo auth. Nao introduzir
+// numero novo aqui: os repositorios sao publicos e fixture e o caminho por onde dado de cadastro
+// real entra.
+const CPF_A = '52998224725';
+const CPF_B = '11144477735';
+
+// `rawCpf` ausente -> user sem perfil (cpf null), como nasce pelo register/OIDC.
+const buildActive = (rawEmail: string, rawCpf?: string): ActiveUser => {
   const email = Email.parse(rawEmail);
   const hash = PasswordHash.fromString('$argon2id$x');
   if (!email.ok || !hash.ok) throw new Error('fixture VO invalido');
+  let cpf = null;
+  if (rawCpf !== undefined) {
+    const parsed = Cpf.parse(rawCpf);
+    if (!parsed.ok) throw new Error('fixture cpf invalido');
+    cpf = parsed.value;
+  }
   const { user } = User.register(
-    { id: UserId.generate(), email: email.value, passwordHash: hash.value, roles: [] },
+    { id: UserId.generate(), email: email.value, passwordHash: hash.value, roles: [], cpf },
     AT,
   );
   return user;
@@ -119,6 +133,52 @@ export const runUserRepositoryContract = (label: string, factory: UserRepoFactor
       const savedB = await repository.save(b);
       assert.equal(savedB.ok, false);
       if (!savedB.ok) assert.equal(savedB.error, 'email-already-registered');
+      await cleanup();
+    });
+
+    // F7 (ciclo de QA 05/10): dois usuarios com o MESMO cpf e e-mails diferentes eram ambos
+    // aceitos — duplicacao de identidade, porque cpf e documento. A garantia vive no UNIQUE
+    // auth_user_cpf_idx (migration 0010); o contrato a cobra do PORT, nao de uma implementacao.
+    it('CA7: save de cpf duplicado (outro id, outro e-mail) -> cpf-already-registered', async () => {
+      const a = buildActive('cpf-a@example.com', CPF_A);
+      const savedA = await repository.save(a);
+      assert.equal(savedA.ok, true);
+
+      const b = buildActive('cpf-b@example.com', CPF_A); // mesmo cpf, e-mail e id diferentes
+      const savedB = await repository.save(b);
+      assert.equal(savedB.ok, false);
+      if (!savedB.ok) assert.equal(savedB.error, 'cpf-already-registered');
+      await cleanup();
+    });
+
+    // O lado negativo, e o que um fake erra com mais facilidade: cpf null NAO e duplicata.
+    // O InnoDB permite multiplos NULL num indice UNIQUE, e quem nasce pelo register/OIDC tem
+    // cpf null — se isto colidisse, nenhum usuario sem perfil poderia ser criado apos o primeiro.
+    it('CA8: dois users sem cpf (null) coexistem — null nao colide no UNIQUE', async () => {
+      const a = buildActive('nocpf-a@example.com');
+      const b = buildActive('nocpf-b@example.com');
+      assert.equal((await repository.save(a)).ok, true);
+      assert.equal((await repository.save(b)).ok, true);
+
+      const found = await reader.findById(b.id);
+      assert.equal(found.ok, true);
+      if (found.ok) assert.equal(found.value?.id, b.id);
+      await cleanup();
+    });
+
+    // Reescrever o PROPRIO registro nao e duplicata: o upsert por id (CA5) tem de continuar
+    // valendo para quem tem cpf, senao nenhum usuario com perfil poderia ser atualizado.
+    it('CA9: save do mesmo id com o mesmo cpf faz upsert, nao conflito', async () => {
+      const user = buildActive('upsert-cpf@example.com', CPF_B);
+      assert.equal((await repository.save(user)).ok, true);
+
+      const { user: disabled } = User.disable(user, AT);
+      const resaved = await repository.save(disabled);
+      assert.equal(resaved.ok, true);
+
+      const found = await reader.findById(user.id);
+      assert.equal(found.ok, true);
+      if (found.ok) assert.equal(found.value?.status, 'disabled');
       await cleanup();
     });
   });

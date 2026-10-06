@@ -2,6 +2,8 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
+import { inscriptionType } from '#src/modules/financial/domain/payout/inscription.ts';
+import { inspectRemittanceFile } from '#src/modules/financial/adapters/cnab/remittance-inspector.ts';
 import type { CedenteHeaderData } from '#src/modules/financial/adapters/cnab/multipag-records.ts';
 import type { Payee } from '#src/modules/financial/adapters/cnab/multipag-segments.ts';
 // W0 RED: o montador do arquivo de remessa ainda não existe.
@@ -1020,5 +1022,165 @@ describe('Remessa Multipag — o arquivo de Pix por chave (#838)', () => {
 
     assert.ok(isOk(r), `esperava arquivo, veio ${isErr(r) ? r.error : '?'}`);
     assert.equal(linesOf(r.value.content).length, 6);
+  });
+});
+
+/*
+ * Favorecido PESSOA FÍSICA nas três rotas emitidas (#1022).
+ *
+ * O cadastro de fornecedor passou a aceitar CPF, e a issue afirma que o CNAB já estava pronto: o
+ * reader deriva o `G005` do comprimento (`inscriptionType`) e o emissor escreve a inscrição por
+ * `inscription()`, que alinha à direita com zeros. Até aqui toda fixture deste arquivo era CNPJ — a
+ * afirmação era verdadeira e nada a MEDIA. Estes casos medem, rota por rota.
+ *
+ * O tipo NÃO é escrito literal: sai de `inscriptionType`, a mesma régua que o reader aplica ao
+ * cadastro (`remittance-payment-reader.drizzle.ts`). É o que amarra "11 posições → `1`" ao que a
+ * linha grava, em vez de testar só que o emissor copia um `'1'` que alguém afirmou.
+ *
+ * Os alinhamentos esperados vêm do layout v08: `G006` é `Num` (zeros à esquerda), com 14 posições no
+ * Segmento B (019-032) e na Informação 2 do Pix (`G031`, p. 101), e 15 no J-52 (p. 33).
+ */
+describe('Remessa Multipag — favorecido pessoa física (CPF) nas três rotas (#1022)', () => {
+  // CPF sintético com DV válido — o exemplo canônico, sem correspondência a cadastro real. DV
+  // inválido seria recusa `AT` (G059) que o inspetor não pega, e o teste aprovaria arquivo recusável.
+  const CPF = '12345678909';
+  const CPF_TYPE = inscriptionType(CPF);
+  const PERSON_NAME = 'MARIA DA SILVA';
+
+  const segmentOf = (line: string): string => at(line, 14, 14);
+  const detailsOf = (content: string): readonly string[] =>
+    linesOf(content).filter((l) => at(l, 8, 8) === '3');
+
+  // Zero defeitos de FORMA — o que o inspetor promete, e só isso. A coerência tipo × número (`AT`)
+  // é o que os asserts de posição abaixo cobrem; o inspetor não a enxerga.
+  const assertWellFormed = (content: string): void => {
+    assert.deepEqual(inspectRemittanceFile(content), []);
+  };
+
+  it('a régua do reader classifica 11 posições como pessoa física', () => {
+    assert.equal(CPF_TYPE, '1');
+  });
+
+  it('transferência: o Segmento B grava tipo `1` e o CPF com três zeros à esquerda', () => {
+    const cpfPayee: Payee = {
+      ...payee(1),
+      name: PERSON_NAME,
+      documentType: CPF_TYPE,
+      document: CPF,
+    };
+    const file = build([
+      { route: 'transfer', payee: cpfPayee, paymentDate: PAYMENT_DATE, valueCents: 1_500_00 },
+    ]);
+    const b = detailsOf(file.content).find((l) => segmentOf(l) === 'B') ?? '';
+
+    assert.equal(at(b, 18, 18), '1', 'G005 — tipo de inscrição do favorecido');
+    assert.equal(at(b, 19, 32), '00012345678909', 'G006 — 14 posições, Num, zeros à esquerda');
+    assertWellFormed(file.content);
+  });
+
+  // O tipo é do PAGAMENTO, não do lote: dois favorecidos do mesmo banco caem no mesmo lote, e cada
+  // Segmento B tem de declarar o seu. Um tipo herdado do primeiro registro classificaria errado o
+  // segundo, num arquivo que o banco aceita.
+  it('transferência: CPF e CNPJ no mesmo lote, cada Segmento B com o tipo do seu favorecido', () => {
+    const cpfPayee: Payee = {
+      ...payee(1),
+      name: PERSON_NAME,
+      documentType: CPF_TYPE,
+      document: CPF,
+    };
+    const file = build([
+      { route: 'transfer', payee: cpfPayee, paymentDate: PAYMENT_DATE, valueCents: 100_00 },
+      payment(2, 200_00),
+    ]);
+    const bs = batchDetailsOf(file.content);
+
+    assert.equal(bs.length, 1, 'mesmo banco de favorecido — um lote só');
+    const segmentsB = (bs[0] ?? []).filter((l) => segmentOf(l) === 'B');
+    assert.deepEqual(
+      segmentsB.map((l) => at(l, 18, 32)),
+      ['1' + '00012345678909', '2' + payee(2).document],
+    );
+    assertWellFormed(file.content);
+  });
+
+  // Literal, e não `{ ...billet(), … }`: `billet` devolve a união `RemittancePayment`, e o spread
+  // sobre ela não estreita para a rota de boleto.
+  const cpfBillet: RemittancePayment = {
+    route: 'billet',
+    barcode: barcodeOf('341', 1),
+    beneficiaryName: PERSON_NAME,
+    beneficiaryDocumentType: CPF_TYPE,
+    beneficiaryDocument: CPF,
+    dueDate: new Date(Date.UTC(2026, 7, 20)),
+    paymentDate: PAYMENT_DATE,
+    valueCents: 5_000,
+  };
+
+  it('boleto: o J-52 grava o CEDENTE com tipo `1` e o CPF com quatro zeros à esquerda', () => {
+    const file = build([cpfBillet]);
+    const j52 = detailsOf(file.content).find((l) => at(l, 18, 19) === '52') ?? '';
+
+    assert.equal(at(j52, 76, 76), '1', 'G005 — tipo de inscrição do cedente (quem recebe)');
+    assert.equal(at(j52, 77, 91), '000012345678909', 'G006 — 15 posições, Num, zeros à esquerda');
+    assert.equal(at(j52, 92, 131).trim(), PERSON_NAME);
+    assertWellFormed(file.content);
+  });
+
+  // ⚠️ "CEDENTE" no J-52 é quem RECEBE; quem paga é o SACADO, e ele vem do header do arquivo. O
+  // favorecido pessoa física não pode reclassificar a empresa pagadora — os dois blocos são
+  // independentes, e é o que se mede aqui.
+  it('boleto: o favorecido CPF não reclassifica o SACADO, que segue sendo a empresa do header', () => {
+    const file = build([cpfBillet]);
+    const j52 = detailsOf(file.content).find((l) => at(l, 18, 19) === '52') ?? '';
+
+    assert.equal(at(j52, 20, 20), CEDENTE.documentType);
+    assert.equal(at(j52, 21, 35), CEDENTE.document.padStart(15, '0'));
+  });
+
+  // O favorecido PF típico tem o próprio CPF como chave. A forma de iniciação NÃO distingue PF de PJ
+  // (`cpf` e `cnpj` colapsam em `03`, `pix-initiation.ts`) — quem distingue é o `G005` do Segmento B.
+  // Por isso o caso cobra os dois juntos: a iniciação sozinha não diria nada sobre o tipo.
+  it('Pix: o Segmento B grava tipo `1`, o CPF alinhado e a chave CPF com iniciação `03`', () => {
+    const file = build([
+      {
+        route: 'pix',
+        payee: { name: PERSON_NAME, documentType: CPF_TYPE, document: CPF },
+        pixKey: CPF,
+        pixKeyType: 'cpf',
+        paymentDate: PAYMENT_DATE,
+        valueCents: 100_00,
+      },
+    ]);
+    const b = detailsOf(file.content).find((l) => segmentOf(l) === 'B') ?? '';
+
+    assert.equal(at(b, 15, 17), '03 ', 'G100 — chave CPF/CNPJ, Alfa alinhado à esquerda');
+    assert.equal(at(b, 18, 18), '1', 'G005 — tipo de inscrição do favorecido');
+    assert.equal(at(b, 19, 32), '00012345678909', 'G006 — 14 posições, Num, zeros à esquerda');
+    assert.equal(at(b, 128, 226).trimEnd(), CPF, 'G101 — a chave');
+    assertWellFormed(file.content);
+  });
+
+  // A Informação 2 do Segmento A repete a inscrição do Segmento B — p. 101 manda o CPF "com zeros à
+  // esquerda" até 14. Alinhar à esquerda deixaria 3 dígitos do ISPB colados no CPF, e a leitura
+  // posicional do banco veria outra inscrição E outro ISPB.
+  it('Pix: a Informação 2 do Segmento A leva o CPF em 14 posições, igual ao Segmento B', () => {
+    const file = build([
+      {
+        route: 'pix',
+        payee: { name: PERSON_NAME, documentType: CPF_TYPE, document: CPF },
+        pixKey: CPF,
+        pixKeyType: 'cpf',
+        paymentDate: PAYMENT_DATE,
+        valueCents: 100_00,
+      },
+    ]);
+    const details = detailsOf(file.content);
+    const a = details.find((l) => segmentOf(l) === 'A') ?? '';
+    const b = details.find((l) => segmentOf(l) === 'B') ?? '';
+
+    assert.equal(at(a, 178, 191), '00012345678909', 'inscrição do favorecido');
+    assert.equal(at(a, 192, 199), '00000000', 'ISPB — intacto depois da inscrição');
+    assert.equal(at(a, 200, 201), '01', 'tipo de conta');
+    assert.equal(at(a, 178, 191), at(b, 19, 32), 'A e B declaram a mesma inscrição');
   });
 });

@@ -1,7 +1,7 @@
 // Adapter Drizzle do SuppliersBatchReadPort (#356) — resolução em lote por ref.
 //
 //   - 1 query com `inArray` (anti-N+1, CA7 validado no W3 contra MySQL real) — seleciona
-//     só as colunas da identidade mínima (id/name/cnpj/service_category); bancário/PIX
+//     só as colunas da identidade mínima (id/name/document/service_category); bancário/PIX
 //     nem chegam a ser lidos (minimização em profundidade, CA5).
 //   - refs sem row correspondente → `missing`. Categoria corrompida (dado legado
 //     inválido) → trata como infra: `err('suppliers-batch-read-unavailable')`.
@@ -39,7 +39,7 @@ export const createDrizzleSuppliersBatchReader = (
         .select({
           id: schema.parSuppliers.id,
           name: schema.parSuppliers.name,
-          cnpj: schema.parSuppliers.cnpj,
+          document: schema.parSuppliers.document,
           serviceCategory: schema.parSuppliers.serviceCategory,
         })
         .from(schema.parSuppliers)
@@ -56,7 +56,7 @@ export const createDrizzleSuppliersBatchReader = (
         items.push({
           ref: row.id,
           name: row.name,
-          taxId: row.cnpj,
+          taxId: row.document,
           serviceCategory: category.value,
         });
         found.add(row.id);

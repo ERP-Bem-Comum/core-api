@@ -44,7 +44,7 @@ Tabela de orientação rápida:
 
 | Tópico | Onde olhar |
 | :--- | :--- |
-| Regras transversais do código (zero `throw`, zero `class`, `Result`, branded, ESLint flat config + typescript-eslint strict + type-checked) | [`../../../CLAUDE.md`](../../../CLAUDE.md) |
+| Regras transversais do código (zero `throw`, zero `class`, `Result`, branded, oxlint type-aware + gate de AST `tests/cleanup/lint-gaps.test.ts`) | [`../../../CLAUDE.md`](../../../CLAUDE.md) |
 | Stack (Node 24 LTS, TS 6.0, ESM/NodeNext, pnpm) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/), [`handbook/reference/pnpm/`](../../../handbook/reference/pnpm/) |
 | Roadmap TS 7 (tsgo / Go-based compiler) | [`ADR-0009`](../../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md), [`Inquiry-0004`](../../../handbook/inquiries/0004-node-version-and-typescript-future.md) |
 | Modular monolith + ports/adapters (fronteira de quem você é) | [`ADR-0006`](../../../handbook/architecture/adr/0006-modular-monolith-core-api.md) |
@@ -178,7 +178,7 @@ import type { Result } from '../../../../shared/result.ts';
 }
 ```
 
-Esse padrão é nativo Node 18+, funciona com `--experimental-strip-types`, e dispensa qualquer transpiler/mapper externo.
+Esse padrão é nativo Node 18+, funciona sob o type stripping do Node, e dispensa qualquer transpiler/mapper externo.
 
 ### Exemplo concreto do módulo `contracts`
 

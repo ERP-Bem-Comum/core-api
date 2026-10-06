@@ -70,6 +70,14 @@ export type ContractsHttpHooks = Readonly<{
 const toErrorCode = (e: string | Readonly<{ tag: string }>): string =>
   typeof e === 'string' ? e : e.tag;
 
+// Id malformado → 400. A borda Zod (`uuidV4()`) já barra não-v4 antes do handler; o mapa é a
+// defesa em profundidade para o `rehydrate` do domínio (mesma régua, `isUuidV4`) nunca virar 500/422.
+const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
+  'contract-id-invalid',
+  'amendment-id-invalid',
+  'document-id-invalid',
+]);
+
 // Conflito de estado/transição/unicidade → 409. `ContractNotActive` é tag de ContractError.
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'contract-sequential-number-duplicated',
@@ -115,6 +123,7 @@ const STORAGE_BAD_GATEWAY_CODES: ReadonlySet<string> = new Set([
 // nunca 500 para erro de negócio (SPEC §3). ATENÇÃO: um `*-repo-*`/`storage-*` novo que não
 // seja adicionado aos Sets cairá no default 422 — ao introduzir código, atualizar os Sets.
 const writeErrorStatus = (code: string): number => {
+  if (BAD_REQUEST_CODES.has(code)) return 400;
   if (NOT_FOUND_CODES.has(code)) return 404;
   if (CONFLICT_CODES.has(code)) return 409;
   if (REPO_UNAVAILABLE_CODES.has(code)) return 503;
@@ -247,6 +256,7 @@ const contractsRoutes =
         if (!result.ok) {
           return sendResult(reply, err(toErrorCode(result.error)), {
             errors: {
+              'contract-id-invalid': 400,
               'contract-not-found': 404,
               'contract-repo-unavailable': 503,
               'amendment-repo-unavailable': 503,
@@ -290,6 +300,7 @@ const contractsRoutes =
         if (!updated.ok) {
           return sendResult(reply, err(toErrorCode(updated.error)), {
             errors: {
+              'contract-id-invalid': 400,
               'contract-not-found': 404,
               'contract-repo-unavailable': 503,
             },
@@ -300,6 +311,7 @@ const contractsRoutes =
         if (!detail.ok) {
           return sendResult(reply, err(toErrorCode(detail.error)), {
             errors: {
+              'contract-id-invalid': 400,
               'contract-not-found': 404,
               'contract-repo-unavailable': 503,
               'amendment-repo-unavailable': 503,
@@ -349,7 +361,11 @@ const contractsRoutes =
         const exists = await deps.getContract({ contractId: req.params.id });
         if (!exists.ok) {
           return sendResult(reply, err(toErrorCode(exists.error)), {
-            errors: { 'contract-not-found': 404, 'contract-repo-unavailable': 503 },
+            errors: {
+              'contract-id-invalid': 400,
+              'contract-not-found': 404,
+              'contract-repo-unavailable': 503,
+            },
           });
         }
         const result = await deps.getContractTimeline({ contractId: req.params.id });
@@ -711,6 +727,7 @@ const contractsRoutes =
         return sendResult(reply, mapped, {
           ok: 204,
           errors: {
+            'document-id-invalid': 400,
             'document-not-found': 404,
             'document-already-deleted': 404,
             'document-already-superseded': 404,

@@ -11,6 +11,8 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 const YEAR_MIN = 2000;
 const YEAR_MAX = 2100;
 
@@ -35,7 +37,7 @@ const networkRefSchema = z
 /** Body do POST /budget-plans. */
 export const createBudgetPlanBodySchema = z.object({
   year: z.number().int().min(YEAR_MIN).max(YEAR_MAX),
-  programRef: z.uuid(),
+  programRef: uuidV4(),
 });
 
 export type CreateBudgetPlanBody = z.infer<typeof createBudgetPlanBodySchema>;
@@ -46,7 +48,7 @@ export const listBudgetPlansQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
   year: z.coerce.number().int().min(YEAR_FILTER_MIN).max(YEAR_FILTER_MAX).optional(),
   status: budgetPlanStatusSchema.optional(),
-  programRef: z.uuid().optional(),
+  programRef: uuidV4().optional(),
   // Coerção ESTRITA (só 'true'/'false') — z.coerce.boolean() mapearia qualquer string não-vazia
   // (ex.: 'banana') para true; aqui um valor não-booleano vira 400. Ausente = lista completa flat.
   rootsOnly: z.stringbool().optional(),
@@ -56,23 +58,23 @@ export type ListBudgetPlansQuery = z.infer<typeof listBudgetPlansQuerySchema>;
 
 /** Param `:id` — UUID v4 do plano orçamentário. */
 export const budgetPlanIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID v4 do plano orçamentário' }),
+  id: uuidV4().meta({ description: 'UUID v4 do plano orçamentário' }),
 });
 
 /** Item da listagem (GET /budget-plans). */
 export const budgetPlanListItemSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   year: z.number().int(),
   status: budgetPlanStatusSchema,
   version: z.string(),
-  programRef: z.uuid(),
+  programRef: uuidV4(),
   programName: z.string(),
   totalInCents: z.number().int(),
   updatedAt: z.string(),
-  updatedByRef: z.uuid().nullable(),
+  updatedByRef: uuidV4().nullable(),
   partnersCount: z.number().int().nonnegative(),
   networkKind: z.enum(['state', 'municipality', 'mixed']).nullable(),
-  parentId: z.uuid().nullable(),
+  parentId: uuidV4().nullable(),
   scenarioName: z.string().nullable(),
 });
 
@@ -88,7 +90,7 @@ export type BudgetPlanListResponseDto = z.infer<typeof budgetPlanListResponseSch
 
 /** Item de orçamento por Rede (parte do detalhe). */
 export const budgetDetailItemSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   partner: z.object({
     kind: z.enum(['state', 'municipality']),
     ref: networkRefSchema,
@@ -98,17 +100,17 @@ export const budgetDetailItemSchema = z.object({
 
 /** Detalhe completo (GET /budget-plans/:id). */
 export const budgetPlanDetailSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   year: z.number().int(),
   status: budgetPlanStatusSchema,
   version: z.string(),
-  programRef: z.uuid(),
+  programRef: uuidV4(),
   programName: z.string(),
   budgets: z.array(budgetDetailItemSchema),
   totalInCents: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  updatedByRef: z.uuid().nullable(),
+  updatedByRef: uuidV4().nullable(),
 });
 
 export type BudgetPlanDetailDto = z.infer<typeof budgetPlanDetailSchema>;
@@ -117,7 +119,7 @@ export type BudgetPlanDetailDto = z.infer<typeof budgetPlanDetailSchema>;
 export const budgetPlanOptionsSchema = z.object({
   programs: z.array(
     z.object({
-      ref: z.uuid(),
+      ref: uuidV4(),
       name: z.string(),
       abbreviation: z.string(),
     }),
@@ -137,9 +139,9 @@ export type BudgetPlanOptionsDto = z.infer<typeof budgetPlanOptionsSchema>;
 
 /** Response do POST /budget-plans. */
 export const createBudgetPlanResponseSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   year: z.number().int(),
-  programRef: z.uuid(),
+  programRef: uuidV4(),
   status: budgetPlanStatusSchema,
   version: z.string(),
   totalInCents: z.number().int(),
@@ -155,13 +157,13 @@ export const sceneryBodySchema = z.object({
 
 /** Resposta das transições (start-calibration/scenery/approve): o plano resultante + árvore. */
 export const lifecyclePlanResponseSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   year: z.number().int(),
-  programRef: z.uuid(),
+  programRef: uuidV4(),
   status: budgetPlanStatusSchema,
-  version: z.string().meta({ description: 'Versão do plano (major.minor)', example: '2.0' }),
+  version: z.string().meta({ description: 'Versão do plano (major.minor)', examples: ['2.0'] }),
   scenarioName: z.string().nullable(),
-  parentId: z.uuid().nullable(),
+  parentId: uuidV4().nullable(),
   totalInCents: z.number().int(),
 });
 
@@ -171,12 +173,12 @@ export type LifecyclePlanResponseDto = z.infer<typeof lifecyclePlanResponseSchem
 // ─── filhos/cenários (#401, BGP-SCENARIO-CHILDREN) ────────────────────────────
 /** Item de um plano-filho (cenário/calibração) na listagem de GET /budget-plans/:id/children. */
 export const budgetPlanChildSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   version: z.string(),
   scenarioName: z.string().nullable(),
   status: budgetPlanStatusSchema,
   totalInCents: z.number().int(),
-  updatedByRef: z.uuid().nullable(),
+  updatedByRef: uuidV4().nullable(),
 });
 
 /** Response do GET /budget-plans/:id/children — filhos diretos, ordenados por versão ascendente. */
@@ -231,7 +233,7 @@ export type AddCostCenterBody = z.infer<typeof addCostCenterBodySchema>;
 
 /** Body do POST .../cost-structure/categories. */
 export const addCategoryBodySchema = z.object({
-  costCenterId: z.uuid(),
+  costCenterId: uuidV4(),
   name: z.string().min(1).max(NODE_NAME_MAX),
 });
 
@@ -239,7 +241,7 @@ export type AddCategoryBody = z.infer<typeof addCategoryBodySchema>;
 
 /** Body do POST .../cost-structure/subcategories. */
 export const addSubcategoryBodySchema = z.object({
-  categoryId: z.uuid(),
+  categoryId: uuidV4(),
   name: z.string().min(1).max(NODE_NAME_MAX),
   launchType: launchTypeSchema,
 });
@@ -264,8 +266,8 @@ export type PatchCostNodeBody = z.infer<typeof patchCostNodeBodySchema>;
 
 /** Params do PATCH: o plano e o nó. O NÍVEL vem do path da rota, não do body. */
 export const costNodeParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID v4 do plano orçamentário' }),
-  nodeId: z.uuid().meta({ description: 'UUID v4 do nó (centro, categoria ou subcategoria)' }),
+  id: uuidV4().meta({ description: 'UUID v4 do plano orçamentário' }),
+  nodeId: uuidV4().meta({ description: 'UUID v4 do nó (centro, categoria ou subcategoria)' }),
 });
 
 // Response: árvore FIXA de 3 níveis (cost-center -> category -> subcategory).
@@ -273,21 +275,21 @@ export const costNodeParamSchema = z.object({
 // individual de cada nó fica na persistência; a borda não a expõe (ninguém pediu, e expor as duas
 // convidaria o front a recalcular a herança por conta).
 const subcategoryNodeSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   name: z.string(),
   launchType: launchTypeSchema,
   active: z.boolean(),
 });
 
 const categoryNodeSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   name: z.string(),
   active: z.boolean(),
   subcategories: z.array(subcategoryNodeSchema),
 });
 
 const costCenterNodeSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   name: z.string(),
   direction: costDirectionSchema,
   active: z.boolean(),
@@ -296,7 +298,7 @@ const costCenterNodeSchema = z.object({
 
 /** Response (GET árvore + 201 dos 3 POSTs): a árvore inteira após a operação. */
 export const costStructureTreeSchema = z.object({
-  budgetPlanId: z.uuid(),
+  budgetPlanId: uuidV4(),
   costCenters: z.array(costCenterNodeSchema),
 });
 
@@ -326,8 +328,8 @@ const ipcaField = z.number().min(-100).max(MAX_PERCENT);
 // chave — era o que deixava os formulários de "Calculando Gastos" órfãos (#454).
 // z.int() e não z.coerce: o body é JSON (o front envia número); coerção mascararia "banana" → NaN.
 const budgetResultTargetSchema = z.object({
-  budgetId: z.uuid(),
-  subcategoryId: z.uuid(),
+  budgetId: uuidV4(),
+  subcategoryId: uuidV4(),
   month: z.int().min(1).max(12).meta({ description: 'Mês do exercício (1..12)' }),
 });
 
@@ -382,9 +384,9 @@ export const logisticsExpensesBudgetResultBodySchema = budgetResultTargetSchema.
 
 /** Response 201 dos POSTs de lançamento: o resultado calculado (valor em centavos). */
 export const budgetResultResponseSchema = z.object({
-  id: z.uuid(),
-  budgetId: z.uuid(),
-  subcategoryId: z.uuid(),
+  id: uuidV4(),
+  budgetId: uuidV4(),
+  subcategoryId: uuidV4(),
   month: z.int().min(1).max(12).meta({ description: 'Mês do exercício (1..12)' }),
   model: launchTypeSchema,
   valueInCents: z.number().int(),
@@ -392,7 +394,7 @@ export const budgetResultResponseSchema = z.object({
 
 /** Param do GET por orçamento (CA3). */
 export const budgetResultByBudgetParamSchema = z.object({
-  budgetId: z.uuid().meta({ description: 'UUID v4 do orçamento (Rede)' }),
+  budgetId: uuidV4().meta({ description: 'UUID v4 do orçamento (Rede)' }),
 });
 
 /**
@@ -450,15 +452,15 @@ export const addBudgetBodySchema = z.object({
 
 /** Response 201 do POST budget. `valueInCents` = soma dos lançamentos da Rede (0 no nascimento). */
 export const budgetResponseSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   partner: z.object({ kind: partnerKindSchema, ref: networkRefSchema }),
   valueInCents: z.number().int(),
 });
 
 /** Param do DELETE /budget-plans/:id/budgets/:budgetId (CA4). */
 export const budgetDeleteParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID v4 do plano orçamentário' }),
-  budgetId: z.uuid().meta({ description: 'UUID v4 do orçamento (Rede)' }),
+  id: uuidV4().meta({ description: 'UUID v4 do plano orçamentário' }),
+  budgetId: uuidV4().meta({ description: 'UUID v4 do orçamento (Rede)' }),
 });
 
 export type AddBudgetBody = z.infer<typeof addBudgetBodySchema>;
@@ -474,8 +476,7 @@ export const consolidatedQuerySchema = z.object({
     .min(YEAR_FILTER_MIN)
     .max(YEAR_FILTER_MAX)
     .meta({ description: 'Ano base do consolidado (obrigatório)' }),
-  programRef: z
-    .uuid()
+  programRef: uuidV4()
     .optional()
     .meta({ description: 'UUID do programa — estreita o consolidado a 1 programa (opcional)' }),
 });
@@ -484,7 +485,7 @@ export type ConsolidatedQuery = z.infer<typeof consolidatedQuerySchema>;
 
 /** Resumo por plano no consolidado (id + programa + versão VIGENTE + total em centavos). */
 const consolidatedPlanSummarySchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   programName: z.string(),
   programAbbreviation: z.string(),
   version: z.number().int().meta({ description: 'Versão major da vigente aprovada da família' }),

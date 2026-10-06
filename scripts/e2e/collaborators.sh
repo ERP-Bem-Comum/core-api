@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # scripts/e2e/collaborators.sh — orquestra o smoke E2E da borda /api/v1/collaborators (P4-SMOKE).
 #
-# [DEPRECATED] A cobertura de collaborators foi migrada para a colecao Bruno em
-# api-collections/core-api/7-partners/collaborators/ (ADR-0034). Use:
-#   pnpm run test:e2e:bruno:partners
-# Este script sera removido apos validacao em ambiente de CI. Nao adicionar novos cenarios aqui.
+# [ATENCAO — 2026-10-06] O aviso anterior dizia que a cobertura havia migrado para a colecao Bruno
+# em api-collections/ e mandava usar `pnpm run test:e2e:bruno:partners`. Nada disso existe mais: a
+# pasta e o @usebruno/cli foram removidos (ADR-0074) e aquele npm-script nunca voltou. A colecao
+# equivalente agora e `api-collections-hurl/casos/partners/collaborators.hurl` — que NAO e gate
+# (fora do git, e exige o seed E2E). Enquanto isso, ESTE script e a unica cobertura executavel de
+# /api/v1/collaborators: nao removê-lo sem substituto medido.
 #
 # Sobe MySQL (Docker), inicia o servidor real com partners em MySQL (RW split: writer=root,
 # reader=readonly_bi) e roda o smoke (tests/e2e/collaborators-smoke.e2e.ts) via Node + fetch.
@@ -44,7 +46,7 @@ e2e_compose up -d mysql --wait || exit 1
 
 # Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
 MIGRATE_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
-  node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
+  node --enable-source-maps src/jobs/migrate/run.ts || exit 1
 
 # Servidor real em background (applyMigrations:false — schema já provisionado). O operador RBAC é
 # semeado por CORE_API_E2E=1 + AUTH_SEED_JSON (collaborator:read+write).
@@ -61,10 +63,10 @@ CORE_API_E2E=1 \
   AUTH_SEED_JSON='{"users":[{"email":"e2e-rh@example.com","password":"Str0ng-Passphrase-2026!","permissions":["collaborator:read","collaborator:write"]}]}' \
   PORT=3100 \
   LOG_LEVEL=warn \
-  node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts &
+  node --enable-source-maps src/server.ts &
 SRV=$!
 disown "$SRV" 2>/dev/null || true
 
 # Smoke via fetch — espera o /health no before(); seu exit code vira o do script (trap preserva).
 E2E_BASE_URL=http://127.0.0.1:3100 \
-  node --test --experimental-strip-types --enable-source-maps --no-warnings tests/e2e/collaborators-smoke.e2e.ts
+  node --enable-source-maps --test tests/e2e/collaborators-smoke.e2e.ts

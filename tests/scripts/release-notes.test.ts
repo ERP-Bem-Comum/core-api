@@ -46,18 +46,24 @@ describe('parseEntry — as duas estratégias de merge do histórico', () => {
       'Merge pull request #872 from ERP-Bem-Comum/fix/cnab-p013',
       'fix(cnab): P013 sai da forma do lote',
     );
-    assert.deepEqual(parsed, {
-      sha: 'aaa111',
-      pr: 872,
-      type: 'fix',
-      scope: 'cnab',
-      description: 'P013 sai da forma do lote',
-      breaking: false,
-    });
+    assert.deepEqual(parsed, [
+      {
+        sha: 'aaa111',
+        pr: 872,
+        type: 'fix',
+        scope: 'cnab',
+        description: 'P013 sai da forma do lote',
+        breaking: false,
+      },
+    ]);
   });
 
   it('squash: a mensagem É o assunto, e o "(#N)" do fim não se repete na descrição', () => {
-    const parsed = parseEntry('bbb222', 'fix(reports): gráficos sob collaborator:read (#499)', '');
+    const [parsed] = parseEntry(
+      'bbb222',
+      'fix(reports): gráficos sob collaborator:read (#499)',
+      '',
+    );
     assert.equal(parsed?.pr, 499);
     assert.equal(parsed?.description, 'gráficos sob collaborator:read');
     assert.ok(
@@ -67,7 +73,7 @@ describe('parseEntry — as duas estratégias de merge do histórico', () => {
   });
 
   it('entrega consolidada: acha o cabeçalho convencional mesmo depois de prosa', () => {
-    const parsed = parseEntry(
+    const [parsed] = parseEntry(
       'ccc333',
       'Merge pull request #835 from ERP-Bem-Comum/chore/integra',
       'Entrega consolidada das frentes abertas.\n\nfeat(financial): reserva sob lock',
@@ -76,20 +82,62 @@ describe('parseEntry — as duas estratégias de merge do histórico', () => {
     assert.equal(parsed?.scope, 'financial');
   });
 
-  it('sem nenhuma linha convencional, devolve null em vez de chutar um tipo', () => {
-    assert.equal(parseEntry('ddd444', 'Merge branch dev into x', 'Prosa pura, sem tipo.'), null);
+  it('sem nenhuma linha convencional, devolve lista VAZIA em vez de chutar um tipo', () => {
+    assert.deepEqual(parseEntry('ddd444', 'Merge branch dev into x', 'Prosa pura, sem tipo.'), []);
   });
 
   it('reconhece a quebra de contrato tanto por "!" quanto por BREAKING CHANGE no corpo', () => {
-    assert.equal(parseEntry('e1', 'feat(financial)!: muda o PATCH (#825)', '')?.breaking, true);
+    assert.equal(parseEntry('e1', 'feat(financial)!: muda o PATCH (#825)', '')[0]?.breaking, true);
     assert.equal(
       parseEntry(
         'e2',
         'feat(financial): muda o PATCH (#825)',
         'BREAKING CHANGE: dueDate obrigatório',
-      )?.breaking,
+      )[0]?.breaking,
       true,
     );
+  });
+
+  /**
+   * O caso que motivou a mudança. O PR #1037 escreveu as cinco mudanças como bullets
+   * convencionais, e o padrão antigo — que exige o tipo no INÍCIO da linha — descartava o merge
+   * inteiro: a release omitia um `feat(x)!`, que é quebra de contrato.
+   */
+  it('entrega consolidada em BULLETS: uma entrada por bullet, não só a primeira', () => {
+    const parsed = parseEntry(
+      'fff666',
+      'Merge pull request #1037 from ERP-Bem-Comum/fix/qa-cycle-findings',
+      [
+        'Ciclo de QA da borda HTTP: fecha os achados e troca a ferramenta.',
+        '',
+        '- fix(auth): unicidade de CPF em auth_user',
+        '- fix(http): uuidV4 estrito na borda',
+        '- feat(api-collections)!: Hurl substitui o Bruno',
+      ].join('\n'),
+    );
+    assert.equal(parsed.length, 3, 'as três bullets viram três entradas');
+    assert.deepEqual(
+      parsed.map((e) => e.type),
+      ['fix', 'fix', 'feat'],
+    );
+    assert.deepEqual(
+      parsed.map((e) => e.breaking),
+      [false, false, true],
+      'o `!` da terceira bullet não contamina as outras duas, e não se perde',
+    );
+    assert.ok(
+      parsed.every((e) => e.pr === 1037),
+      'todas apontam para o PR que as entregou',
+    );
+  });
+
+  it('merge comum NÃO duplica: o padrão de bullet exige o marcador de lista', () => {
+    const parsed = parseEntry(
+      'ggg777',
+      'Merge pull request #900 from ERP-Bem-Comum/fix/x',
+      'fix(auth): corrige o login',
+    );
+    assert.equal(parsed.length, 1, 'sem bullet, uma linha convencional é UMA entrada');
   });
 });
 

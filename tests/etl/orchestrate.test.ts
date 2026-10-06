@@ -63,7 +63,7 @@ import * as UserRefVo from '#src/shared/kernel/user-ref.ts';
 // Helpers de montagem de LegacyData + sink de quarentena coletor.
 // ---------------------------------------------------------------------------
 
-const emptyRead = <T>(): TableRead<T> => ({ rows: [], failures: [] });
+const emptyRead = (): TableRead<never> => ({ rows: [], failures: [] });
 
 const legacyData = (over: Partial<LegacyData> = {}): LegacyData => ({
   financiers: emptyRead(),
@@ -318,10 +318,7 @@ describe('PARTNERS-ETL-ORCHESTRATOR — quarentena (D12)', () => {
     const stores = makeStores();
     const brokenStores: Stores = {
       ...stores,
-      suppliers: makeFailingEntityStore<Supplier, SupplierId>() as FakeEntityStore<
-        Supplier,
-        SupplierId
-      >,
+      suppliers: makeFailingEntityStore<SupplierId>() as FakeEntityStore<Supplier, SupplierId>,
     };
     const data = legacyData({
       suppliers: { rows: [supplierRow({ id: 1 })], failures: [] },
@@ -411,10 +408,7 @@ describe('PARTNERS-ETL-ORCHESTRATOR — reason fiel ao erro de port (Obs.2)', ()
     const stores = makeStores();
     const brokenStores: Stores = {
       ...stores,
-      suppliers: makeFailingEntityStore<Supplier, SupplierId>() as FakeEntityStore<
-        Supplier,
-        SupplierId
-      >,
+      suppliers: makeFailingEntityStore<SupplierId>() as FakeEntityStore<Supplier, SupplierId>,
     };
     const data = legacyData({
       suppliers: { rows: [supplierRow({ id: 1 })], failures: [] },
@@ -455,10 +449,7 @@ describe('PARTNERS-ETL-ORCHESTRATOR — reason fiel ao erro de port (Obs.2)', ()
     const stores = makeStores();
     const brokenStores: Stores = {
       ...stores,
-      suppliers: makeFailingEntityStore<Supplier, SupplierId>() as FakeEntityStore<
-        Supplier,
-        SupplierId
-      >,
+      suppliers: makeFailingEntityStore<SupplierId>() as FakeEntityStore<Supplier, SupplierId>,
     };
     const data = legacyData({
       suppliers: { rows: [supplierRow({ id: 1 })], failures: [] },
@@ -483,7 +474,7 @@ describe('PARTNERS-ETL-ORCHESTRATOR — reason fiel ao erro de port (Obs.2)', ()
 //    RED hoje: `migrateUserRow` (orchestrate.ts :259-263) só passa
 //    { legacyId, email, massApprove } ao provisionLegacyUser — descarta name/cpf/
 //    telephone (já presentes em `validated`) e o collaboratorRef já resolvido.
-//    Como `node --test --experimental-strip-types` NÃO type-checa, o teste CARREGA e
+//    Como o type stripping do Node NÃO type-checa (só apaga anotação), o teste CARREGA e
 //    o RED vem das ASSERÇÕES (os campos chegam `undefined` ao auth-port hoje). O gate
 //    `pnpm run typecheck` também fica RED (campos inexistentes em ProvisionLegacyUserInput).
 // ---------------------------------------------------------------------------

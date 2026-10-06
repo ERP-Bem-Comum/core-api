@@ -11,9 +11,9 @@
 | :--- | ---: | :--- |
 | `open` | 8 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
-| `decided` | 20 | ninguém — fechada |
+| `decided` | 19 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
-| `superseded` | 1 | — |
+| `superseded` | 2 | — |
 
 Total: **37**.
 
@@ -66,7 +66,6 @@ Total: **37**.
 | [0022](./0022-jobs-anti-pattern-essential-vs-accidental.md) | Inquiry 0022 — `src/jobs/`/auto-expire: anti-pattern ou complexidade essencial? |  |  |
 | [0023](./0023-typescript-7-native-spike.md) | TypeScript 7 nativo — spike medido e diagnóstico de lentidão do `core-api` | 2026-07-31 | 2026-07-31 |
 | [0024](./0024-adr-format-for-llm-agents.md) | Inquiry 0024 — ADR como contexto de agente: o que o campo convergiu, e onde estamos fora |  |  |
-| [0029](./0029-linter-type-aware-sob-typescript-7.md) | Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado | 2026-08-06 | 2026-08-06 |
 | [0033](./0033-cnab-multipag-bisseccao-validador.md) | O que o Bradesco realmente exige — bisseção de 18 remessas contra o Validador Universal | 2026-08-25 |  |
 | [0034](./0034-in-memory-fora-de-local-custo-na-piramide.md) | Eliminar o in-memory fora de LOCAL — o custo na pirâmide de testes, e por que a estimativa de 179 arquivos estava errada | 2026-08-31 |  |
 | [0037](./0037-laudo-multipag-pix-e-validador-cego.md) | O laudo do Multipag Pix — os 6 pontos confirmados, e a descoberta de que o Validador Universal é cego para a modalidade | 2026-09-02 |  |
@@ -88,6 +87,7 @@ Total: **37**.
 | # | Título | Aberta | Decidida |
 | :--- | :--- | :--- | :--- |
 | [0008](./0008-postgres-driver-pg-vs-postgres.md) | Driver Postgres — `pg` vs `postgres` (porsager) | 2026-04-28 | 2026-04-28 |
+| [0029](./0029-linter-type-aware-sob-typescript-7.md) | Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado | 2026-08-06 | 2026-08-06 |
 
 ---
 

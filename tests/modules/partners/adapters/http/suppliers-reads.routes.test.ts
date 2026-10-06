@@ -41,7 +41,7 @@ const mk = (over: {
     id: SupplierId.generate(),
     name: over.name,
     email: `${over.name.toLowerCase()}@fornecedor.com.br`,
-    cnpj: over.cnpj,
+    document: over.cnpj,
     corporateName: `${over.name} LTDA`,
     fantasyName: over.name,
     serviceCategory: over.serviceCategory,
@@ -169,7 +169,9 @@ describe('SUPPLIERS-HTTP-READS (S1) — GET /api/v1/suppliers', () => {
     assert.equal(body.meta.totalItems, 2);
     const first = body.items[0]!;
     assert.ok('legacyId' in first);
-    assert.ok('cnpj' in first);
+    assert.ok('document' in first);
+    assert.ok('personType' in first);
+    assert.ok('cnpj' in first); // alias deprecated por um ciclo (#1022)
     assert.ok('serviceCategory' in first);
     assert.ok('active' in first);
     await teardown();
@@ -200,11 +202,15 @@ describe('SUPPLIERS-HTTP-READS (S1) — GET /api/v1/suppliers/:id', () => {
     assert.equal(res.statusCode, 200);
     const dto = res.json() as {
       id: string;
+      document: string;
+      personType: string;
       cnpj: string;
       serviceCategory: string;
       active: boolean;
     };
     assert.equal(dto.id, id);
+    assert.equal(dto.document, '11222333000181');
+    assert.equal(dto.personType, 'PJ');
     assert.equal(dto.cnpj, '11222333000181');
     assert.equal(dto.serviceCategory, 'INFORMATICA');
     assert.equal(dto.active, true);

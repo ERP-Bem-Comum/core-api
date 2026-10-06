@@ -35,7 +35,7 @@ const aSupplier = () => {
     id: SupplierId.generate(),
     name: 'Fornecedor X',
     email: 'contato@fornecedor.com.br',
-    cnpj: '11222333000181',
+    document: '11222333000181',
     corporateName: 'Fornecedor X LTDA',
     fantasyName: 'FX',
     serviceCategory: 'INFORMATICA',
@@ -101,7 +101,7 @@ const anAct = () => {
 };
 
 describe('supplierToView', () => {
-  it('projeta nome, documento (cnpj), email, categoria + updatedAt', () => {
+  it('projeta nome, documento (CNPJ), email, categoria + updatedAt', () => {
     const s = aSupplier();
     const view = supplierToView(s, UPDATED_AT);
 
@@ -109,7 +109,7 @@ describe('supplierToView', () => {
     assert.equal(view.id, s.id as unknown as string);
     assert.equal(view.name, 'Fornecedor X');
     assert.equal(view.email, 'contato@fornecedor.com.br');
-    assert.equal(view.document, s.cnpj as unknown as string);
+    assert.equal(view.document, '11222333000181');
     assert.equal(view.serviceCategory, 'INFORMATICA');
     assert.deepEqual(view.updatedAt, UPDATED_AT);
   });
@@ -132,7 +132,7 @@ describe('supplierToView', () => {
       id: SupplierId.generate(),
       name: 'Só PIX',
       email: 'sopix@x.com',
-      cnpj: '11444777000161',
+      document: '11444777000161',
       corporateName: 'Só PIX LTDA',
       fantasyName: 'SP',
       serviceCategory: 'INFORMATICA',

@@ -132,7 +132,11 @@ claims:
         teste falha. Dado `src/workers/`, a ligação entre dois módulos MUST estar aqui, não dentro deles.
       expected_error: null
       blocker: null
-      enforced_by: ['eslint.config.js', 'tests/workers/supplier-view-projection/delivery.test.ts']
+      enforced_by:
+        [
+          'tests/cleanup/module-boundary.test.ts',
+          'tests/workers/supplier-view-projection/delivery.test.ts',
+        ]
     rule:
       status: proposed
       disposition: adopt

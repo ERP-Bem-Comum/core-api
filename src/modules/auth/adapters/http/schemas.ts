@@ -6,7 +6,7 @@
 import * as z from 'zod/v4';
 
 export const registerBodySchema = z.object({
-  email: z.string().meta({ description: 'E-mail do usuário', example: 'user@example.com' }),
+  email: z.string().meta({ description: 'E-mail do usuário', examples: ['user@example.com'] }),
   password: z.string().meta({ description: 'Senha em claro (validada pela policy do domínio)' }),
 });
 
@@ -63,6 +63,12 @@ export const resetPasswordBodySchema = z.object({
 // USR-PASSWORD-POLICY: política consumível pelo front (fonte única dos comprimentos). Expõe APENAS os
 // limites — NUNCA a blocklist (revelá-la permitiria contorná-la). Endpoint público, sem autenticação.
 export const passwordPolicyResponseSchema = z.object({
-  minLength: z.number().int().meta({ description: 'Comprimento mínimo da senha', example: 12 }),
-  maxLength: z.number().int().meta({ description: 'Comprimento máximo da senha', example: 128 }),
+  minLength: z
+    .number()
+    .int()
+    .meta({ description: 'Comprimento mínimo da senha', examples: [12] }),
+  maxLength: z
+    .number()
+    .int()
+    .meta({ description: 'Comprimento máximo da senha', examples: [128] }),
 });

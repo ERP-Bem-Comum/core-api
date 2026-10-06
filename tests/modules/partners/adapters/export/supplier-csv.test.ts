@@ -14,7 +14,7 @@ const EXPECTED_HEADER = [
   'id',
   'name',
   'email',
-  'cnpj',
+  'CPF/CNPJ',
   'corporateName',
   'fantasyName',
   'serviceCategory',
@@ -40,9 +40,9 @@ const baseInput = () => ({
   id: SupplierId.generate(),
   name: 'Fornecedor X',
   email: 'contato@fornecedor.com.br',
-  cnpj: '11.222.333/0001-81',
-  corporateName: 'Fornecedor X LTDA',
-  fantasyName: 'FX',
+  document: '11.222.333/0001-81',
+  corporateName: 'Fornecedor X LTDA' as string | null,
+  fantasyName: 'FX' as string | null,
   serviceCategory: 'INFORMATICA',
   bankAccount: bankInput() as ReturnType<typeof bankInput> | null,
   pixKey: null as ReturnType<typeof pixInput> | null,
@@ -98,10 +98,10 @@ describe('suppliersToCsv — Active com bankAccount', () => {
     assert.equal(cells[14], ''); // deactivatedAt
   });
 
-  it('cnpj é o valor normalizado do VO', () => {
+  it('documento é o valor normalizado do VO', () => {
     const s = makeActive();
     const cells = dataLines(suppliersToCsv([s]))[0]?.split(',') ?? [];
-    assert.equal(cells[3], String(s.cnpj));
+    assert.equal(cells[3], Supplier.documentOf(s));
   });
 });
 

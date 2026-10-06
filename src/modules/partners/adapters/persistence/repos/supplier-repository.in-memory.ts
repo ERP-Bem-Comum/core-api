@@ -1,9 +1,9 @@
 /**
  * Adapter InMemory do `SupplierRepository` (módulo partners). Para teste/CLI.
  *
- * `Map<SupplierId, Supplier>`. `save` recusa CNPJ duplicado com id diferente
- * (espelha o UNIQUE de `par_suppliers.cnpj` que o adapter Drizzle terá).
- * `findByCnpj` por varredura (cardinalidade modesta — ADR-0031).
+ * `Map<SupplierId, Supplier>`. `save` recusa documento (CPF/CNPJ) duplicado com id diferente
+ * (espelha o UNIQUE de `par_suppliers.document` do adapter Drizzle).
+ * `findByDocument` por varredura (cardinalidade modesta — ADR-0031).
  *
  * Outbox (PAR-SUPPLIER-EVENTS / ADR-0043): `save(supplier, events)` publica os
  * eventos publicáveis (Registered/Edited) num `InMemoryOutbox` opcionalmente
@@ -21,6 +21,7 @@
 
 import { ok, err } from '#src/shared/primitives/result.ts';
 import type { SupplierRepository } from '#src/modules/partners/domain/supplier/repository.ts';
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import type { SupplierId } from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import type { Supplier } from '#src/modules/partners/domain/supplier/types.ts';
 import type { InMemoryOutbox } from '#src/modules/partners/adapters/outbox/outbox.in-memory.ts';
@@ -34,17 +35,22 @@ export type InMemorySupplierStore = Readonly<{
 /** Outbox in-memory injetado (para inspeção em testes). `append` é a única operação usada. */
 type InjectableOutbox = Readonly<{ port: ReturnType<typeof InMemoryOutbox>['port'] }>;
 
+// Igualdade pela chave do UNIQUE (`toRaw`), como no MySQL: CPF e CNPJ nunca colidem.
+const sameDocument = (s: Supplier, document: SupplierDocument.SupplierDocument): boolean =>
+  SupplierDocument.toRaw(s.identity.document) === SupplierDocument.toRaw(document);
+
 export const makeInMemorySupplierStore = (outbox?: InjectableOutbox): InMemorySupplierStore => {
   const map = new Map<SupplierId, Supplier>();
 
   const repository: SupplierRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
-    findByCnpj: async (cnpj) => ok([...map.values()].find((s) => s.cnpj === cnpj) ?? null),
+    findByDocument: async (document) =>
+      ok([...map.values()].find((s) => sameDocument(s, document)) ?? null),
     list: async () => ok([...map.values()]),
     save: async (supplier, events) => {
       for (const existing of map.values()) {
-        if (existing.cnpj === supplier.cnpj && existing.id !== supplier.id) {
-          return err('supplier-cnpj-duplicate');
+        if (sameDocument(existing, supplier.identity.document) && existing.id !== supplier.id) {
+          return err('supplier-document-duplicate');
         }
       }
       map.set(supplier.id, supplier);

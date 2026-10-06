@@ -75,7 +75,8 @@ Agente especialista em **Docker / Docker Compose** para o `core-api`. Atua quand
 ## Constraints invariantes
 
 - **Imagem base Node** (quando ativada a build de prod do app): `node:24-bookworm-slim` (ou `node:24-alpine` se aceitarmos musl trade-off — ADR pendente). Sem `latest`. Sem `node:24` sem o `-slim`/`-alpine`.
-- **Multi-stage obrigatório** em prod: `deps` → `build` (se tiver compile step; hoje `--experimental-strip-types`, então build step opcional) → `runtime`.
+- **`# syntax=docker/dockerfile:1`, nunca um minor fixo.** A doc oficial ([build/buildkit/frontend](https://docs.docker.com/build/buildkit/frontend/)) diz que `:1` acompanha a última `1.x.x` e que uma versão específica "needs to be updated manually to continue receiving bugfixes". Minor fixo não é imutável (recebe patches `x.y.z`) nem atualizado — este repositório ficou em `1.10` por 17 minors. O digest pin do ADR-0011 vale para a imagem **base**, que vai para o runtime; o frontend do `# syntax` é baixado em build e não entra na imagem.
+- **Multi-stage obrigatório** em prod: `deps` → `build` (se tiver compile step; hoje o Node executa `.ts` direto, então build step opcional) → `runtime`.
 - **`USER nonroot`** (UID >= 10000) no estágio final.
 - **`.dockerignore` rico** — `node_modules`, `.git`, `dist`, `coverage`, `.env*`, `secrets/`, `*.log`, `.claude/`, `handbook/`.
 - **`HEALTHCHECK` declarado** em serviços críticos (MySQL, MinIO).
@@ -123,7 +124,9 @@ services:
       start_period: 10s
 
   minio:
-    image: minio/minio:RELEASE.2026-04-22T00-00-00Z   # pinar — nunca `latest`
+    # Fork Silo (ADR-0071): minio/minio sumiu do Docker Hub. Pinar por digest — nunca `latest` solto.
+    # Digest vigente e comando de atualização: copiar de compose.yaml (serviço `minio`), não daqui.
+    image: pgsty/silo:latest@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -164,7 +167,7 @@ secrets:
 ### `Dockerfile` (esqueleto para quando build de prod for ativada — hoje a CLI roda local)
 
 ```Dockerfile
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1
 ARG NODE_VERSION=24-bookworm-slim
 
 # --- deps ------------------------------------------------------------------
@@ -196,10 +199,11 @@ COPY --chown=app:app package.json ./
 USER app
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --retries=3 \
-  CMD node --experimental-strip-types --no-warnings -e "fetch('http://localhost:3000/health').then(r => r.ok ? 0 : process.exit(1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:3000/health').then(r => r.ok ? 0 : process.exit(1)).catch(() => process.exit(1))"
 
 # `tini` (PID 1 init) — opcional via flag init: true do compose, ou via ENTRYPOINT.
-ENTRYPOINT ["node", "--experimental-strip-types", "--no-warnings"]
+# Sem flag de runtime: o type stripping é default no Node 24.
+ENTRYPOINT ["node"]
 CMD ["src/server.ts"]
 ```
 

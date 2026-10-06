@@ -43,6 +43,13 @@ const MERGE_PR = /^Merge pull request #(\d+) from /;
 /** Sufixo que o GitHub anexa ao assunto num squash merge: `fix(reports): … (#499)`. */
 const SQUASH_PR = /\(#(\d+)\)\s*$/;
 const CONVENTIONAL = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?:\s*(?<description>.+)$/;
+/**
+ * A mesma forma, precedida do marcador de lista — como a entrega consolidada escreve cada mudança
+ * no corpo do merge. O marcador é OBRIGATÓRIO aqui: sem ele o padrão casaria as mesmas linhas que
+ * o `CONVENTIONAL`, e cada merge comum renderia a entrada duas vezes.
+ */
+const BULLET_CONVENTIONAL =
+  /^[-*]\s+(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?:\s*(?<description>.+)$/;
 
 /**
  * Extrai uma entrada do par (assunto, corpo) de um merge commit.
@@ -58,7 +65,7 @@ const CONVENTIONAL = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?(?<bang>!)?:\s*(?<
  * Devolve `null` quando nenhuma linha é convencional: entrada sem tipo não tem seção, e chutar uma
  * seria inventar informação que o histórico não deu. Quem descarta REPORTA — ver `main()`.
  */
-export function parseEntry(sha: string, subject: string, body: string): ReleaseEntry | null {
+export function parseEntry(sha: string, subject: string, body: string): readonly ReleaseEntry[] {
   const mergeCommitPr = MERGE_PR.exec(subject);
 
   // Duas estratégias de merge convivem neste histórico e guardam a mensagem em lugares diferentes:
@@ -66,27 +73,51 @@ export function parseEntry(sha: string, subject: string, body: string): ReleaseE
   //   squash       → o próprio ASSUNTO é a mensagem convencional, com "(#N)" no fim.
   // Ler só o corpo perdia 30 dos 192 merges do range, todos squash — e os perdia em silêncio.
   const candidates = mergeCommitPr === null ? [subject, ...body.split('\n')] : body.split('\n');
+
+  const squashPr = SQUASH_PR.exec(subject);
+  const prNumber = (mergeCommitPr ?? squashPr)?.[1];
+  const breakingFooter = /^BREAKING[ -]CHANGE:/m.test(body);
+
+  const build = (
+    groups: Readonly<Record<string, string | undefined>> | undefined,
+  ): ReleaseEntry | null => {
+    const { type, scope, bang, description } = groups ?? {};
+    if (type === undefined || description === undefined) return null;
+    return {
+      sha,
+      pr: prNumber === undefined ? null : Number(prNumber),
+      type,
+      scope: scope ?? null,
+      // O `(#N)` do squash sai daqui: o nº do PR já vira link no render, e mantê-lo no texto o
+      // imprimiria duas vezes na mesma linha.
+      description: description.replace(SQUASH_PR, '').trim(),
+      breaking: bang === '!' || breakingFooter,
+    };
+  };
+
+  // Entrega consolidada lista as mudanças como BULLETS convencionais, uma por linha — e cada uma é
+  // uma entrega distinta, que merece sua própria linha na sua própria seção. Varrer o corpo e
+  // devolver só a primeira transformaria cinco mudanças numa, e um `feat(x)!` na terceira bullet
+  // sumiria com o aviso de quebra junto.
+  //
+  // Medido em 06/10/2026 no PR #1037: cinco bullets (`fix(auth)`, `fix(http)`, `fix(programs)`,
+  // `feat(api-collections)!`, `fix(deps)`). Antes desta mudança o merge inteiro caía em "Não
+  // classificado", porque o `CONVENTIONAL` exige o tipo no início da linha e o `- ` o empurrava —
+  // a release omitia a troca de ferramenta da borda HTTP, que é breaking.
+  const bulleted = candidates
+    .map((line) => BULLET_CONVENTIONAL.exec(line.trim()))
+    .filter((match) => match !== null)
+    .map((match) => build(match.groups))
+    .filter((entry) => entry !== null);
+  if (bulleted.length > 0) return bulleted;
+
+  // Sem bullets, vale o formato de sempre: um merge, uma entrada, a primeira linha convencional.
   const conventional = candidates
     .map((line) => CONVENTIONAL.exec(line.trim()))
     .find((match) => match !== null);
-  if (conventional?.groups === undefined) return null;
-
-  const squashPr = SQUASH_PR.exec(subject);
-  const prMatch = mergeCommitPr ?? squashPr;
-
-  const { type, scope, bang, description } = conventional.groups;
-  if (type === undefined || description === undefined) return null;
-
-  return {
-    sha,
-    pr: prMatch?.[1] === undefined ? null : Number(prMatch[1]),
-    type,
-    scope: scope ?? null,
-    // O `(#N)` do squash sai daqui: o nº do PR já vira link no render, e mantê-lo no texto o
-    // imprimiria duas vezes na mesma linha.
-    description: description.replace(SQUASH_PR, '').trim(),
-    breaking: bang === '!' || /^BREAKING[ -]CHANGE:/m.test(body),
-  };
+  if (conventional === undefined) return [];
+  const single = build(conventional.groups);
+  return single === null ? [] : [single];
 }
 
 /**
@@ -302,9 +333,9 @@ export function readEntries(range: string): ReadResult {
     if (trimmed === '') continue;
     const [sha, subject, body] = trimmed.split(FIELD_SEP);
     if (sha === undefined || subject === undefined) continue;
-    const entry = parseEntry(sha, subject, body ?? '');
-    if (entry === null) skipped.push({ sha, subject });
-    else entries.push(entry);
+    const parsed = parseEntry(sha, subject, body ?? '');
+    if (parsed.length === 0) skipped.push({ sha, subject });
+    else entries.push(...parsed);
   }
   return { entries, skipped };
 }

@@ -9,7 +9,7 @@ import { ok } from '#src/shared/primitives/result.ts';
 import type { ContractCountStore } from '#src/modules/partners/application/ports/contract-count-store.ts';
 
 export const makeInMemoryContractCountStore = (
-  seed: readonly { contractorRef: string; activeCount: number }[] = [],
+  seed: readonly Readonly<{ contractorRef: string; activeCount: number }>[] = [],
 ): ContractCountStore => {
   const counts = new Map<string, number>(seed.map((s) => [s.contractorRef, s.activeCount]));
   const applied = new Set<string>();

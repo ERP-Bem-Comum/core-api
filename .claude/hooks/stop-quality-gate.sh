@@ -11,7 +11,7 @@
 #   - nenhum arquivo alterado                → exit 0 imediato
 #   - só .md / .yaml / .sh / qualquer não-.ts → exit 0 (format já roda no PostToolUse)
 #   - QUALQUER .ts, em qualquer diretório     → gate completo
-#   - tsconfig.json, eslint.config.js, package.json → gate completo
+#   - tsconfig.json, .oxlintrc.json, package.json → gate completo
 #   - .claude/rules/*.md                      → gate completo, apesar de ser .md: o bloco
 #     `verify:` dessas rules AFIRMA coisas sobre o código, e quem confere essas afirmações é
 #     `tests/cleanup/rules-self-verify.test.ts` — que só roda dentro de `pnpm test`. Sem esta
@@ -60,7 +60,7 @@ while IFS= read -r f; do
     # `src/*.ts|tests/*.ts|…` que existiam aqui eram código morto, subsumidas por ele.
     *.ts) needs_gate=1; break ;;
     .claude/rules/*.md) needs_gate=1; break ;;
-    tsconfig.json | eslint.config.js | package.json) needs_gate=1; break ;;
+    tsconfig.json | .oxlintrc.json | package.json) needs_gate=1; break ;;
   esac
 done <<< "$changed"
 
@@ -68,11 +68,31 @@ log "arquivos alterados: ${n_changed}"
 
 if [ "$needs_gate" -eq 0 ]; then
   log "veredito: PULADO — nenhum alterado aciona o gate (sem .ts, tsconfig.json,"
-  log "          eslint.config.js ou package.json). Formatação já rodou no PostToolUse."
+  log "          .oxlintrc.json ou package.json). Formatação já rodou no PostToolUse."
   log ""
   log "alterados:"
   printf '%s\n' "$changed" | sed 's/^/  /' >> "$LOGFILE"
   exit 0
+fi
+
+# ── pré-condição: o gate precisa do pnpm no PATH do HOOK ─────────────────────
+# O hook roda em shell não-interativo: um pnpm que só existe no PATH montado por um gerenciador de
+# versão (nvm, fnm…) ou por outro init de shell interativo não está aqui. Sem esta checagem, o
+# "comando não encontrado" saía como QUATRO vermelhos — o gate classificando falta de ferramenta
+# como regressão de código. Continua bloqueando (nada foi verificado), mas diz a causa verdadeira.
+# A mensagem manda ESCALAR, não consertar: o PATH é ambiente da máquina do humano, fora do repo, e
+# o agente que lê isto não deve sair alterando a home de ninguém. O PATH completo vai só ao log.
+if ! command -v pnpm >/dev/null 2>&1; then
+  log "veredito: NÃO RODOU — \`pnpm\` não está no PATH do hook (PATH=${PATH})."
+  {
+    echo "🟠 GATE DE QUALIDADE NÃO RODOU — \`pnpm\` não encontrado no PATH do hook."
+    echo ""
+    echo "Não é vermelho de código: nada foi verificado. O hook roda em shell não-interativo, que não"
+    echo "carrega o gerenciador de versão do Node (nvm, fnm…). É ambiente da máquina, fora do repo:"
+    echo "ESCALE ao humano (saída 3 da regressão zero) — não altere a home/PATH por conta própria."
+    echo "Detalhe em ${LOGFILE}."
+  } >&2
+  exit 2
 fi
 
 # ── gate: os comandos, na ordem mais barata primeiro ─────────────────────────

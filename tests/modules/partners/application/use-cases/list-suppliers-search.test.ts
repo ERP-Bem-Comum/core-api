@@ -9,7 +9,7 @@ const baseInput = () => ({
   id: SupplierId.generate(),
   name: 'ACME Alimentos',
   email: 'contato@acme.com.br',
-  cnpj: '11.222.333/0001-81',
+  document: '11.222.333/0001-81',
   corporateName: 'ACME Alimentos LTDA',
   fantasyName: 'ACME',
   serviceCategory: 'INFORMATICA',

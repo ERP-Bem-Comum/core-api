@@ -4,10 +4,16 @@
  * Renomeia `bancaryInfo*`→bankAccount e `pixInfo*`→pixKey; `serviceCategory` literal
  * (ADR-0031 §D2 — quarentena se fora do Set); valida e-mail por formato. Sem destino de
  * pagamento → quarentena (`Supplier.rehydrate` exige ao menos um). D10 para inativos.
+ *
+ * Documento (#1022): a coluna legada `cnpj` pode trazer CPF — fornecedor pessoa física, pago por
+ * RPA. Antes ia para quarentena como `CnpjInvalid`; agora entra como PF. O legado tinha
+ * `corporateName`/`fantasyName` NOT NULL, então a PF chega com os dois preenchidos à força; o
+ * core não os tem na PF, e o ACL os descarta (ver `identityFieldsFor`).
  */
 
 import { type Result, ok, err, combine } from '#src/shared/primitives/result.ts';
-import type { Cnpj } from '#src/shared/kernel/cnpj.ts';
+import { isValidCnpj } from '#src/shared/kernel/cnpj.ts';
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-category.ts';
@@ -22,13 +28,7 @@ import type {
 } from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { LegacySupplierRow } from '../legacy/rows.ts';
 import type { QuarantineReason } from '../quarantine/reason.ts';
-import {
-  type MapperResult,
-  requireField,
-  requireEmail,
-  parseCnpjField,
-  statusFromActive,
-} from './shared.ts';
+import { type MapperResult, requireField, requireEmail, statusFromActive } from './shared.ts';
 
 // ACL translator: legacy pix_key_type vocabulary → core PixKeyType (#275, Evans DDD p.226).
 const LEGACY_PIX_KEY_TYPE_MAP: Readonly<Record<string, PixKeyType>> = {
@@ -121,33 +121,87 @@ const resolvePaymentTargets = (
   return errors.length > 0 ? err(errors) : ok({ bankAccount, pixKey });
 };
 
+// CPF ou CNPJ na coluna legada `cnpj`. Inválido → quarentena com a tag de sempre (o campo de
+// origem segue sendo `cnpj`).
+//
+// ⚠️ CPF AMBÍGUO vai para quarentena, não para PF. Um CNPJ legado que perdeu os zeros à esquerda
+// (`000…` → 11 posições) e por acaso passa no DV de CPF seria migrado como pessoa física, com a
+// razão social real descartada e sem rastro. Se as 11 posições completadas com zeros formam um CNPJ
+// válido, o documento é ambíguo e a decisão volta para um humano (ADR-0070).
+const parseDocumentField = (
+  raw: string,
+): Result<SupplierDocument.SupplierDocument, QuarantineReason> => {
+  const r = SupplierDocument.parse(raw);
+  if (!r.ok) return err({ tag: 'CnpjInvalid', field: 'cnpj', attempted: raw });
+  if (
+    r.value.kind === 'cpf' &&
+    isValidCnpj(r.value.value.padStart(SupplierDocument.CNPJ_LENGTH, '0'))
+  ) {
+    return err({ tag: 'ExcludedByDecision', field: 'cnpj', decisionRef: 'ADR-0070' });
+  }
+  return ok(r.value);
+};
+
+// Nomes da PJ, obrigatórios. Usado também quando o documento é inválido: o legado é PJ por
+// padrão (coluna `cnpj`), e checar os nomes mesmo assim mantém a regra de juntar TODOS os erros
+// da linha numa quarentena só — senão quem corrige o documento descobre o nome numa 2ª rodada.
+const requireCompanyNames = (
+  row: LegacySupplierRow,
+): Result<readonly [string, string], readonly QuarantineReason[]> => {
+  const names = combine<readonly [string, string], QuarantineReason>([
+    requireField(row.corporateName, 'corporate_name'),
+    requireField(row.fantasyName, 'fantasy_name'),
+  ]);
+  return names.ok ? ok(names.value) : err(names.error);
+};
+
+// Razão social/nome fantasia que o domínio recebe. PF: `null` — o legado obrigava a preenchê-los
+// (NOT NULL), então o que vem ali é enchimento de formulário, não dado da pessoa física; o domínio
+// recusaria a PF com eles. PJ: obrigatórios, como sempre (branco → quarentena).
+const identityFieldsFor = (
+  document: SupplierDocument.SupplierDocument,
+  row: LegacySupplierRow,
+): Result<readonly [string | null, string | null], readonly QuarantineReason[]> => {
+  switch (document.kind) {
+    case 'cpf':
+      return ok([null, null]);
+    case 'cnpj':
+      return requireCompanyNames(row);
+  }
+};
+
 export const mapLegacySupplierRow = (row: LegacySupplierRow): MapperResult<SupplierEntity> => {
+  const documentField = parseDocumentField(row.cnpj);
   const fields = combine<
-    readonly [string, string, string, string, Cnpj, ServiceCategoryType],
+    readonly [string, string, SupplierDocument.SupplierDocument, ServiceCategoryType],
     QuarantineReason
   >([
     requireField(row.name, 'name'),
     requireEmail(row.email, 'email'),
-    requireField(row.corporateName, 'corporate_name'),
-    requireField(row.fantasyName, 'fantasy_name'),
-    parseCnpjField(row.cnpj, 'cnpj'),
+    documentField,
     parseServiceCategory(row.serviceCategory),
   ]);
+  // Os nomes dependem SÓ do documento: PF não os tem; PJ — ou documento inválido — os exige.
+  const names = documentField.ok
+    ? identityFieldsFor(documentField.value, row)
+    : requireCompanyNames(row);
 
   const targets = resolvePaymentTargets(row);
   const rating = translateServiceRating(row.serviceEvaluation);
 
   // Acumula erros de campos escalares + destino de pagamento + avaliação numa única quarentena.
-  if (!fields.ok || !targets.ok || !rating.ok) {
+  if (!fields.ok || !names.ok || !targets.ok || !rating.ok) {
     const all = [
       ...(fields.ok ? [] : fields.error),
+      ...(names.ok ? [] : names.error),
       ...(targets.ok ? [] : targets.error),
       ...(rating.ok ? [] : [rating.error]),
     ];
     return err(all);
   }
 
-  const [name, email, corporateName, fantasyName, cnpj, serviceCategory] = fields.value;
+  const [name, email, document, serviceCategory] = fields.value;
+  const [corporateName, fantasyName] = names.value;
   const status = statusFromActive(row.active);
   const deactivatedAt = status === 'Inactive' ? row.updatedAt : null;
 
@@ -155,7 +209,7 @@ export const mapLegacySupplierRow = (row: LegacySupplierRow): MapperResult<Suppl
     id: SupplierId.generate(),
     name,
     email,
-    cnpj,
+    document,
     corporateName,
     fantasyName,
     serviceCategory,

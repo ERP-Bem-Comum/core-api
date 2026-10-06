@@ -28,27 +28,17 @@ jobs:
       - name: Checkout
         # ADR-0011 §"Pin de versões" — pin por SHA.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: Node 24 (runtime do --experimental-strip-types)
+      - name: Node (executa .ts direto, sem flag) — versão lida do .nvmrc
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: '24'
+          # `node-version-file` e nunca um literal: um major solto (`'24'`) flutua a cada release
+          # upstream e um valor exato duplica o .nvmrc. Cobrado por
+          # tests/cleanup/node-version-single-source.test.ts.
+          node-version-file: .nvmrc
       - name: Habilita pnpm (corepack lê a versão do packageManager)
         run: corepack enable
       - name: Install (frozen-lockfile)
         run: pnpm install --frozen-lockfile
-      # Sem esta restauração o `--cache` do lint não vale NADA aqui: o runner nasce limpo,
-      # o cache é sempre frio, e o gate paga os ~44s cheios (Inquiry-0029, §4).
-      # A chave inclui o lockfile e a config porque ambos invalidam o cache do ESLint;
-      # `restore-keys` aceita cache de outro commit — o ESLint revalida por arquivo.
-      - name: Restaura cache do ESLint
-        # ADR-0011 §"Pin de versões" — pin por SHA.
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .eslintcache
-          key: eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'eslint.config.js', 'tsconfig.json') }}-${{ github.sha }}
-          restore-keys: |
-            eslint-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'eslint.config.js', 'tsconfig.json') }}-
-            eslint-${{ runner.os }}-
       - name: Typecheck
         run: pnpm run typecheck
       - name: Format check

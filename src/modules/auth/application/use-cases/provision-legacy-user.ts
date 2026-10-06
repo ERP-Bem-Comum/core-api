@@ -130,24 +130,44 @@ export const provisionLegacyUser =
     const cpf = degradeCpf(input.cpf, input.legacyId);
     const telephone = degradeTelephone(input.telephone, input.legacyId);
 
-    // 5. Agregado User (active, sem senha utilizavel ate reset).
-    const { user } = User.register(
-      {
-        id: UserId.generate(),
-        email: input.email,
-        passwordHash: hashR.value,
-        roles,
-        name: input.name ?? null,
-        cpf,
-        telephone,
-        collaboratorRef: input.collaboratorRef ?? null,
-      },
-      deps.clock.now(),
-    );
+    // 5. Agregado User (active, sem senha utilizavel ate reset). O id e gerado UMA vez: o retry
+    //    do passo 6 reconstroi o agregado com o mesmo id, nao um usuario diferente.
+    const newUserId = UserId.generate();
+    const now = deps.clock.now();
+    const build = (withCpf: Cpf.Cpf | null): ReturnType<typeof User.register> =>
+      User.register(
+        {
+          id: newUserId,
+          email: input.email,
+          passwordHash: hashR.value,
+          roles,
+          name: input.name ?? null,
+          cpf: withCpf,
+          telephone,
+          collaboratorRef: input.collaboratorRef ?? null,
+        },
+        now,
+      );
 
     // 6. Persistir com correlacao legacy_id (insert idempotente).
+    //
+    //    cpf JA PERTENCENTE A OUTRO usuario degrada para null + warning e re-tenta — a mesma
+    //    politica do cpf invalido no passo 4, pela mesma razao: a ETL e factory de reconstituicao
+    //    (Evans, DDD, p.82) e um campo de perfil opcional nao vale o registro inteiro. Sem isto o
+    //    usuario legado NAO seria migrado e nao conseguiria logar, perdendo acesso por causa de um
+    //    documento duplicado no legado. A degradacao e idempotente: a tx do provision deu rollback,
+    //    nada foi gravado, e o segundo provision roda do zero com o mesmo legacy_id.
+    const { user } = build(cpf);
     const provisioned = await deps.store.provision(user, input.legacyId);
-    if (!provisioned.ok) return err(provisioned.error);
+    if (provisioned.ok) return ok({ userRef: user.id, outcome: 'created' });
+    if (provisioned.error !== 'cpf-already-registered') return err(provisioned.error);
 
-    return ok({ userRef: user.id, outcome: 'created' });
+    process.stderr.write(
+      `[provision-legacy-user] legacyId=${String(input.legacyId)} degraded duplicate cpf to null\n`,
+    );
+    const { user: withoutCpf } = build(null);
+    const retried = await deps.store.provision(withoutCpf, input.legacyId);
+    if (!retried.ok) return err(retried.error);
+
+    return ok({ userRef: withoutCpf.id, outcome: 'created' });
   };

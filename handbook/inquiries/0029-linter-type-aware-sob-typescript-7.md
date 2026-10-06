@@ -1,15 +1,23 @@
 ---
 inquiry: 0029
 title: "Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado"
-state: decided
+state: superseded
 opened: 2026-08-06
 decided: 2026-08-06
-last_reviewed: 2026-08-06
+last_reviewed: 2026-10-05
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
 
 # Inquiry-0029: Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado
+
+> ## ⚠️ Superseded pelo [ADR-0072](../architecture/adr/0072-oxc-lint-supersedes-inquiry-0029-and-0067-d2.md) (2026-10-05)
+>
+> A decisão de §6 (ESLint + `--cache`) caiu por uma premissa que esta inquiry mediu pela metade:
+> o `--cache` é rápido, mas **dá falso verde** em regra type-aware — guarda o resultado por
+> arquivo, e o tipo vem de outro (sonda reproduzida e documentação do `typescript-eslint` no
+> ADR) — e **nunca foi restaurado no CI** (`Cache not found`, lint de 39–62 s). As medições
+> abaixo seguem válidas como registro de 2026-08-06; o que deixou de valer é a conclusão.
 
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** IA externa (texto recebido) + verificação em fontes primárias + medição local

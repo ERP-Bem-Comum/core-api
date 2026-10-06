@@ -16,6 +16,7 @@ import {
   makeRequireAuth,
   usersHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
+import { syntheticCpf } from '#tests/support/synthetic-cpf.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
 const ADMIN = 'admin.create@example.com';
@@ -73,9 +74,14 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
+// cpf UNICO por chamada: `auth_user_cpf_idx` (migration 0010) recusa documento repetido, e este
+// arquivo cria varios usuarios. Com cpf fixo, o segundo POST virava 409 — e o teste de e-mail
+// duplicado passava a falhar no `first`, acusando a fixture e nao a rota.
+// Quem precisa de COLISAO intencional reusa o MESMO objeto de body (ver CA4), nao chama de novo.
+let cpfSeed = 7000;
 const validBody = () => ({
   name: 'Amanda Manoel',
-  cpf: '52998224725',
+  cpf: syntheticCpf((cpfSeed += 1)),
   email: 'amanda.nova@example.com',
   telephone: '15997133502',
 });
@@ -139,6 +145,29 @@ describe('AUTH-HTTP-CREATE-USER — POST /api/v1/users', () => {
       headers: { authorization: `Bearer ${adminToken}` },
       payload: dup,
     });
+    assert.equal(second.statusCode, 409);
+  });
+
+  // F7 (ciclo de QA 05/10): dois usuarios com o MESMO cpf e e-mails DIFERENTES eram ambos 201.
+  // cpf e documento, logo duplicata e duplicacao de identidade. A garantia e o UNIQUE
+  // auth_user_cpf_idx; aqui se cobra a traducao na borda: `cpf-already-registered` -> 409.
+  it('CA4b: 409 cpf duplicado com e-mail diferente', async () => {
+    const cpf = syntheticCpf(7777);
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { ...validBody(), email: 'cpf.dup.a@example.com', cpf },
+    });
+    assert.equal(first.statusCode, 201);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { ...validBody(), email: 'cpf.dup.b@example.com', cpf },
+    });
+    // 409, nao 201 (duplicata aceita) nem 500 (erro nao mapeado caindo no default).
     assert.equal(second.statusCode, 409);
   });
 

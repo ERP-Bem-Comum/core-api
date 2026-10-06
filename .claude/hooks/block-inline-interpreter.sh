@@ -88,7 +88,7 @@ Substituições:
   reescrever arquivo inteiro    →  Write
   ler parte de arquivo          →  Read (offset/limit)
   buscar padrão                 →  Grep
-  transformar texto em lote     →  script .ts com node --experimental-strip-types
+  transformar texto em lote     →  script .ts executado com `node arquivo.ts`
                                    (é o runtime do projeto — ver scripts/)
 
 Se precisar mesmo de processamento pontual em shell, `jq`, `grep`, `sed` e `awk`

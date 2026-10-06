@@ -52,9 +52,9 @@ const SENSITIVE_PERMISSION = 'supplier:edit-sensitive';
 
 // Conflito de estado/unicidade → 409.
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
-  'register-supplier-cnpj-duplicate',
-  'supplier-cnpj-duplicate',
-  'edit-supplier-cnpj-duplicate',
+  'register-supplier-document-duplicate',
+  'supplier-document-duplicate',
+  'edit-supplier-document-duplicate',
   'supplier-already-inactive',
   'supplier-already-active',
 ]);
@@ -71,7 +71,8 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
 const FORBIDDEN_CODES: ReadonlySet<string> = new Set(['edit-supplier-sensitive-forbidden']);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['supplier-repo-unavailable']);
 
-// Erro de escrita → status. Default 422 (invariante de domínio: email/cnpj/categoria/payment-target).
+// Erro de escrita → status. Default 422 (invariante de domínio: email/documento/identidade PF × PJ/
+// categoria/payment-target).
 const writeErrorStatus = (code: string): number => {
   if (FORBIDDEN_CODES.has(code)) return 403;
   if (CONFLICT_CODES.has(code)) return 409;
@@ -262,7 +263,8 @@ const suppliersRoutes =
     });
 
     // Edição (PUT total). `supplier:write` edita campos não-vitais (incl. payment target);
-    // mudar o CNPJ (vital) exige `supplier:edit-sensitive` (regra no use case).
+    // mudar o documento (vital) — inclusive trocar PF ↔ PJ — exige `supplier:edit-sensitive`
+    // (regra no use case).
     scope.route({
       method: 'PUT',
       url: '/suppliers/:id',

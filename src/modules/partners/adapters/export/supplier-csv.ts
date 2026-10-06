@@ -7,13 +7,15 @@
  */
 
 import { toCsv } from '#src/shared/utils/csv.ts';
+import { companyNamesOf, documentOf } from '../../domain/supplier/supplier.ts';
 import type { Supplier } from '../../domain/supplier/types.ts';
 
 const HEADER: readonly string[] = [
   'id',
   'name',
   'email',
-  'cnpj',
+  // Rótulo ao humano (#1022): a coluna traz CPF (PF) ou CNPJ (PJ).
+  'CPF/CNPJ',
   'corporateName',
   'fantasyName',
   'serviceCategory',
@@ -29,14 +31,16 @@ const HEADER: readonly string[] = [
 
 // Achata o agregado em 15 células (ordem do HEADER). Destino de pagamento é discriminado:
 // colunas bancárias vazias quando `bankAccount` é null; idem pix. `deactivatedAt` só nos Inactive.
+// Razão social e nome fantasia só existem na PJ; na PF as células ficam vazias.
 const supplierToCells = (s: Supplier): readonly string[] => {
+  const names = companyNamesOf(s.identity);
   const identity = [
     s.id,
     s.name,
     s.email,
-    String(s.cnpj),
-    s.corporateName,
-    s.fantasyName,
+    documentOf(s),
+    names?.corporateName ?? '',
+    names?.fantasyName ?? '',
     s.serviceCategory,
     s.status,
   ];

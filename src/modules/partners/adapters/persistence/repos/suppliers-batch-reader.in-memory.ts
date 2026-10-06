@@ -5,6 +5,7 @@
  */
 
 import { ok } from '#src/shared/primitives/result.ts';
+import { documentOf } from '#src/modules/partners/domain/supplier/supplier.ts';
 import type {
   SuppliersBatchReadPort,
   SupplierBatchView,
@@ -29,7 +30,7 @@ export const makeInMemorySuppliersBatchReader = (
         items.push({
           ref,
           name: supplier.name,
-          taxId: String(supplier.cnpj),
+          taxId: documentOf(supplier),
           serviceCategory: supplier.serviceCategory,
         });
       }

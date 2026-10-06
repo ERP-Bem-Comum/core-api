@@ -3,7 +3,7 @@
  * Para testes do use case provisionLegacyUser. Idempotente por legacy_id (skip). ASCII puro.
  */
 
-import { ok } from '../../../../../shared/primitives/result.ts';
+import { ok, err } from '../../../../../shared/primitives/result.ts';
 import type { ProvisionedUserStore } from '../../../application/ports/provisioned-user-store.ts';
 import type { ActiveUser } from '../../../domain/identity/user/types.ts';
 
@@ -25,7 +25,16 @@ export const makeInMemoryProvisionedUserStore = (): InMemoryProvisionedUserStore
     },
     // Idempotente: se o legacy_id ja existe, no-op (preserva o registro original).
     provision: async (user, legacyId) => {
-      if (!map.has(legacyId)) map.set(legacyId, { user, legacyId });
+      if (map.has(legacyId)) return ok(undefined);
+      // Espelha o UNIQUE auth_user_cpf_idx (migration 0010): cpf de OUTRO usuario -> erro nomeado.
+      // cpf null nao colide (multiplos NULL no UNIQUE do InnoDB) — e a maioria dos registros
+      // legados, que chegam sem perfil ou com cpf invalido degradado para null.
+      if (user.cpf !== null) {
+        for (const entry of map.values()) {
+          if (entry.user.cpf === user.cpf) return err('cpf-already-registered');
+        }
+      }
+      map.set(legacyId, { user, legacyId });
       return ok(undefined);
     },
   };

@@ -190,7 +190,7 @@ const { stdout } = await exec(`grep "${userQuery}" arquivo.txt`); // ❌❌❌
 ```ts
 // parent.ts
 import { fork } from 'node:child_process';
-const worker = fork('./worker.ts', [], { execArgv: ['--experimental-strip-types'] });
+const worker = fork('./worker.ts'); // sem execArgv: o type stripping é default no Node 24
 worker.send({ tipo: 'processar', items: [/* ... */] });
 worker.on('message', (m) => { /* ... */ });
 worker.on('close', (code) => { /* ... */ });

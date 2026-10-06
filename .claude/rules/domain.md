@@ -14,7 +14,7 @@ verify:
 
 Domínio puro: zero infra, zero framework, zero I/O. Abrange `src/modules/*/domain/` e o shared kernel (`src/shared/kernel/` — `Money`, `NonZeroMoney`, `Period`, `PlainDate`, `UserRef`, `Cpf`, `Cnpj`).
 
-O que já é cobrado por mecanismo e **não** se repete aqui: `throw` (`tests/cleanup/domain-no-throw.test.ts`), `class`/`this` (ESLint `no-restricted-syntax`), `any` (`no-explicit-any`), `switch` exaustivo (`switch-exhaustiveness-check` + `noFallthroughCasesInSwitch`) e parâmetro mutável (`prefer-readonly-parameter-types`). As primitivas `Result`, `Brand`, `immutable` e `exhaustiveStringUnion` vivem em `src/shared/primitives/` e têm rule própria — [`shared-primitives.md`](./shared-primitives.md).
+O que já é cobrado por mecanismo e **não** se repete aqui: `throw` (`tests/cleanup/domain-no-throw.test.ts`), `class` (`tests/cleanup/lint-gaps.test.ts`), `any` (`no-explicit-any`), `switch` exaustivo (`switch-exhaustiveness-check` + `noFallthroughCasesInSwitch`) e parâmetro mutável (`prefer-readonly-parameter-types`). As primitivas `Result`, `Brand`, `immutable` e `exhaustiveStringUnion` vivem em `src/shared/primitives/` e têm rule própria — [`shared-primitives.md`](./shared-primitives.md).
 
 - **Erro de domínio é string literal union, nunca classe.** `type ContractError = 'contract-not-active' | 'contract-cannot-expire-yet' | …`. É o que faz o `E` do `Result` ser exaustivo no `switch` do chamador — e o que o compilador consegue cobrar. Uma classe de erro devolve a decisão para runtime e reintroduz hierarquia onde o projeto escolheu união fechada.
 

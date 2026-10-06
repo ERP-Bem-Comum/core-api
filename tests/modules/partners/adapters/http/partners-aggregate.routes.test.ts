@@ -59,7 +59,7 @@ const seed = () => {
       id: SupplierId.generate(),
       name: 'Alpha',
       email: 'alpha@f.com',
-      cnpj: '11.222.333/0001-81',
+      document: '11.222.333/0001-81',
       corporateName: 'Alpha LTDA',
       fantasyName: 'Alpha',
       serviceCategory: 'INFORMATICA',

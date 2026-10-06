@@ -91,7 +91,7 @@ export type FinancierRow = typeof parFinanciers.$inferSelect;
 export type NewFinancierRow = typeof parFinanciers.$inferInsert;
 
 // ─── par_suppliers ──────────────────────────────────────────────────────────
-// Fornecedor (legado `suppliers`, database.dbml:153-176). `cnpj` UNIQUE. Soft-delete
+// Fornecedor (legado `suppliers`, database.dbml:153-176). `document` (CPF ou CNPJ) UNIQUE. Soft-delete
 // via `active` + `deactivated_at`. Destino de pagamento embedded (`bancaryInfo`/`pixInfo`
 // do legado) ACHATADO em colunas nullable — invariante "ao menos um destino" via CHECK.
 export const parSuppliers = mysqlTable(
@@ -101,10 +101,14 @@ export const parSuppliers = mysqlTable(
     id: uuidKey('id').primaryKey().notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     email: varchar('email', { length: 255 }).notNull(),
-    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). UNIQUE; COLLATE utf8mb4_bin pelo tipo.
-    cnpj: cnpjKey('cnpj').notNull(),
-    corporateName: varchar('corporate_name', { length: 255 }).notNull(),
-    fantasyName: varchar('fantasy_name', { length: 255 }).notNull(),
+    // CPF (11 caracteres numéricos, PF) ou CNPJ (14 caracteres alfanuméricos, PJ — ADR-0044), sem máscara (#1022).
+    // `cnpjKey` é o varchar(14) COLLATE utf8mb4_bin: cabe os dois. O tipo de pessoa NÃO é coluna —
+    // deriva do tamanho, e uma coluna própria permitiria gravar PF com um CNPJ. UNIQUE: CPF e CNPJ
+    // nunca colidem, os tamanhos diferem.
+    document: cnpjKey('document').notNull(),
+    // Razão social e nome fantasia: só a PJ tem. NULL ⟺ PF, amarrado ao documento pelos CHECKs (e).
+    corporateName: varchar('corporate_name', { length: 255 }),
+    fantasyName: varchar('fantasy_name', { length: 255 }),
     // Literal legado (ex.: INFORMATICA). varchar, NÃO ENUM (ADR-0020).
     serviceCategory: varchar('service_category', { length: 50 }).notNull(),
     active: boolean('active').notNull().default(true),
@@ -150,7 +154,18 @@ export const parSuppliers = mysqlTable(
       'par_suppliers_service_rating_chk',
       sql`${t.serviceRating} IS NULL OR ${t.serviceRating} IN ('RUIM','REGULAR','BOM','OTIMO')`,
     ),
-    uniqueIndex('par_suppliers_cnpj_idx').on(t.cnpj),
+    // (e) identidade PF × PJ (#1022): PF (CPF, 11) ⟺ sem razão social e sem nome fantasia.
+    // NULL aqui é a AUSÊNCIA do campo, não valor desconhecido — sentinela ("-1", "") passaria
+    // pelo CHECK e chegaria à tela, ao CSV e à busca.
+    check(
+      'par_suppliers_pf_corporate_name_chk',
+      sql`(CHAR_LENGTH(${t.document}) = 11) = (${t.corporateName} IS NULL)`,
+    ),
+    check(
+      'par_suppliers_pf_fantasy_name_chk',
+      sql`(CHAR_LENGTH(${t.document}) = 11) = (${t.fantasyName} IS NULL)`,
+    ),
+    uniqueIndex('par_suppliers_document_idx').on(t.document),
     // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
     uniqueIndex('par_suppliers_legacy_id_idx').on(t.legacyId),
   ],

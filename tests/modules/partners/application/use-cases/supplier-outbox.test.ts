@@ -30,12 +30,12 @@ const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
 let outbox: ReturnType<typeof InMemoryOutbox>;
 let store: ReturnType<typeof makeInMemorySupplierStore>;
 
-const validCmd = (cnpj = '11.222.333/0001-81') => ({
+const validCmd = (document = '11.222.333/0001-81') => ({
   name: 'Gráfica Boa Impressão',
   email: 'contato@boaimpressao.com.br',
-  cnpj,
-  corporateName: 'Boa Impressão Gráfica LTDA',
-  fantasyName: 'Boa Impressão',
+  document,
+  corporateName: 'Boa Impressão Gráfica LTDA' as string | null,
+  fantasyName: 'Boa Impressão' as string | null,
   serviceCategory: 'GRAFICA',
   bankAccount: { bank: '001', agency: '1234', accountNumber: '56789', checkDigit: '0' },
   pixKey: null,

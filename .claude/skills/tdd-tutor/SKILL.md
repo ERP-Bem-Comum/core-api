@@ -66,7 +66,7 @@ Quando o aluno disser "quero ver TDD de verdade aqui", aponte para:
 | Tópico | Onde olhar |
 | :--- | :--- |
 | Vermelho não fecha turno — teste, lint, typecheck ou build | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Política de regressão zero" |
-| Runner usado no projeto: `node:test` nativo + `--experimental-strip-types` (sem Jest, sem Vitest) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
+| Runner usado no projeto: `node:test` nativo, `.ts` direto sem flag (sem Jest, sem Vitest) | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
 | Comandos do dia-a-dia (`pnpm test`, single-test com `--test-name-pattern`) | [`../../rules/testing.md`](../../rules/testing.md) |
 | Estrutura: `tests/` espelha `src/`, sufixo `.test.ts` é descoberto, `.contract.ts`/`.suite.ts` são suites parametrizadas reutilizáveis | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Convenções de testes" |
 | Exemplos vivos de testes na base | `tests/modules/contracts/domain/shared/money.test.ts`, `period.test.ts`, `bucket-name.test.ts`, `storage-key.test.ts` |

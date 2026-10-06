@@ -47,15 +47,23 @@ describe('CORE-MIGRATE-BOOT-INVERT — CA-B1: boot não migra (applyMigrations:f
 
 // ─── CA-B3 — scripts E2E rodam o migrate antes do server ────────────────────
 describe('CORE-MIGRATE-BOOT-INVERT — CA-B3: e2e migram antes de subir o server', () => {
-  const SCRIPTS = ['e2e/auth.sh', 'e2e/contracts.sh', 'e2e/collaborators.sh', 'e2e/bruno-all.sh'];
+  const SCRIPTS = ['e2e/auth.sh', 'e2e/contracts.sh', 'e2e/collaborators.sh'];
 
   for (const name of SCRIPTS) {
     it(`CA-B3: scripts/${name} executa o migrate antes de src/server.ts`, () => {
       const src = read(join('scripts', name));
-      // Casa a INVOCAÇÃO real (`node ... --no-warnings <script>`), não o
-      // `pkill -f 'node .*src/server.ts'` do cleanup (que menciona o server antes).
-      const migrateAt = src.indexOf('--no-warnings src/jobs/migrate/run.ts');
-      const serverAt = src.indexOf('--no-warnings src/server.ts');
+      // Casa a INVOCAÇÃO real, não o `pkill -f 'node .*src/server.ts'` do cleanup (que menciona o
+      // server antes e inverteria a ordem medida).
+      //
+      // A âncora é `node` no INÍCIO da linha, com as flags que houver entre ele e o caminho.
+      // Antes era a string `--no-warnings <script>`, que funcionava por acidente: a flag saiu
+      // quando o Node 24 tornou o stripping default (`node-flags-not-redundant.test.ts`) e
+      // levaria este gate a `-1` nos dois lados — uma flag redundante sustentava a asserção.
+      // O `pkill` não casa porque a linha dele começa com `pkill`, não com `node`.
+      const invocation = (script: string): RegExp =>
+        new RegExp(`^\\s*node(?:\\s+--[\\w-]+(?:=[^\\s]+)?)*\\s+${script}\\b`, 'm');
+      const migrateAt = src.search(invocation('src/jobs/migrate/run\\.ts'));
+      const serverAt = src.search(invocation('src/server\\.ts'));
       assert.ok(migrateAt !== -1, `${name} deveria invocar src/jobs/migrate/run.ts`);
       assert.ok(serverAt !== -1, `${name} deveria subir src/server.ts`);
       assert.ok(

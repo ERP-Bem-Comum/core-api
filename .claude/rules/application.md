@@ -9,7 +9,7 @@ verify:
     expect: []
 ---
 
-Application orquestra: não tem regra de negócio nem conhece infra. A regra de dependência (não importar `adapters/`) e a proibição de `interface` em port são cobradas por `tests/cleanup/application-depends-inward.test.ts`; `class` é barrado globalmente por ESLint. A atomicidade do `INSERT` na outbox vive em [`adapters.md`](./adapters.md), porque `appendOutboxInTx` é chamado em 12 arquivos de `adapters/` e em **nenhum** de `application/`.
+Application orquestra: não tem regra de negócio nem conhece infra. A regra de dependência (não importar `adapters/`) e a proibição de `interface` em port são cobradas por `tests/cleanup/application-depends-inward.test.ts`; `class` é barrado globalmente por `tests/cleanup/lint-gaps.test.ts`. A atomicidade do `INSERT` na outbox vive em [`adapters.md`](./adapters.md), porque `appendOutboxInTx` é chamado em 12 arquivos de `adapters/` e em **nenhum** de `application/`.
 
 - **Use case é factory function que recebe `Deps` e devolve `Result`.** `(deps: Readonly<{…}>) => (input) => Promise<Result<O, E>>` — 153 dos 157 use cases declaram um tipo `*Deps`, 151 devolvem `Promise<Result<…>>`. A sequência dentro é sempre a mesma: **validar → buscar → decidir no domínio → persistir → publicar evento**. O que faz esse formato valer não é a estética: é que `deps` ser argumento torna o teste uma chamada de função, sem container nem mock de módulo.
 

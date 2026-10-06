@@ -40,18 +40,23 @@ echo "" >&2
 FAILED=0
 
 # ---------------------------------------------------------------------------
-# Resolver pnpm (preferido) ou fallback npx
+# Resolver pnpm — sem fallback: ausente, o gate falha fechado (ver o else de run_pnpm_script)
 # ---------------------------------------------------------------------------
-PNPM_CMD=""
+#
+# Chamada direta, com `--dir` entre aspas — NÃO um comando guardado em string. A versão anterior
+# fazia `PNPM_CMD="pnpm --dir=${CORE_API_DIR} --silent"` e expandia `${PNPM_CMD}` sem aspas: num
+# clone com espaço no caminho ("Área de trabalho") o `--dir` partia em dois e os quatro gates
+# morriam com `ENOENT ... lstat '/home/.../Área'`.
+HAVE_PNPM=0
 if command -v pnpm >/dev/null 2>&1; then
-  PNPM_CMD="pnpm --dir=${CORE_API_DIR} --silent"
+  HAVE_PNPM=1
 fi
 
 run_pnpm_script() {
   local script="$1"
   local label="$2"
-  if [ -n "${PNPM_CMD}" ]; then
-    if ! ${PNPM_CMD} "${script}" 2>&1 | sed 's/^/    /' >&2; then
+  if [ "${HAVE_PNPM}" -eq 1 ]; then
+    if ! pnpm --dir="${CORE_API_DIR}" --silent "${script}" 2>&1 | sed 's/^/    /' >&2; then
       echo "❌ ${label} falhou" >&2
       FAILED=1
     else
@@ -84,19 +89,19 @@ echo "▶ [2/4] Type check (tsc --noEmit)..." >&2
 run_pnpm_script "typecheck" "typecheck"
 
 # ---------------------------------------------------------------------------
-# Check 3 — Lint (ESLint + typescript-eslint)
+# Check 3 — Lint (oxlint, type-aware via oxlint-tsgolint)
 # ---------------------------------------------------------------------------
 echo "" >&2
-echo "▶ [3/4] Lint (eslint)..." >&2
+echo "▶ [3/4] Lint (oxlint)..." >&2
 run_pnpm_script "lint" "lint"
 
 # ---------------------------------------------------------------------------
-# Check 4 — Tests (node:test + --experimental-strip-types)
+# Check 4 — Tests (node:test; o stripping de tipos é default no Node 24, sem flag)
 # ---------------------------------------------------------------------------
 HAS_TESTS=$(find "${CORE_API_DIR}/tests" -name '*.test.ts' -print -quit 2>/dev/null || true)
 if [ -n "${HAS_TESTS}" ]; then
   echo "" >&2
-  echo "▶ [4/4] Test run (node --test --experimental-strip-types)..." >&2
+  echo "▶ [4/4] Test run (node --test)..." >&2
   run_pnpm_script "test" "tests"
 else
   echo "" >&2

@@ -25,6 +25,6 @@ case "$file" in
 esac
 
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
-node --experimental-strip-types --no-warnings scripts/handbook/inquiry-index.ts >/dev/null 2>&1
+node scripts/handbook/inquiry-index.ts >/dev/null 2>&1
 
 exit 0

@@ -23,9 +23,9 @@ const baseInput = () => ({
   id: SupplierId.generate(),
   name: 'Fornecedor X',
   email: 'contato@fornecedor.com.br',
-  cnpj: '11.222.333/0001-81',
-  corporateName: 'Fornecedor X LTDA',
-  fantasyName: 'FX',
+  document: '11.222.333/0001-81',
+  corporateName: 'Fornecedor X LTDA' as string | null,
+  fantasyName: 'FX' as string | null,
   serviceCategory: 'INFORMATICA',
   bankAccount: bankInput() as ReturnType<typeof bankInput> | null,
   pixKey: null as ReturnType<typeof pixInput> | null,
@@ -68,12 +68,13 @@ describe('PaymentTarget VOs', () => {
 });
 
 describe('Supplier.register', () => {
-  it('cria Active com banco e emite SupplierRegistered (cnpj normalizado)', () => {
+  it('cria Active com banco e emite SupplierRegistered (documento normalizado)', () => {
     const r = Supplier.register(validInput());
     assert.equal(isOk(r), true);
     if (r.ok) {
       assert.equal(r.value.supplier.status, 'Active');
-      assert.equal(r.value.supplier.cnpj as unknown as string, '11222333000181');
+      assert.equal(Supplier.documentOf(r.value.supplier), '11222333000181');
+      assert.equal(r.value.supplier.identity.personType, 'company');
       assert.notEqual(r.value.supplier.bankAccount, null);
       assert.equal(r.value.supplier.pixKey, null);
       assert.equal(r.value.event.type, 'SupplierRegistered');
@@ -99,7 +100,9 @@ describe('Supplier.register', () => {
   });
 
   it('rejeita CNPJ inválido e serviceCategory desconhecida', () => {
-    assert.equal(isErr(Supplier.register(validInput({ cnpj: '11222333000180' }))), true);
+    const doc = Supplier.register(validInput({ document: '11222333000180' }));
+    assert.equal(isErr(doc), true);
+    if (!doc.ok) assert.equal(doc.error, 'invalid-supplier-document');
     const sc = Supplier.register(validInput({ serviceCategory: 'NAO_EXISTE' }));
     assert.equal(isErr(sc), true);
     if (!sc.ok) assert.equal(sc.error, 'invalid-service-category');

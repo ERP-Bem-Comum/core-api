@@ -60,10 +60,10 @@ claims:
       absent_in: []
       evidence:
         - 'compose.yaml:95 — serviço minio declarado'
-        - 'compose.yaml:98 — imagem minio/minio pinada por DIGEST (sha256), mais estrito que o exemplo do ADR, que usava :latest'
+        - 'compose.yaml:98 — imagem pinada por DIGEST (sha256), mais estrito que o exemplo do ADR, que usava :latest; desde o ADR-0071 é o fork MinIO-compatível pgsty/silo, porque minio/minio sumiu do Docker Hub (#1026)'
         - 'compose.yaml:15 — comentário de uso: docker compose up -d sobe minio + mysql'
       verify: |
-        grep -n "minio" compose.yaml | head -5
+        grep -n "^  minio:\|image: pgsty/silo" compose.yaml
     testability:
       verdict: testable
       layer: static
@@ -219,15 +219,19 @@ claims:
       - 'compose.yaml'
       - 'Dockerfile*'
     reality:
-      verdict: holds
+      # `contradicted` na LETRA da alegação, por decisão deliberada: o ADR-0071 trocou a imagem oficial
+      # `minio/minio` (apagada do Docker Hub em 2026-09-11, #1026) pelo fork Silo. O ESSENCIAL da
+      # cláusula — referenciar de registry, não copiar, não redistribuir; AGPLv3 só em uso interno —
+      # segue valendo, e é o que a `rule` abaixo carrega.
+      verdict: contradicted
       holds_in: [core-api]
       absent_in: []
       evidence:
-        - 'compose.yaml:98 — image minio/minio:latest@sha256:14cea49... referenciada do registry, não copiada'
-        - 'ausência: nenhum binário nem código-fonte de MinIO no repositório'
-        - 'nota: o Dockerfile do app não inclui MinIO — o serviço vive só no compose de dev'
+        - 'compose.yaml:98 — image pgsty/silo:latest@sha256:635197cb... — NÃO é a imagem oficial minio/minio (ADR-0071); é referenciada do registry, não copiada, e é AGPLv3 como o MinIO'
+        - 'ausência: nenhum binário nem código-fonte de MinIO/Silo no repositório'
+        - 'nota: o Dockerfile do app não inclui MinIO nem Silo — o serviço vive só no compose de dev'
       verify: |
-        grep -n "minio" compose.yaml Dockerfile 2>/dev/null
+        grep -n "image: pgsty/silo" compose.yaml; grep -ni "minio\|silo" Dockerfile 2>/dev/null
     testability:
       verdict: testable
       layer: static
@@ -255,7 +259,7 @@ findings:
     é o achado: o mesmo repositório resolveu o problema de um jeito para banco e de outro para storage.
     A reinvenção que o ADR queria evitar chegou como replicação de wiring, não como wrapper caseiro.
   - |
-    O compose pina a imagem do MinIO por DIGEST (`@sha256:14cea49...`), enquanto o exemplo do ADR usa
+    O compose pina a imagem do S3 local por DIGEST (hoje `pgsty/silo@sha256:635197cb...`, ADR-0071), enquanto o exemplo do ADR usa
     `minio/minio:latest`. Segundo caso do inventário de hardening ACIMA do ADR, junto com os CHECKs dos
     outbox (`ADR-0014#findings`). Registrar antes que alguém "simplifique" para `:latest`.
   - |

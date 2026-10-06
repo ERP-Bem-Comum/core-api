@@ -1,4 +1,16 @@
-# syntax=docker/dockerfile:1.10
+# syntax=docker/dockerfile:1
+#
+# ⚠️ `:1` e NUNCA um minor fixo. A doc oficial é explícita: `docker/dockerfile:1` acompanha a
+# última 1.x.x e o BuildKit checa atualização a cada build, enquanto "if a specific version is
+# used, such as `1.2` or `1.2.1`, the Dockerfile needs to be updated manually to continue
+# receiving bugfixes and new features" (https://docs.docker.com/build/buildkit/frontend/).
+# Este arquivo ficou em `1.10` até 06/10/2026 — 17 minors atrás da ponta (`1.27.1`), sem receber
+# correção desde que a `1.11` saiu, e ninguém tinha como notar.
+#
+# Por que isto NÃO contraria o digest pin do ADR-0011, que vale para a imagem base abaixo: o
+# frontend do `# syntax` é baixado em tempo de BUILD e não entra na imagem final — ele não afeta a
+# reprodutibilidade do que roda em produção, que é o que aquele ADR protege. Um minor fixo aqui
+# não era nem imutável (recebe patches `1.10.x`) nem atualizado: era o pior dos dois mundos.
 #
 # core-api — módulo Contracts
 # ─────────────────────────────────────────────────────────────────────────────
@@ -7,7 +19,7 @@
 # stage `deps` não precisa de toolchain C++.
 #
 # Camadas:
-#   1. base    — pin do node:24.15-bookworm-slim por digest (ADR-0011 supply chain)
+#   1. base    — pin do node:24.21-bookworm-slim por digest (ADR-0011 supply chain)
 #   2. deps    — instala dependências (sem toolchain C++)
 #   3. runtime — imagem final mínima, non-root, signal-safe
 #
@@ -32,10 +44,15 @@
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 1 — base
 # Pin: digest do índice multi-arch (amd64 + arm64), Debian 12 Bookworm Slim.
-# Para atualizar: `docker buildx imagetools inspect node:24.15-bookworm-slim --format '{{.Manifest.Digest}}'`
-# Digest atual (2026-06-07): sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d
+# Para atualizar: `docker buildx imagetools inspect node:24.21-bookworm-slim --format '{{.Manifest.Digest}}'`
+# Digest atual (2026-10-06): sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
+#
+# A major.minor desta tag é cobrada contra o `.nvmrc` por
+# `tests/cleanup/node-version-single-source.test.ts` — subir aqui sem subir lá (ou vice-versa) fica
+# vermelho no gate. O digest em si o teste NÃO cobra: a tag é reconstruída upstream a cada patch
+# de Debian, e digest errado já falha o build com `manifest unknown`.
 # ────────────────────────────────────────────────────────────────────────────
-FROM node:24.15-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d AS base
+FROM node:24.21-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
 
 # tini é o init mínimo (PID 1) para reaping de zumbis e forward de SIGTERM/SIGINT.
 # Disponível via apt em Debian — equivalente ao `apk add tini` do Alpine anterior.
@@ -86,16 +103,29 @@ LABEL org.opencontainers.image.title="core-api" \
       org.opencontainers.image.vendor="Envolve / Bem Comum" \
       org.opencontainers.image.source="https://github.com/envolve/bem-comum-core-api" \
       org.opencontainers.image.licenses="proprietary" \
-      org.opencontainers.image.base.name="docker.io/library/node:24.15-bookworm-slim"
+      org.opencontainers.image.base.name="docker.io/library/node:24.21-bookworm-slim"
 
 # Variáveis de runtime.
 # - NODE_ENV=production: stripping de warnings, otimizações.
-# - NODE_NO_WARNINGS=1: silencia avisos experimentais (strip-types em Node 24).
-# - NODE_OPTIONS: habilita strip-types nativamente + suprime warning explícito
-#   (defesa em profundidade contra NODE_NO_WARNINGS ser desativado por debugger).
+#
+# Saíram daqui `--experimental-strip-types` e `NODE_NO_WARNINGS=1`/`--no-warnings`, medidos no
+# runtime do `devEngines` (ver `tests/cleanup/node-flags-not-redundant.test.ts`):
+#   - `--experimental-strip-types` é redundante: o stripping é DEFAULT desde o Node 23.6 — a prova
+#     é `--no-strip-types` existir como negação no `--help`. O ENTRYPOINT abaixo executa `.ts`
+#     direto porque o runtime já faz isso.
+#   - `NODE_NO_WARNINGS=1` + `--no-warnings` existiam para calar o `ExperimentalWarning` do
+#     stripping, que não é mais emitido. Mantê-los passou a significar **engolir
+#     `DeprecationWarning` em produção** — justamente o canal pelo qual o Node anuncia o que
+#     quebra na próxima major, e a informação que torna acionável a disciplina de subida de
+#     runtime do ADR-0073. Em contêiner, esse aviso vai para o stderr → log do ECS.
+#
+# `--enable-source-maps` FICA, e a razão é medida: `drizzle-orm` publica 444 arquivos `.js.map`
+# (mais 4 em `fast-xml-parser`). Sem a flag, um erro dentro da lib reporta o `.js` empacotado
+# (`drizzle-orm/utils.js:109`); com ela, o `.ts` de origem (`src/utils.ts:208`). O código DESTE
+# repositório não precisa dela — o type stripping preserva a posição —, mas ela nunca serviu a
+# ele: serve às dependências que publicam mapa, e é em produção que o stack trace importa.
 ENV NODE_ENV=production \
-    NODE_NO_WARNINGS=1 \
-    NODE_OPTIONS="--experimental-strip-types --no-warnings"
+    NODE_OPTIONS="--enable-source-maps"
 
 # Copia node_modules do estágio deps.
 COPY --from=deps /app/node_modules ./node_modules
@@ -132,8 +162,8 @@ STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
 
-# `tini` como PID 1, depois `node` com flags (NODE_OPTIONS habilita strip-types). ENTRYPOINT
-# é o binário Node direto (sem shell) — encaminha sinais corretamente sem shell-trap.
+# `tini` como PID 1, depois `node` executando o `.ts` direto (stripping é default no Node 24).
+# ENTRYPOINT é o binário Node direto (sem shell) — encaminha sinais corretamente sem shell-trap.
 #
 # CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida; o entrypoint é o servidor HTTP.
 # O worker de outbox roda em processo dedicado: `node src/modules/contracts/worker/run.ts`

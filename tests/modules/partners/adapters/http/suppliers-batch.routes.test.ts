@@ -36,7 +36,7 @@ const mk = (name: string, cnpj: string, cat: string): ReturnType<typeof Supplier
     id: SupplierId.generate(),
     name,
     email: `${name.toLowerCase()}@fornecedor.com.br`,
-    cnpj,
+    document: cnpj,
     corporateName: `${name} LTDA`,
     fantasyName: name,
     serviceCategory: cat,

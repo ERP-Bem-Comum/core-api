@@ -4,10 +4,10 @@ source: handbook/architecture/adr/0034-adopt-bruno-api-client-cli.md
 decided_on: 2026-06-04
 
 declared:
-  status: Accepted
-  status_normalized: accepted
+  status: Superseded
+  status_normalized: superseded
   supersedes: []
-  superseded_by: []
+  superseded_by: [ADR-0074]
   related: [ADR-0011, ADR-0025, ADR-0027, ADR-0029, ADR-0037, ADR-0038]
 
 assessment:

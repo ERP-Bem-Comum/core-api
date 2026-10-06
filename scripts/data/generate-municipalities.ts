@@ -1,7 +1,7 @@
 // Gera src/modules/partners/domain/geography/municipalities.data.ts a partir de
 // .tmp/ibge-municipios.json (baixado por fetch-ibge-municipios.ts).
 //
-//   node --experimental-strip-types scripts/data/generate-municipalities.ts
+//   node scripts/data/generate-municipalities.ts
 //
 // Build-time only: o transform IBGE→domínio acontece aqui; o runtime carrega o
 // array já normalizado. O data file gerado É commitado (faz parte do source/seed).
@@ -37,7 +37,7 @@ const main = async (): Promise<void> => {
 
   const body = `// GERADO — não editar à mão.
 // Fonte: IBGE localidades/municipios (view=nivelado). Total: ${String(tuples.length)}.
-// Regenerar: node --experimental-strip-types scripts/data/generate-municipalities.ts
+// Regenerar: node scripts/data/generate-municipalities.ts
 
 // Tupla compacta [cod IBGE (7 dígitos), nome, sigla UF]. Normalização para o VO
 // Municipality acontece em municipality.ts (runtime).

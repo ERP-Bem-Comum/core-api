@@ -55,7 +55,7 @@ Por que cada flag importa:
 | Flag | Motivo |
 | :--- | :--- |
 | `module: NodeNext` | Resolução nativa de ESM do Node |
-| `noEmit: true` | TS só verifica; runtime usa `--experimental-strip-types` |
+| `noEmit: true` | TS só verifica; o runtime usa o type stripping nativo do Node |
 | `allowImportingTsExtensions: true` | Permite `import x from './foo.ts'` |
 | `verbatimModuleSyntax: true` | Força `import type` para tipos, evita "fantasma" |
 | `exactOptionalPropertyTypes: true` | `foo?: string` ≠ `foo?: string \| undefined` |
@@ -67,7 +67,7 @@ Por que cada flag importa:
 
 ## 3. Imports — sempre com `.ts`
 
-Em ESM puro Node, **a extensão é obrigatória no import**. Como rodamos via `node --experimental-strip-types`, usamos `.ts` direto.
+Em ESM puro Node, **a extensão é obrigatória no import**. Como rodamos os arquivos via `node arquivo.ts` (type stripping nativo), usamos `.ts` direto.
 
 ```ts
 // ✅ Correto
@@ -146,13 +146,15 @@ Pontos:
 pnpm exec tsc --noEmit
 
 # Rodar arquivo TS direto
-node --experimental-strip-types src/main.ts
+node src/main.ts
 
 # Rodar testes do node:test em arquivos .test.ts
-node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'
+node --test 'src/**/*.test.ts'
 ```
 
-`--experimental-strip-types` (Node 22.6+) remove anotações de tipo em tempo de carga. É o que permite usar `.ts` direto, sem build. Sem dependências de transpiler (esbuild, swc, tsx).
+O type stripping do Node remove anotações de tipo em tempo de carga, e é **default desde o Node
+23.6** (backport na 22.18) — nenhuma flag é necessária. É o que permite usar `.ts` direto, sem
+build e sem dependência de transpiler (esbuild, swc, tsx).
 
 > **Trade-off:** strip-types só **remove tipos** — não transforma `enum`, `namespace`, decorators legacy. Como nosso domínio é TS funcional puro, não usamos nada disso. Para Application+Adapters (que vão usar NestJS depois), provavelmente buildaremos para `dist/`.
 
@@ -229,6 +231,6 @@ Antes de fechar uma sessão:
 | CommonJS | Sistema de módulos legacy do Node (`require`) |
 | NodeNext | Modo de resolução do TS que segue regras do Node moderno |
 | `verbatimModuleSyntax` | Força clareza sobre imports tipo vs. valor |
-| `--experimental-strip-types` | Flag do Node 22.6+ que remove tipos em runtime |
+| type stripping | Remoção de tipos em tempo de carga, default no Node 23.6+ (sem flag) |
 | Barrel export | `index.ts` que reexporta API pública de uma pasta |
 | `isolatedModules` | Garante que cada arquivo possa ser compilado isoladamente |

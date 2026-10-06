@@ -9,8 +9,8 @@ dist/
 .idea/
 coverage/
 .tsbuildinfo
-# Cache do ESLint (~1 MB). Derivado do fonte e da config — nunca versionado.
-# No CI ele é restaurado por actions/cache, não pelo repositório (Inquiry-0029).
+# Resíduo do ESLint (removido no ADR-0072): clones anteriores à troca ainda têm o arquivo no
+# disco. Ignorado para não aparecer como não rastreado; o oxlint não usa cache.
 .eslintcache
 
 # Dados brutos temporários (ex.: dump IBGE baixado por scripts/data/fetch-*)
@@ -90,3 +90,23 @@ test-results/
 # Scripts de diagnóstico black-box descartáveis (ex.: login-diag) — uso local,
 # nunca versionar; os outputs em out/ podem conter dados de prod (tokens redatados).
 tools/bugs-scripts/
+
+# Artefatos de QA/security testing da borda HTTP (.rest, harness Go, laudos de
+# descoberta). Contêm Bearer token de sessão, enumeração de rotas internas e provas
+# de vulnerabilidade — exatamente o que um atacante quer. Os repos são PÚBLICOS, então
+# nenhum desses artefatos pode nascer rastreável. Uso local, contra o dev server.
+penTest_rest/
+
+# Coleções convertidas a partir de api-collections/ (.bru): `.hurl` para execução/CI e `.http`
+# para disparar request pela IDE. Uso interno — ambas carregam o token da sessão quando
+# preenchidas (`_vars.env` no caso do Hurl, `@token` no caso do .http), e os repos são PÚBLICOS.
+# Quando o `.hurl` for promovido a gate de CI, a pasta `casos/` passa a ser versionada: ela
+# nasce SEM segredo (variável vem de --variables-file) — só o `_vars.env` é que nunca entra.
+api-collections-http/
+api-collections-hurl/
+
+# Cockpit (IDE) — estado e configuração de workspace da máquina de quem desenvolve:
+# tasks.json (comandos do painel de Tasks), databases.json, layouts .ckp e worktrees.
+# Não é configuração do projeto: os comandos dependem de caminhos e de arquivos locais
+# (ex.: .tmp/local.env, também ignorado), então versionar só espalharia task que não roda.
+.cockpit/

@@ -22,7 +22,7 @@
  *   1) PURO / TIPO (roda em `pnpm test` e é checado por `pnpm run typecheck`):
  *      - Superfície runtime que JÁ passa hoje (regression guard: a função existe; conn malformada
  *        → Result err kebab). NÃO é o RED — é a rede de proteção.
- *      - Witnesses de TIPO do campo novo `subcategoryRef`. Sob `--experimental-strip-types` os tipos
+ *      - Witnesses de TIPO do campo novo `subcategoryRef`. Sob o type stripping do Node os tipos
  *        são apagados → NÃO falham em runtime, mas `pnpm run typecheck` fica VERMELHO até o W1
  *        adicionar `subcategoryRef` a `RealizedProvisionedRow`. Esse é o RED puro DEMONSTRÁVEL do
  *        campo/tipo.

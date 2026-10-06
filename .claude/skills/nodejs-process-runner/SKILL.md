@@ -2,7 +2,7 @@
 name: nodejs-process-runner
 description: >
   Executa processos externos (git, docker, pnpm, mysqldump, ffmpeg, scripts shell
-  herdados) a partir de Node.js (TypeScript, ESM, Node 24 + --experimental-strip-types)
+  herdados) a partir de Node.js (TypeScript, ESM, Node 24 executando .ts direto, sem flag)
   usando node:child_process — sempre via execFile/spawn, nunca exec com shell. Cobre
   o equivalente moderno de `$(...)`, pipes, redirecionamento, sinais, timeouts,
   streaming de stdout/stderr e tradução de exit code → Result<T, E>. Pareada com
@@ -102,7 +102,7 @@ scripts/
 Execução padrão:
 
 ```bash
-pnpm exec node --experimental-strip-types --no-warnings scripts/snapshot-db.ts --to backups/2026-05-15.sql
+pnpm exec node scripts/snapshot-db.ts --to backups/2026-05-15.sql
 ```
 
 ---
@@ -246,7 +246,7 @@ Precisa do shell para interpretar `|`, `>`, `*`, `$VAR`?
 ## Anatomia de um script (template canônico)
 
 ```ts
-#!/usr/bin/env -S node --experimental-strip-types --no-warnings
+#!/usr/bin/env node
 // scripts/git-tag-release.ts
 //
 // Substitui:  git tag -a "v${VER}" -m "release ${VER}" && git push origin "v${VER}"
@@ -514,7 +514,7 @@ nodejs-fs-scripter   ◄──┼──►   nodejs-process-runner   ◄── v
 
 ## Checklist antes de declarar pronto
 
-- [ ] Script roda com `pnpm exec node --experimental-strip-types --no-warnings scripts/<nome>.ts` sem warning.
+- [ ] Script roda com `pnpm exec node scripts/<nome>.ts` sem warning.
 - [ ] Toda chamada externa usa `execFile`/`spawn`, **nunca** `exec` com interpolação.
 - [ ] `shell: false` (ou omitido — esse é o default em `execFile`/`spawn`).
 - [ ] Cada chamada tem `timeoutMs` ou `signal` explícito.

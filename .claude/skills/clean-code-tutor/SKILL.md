@@ -69,7 +69,7 @@ Quando o aluno disser "quero ver isso num código real", aponte:
 | Tópico | Onde olhar |
 | :--- | :--- |
 | Regras transversais que materializam Clean Code (naming EN, funções puras, zero side-effects no domínio) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Regras invariantes" |
-| Enforcement automatizado via ESLint flat config (typescript-eslint strict + type-checked, regras `naming-convention`, `max-params`, `prefer-readonly-parameter-types`, `consistent-type-imports`, `no-restricted-syntax` para banir `class`) | [`../../../eslint.config.js`](../../../eslint.config.js) |
+| Enforcement automatizado via oxlint type-aware (regras `max-params`, `prefer-readonly-parameter-types`, `consistent-type-imports`) e gate de AST (`naming-convention`, banimento de `class`) | [`../../../.oxlintrc.json`](../../../.oxlintrc.json), [`../../../tests/cleanup/lint-gaps.test.ts`](../../../tests/cleanup/lint-gaps.test.ts) |
 | Formatador automático | [`../../../.prettierrc.json`](../../../.prettierrc.json) |
 | Skill irmã que aplica TS funcional puro | [`../ts-domain-modeler/SKILL.md`](../ts-domain-modeler/SKILL.md) — zero `class`, zero `this`, branded types, smart constructors |
 | Skill irmã que define ports e adapters | [`../ports-and-adapters/SKILL.md`](../ports-and-adapters/SKILL.md) — interface segregation aplicada via `type Readonly<{...}>` |

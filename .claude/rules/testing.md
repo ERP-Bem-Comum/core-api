@@ -15,7 +15,7 @@ verify:
     expect: ['scripts/handbook/link-scan.ts']
 ---
 
-Runner: Node test runner nativo + `--experimental-strip-types`. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras ESLint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`, `naming-convention`) estão em `eslint.config.js`, no bloco `files: ['tests/**/*.ts']`.
+Runner: Node test runner nativo, executando `.ts` direto. O type stripping é default desde o Node 23.6, e `--experimental-strip-types`/`--no-warnings` foram removidos de todos os pontos de invocação do repositório — `tests/cleanup/node-flags-not-redundant.test.ts` cobra cada um e impede o retorno. **`--enable-source-maps` permanece**, e não por inércia: `drizzle-orm` publica 444 `.js.map`, e sem a flag um erro dentro da lib reporta o `.js` empacotado em vez do `.ts` de origem. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras de lint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`) estão no `.oxlintrc.json`, no override `files: ['tests/**/*.ts']`; o `naming-convention`, que o oxlint não tem, fica de fora de `tests/` no próprio gate `tests/cleanup/lint-gaps.test.ts`.
 
 ## Quatro naturezas de arquivo, e só uma roda no gate
 
@@ -49,7 +49,7 @@ Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **
   sed -n '/^  partners: mysqlSuite(/,/^  ]),/p' scripts/ci/test-integration.ts \
     | grep -oE "'tests/[^']+'" | tr -d "'" \
     | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}' \
-    | xargs node --test --test-concurrency=1 --experimental-strip-types
+    | xargs node --test --test-concurrency=1
   ```
 
   A inversão usa `awk` de propósito: a versão anterior desta rule usava `tail -r`, que **só existe no macOS** — no CI Linux o comando falhava antes de rodar teste algum.

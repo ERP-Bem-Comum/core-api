@@ -141,6 +141,13 @@
       "when": 1787363790665,
       "tag": "0019_sturdy_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1790873687663,
+      "tag": "0020_mixed_randall",
+      "breakpoints": true
     }
   ]
 }

@@ -25,7 +25,7 @@ description: >
 
 # nodejs-runtime-expert
 
-Agente especialista em **Node.js 24 LTS** com **ESM + NodeNext + `--experimental-strip-types`** para o `core-api`. Atua como engenheiro sênior do runtime — escolhe API nativa antes de dep externa, modela graceful shutdown, diagnostica erros de module resolution.
+Agente especialista em **Node.js 24 LTS** com **ESM + NodeNext + type stripping nativo** (`node arquivo.ts`, sem flag) para o `core-api`. Atua como engenheiro sênior do runtime — escolhe API nativa antes de dep externa, modela graceful shutdown, diagnostica erros de module resolution.
 
 > **Herda integralmente** o `CLAUDE.md` raiz, [ADR-0002](../../handbook/architecture/adr/0002-keep-nodejs-runtime.md) (Node como runtime), [ADR-0009](../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) (Node 24 + TS 6). Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
 
@@ -36,13 +36,17 @@ Agente especialista em **Node.js 24 LTS** com **ESM + NodeNext + `--experimental
 | Tecnologia                     | Versão / Flag                                      | Origem                           |
 | :----------------------------- | :------------------------------------------------- | :------------------------------- |
 | Node.js                        | `>=24.0.0`                                         | `package.json#engines.node`      |
-| `@types/node`                  | `^22.10.0`                                         | `package.json#devDependencies`   |
-| TS execution mode              | `--experimental-strip-types --no-warnings`         | scripts `test`, `test:integration`, `cli:contracts`, `secrets:setup` |
+| `@types/node`                  | `^24.0.0`                                          | `package.json#devDependencies`   |
+| TS execution mode              | `node arquivo.ts` — **sem flag**                   | todos os scripts do `package.json` |
 | Module system                  | ESM (`"type": "module"`)                           | `package.json#type`              |
 | `tsconfig.module`              | `NodeNext` + `allowImportingTsExtensions`          | `tsconfig.json`                  |
 | Subpath imports                | `#src/*` → `./src/*`                               | `package.json#imports`           |
 
-`--experimental-strip-types` está em "Active development" em Node 24 (não Stable). Toda mudança que dependa dele acima de "test/dev" tem que ser validada — registrar em ADR se virar dependência de prod.
+O type stripping **não é mais experimental**: é o comportamento default do Node desde a 23.6 (backport na 22.18), e a prova verificável é `--no-strip-types` existir como negação no `node --help`. Produção depende dele — o `ENTRYPOINT` da imagem é `tini -- node src/server.ts`, sem flag.
+
+⚠️ **Nunca escrever `--experimental-strip-types` nem `--no-warnings` num comando deste repositório.** As duas foram removidas em 06/10/2026 após medição: a primeira é redundante; a segunda **esconde** `DeprecationWarning`, que é como o Node anuncia o que quebra na próxima major. Cobrado por `tests/cleanup/node-flags-not-redundant.test.ts` em todos os pontos de invocação. O que exige flag é `enum`/`namespace` (`--experimental-transform-types`) — e o repositório não tem nenhum, por `erasableSyntaxOnly` no `tsconfig`.
+
+⚠️ **`--enable-source-maps` é o contrário: ela FICA, e removê-la é regressão.** A primeira versão desta regra mandava tirá-la, com a justificativa de que nenhuma dep de produção publicava `.js.map`. Era falso por erro de medição — o `find` rodou **sem `-L`**, e `node_modules/<dep>` é symlink sob pnpm, então a varredura nunca desceu no alvo. Com `find -L`: `drizzle-orm` publica **444** `.js.map`, `fast-xml-parser` mais 4. Reproduzido: sem a flag, um erro dentro da lib reporta `drizzle-orm/utils.js:109`; com ela, `src/utils.ts:208`. O type stripping preserva a posição do código **deste** repositório — e é por isso que o raciocínio engana: a flag nunca serviu a ele, serve às deps que publicam mapa. **Ao medir qualquer coisa dentro de `node_modules` sob pnpm, use `find -L`.**
 
 ---
 
@@ -170,9 +174,9 @@ describe('Money.fromCents', () => {
 
 Rodar suíte específica:
 ```bash
-node --test --experimental-strip-types --no-warnings tests/modules/contracts/domain/shared/money.test.ts
+node --test tests/modules/contracts/domain/shared/money.test.ts
 # Por nome:
-node --test --experimental-strip-types --no-warnings --test-name-pattern="fromCents" tests/.../money.test.ts
+node --test --test-name-pattern="fromCents" tests/.../money.test.ts
 ```
 
 ### AsyncLocalStorage para correlação

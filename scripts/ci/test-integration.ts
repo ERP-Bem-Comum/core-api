@@ -316,12 +316,14 @@ const dockerDown = (): void => {
 };
 
 const runNodeTest = (suite: Suite): number => {
+  // `--experimental-strip-types` e `--no-warnings` saíram (redundantes no Node 24, ver
+  // `tests/cleanup/node-flags-not-redundant.test.ts`). `--enable-source-maps` FICA: o
+  // `drizzle-orm` publica source map, e estas suítes rodam contra MySQL real — é exatamente onde
+  // um stack trace apontando o `.ts` da lib em vez do `.js` empacotado paga por si.
   const flags = [
+    '--enable-source-maps',
     '--test',
     ...(suite.concurrency1 ? ['--test-concurrency=1'] : []),
-    '--experimental-strip-types',
-    '--enable-source-maps',
-    '--no-warnings',
   ];
   return (
     spawnSync('node', [...flags, ...suite.paths], {

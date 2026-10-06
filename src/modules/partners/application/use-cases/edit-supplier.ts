@@ -1,5 +1,6 @@
 /**
- * Use case `editSupplier` — edição cadastral (PUT total) com RBAC do campo vital (CNPJ).
+ * Use case `editSupplier` — edição cadastral (PUT total) com RBAC do campo vital (documento
+ * CPF/CNPJ — trocar PF ↔ PJ é trocar o documento, logo exige a mesma permissão).
  * Espelha `editFinancier`. Regra do vital no use case (usa o writer; evita inconsistência
  * reader/writer do driver memory). Payment-target é não-vital (editável via supplier:write).
  */
@@ -8,6 +9,7 @@ import { type Result, ok, err } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import type { Supplier as SupplierAggregate } from '#src/modules/partners/domain/supplier/types.ts';
 import type {
   BankAccountInput,
@@ -25,9 +27,9 @@ export type EditSupplierCommand = Readonly<{
   canEditSensitive: boolean;
   name: string;
   email: string;
-  cnpj: string;
-  corporateName: string;
-  fantasyName: string;
+  document: string;
+  corporateName: string | null;
+  fantasyName: string | null;
   serviceCategory: string;
   bankAccount: BankAccountInput | null;
   pixKey: PixKeyInput | null;
@@ -38,7 +40,7 @@ export type EditSupplierCommand = Readonly<{
 export type EditSupplierError =
   | 'edit-supplier-invalid-id'
   | 'edit-supplier-not-found'
-  | 'edit-supplier-cnpj-duplicate'
+  | 'edit-supplier-document-duplicate'
   | 'edit-supplier-sensitive-forbidden'
   | SupplierError
   | SupplierRepositoryError;
@@ -66,7 +68,7 @@ export const editSupplier =
       {
         name: cmd.name,
         email: cmd.email,
-        cnpj: cmd.cnpj,
+        document: cmd.document,
         corporateName: cmd.corporateName,
         fantasyName: cmd.fantasyName,
         serviceCategory: cmd.serviceCategory,
@@ -79,13 +81,14 @@ export const editSupplier =
     );
     if (!edited.ok) return edited;
 
-    const cnpjChanged = String(current.cnpj) !== String(edited.value.supplier.cnpj);
-    if (cnpjChanged) {
+    const nextDocument = edited.value.supplier.identity.document;
+    const documentChanged = !SupplierDocument.equals(current.identity.document, nextDocument);
+    if (documentChanged) {
       if (!cmd.canEditSensitive) return err('edit-supplier-sensitive-forbidden');
-      const byCnpj = await deps.supplierRepo.findByCnpj(edited.value.supplier.cnpj);
-      if (!byCnpj.ok) return byCnpj;
-      if (byCnpj.value !== null && String(byCnpj.value.id) !== String(id.value)) {
-        return err('edit-supplier-cnpj-duplicate');
+      const byDocument = await deps.supplierRepo.findByDocument(nextDocument);
+      if (!byDocument.ok) return byDocument;
+      if (byDocument.value !== null && String(byDocument.value.id) !== String(id.value)) {
+        return err('edit-supplier-document-duplicate');
       }
     }
 

@@ -47,7 +47,7 @@ export type DocumentStorage = Readonly<{
   // `Uint8Array` não tem variant `readonly` nativo no TypeScript 6, e
   // `Readonly<Uint8Array>` não impede `.set(0, x)`. A regra
   // `prefer-readonly-parameter-types` fica desabilitada apenas aqui — o
-  // contrato é "adapter consome `bytes` sem mutar" e ESLint não consegue
+  // contrato é "adapter consome `bytes` sem mutar" e o lint não consegue
   // expressar essa garantia para tipos não-readonly nativos.
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   upload: (input: UploadInput) => Promise<Result<StorageRef, DocumentStorageError>>;

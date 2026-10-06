@@ -58,7 +58,7 @@ export type CheckDigitUnverifiable = 'unsupported-bank' | 'account-not-numeric';
 // depois do padding. Há teste fixando essa equivalência.
 export const bradescoAccountCheckDigits = (accountDigits: string): readonly string[] => {
   // Percorre da esquerda para a direita e deriva a posição a partir da DIREITA — o `for…of` sobre a
-  // string evita tanto o spread (que o ESLint barra por decompor caracteres compostos) quanto o
+  // string evita tanto o spread (que o lint barra por decompor caracteres compostos) quanto o
   // acesso indexado (que `noUncheckedIndexedAccess` obrigaria a destratar com `?? '0'`, escondendo
   // um índice fora de faixa atrás de um zero plausível). Mesmo idioma de `auth/domain/identity/cpf.ts`.
   let weightedSum = 0;

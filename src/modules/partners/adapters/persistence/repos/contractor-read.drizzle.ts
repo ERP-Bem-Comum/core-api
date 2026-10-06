@@ -12,7 +12,7 @@ import { eq } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
-import * as Cnpj from '#src/shared/kernel/cnpj.ts';
+import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 import type {
   ContractorReadPort,
   ContractorReadError,
@@ -128,22 +128,22 @@ export const createDrizzleContractorReadStore = (
     }
   };
 
-  // #FIN-OCR-AUTOFILL-SUPPLIER: normaliza o CNPJ (VO) e resolve pelo índice único `par_suppliers_cnpj_idx`.
-  // CNPJ inválido → ok(null) (não é erro de infra). Sem match → ok(null).
-  const findSupplierIdByCnpj = async (
-    cnpj: string,
+  // #FIN-OCR-AUTOFILL-SUPPLIER: normaliza o documento (CPF ou CNPJ — #1022) e resolve pelo índice
+  // único `par_suppliers_document_idx`. Documento inválido → ok(null) (não é erro de infra). Sem match → ok(null).
+  const findSupplierIdByDocument = async (
+    document: string,
   ): Promise<Result<string | null, ContractorReadError>> => {
-    const parsed = Cnpj.parse(cnpj);
+    const parsed = SupplierDocument.parse(document);
     if (!parsed.ok) return ok(null);
     try {
       const rows = await db
         .select({ id: schema.parSuppliers.id })
         .from(schema.parSuppliers)
-        .where(eq(schema.parSuppliers.cnpj, parsed.value as unknown as string))
+        .where(eq(schema.parSuppliers.document, SupplierDocument.toRaw(parsed.value)))
         .limit(1);
       return ok(rows[0]?.id ?? null);
     } catch (cause) {
-      logRead('findSupplierIdByCnpj', cause);
+      logRead('findSupplierIdByDocument', cause);
       return err('contractor-read-unavailable');
     }
   };
@@ -153,6 +153,6 @@ export const createDrizzleContractorReadStore = (
     getFinancierView,
     getCollaboratorView,
     getActView,
-    findSupplierIdByCnpj,
+    findSupplierIdByDocument,
   };
 };

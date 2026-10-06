@@ -6,8 +6,10 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 export const approverItemSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   name: z.string().nullable(),
 });
 
