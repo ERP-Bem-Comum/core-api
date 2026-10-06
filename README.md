@@ -149,7 +149,6 @@ pnpm run job:contracts:sweep           # oneshot: varredura de ciclo de vida de 
 # Testes de integração (sobem MySQL/MinIO via Docker compose --wait) e E2E HTTP (Bruno)
 pnpm run test:integration:financial    # idem :contracts :auth :partners :programs :notifications :storage :etl …
 pnpm run test:e2e:auth                 # coleções .bru (idem :contracts :collaborators)
-pnpm run test:integration:all          # bruno-all.sh
 
 # Migrations (Drizzle Kit) — uma config por módulo em db/drizzle/
 pnpm run db:generate                   # contracts  (idem :auth :partners :programs :financial :notifications)

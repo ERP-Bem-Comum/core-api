@@ -121,7 +121,7 @@ describe('block-bash-file-io — o shell continua utilizável', () => {
   for (const cmd of [
     'cat .claude/.last-quality-gate.log',
     'cat .claude/.last-instructions.log',
-    'head -5 scripts/e2e/bruno-all.sh',
+    'head -5 scripts/e2e/auth.sh',
     'cat db/drizzle/0001_init.sql',
   ]) {
     it(`permite (não é código formatável): ${cmd}`, () => {
