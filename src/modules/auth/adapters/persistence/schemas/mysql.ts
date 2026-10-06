@@ -161,6 +161,17 @@ export const authUser = mysqlTable(
     // Idempotência da ETL: UNIQUE em legacy_id (múltiplos NULL permitidos no InnoDB).
     uniqueIndex('auth_user_legacy_id_idx').on(t.legacyId),
 
+    // Unicidade de CPF: um CPF por usuário. `cpf` é nullable (register/OIDC criam sem perfil), e o
+    // InnoDB permite múltiplos NULL num índice UNIQUE — então quem não tem CPF não colide.
+    //
+    // A garantia vive no banco, e os dois adapters que inserem em auth_user traduzem o 1062 DESTE
+    // índice (pelo nome, na sqlMessage) em `cpf-already-registered`: `user-repository.drizzle.ts`
+    // → 409 na borda; `provisioned-user-store.drizzle.ts` → o use case `provisionLegacyUser`
+    // degrada o CPF para null e re-tenta, como já faz com CPF inválido. Adapter novo que insira
+    // aqui sem distinguir este índice devolve `unavailable` e disfarça dado duplicado de falha
+    // de infra.
+    uniqueIndex('auth_user_cpf_idx').on(t.cpf),
+
     // Índice em name: cobre ORDER BY name ASC da listagem paginada (UserQuery.list, spec 005 US1).
     // leading-% LIKE não usa B-Tree para range scan; benefício é evitar filesort no ORDER BY.
     // name herda utf8mb4_unicode_ci da tabela — LIKE é case-insensitive.

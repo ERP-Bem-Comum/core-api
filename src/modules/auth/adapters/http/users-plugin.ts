@@ -217,6 +217,7 @@ const usersRoutes =
             errors: {
               ...FIELD_VALIDATION_STATUS,
               'email-already-registered': 409,
+              'cpf-already-registered': 409,
               // AUTH-MASS-APPROVE-SETTABLE: ator sem user:assign-role tentando setar a flag -> 403
               // (mesmo mapeamento de assign-role na borda).
               forbidden: 403,
@@ -276,6 +277,7 @@ const usersRoutes =
               'user-not-found': 404,
               'user-disabled': 422,
               'email-already-registered': 409,
+              'cpf-already-registered': 409,
               // AUTH-MASS-APPROVE-SETTABLE: ator sem user:assign-role tentando setar a flag -> 403.
               forbidden: 403,
               'mass-approver-role-invalid': 422,

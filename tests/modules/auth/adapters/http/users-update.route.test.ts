@@ -16,6 +16,7 @@ import {
   makeRequireAuth,
   usersHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
+import { syntheticCpf } from '#tests/support/synthetic-cpf.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
 const ADMIN = 'admin.update@example.com';
@@ -77,6 +78,10 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
+// cpf UNICO por chamada: `auth_user_cpf_idx` (migration 0010) recusa documento repetido, e este
+// arquivo cria varios usuarios. Quem precisa do VALOR do cpf para assertar passa o seu por
+// `overrides` (ver CA3), em vez de depender do que o default gerou.
+let cpfSeq = 8000;
 const createUser = async (
   app: AppHandle,
   token: string,
@@ -88,7 +93,7 @@ const createUser = async (
     headers: { authorization: `Bearer ${token}` },
     payload: {
       name: 'Amanda Manoel',
-      cpf: '52998224725',
+      cpf: syntheticCpf((cpfSeq += 1)),
       email: 'amanda.upd@example.com',
       telephone: '15997133502',
       ...overrides,
@@ -136,7 +141,10 @@ describe('AUTH-HTTP-UPDATE-USER — PUT /api/v1/users/:id', () => {
   });
 
   it('CA3: 200 edita nome/telefone; detalhe reflete; demais preservados', async () => {
-    const id = await createUser(app, adminToken, { email: 'ca3.upd@example.com' });
+    // cpf explicito: o assert adiante prova que ele PERMANECE depois do PUT, e para isso o teste
+    // precisa saber qual valor foi criado.
+    const cpf = syntheticCpf(8901);
+    const id = await createUser(app, adminToken, { email: 'ca3.upd@example.com', cpf });
     const res = await app.inject({
       method: 'PUT',
       url: `/api/v1/users/${id}`,
@@ -147,7 +155,7 @@ describe('AUTH-HTTP-UPDATE-USER — PUT /api/v1/users/:id', () => {
     const body = res.json() as { name: string; telephone: string; cpf: string; email: string };
     assert.equal(body.name, 'Amanda Souza');
     assert.equal(body.telephone, '15991111111');
-    assert.equal(body.cpf, '52998224725');
+    assert.equal(body.cpf, cpf); // nao tocado pelo PUT
     assert.equal(body.email, 'ca3.upd@example.com');
   });
 
@@ -160,6 +168,21 @@ describe('AUTH-HTTP-UPDATE-USER — PUT /api/v1/users/:id', () => {
       url: `/api/v1/users/${id}`,
       headers: { authorization: `Bearer ${adminToken}` },
       payload: { email: ocupado },
+    });
+    assert.equal(res.statusCode, 409);
+  });
+
+  // F7: o PUT tambem alcanca o cpf, e o mesmo UNIQUE vale na edicao — nao so na criacao.
+  // Sem o mapeamento de `cpf-already-registered` na borda isto cairia no default 500.
+  it('CA4b: 409 ao trocar cpf para o de outro usuario', async () => {
+    const ocupado = syntheticCpf(8902);
+    await createUser(app, adminToken, { email: 'cpf.ocupado.upd@example.com', cpf: ocupado });
+    const id = await createUser(app, adminToken, { email: 'ca4b.upd@example.com' });
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/users/${id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { cpf: ocupado },
     });
     assert.equal(res.statusCode, 409);
   });

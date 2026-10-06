@@ -108,3 +108,43 @@ describe('AUTH-DB-SCHEMA — CA8: schema.ts declara as 6 tabelas', () => {
     }
   });
 });
+
+// F7 (ciclo de QA 05/10): CPF duplicado era aceito — dois usuarios, o mesmo documento, ambos 201.
+// A unicidade de email nasceu na 0000 (CA3); a de cpf veio na 0010, entao este guard varre TODAS
+// as migrations em vez de fixar um arquivo. O nome do arquivo e gerado pelo drizzle-kit e nao e
+// contrato; o UNIQUE no cpf e.
+describe('AUTH-DB-SCHEMA — CA9: unicidade de CPF (F7)', () => {
+  const allMigrations = (): string =>
+    readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => read(resolve(MIGRATIONS_DIR, f)))
+      .join('\n');
+
+  it('CA9: auth_user.cpf UNIQUE em alguma migration (-> cpf-already-registered)', () => {
+    assert.match(
+      allMigrations(),
+      /auth_user_cpf_idx/i,
+      'UNIQUE auth_user_cpf_idx ausente: CPF duplicado volta a ser aceito (F7).',
+    );
+  });
+
+  it('CA9: o schema declara o uniqueIndex do cpf (migration e schema nao divergem)', () => {
+    const ts = read(SCHEMA_MYSQL);
+    assert.match(
+      ts,
+      /uniqueIndex\(\s*'auth_user_cpf_idx'\s*\)\s*\.on\(\s*t\.cpf\s*\)/,
+      'schema sem uniqueIndex em cpf: drizzle-kit geraria um DROP do indice na proxima migration.',
+    );
+  });
+
+  // A garantia tem de permitir CPF ausente: `cpf` nullable + multiplos NULL no UNIQUE do InnoDB
+  // e o que deixa register/OIDC criarem usuario sem perfil. Um NOT NULL aqui quebraria isso.
+  it('CA9: a coluna cpf permanece nullable (register/OIDC criam sem perfil)', () => {
+    const sql = allMigrations();
+    assert.doesNotMatch(
+      sql,
+      /`cpf`\s+varchar\(\d+\)[^,\n]*\bNOT\s+NULL/i,
+      'cpf NOT NULL impediria usuario sem perfil e faria NULL colidir no UNIQUE.',
+    );
+  });
+});

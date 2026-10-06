@@ -16,6 +16,7 @@ import {
   makeRequireAuth,
   usersHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
+import { syntheticCpf } from '#tests/support/synthetic-cpf.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
 const ADMIN = 'admin.photo@example.com';
@@ -89,7 +90,9 @@ const createUser = async (app: AppHandle, token: string): Promise<string> => {
     headers: { authorization: `Bearer ${token}` },
     payload: {
       name: 'Foto User',
-      cpf: '52998224725',
+      // cpf derivado do MESMO `seq` que ja torna o e-mail unico: `auth_user_cpf_idx`
+      // (migration 0010) recusa documento repetido, e este helper cria varios usuarios.
+      cpf: syntheticCpf(seq),
       email: `foto${seq}@example.com`,
       telephone: '15997133502',
     },

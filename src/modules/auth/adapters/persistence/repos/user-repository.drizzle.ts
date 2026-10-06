@@ -62,6 +62,14 @@ const isEmailDupEntry = (e: unknown): boolean => {
   return info.sqlMessage.includes('auth_user_email_idx');
 };
 
+// Mesma distinção, para o UNIQUE de CPF (auth_user_cpf_idx): errno 1062 no índice do CPF
+// -> cpf-already-registered. Separado do email porque os dois têm código de erro distinto.
+const isCpfDupEntry = (e: unknown): boolean => {
+  const info = getDupEntryInfo(e);
+  if (info === null) return false;
+  return info.sqlMessage.includes('auth_user_cpf_idx');
+};
+
 // ─── safe wrapper ──────────────────────────────────────────────────────────────
 //
 // Converte excecoes de I/O para user-repo-unavailable. Nao usado no save (o save
@@ -224,9 +232,12 @@ export const createDrizzleUserStore = (
   //
   // Blueprint §2: Upsert via SELECT-then-UPDATE-or-INSERT (ADR-0020 — sem ODKU).
   // Blueprint §3: Replace auth_user_role via DELETE+INSERT batch (skip se roles vazio).
-  // Blueprint §4: isEmailDupEntry -> email-already-registered; outros erros -> user-repo-unavailable.
+  // Blueprint §4: isEmailDupEntry -> email-already-registered; isCpfDupEntry (auth_user_cpf_idx,
+  // migration 0010) -> cpf-already-registered; outros erros -> user-repo-unavailable.
   //
-  // O save NAO usa o safe() generico porque precisa distinguir isEmailDupEntry.
+  // O save NAO usa o safe() generico porque precisa distinguir as duas duplicatas nomeadas.
+  // Sem ODKU (ADR-0020) o 1062 chega ao catch: um INSERT com cpf de OUTRA row levanta erro em vez
+  // de virar UPDATE silencioso da row alheia, que e o que ON DUPLICATE KEY UPDATE faria.
 
   const save = async (user: User): Promise<Result<void, UserRepositoryError>> => {
     const now = clock.now();
@@ -271,9 +282,12 @@ export const createDrizzleUserStore = (
 
       return ok(undefined);
     } catch (cause) {
-      // Blueprint §4: isEmailDupEntry = errno 1062 E sqlMessage inclui 'auth_user_email_idx'.
+      // errno 1062 no índice: distingue o campo pelo nome do índice na sqlMessage.
       if (isEmailDupEntry(cause)) {
         return err('email-already-registered');
+      }
+      if (isCpfDupEntry(cause)) {
+        return err('cpf-already-registered');
       }
       process.stderr.write(`[user-repo:save] ${String(cause)}\n`);
       return err('user-repo-unavailable');

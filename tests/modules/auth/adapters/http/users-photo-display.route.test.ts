@@ -17,6 +17,7 @@ import {
   makeRequireAuth,
   usersHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
+import { syntheticCpf } from '#tests/support/synthetic-cpf.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
 const ADMIN = 'admin.photo.display@example.com';
@@ -89,7 +90,8 @@ const createUser = async (app: AppHandle, token: string): Promise<string> => {
     headers: { authorization: `Bearer ${token}` },
     payload: {
       name: 'Foto Display User',
-      cpf: '52998224725',
+      // cpf derivado do MESMO `seq` que ja torna o e-mail unico (UNIQUE auth_user_cpf_idx).
+      cpf: syntheticCpf(seq),
       email: `foto.display${seq}@example.com`,
       telephone: '15997133502',
     },
