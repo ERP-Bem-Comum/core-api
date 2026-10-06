@@ -17,6 +17,36 @@ import type {
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MiB (FR-021)
 
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff] as const;
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
+const RIFF_SIGNATURE = [0x52, 0x49, 0x46, 0x46] as const;
+const WEBP_SIGNATURE = [0x57, 0x45, 0x42, 0x50] as const;
+
+// bytes é Uint8Array (sem variant readonly nativo no TS 6); a função não muta os bytes.
+// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+const startsWith = (bytes: Uint8Array, sig: readonly number[], offset = 0): boolean =>
+  sig.every((b, i) => bytes[offset + i] === b);
+
+/**
+ * Confere a assinatura real dos bytes contra o mimeType declarado: defesa em profundidade contra
+ * content-type spoofing (CWE-434). O mimeType vem do cliente e não prova nada sobre o conteúdo —
+ * as rotas-irmãs (foto de usuário, documentos) já checam magic-bytes; o logo precisa do mesmo.
+ * MIME fora de jpeg/png/webp devolve `true` — a allowlist de MIME é barrada antes, por ALLOWED_MIME.
+ */
+// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+const imageMagicBytesMatch = (mimeType: string, bytes: Uint8Array): boolean => {
+  switch (mimeType) {
+    case 'image/jpeg':
+      return startsWith(bytes, JPEG_SIGNATURE);
+    case 'image/png':
+      return startsWith(bytes, PNG_SIGNATURE);
+    case 'image/webp':
+      return startsWith(bytes, RIFF_SIGNATURE) && startsWith(bytes, WEBP_SIGNATURE, 8);
+    default:
+      return true;
+  }
+};
+
 // Key determinística: um logo por programa; troca sobrescreve (idempotente).
 const logoKey = (programId: string): string => `programs/${programId}/logo`;
 
@@ -31,6 +61,7 @@ export type UploadProgramLogoCommand = Readonly<{
 export type UploadProgramLogoError =
   | 'program-not-found'
   | 'logo-type-unsupported'
+  | 'logo-content-mismatch'
   | 'logo-empty'
   | 'logo-too-large'
   | LogoStorageError
@@ -56,6 +87,7 @@ export const uploadProgramLogo =
     }
     if (cmd.bytes.length === 0) return err('logo-empty');
     if (cmd.bytes.length > MAX_LOGO_BYTES) return err('logo-too-large');
+    if (!imageMagicBytesMatch(cmd.mimeType, cmd.bytes)) return err('logo-content-mismatch');
 
     const fetched = await deps.programRepo.findById(id.value);
     if (!fetched.ok) return fetched;
