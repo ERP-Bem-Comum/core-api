@@ -40,12 +40,26 @@
 # Exit code: sempre 0 — lembrete nunca bloqueia trabalho.
 
 set -uo pipefail
+
+# ⚠️ O stdin é DRENADO ANTES de qualquer saída antecipada, e a ordem é o conserto de um defeito,
+# não estilo. Quem invoca este hook escreve o payload JSON no stdin; se o script sai antes de ler,
+# o lado que escreve recebe EPIPE assim que o payload não couber no buffer do pipe.
+#
+# Medido em 06/10/2026: com o `cat` depois do `[ -r "$LOGFILE" ] || exit 0`, payload de ~70 KB
+# dava EPIPE em 5 de 5 execuções, e payload pequeno passava em 5 de 5 — o buffer do pipe (64 KB)
+# absorvia a escrita antes do exit. Daí o sintoma ser intermitente e parecer flake: no CI o
+# `post-compact-rules-reminder.test.ts` falhou com payload de ~60 bytes só porque o runner deixou
+# o script sair primeiro. Não era aleatório; era corrida.
+#
+# Drenar primeiro custa uma leitura e remove a corrida inteira: a partir daqui, nenhum `exit`
+# deixa escritor pendurado.
+payload=$(cat 2>/dev/null || true)
+
 cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" || exit 0
 
 LOGFILE=".claude/.last-instructions.log"
 [ -r "$LOGFILE" ] || exit 0
 
-payload=$(cat 2>/dev/null || true)
 SESSION=$(printf '%s' "$payload" | jq -r '.session_id // ""' 2>/dev/null || echo '')
 [ -z "$SESSION" ] && exit 0
 
