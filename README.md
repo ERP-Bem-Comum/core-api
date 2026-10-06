@@ -6,7 +6,7 @@ Backend do ERP Bem Comum, modelado como **modular monolith**. Vários módulos d
 >
 > **Source of Truth:** [`handbook/`](./handbook/) (`handbook/architecture/adr/` vence tudo). Contexto canônico em [`CLAUDE.md`](./CLAUDE.md). Orquestrador, agentes e skills em [`./.claude/`](./.claude/).
 >
-> **Regras invariantes:** sempre `pnpm`, nunca `npm` (ADR-0012) · borda HTTP é a UX primária; **a CLI embutida foi retirada** (ADR-0037) — validação E2E é feita via Bruno (ADR-0034/0038).
+> **Regras invariantes:** sempre `pnpm`, nunca `npm` (ADR-0012) · borda HTTP é a UX primária; **a CLI embutida foi retirada** (ADR-0037) — validação E2E é feita em **Hurl** (ADR-0074; substituiu o Bruno em 2026-10-06).
 
 ---
 
@@ -70,7 +70,7 @@ src/
 
 tests/                                   modules (mirror de src/) · cleanup (invariantes estruturais) · e2e · etl · infra · workers · jobs …
 db/drizzle/                              configs do drizzle-kit por módulo (contracts, auth, partners, programs, financial, notifications)
-scripts/                                 ci · claude · e2e (Bruno) · etl · financial · handbook · seed · setup
+scripts/                                 ci · claude · e2e (smoke HTTP) · etl · financial · handbook · seed · setup
 
 handbook/                                Source of Truth — interno ao repo
 ├── architecture/adr/                    ADRs aceitos (IMUTÁVEIS)
@@ -146,9 +146,12 @@ pnpm run worker:supplier-projection    # projeção fin_supplier_view
 pnpm run job:migrate                   # aplica migrations
 pnpm run job:contracts:sweep           # oneshot: varredura de ciclo de vida de contratos
 
-# Testes de integração (sobem MySQL/MinIO via Docker compose --wait) e E2E HTTP (Bruno)
+# Testes de integração (sobem MySQL/S3 via Docker compose --wait) e smoke E2E HTTP
 pnpm run test:integration:financial    # idem :contracts :auth :partners :programs :notifications :storage :etl …
-pnpm run test:e2e:auth                 # coleções .bru (idem :contracts :collaborators)
+pnpm run test:e2e:auth                 # smoke bash contra server real (idem :contracts :collaborators)
+
+# Suíte da borda em Hurl (ADR-0074) — fora do git, não é gate: ver api-collections-hurl/README.md
+hurl --test --jobs 1 --variables-file api-collections-hurl/_vars.env api-collections-hurl/casos/**/*.hurl
 
 # Migrations (Drizzle Kit) — uma config por módulo em db/drizzle/
 pnpm run db:generate                   # contracts  (idem :auth :partners :programs :financial :notifications)

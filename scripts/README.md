@@ -10,7 +10,7 @@ Automação de **desenvolvimento, CI e operações** do core-api — TypeScript 
 | Subpasta    | Propósito                                                                                                                                             | Comandos pnpm        |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
 | `ci/`       | Tooling de CI / supply-chain: `test-integration.ts` (orquestrador dos `test:integration:*`) e `only-allow-pnpm.ts` (guard do `preinstall`, ADR-0012). | `test:integration:*` |
-| `e2e/`      | Smoke E2E da borda HTTP (bash): sobem server real + MySQL e rodam o smoke/Bruno.                                                                      | `test:e2e:*`         |
+| `e2e/`      | Smoke E2E da borda HTTP (bash): sobem server real + MySQL e rodam o smoke. Coleções são Hurl, fora daqui (ADR-0074).                                  | `test:e2e:*`         |
 | `setup/`    | Bootstrap do ambiente local: `secrets.ts` gera `secrets/*.txt` para o compose.                                                                        | `secrets:setup`      |
 | `seed/`     | Seeds de dados de domínio.                                                                                                                            | `db:seed:partners`   |
 | `etl/`      | ETL do legado (parsing, reconcile, mappers). Importado por testes via `#scripts/etl/*`.                                                               | `etl:*`              |

@@ -96,7 +96,6 @@
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.1",
     "@typescript/native-preview": "7.0.0-dev.20260515.1",
-    "@usebruno/cli": "3.4.2",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",

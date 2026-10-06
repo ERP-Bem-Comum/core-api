@@ -2,8 +2,12 @@
 
 # ADR-0034: Adoção do Bruno (`@usebruno/cli`) como ferramenta de teste da borda HTTP
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0074](./0074-hurl-replaces-bruno-http-edge-suite.md)
 - **Date:** 2026-06-04
+
+> ⚠️ **Superseded em 2026-10-06 pelo [ADR-0074](./0074-hurl-replaces-bruno-http-edge-suite.md).** O
+> `@usebruno/cli` saiu do `package.json` e `api-collections/` foi removida; a ferramenta da borda é
+> **Hurl**. Este documento descreve a escolha que valeu de 06/2026 a 10/2026.
 - **Deciders:** Gabriel Aderaldo + Arquiteto técnico
 - **Relacionado:** [ADR-0011](./0011-supply-chain-hardening.md) (política de supply-chain), [ADR-0029](./0029-pnpm-11-supply-chain-defaults.md) (`trustPolicy: no-downgrade`), [ADR-0025](./0025-http-server-fastify-core-api.md) (a borda HTTP que as coleções exercitam), [ADR-0027](./0027-zod-openapi-contract-first-http-edge.md) (schemas que as coleções refletem)
 

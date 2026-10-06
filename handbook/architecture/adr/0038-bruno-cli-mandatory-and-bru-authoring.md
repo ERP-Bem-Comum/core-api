@@ -1,8 +1,16 @@
 # ADR-0038: Coleções Bruno obrigatoriamente executadas via CLI + diretrizes de autoria `.bru`
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0074](./0074-hurl-replaces-bruno-http-edge-suite.md)
 - **Date:** 2026-06-08
 - **Deciders:** Tech Lead + Especialista de Integração (spec 007)
+
+> ⚠️ **Superseded em 2026-10-06 pelo [ADR-0074](./0074-hurl-replaces-bruno-http-edge-suite.md).** O
+> Bruno saiu do projeto e `api-collections/` foi removida; a suíte da borda é Hurl. O que esta
+> decisão estabeleceu e **continua valendo** está reafirmado por inteiro no §5 do ADR-0074 — não
+> citar este documento como norma corrente.
+>
+> Vale registrar que o critério daqui foi o que condenou o próprio Bruno: quando o runner único caiu
+> (05/10), os 266 `.bru` viraram exatamente a "cobertura ilusória" que este ADR proibia.
 
 ## Contexto
 
