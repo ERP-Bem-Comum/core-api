@@ -8,6 +8,8 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5; // default do legado (PaginatedEnvelope.Limit).
 
@@ -93,7 +95,7 @@ export type CollaboratorListQuery = z.infer<typeof collaboratorListQuerySchema>;
 
 /** Param `:id` — UUID do colaborador (core-api). Formato inválido → 400 (Zod, antes do domínio). */
 export const collaboratorIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do colaborador (core-api)' }),
+  id: uuidV4().meta({ description: 'UUID do colaborador (core-api)' }),
 });
 
 /** Query do GET /collaborators/:id/export — US4: por ora só `type=history` (CSV de alterações). */
@@ -140,7 +142,7 @@ const territorySchema = z.object({
 });
 
 export const collaboratorDetailSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   legacyId: z.number().int().nullable(),
   name: z.string(),
   email: z.string(),

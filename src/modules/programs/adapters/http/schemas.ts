@@ -8,6 +8,8 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 const LIST_LIMITS = [5, 10, 25] as const;
 const LIST_LIMIT_DEFAULT = 5;
 
@@ -30,12 +32,12 @@ export type ProgramListQuery = z.infer<typeof programListQuerySchema>;
 
 /** Param `:id` — UUID v4 do programa. Formato inválido -> 400. */
 export const programIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID v4 do programa' }),
+  id: uuidV4().meta({ description: 'UUID v4 do programa' }),
 });
 
 /** Item da lista (subconjunto enxuto). */
 export const programItemSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   programNumber: z.number().int(),
   name: z.string(),
   sigla: z.string(),
@@ -48,7 +50,7 @@ export type ProgramItemDto = z.infer<typeof programItemSchema>;
 
 /** Detalhe completo (inclui version + timestamps). */
 export const programDetailSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   programNumber: z.number().int(),
   name: z.string(),
   sigla: z.string(),

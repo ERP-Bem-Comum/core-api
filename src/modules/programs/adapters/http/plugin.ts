@@ -57,6 +57,7 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'logo-storage-unavailable': 503,
   'logo-too-large': 413,
   'logo-type-unsupported': 415,
+  'logo-content-mismatch': 422,
   'logo-empty': 422,
   'program-name-required': 422,
   'program-sigla-invalid': 422,

@@ -6,12 +6,14 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5;
 
 /** Param `:id` — UUID do Act (core-api). Formato inválido → 400. */
 export const actIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do Acordo (core-api)' }),
+  id: uuidV4().meta({ description: 'UUID do Acordo (core-api)' }),
 });
 
 const bankAccountSchema = z.object({
@@ -28,7 +30,7 @@ const pixKeySchema = z.object({
 
 /** Detalhe do Acordo. `startDate`/`endDate` derivados da vigência (Period). */
 export const actDetailSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   legacyId: z.number().int().nullable(),
   actNumber: z.string(),
   name: z.string(),

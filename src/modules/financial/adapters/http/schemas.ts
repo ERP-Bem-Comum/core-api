@@ -9,6 +9,7 @@
  */
 
 import * as z from 'zod/v4';
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
 import { TIMELINE_EVENT_TYPES } from '../../domain/document/events.ts';
 
 // ─── Shared ──────────────────────────────────────────────────────────────────
@@ -101,16 +102,16 @@ const createDocumentBodyBaseSchema = z.object({
   type: documentTypeSchema.optional(),
   documentNumber: z.string().min(1).max(60).optional(),
   series: z.string().max(20).optional(),
-  supplierRef: z.uuid().optional(),
+  supplierRef: uuidV4().optional(),
   payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']).optional(),
-  approverRef: z.uuid().optional(),
-  contractRef: z.uuid().optional(),
-  budgetPlanRef: z.uuid().optional(),
-  categoryRef: z.uuid().optional(),
+  approverRef: uuidV4().optional(),
+  contractRef: uuidV4().optional(),
+  budgetPlanRef: uuidV4().optional(),
+  categoryRef: uuidV4().optional(),
   // #502: folha da árvore do plano (carimbo da subcategoria). Opcional; ref opaco por formato.
-  subcategoryRef: z.uuid().optional(),
-  costCenterRef: z.uuid().optional(),
-  programRef: z.uuid().optional(),
+  subcategoryRef: uuidV4().optional(),
+  costCenterRef: uuidV4().optional(),
+  programRef: uuidV4().optional(),
   paymentMethod: paymentMethodSchema.optional(),
   grossValueCents: centsStringSchema.optional(),
   sourceDiscountsCents: centsStringSchema.default('0'),
@@ -129,7 +130,7 @@ const createDocumentBodyBaseSchema = z.object({
     .optional(),
   // #197: competência (YYYY-MM, validada no domínio via VO) + conta-débito (ref → fin_cedente_accounts).
   competencia: z.string().optional(),
-  contaDebitoRef: z.uuid().optional(),
+  contaDebitoRef: uuidV4().optional(),
   // #273: complemento da forma de pagamento (linha digitável, referência de câmbio etc.). Opcional na criação.
   paymentDetail: paymentDetailInput.optional(),
   asDraft: z.boolean().default(false),
@@ -215,7 +216,7 @@ export type CancelDocumentBody = z.infer<typeof cancelDocumentBodySchema>;
 // ─── Params ──────────────────────────────────────────────────────────────────
 
 export const documentIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do documento fiscal' }),
+  id: uuidV4().meta({ description: 'UUID do documento fiscal' }),
 });
 
 // ─── GET /documents (lista paginada) ─────────────────────────────────────────
@@ -225,7 +226,7 @@ export const listDocumentsQuerySchema = z.object({
   status: z.enum(['Draft', 'Open', 'Approved', 'Paid', 'Reconciled']).optional(),
   // #164: aceitam valor único (retrocompat) OU lista (?type=a&type=b) — Fastify entrega array em repetição.
   // .max(50) espelha o teto dos demais arrays de input do arquivo (anti-amplificação de IN — CWE-770).
-  supplierRef: z.union([z.uuid(), z.array(z.uuid()).max(50)]).optional(),
+  supplierRef: z.union([uuidV4(), z.array(uuidV4()).max(50)]).optional(),
   type: z.union([documentTypeSchema, z.array(documentTypeSchema).max(50)]).optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
@@ -242,8 +243,8 @@ export const listDocumentsQuerySchema = z.object({
     .regex(/^[^\x00-\x1F\x7F]*$/, 'caracteres de controle não são permitidos')
     .optional(),
   // #164: filtros adicionais + ordenação.
-  contractRef: z.uuid().optional(),
-  programRef: z.uuid().optional(),
+  contractRef: uuidV4().optional(),
+  programRef: uuidV4().optional(),
   valorMin: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   valorMax: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
   sort: z.enum(['dueDate', 'netValue', 'supplierName']).optional(),
@@ -259,7 +260,7 @@ export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
 export const bulkUpdateDueDateBodySchema = z.object({
   items: z
     .array(
-      z.object({ id: z.uuid(), version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }),
+      z.object({ id: uuidV4(), version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }),
     )
     .min(1)
     .max(100),
@@ -271,7 +272,7 @@ export type BulkUpdateDueDateBody = z.infer<typeof bulkUpdateDueDateBodySchema>;
 export const bulkUpdateDueDateResponseSchema = z.object({
   results: z.array(
     z.object({
-      documentId: z.uuid(),
+      documentId: uuidV4(),
       outcome: z.enum(['ok', 'not-found', 'version-conflict', 'invalid-state', 'error']),
     }),
   ),
@@ -281,7 +282,7 @@ export const bulkUpdateDueDateResponseSchema = z.object({
 
 const payableResponseSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidV4(),
     kind: z.enum(['Parent', 'Child']),
     retentionType: retentionTypeSchema.nullable(),
     valueCents: centsStringSchema,
@@ -292,7 +293,7 @@ const payableResponseSchema = z
 /** Resposta de criação/escrita (POST/PATCH/approve/undo-approval) — documento + títulos. */
 export const documentResponseSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidV4(),
     status: z.string(),
     documentNumber: z.string().nullable(),
     series: z.string().nullable(), // #95: série (drawer de Detalhe / edição)
@@ -377,7 +378,7 @@ export type DocumentResponseDto = z.infer<typeof documentResponseSchema>;
 /** Item resumido na listagem. */
 export const documentSummarySchema = z
   .object({
-    id: z.uuid(),
+    id: uuidV4(),
     status: z.string(),
     documentNumber: z.string().nullable(),
     type: z.string().nullable(),
@@ -433,7 +434,7 @@ export const timelineEntrySchema = z
         kind: z.enum(['Document', 'Payable']).meta({
           description: 'Entidade afetada pelo evento — documento principal ou título filho',
         }),
-        id: z.uuid().meta({
+        id: uuidV4().meta({
           description: 'UUID da entidade afetada (Document.id ou Payable.id)',
         }),
       })
@@ -441,7 +442,7 @@ export const timelineEntrySchema = z
     occurredAt: z.iso.datetime().meta({
       description: 'Instante UTC em que o evento ocorreu (ISO-8601 com offset)',
     }),
-    actor: z.uuid().nullable().meta({
+    actor: uuidV4().nullable().meta({
       description: 'UUID do usuário responsável pela ação; nulo em ações automáticas do sistema',
     }),
     changes: z
@@ -483,7 +484,7 @@ export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineRespons
  * payload gigante antes do parse (DoS). `fileName` é opcional (rótulo de origem).
  */
 export const importBankStatementBodySchema = z.object({
-  debitAccountRef: z.uuid(),
+  debitAccountRef: uuidV4(),
   format: z.enum(['OFX', 'CSV', 'PDF']),
   content: z.string().min(1).max(5_000_000),
   fileName: z.string().min(1).max(255).optional(),
@@ -492,12 +493,12 @@ export const importBankStatementBodySchema = z.object({
 export type ImportBankStatementBody = z.infer<typeof importBankStatementBodySchema>;
 
 export const bankStatementIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do extrato bancário' }),
+  id: uuidV4().meta({ description: 'UUID do extrato bancário' }),
 });
 
 /** Response da importação (201). `duplicatesDiscarded` = transações já conhecidas (descarte silencioso). */
 export const importBankStatementResponseSchema = z.object({
-  statementId: z.uuid(),
+  statementId: uuidV4(),
   imported: z.number().int().min(0),
   duplicatesDiscarded: z.number().int().min(0),
   period: z.object({
@@ -514,7 +515,7 @@ export type ImportBankStatementResponseDto = z.infer<typeof importBankStatementR
 // `centsStringSchema`: saldo pode ser negativo (cheque especial); é serialização nossa (confiável).
 const statementTransactionSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidV4(),
     fitid: z.string(),
     date: z.iso.datetime(),
     movement: z.enum(['Debit', 'Credit']),
@@ -542,13 +543,13 @@ export type StatementTransactionsResponseDto = z.infer<typeof statementTransacti
 // consistência sinal×tratamento (ex.: Discount deve ser negativo) é da conciliação parcial avançada (#141);
 // aqui o domínio só checa o fechamento 100% (R3).
 export const confirmReconciliationBodySchema = z.object({
-  transactionId: z.uuid(),
-  payableIds: z.array(z.uuid()).min(1).max(100),
+  transactionId: uuidV4(),
+  payableIds: z.array(uuidV4()).min(1).max(100),
   // #141/#247: alocação parcial por título — valor REAL conciliado (saldo aberto deriva PartiallyReconciled).
   allocations: z
     .array(
       z.object({
-        payableId: z.uuid(),
+        payableId: uuidV4(),
         reconciledValueCents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
       }),
     )
@@ -574,11 +575,11 @@ export const confirmReconciliationBodySchema = z.object({
   // só a subcategoria (M2-2), reenvia os outros quatro inalterados.
   taxonomy: z
     .object({
-      programRef: z.uuid(),
-      budgetPlanRef: z.uuid(),
-      costCenterRef: z.uuid(),
-      categoryRef: z.uuid(),
-      subcategoryRef: z.uuid(),
+      programRef: uuidV4(),
+      budgetPlanRef: uuidV4(),
+      costCenterRef: uuidV4(),
+      categoryRef: uuidV4(),
+      subcategoryRef: uuidV4(),
     })
     .meta({
       description:
@@ -592,7 +593,7 @@ export const confirmReconciliationBodySchema = z.object({
 export type ConfirmReconciliationBody = z.infer<typeof confirmReconciliationBodySchema>;
 
 export const reconciliationIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID da conciliação' }),
+  id: uuidV4().meta({ description: 'UUID da conciliação' }),
 });
 
 export const undoReconciliationBodySchema = z.object({
@@ -602,13 +603,13 @@ export const undoReconciliationBodySchema = z.object({
 export type UndoReconciliationBody = z.infer<typeof undoReconciliationBodySchema>;
 
 export const confirmReconciliationResponseSchema = z.object({
-  reconciliationId: z.uuid(),
+  reconciliationId: uuidV4(),
   type: z.enum(['Individual', 'Multiple', 'Partial']),
   itemCount: z.number().int().min(1),
 });
 
 export const undoReconciliationResponseSchema = z.object({
-  reconciliationId: z.uuid(),
+  reconciliationId: uuidV4(),
   status: z.literal('Undone'),
 });
 
@@ -620,8 +621,8 @@ export const paidPayablesQuerySchema = z.object({
 
 const paidPayableSchema = z
   .object({
-    id: z.uuid(),
-    documentId: z.uuid(),
+    id: uuidV4(),
+    documentId: uuidV4(),
     valueCents: z.string(),
     dueDate: z.string(),
     paymentMethod: z.string(),
@@ -649,12 +650,12 @@ export type PaidPayablesResponseDto = z.infer<typeof paidPayablesResponseSchema>
 // ─── GET /statement-transactions/:id/suggestions (suggestMatches, US2) ───────
 
 export const statementTransactionIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID da transação de extrato' }),
+  id: uuidV4().meta({ description: 'UUID da transação de extrato' }),
 });
 
 // band `baixa` (<50) não é retornada (R1/FR-011) → só alta|media na resposta.
 const matchSuggestionSchema = z.object({
-  payableId: z.uuid(),
+  payableId: uuidV4(),
   score: z.number().int().min(0).max(100),
   band: z.enum(['alta', 'media']),
   criteria: z.object({
@@ -685,8 +686,8 @@ export type SuggestionsResponseDto = z.infer<typeof suggestionsResponseSchema>;
 // GET /statement-transactions/:id/counterpart-suggestions + POST /reconciliations/counterpart.
 
 const counterpartSuggestionSchema = z.object({
-  counterpartId: z.uuid(),
-  originAccountRef: z.uuid(),
+  counterpartId: uuidV4(),
+  originAccountRef: uuidV4(),
   valueCents: centsStringSchema,
   expectedDate: z.string(),
   score: z.number().int().min(0).max(100),
@@ -701,28 +702,28 @@ export type CounterpartSuggestionsResponseDto = z.infer<
 >;
 
 export const confirmCounterpartBodySchema = z.object({
-  transactionId: z.uuid(),
-  counterpartId: z.uuid(),
+  transactionId: uuidV4(),
+  counterpartId: uuidV4(),
 });
 
 export type ConfirmCounterpartBody = z.infer<typeof confirmCounterpartBodySchema>;
 
 export const confirmCounterpartResponseSchema = z.object({
-  reconciliationId: z.uuid(),
-  counterpartId: z.uuid(),
+  reconciliationId: uuidV4(),
+  counterpartId: uuidV4(),
 });
 
 // ─── POST /statement-transactions/:id/reject-suggestion (rejectSuggestion, US2) ──
 
 export const rejectSuggestionBodySchema = z.object({
-  payableId: z.uuid(),
+  payableId: uuidV4(),
 });
 
 export type RejectSuggestionBody = z.infer<typeof rejectSuggestionBodySchema>;
 
 export const rejectSuggestionResponseSchema = z.object({
-  transactionId: z.uuid(),
-  payableId: z.uuid(),
+  transactionId: uuidV4(),
+  payableId: uuidV4(),
 });
 
 // ─── POST /statement-transactions/:id/manual-entry + /reconciliations/batch (US5) ──
@@ -739,16 +740,16 @@ const manualEntryTypeSchema = z.enum([
 // `value` NÃO vem no body — é o valor da transação (derivado no use-case).
 export const manualEntryBodySchema = z.object({
   type: manualEntryTypeSchema,
-  supplierRef: z.uuid().optional(),
+  supplierRef: uuidV4().optional(),
   // #502/S2: taxonomia planejável no título manual — plano + subcategoria (folha). UUID v4 → 400 na borda.
-  budgetPlanRef: z.uuid().optional(),
-  subcategoryRef: z.uuid().optional(),
-  categoryRef: z.uuid().optional(),
-  costCenterRef: z.uuid().optional(),
-  programRef: z.uuid().optional(),
+  budgetPlanRef: uuidV4().optional(),
+  subcategoryRef: uuidV4().optional(),
+  categoryRef: uuidV4().optional(),
+  costCenterRef: uuidV4().optional(),
+  programRef: uuidV4().optional(),
   description: z.string().min(1).max(500).optional(),
   // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
-  destinationAccountRef: z.uuid().optional(),
+  destinationAccountRef: uuidV4().optional(),
   productLabel: z.string().min(1).max(120).optional(),
   // #370: campos de documento (opcionais; aplicabilidade por tipo é do front). `documentValueCents`
   // omitido → default = valor da transação conciliada (no domínio).
@@ -761,9 +762,9 @@ export const manualEntryBodySchema = z.object({
 export type ManualEntryBody = z.infer<typeof manualEntryBodySchema>;
 
 export const manualEntryResponseSchema = z.object({
-  reconciliationId: z.uuid(),
+  reconciliationId: uuidV4(),
   type: z.literal('ManualEntry'),
-  manualEntryId: z.uuid(),
+  manualEntryId: uuidV4(),
   // #502/S2: a resposta ecoa o carimbo de taxonomia (plano + subcategoria) do título manual.
   budgetPlanRef: z.string().nullable(),
   subcategoryRef: z.string().nullable(),
@@ -776,7 +777,7 @@ export const manualEntryResponseSchema = z.object({
 });
 
 export const batchBodySchema = z.object({
-  transactionIds: z.array(z.uuid()).min(1).max(500),
+  transactionIds: z.array(uuidV4()).min(1).max(500),
   template: manualEntryBodySchema,
 });
 
@@ -784,15 +785,15 @@ export type BatchBody = z.infer<typeof batchBodySchema>;
 
 export const batchResponseSchema = z.object({
   created: z.number().int().min(0),
-  reconciliationIds: z.array(z.uuid()),
+  reconciliationIds: z.array(uuidV4()),
   // Best-effort: transações que falharam (estado/guard) com o code público — o lote não aborta por uma.
-  failed: z.array(z.object({ transactionId: z.uuid(), error: z.string() })),
+  failed: z.array(z.object({ transactionId: uuidV4(), error: z.string() })),
 });
 
 // ─── US6 — fechar período + exportar ─────────────────────────────────────────
 
 export const closePeriodBodySchema = z.object({
-  debitAccountRef: z.uuid(),
+  debitAccountRef: uuidV4(),
   periodStart: z.iso.date(),
   periodEnd: z.iso.date(),
 });
@@ -800,18 +801,18 @@ export const closePeriodBodySchema = z.object({
 export type ClosePeriodBody = z.infer<typeof closePeriodBodySchema>;
 
 export const closePeriodResponseSchema = z.object({
-  periodId: z.uuid(),
+  periodId: uuidV4(),
   status: z.literal('Closed'),
 });
 
 // Reabertura (#203) — período volta a `Open`. Sem body (id vem no path).
 export const reopenPeriodResponseSchema = z.object({
-  periodId: z.uuid(),
+  periodId: uuidV4(),
   status: z.literal('Open'),
 });
 
 export const reconciliationPeriodIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do período de conciliação' }),
+  id: uuidV4().meta({ description: 'UUID do período de conciliação' }),
 });
 
 export const exportReconciliationQuerySchema = z.object({
@@ -825,7 +826,7 @@ export const exportReconciliationQuerySchema = z.object({
 // fechado. `periodStart`/`periodEnd` são datas `YYYY-MM-DD` (parseadas com `new Date(...)` na borda,
 // idêntico ao POST /reconciliation-periods/close → export idêntico ao de um período com essas datas).
 export const exportReconciliationByRangeQuerySchema = z.object({
-  debitAccountRef: z.uuid(),
+  debitAccountRef: uuidV4(),
   periodStart: z.iso.date(),
   periodEnd: z.iso.date(),
   format: z.enum(['ofx', 'csv', 'csv-nibo']).meta({
@@ -911,12 +912,12 @@ export const editCedenteAccountBodySchema = z.object({
 });
 
 export const cedenteAccountIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID da conta-cedente' }),
+  id: uuidV4().meta({ description: 'UUID da conta-cedente' }),
 });
 
 export const cedenteAccountResponseSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidV4(),
     bankCode: z.string(),
     bankName: z.string().nullable(),
     type: z.string().nullable(),
@@ -956,13 +957,13 @@ export type CedenteAccountListItemDto = z.infer<typeof cedenteAccountListItemSch
 
 // Dados de referência de categorização (020 · US1) — GET /financial/categories.
 export const categoryResponseSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   name: z.string(),
   group: z.enum(['despesa', 'receita', 'ajuste']),
   // Hierarquia auto-referente (#147 F3): pai (subcategoria). null = top-level. UUID v4 (espelha id).
-  parentId: z.uuid().nullable(),
+  parentId: uuidV4().nullable(),
   // #341: nível Centro de Custo → Categoria. null = sem centro. Front cascateia com costCenterId + parentId.
-  costCenterId: z.uuid().nullable(),
+  costCenterId: uuidV4().nullable(),
 });
 
 export const categoryListResponseSchema = z.array(categoryResponseSchema);
@@ -971,7 +972,7 @@ export type CategoryResponseDto = z.infer<typeof categoryResponseSchema>;
 
 // Centros de custo de referência (020 · US2) — GET /financial/cost-centers.
 export const costCenterResponseSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   code: z.string(),
   name: z.string(),
 });
@@ -982,7 +983,7 @@ export type CostCenterResponseDto = z.infer<typeof costCenterResponseSchema>;
 
 // Programas (020 · US3) — GET /financial/programs (passthrough da fonte canônica de `programs`).
 export const programResponseSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   name: z.string(),
 });
 
@@ -1013,11 +1014,11 @@ export type DocumentTypeMetadataResponseDto = z.infer<typeof documentTypeMetadat
 // Top-5 títulos Pagos por data de pagamento desc. `valueCents` como string de centavos (convenção de
 // Money do módulo — bigint não é JSON-safe; espelha `paidPayablesToDto`). Refs estrangeiras
 // (supplier/debit) como `z.string()`: o read-model NÃO revalida UUID na leitura (evita 500 na
-// serialização de resposta se o payload do evento sofrer drift). IDs próprios seguem `z.uuid()`.
+// serialização de resposta se o payload do evento sofrer drift). IDs próprios seguem `uuidV4()`.
 export const recentPaymentSchema = z
   .object({
-    payableId: z.uuid(),
-    documentId: z.uuid(),
+    payableId: uuidV4(),
+    documentId: uuidV4(),
     supplierRef: z.string().nullable(),
     debitAccountRef: z.string().nullable(),
     valueCents: centsStringSchema,
@@ -1151,8 +1152,8 @@ export type AccountStatementResponseDto = z.infer<typeof accountStatementRespons
 
 export const transactionReconciliationResponseSchema = z
   .object({
-    id: z.uuid(),
-    transactionId: z.uuid(),
+    id: uuidV4(),
+    transactionId: uuidV4(),
     type: z.enum(['Individual', 'Multiple', 'Partial', 'ManualEntry']),
     status: z.enum(['Active', 'Undone']),
     reconciledBy: z.string(),
@@ -1160,7 +1161,7 @@ export const transactionReconciliationResponseSchema = z
     reconciledByName: z.string().nullable(),
     reconciledAt: z.iso.datetime(),
     differenceCents: z.string().nullable(),
-    items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() }).strict()),
+    items: z.array(z.object({ payableId: uuidV4(), reconciledValueCents: z.string() }).strict()),
     // Categoria do lançamento manual, resolvida server-side (ref → nome). null = sem categoria ou
     // conciliação sem lançamento manual (título real fica p/ fatia 2).
     category: z.string().nullable(),
@@ -1187,12 +1188,12 @@ export type TransactionReconciliationResponseDto = z.infer<
 // ─── Listar períodos de conciliação por conta (#173) ───────────────────────────
 
 export const reconciliationPeriodsQuerySchema = z.object({
-  debitAccountRef: z.uuid(),
+  debitAccountRef: uuidV4(),
 });
 
 const reconciliationPeriodItemSchema = z
   .object({
-    id: z.uuid(),
+    id: uuidV4(),
     debitAccountRef: z.string(),
     periodStart: z.iso.date(),
     periodEnd: z.iso.date(),
@@ -1213,7 +1214,7 @@ export type ReconciliationPeriodsResponseDto = z.infer<typeof reconciliationPeri
 export const statementSuggestionsResponseSchema = z.object({
   items: z.array(
     z.object({
-      transactionId: z.uuid(),
+      transactionId: uuidV4(),
       topBand: z.enum(['alta', 'media']).nullable(),
       topScore: z.number().int().min(0).max(100).nullable(),
     }),
@@ -1230,7 +1231,7 @@ export const listPayablesQuerySchema = z.object({
     .enum(['Draft', 'Open', 'Approved', 'Transmitted', 'Refused', 'Paid', 'Reconciled'])
     .optional(),
   documentType: documentTypeSchema.optional(),
-  supplierRef: z.uuid().optional(),
+  supplierRef: uuidV4().optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -1241,8 +1242,8 @@ export type ListPayablesQuery = z.infer<typeof listPayablesQuerySchema>;
 
 export const payableSummarySchema = z
   .object({
-    payableId: z.uuid(),
-    documentId: z.uuid(),
+    payableId: uuidV4(),
+    documentId: uuidV4(),
     documentNumber: z.string().nullable(),
     series: z.string().nullable(),
     documentType: z.string().nullable(),
@@ -1279,7 +1280,7 @@ export const payableListResponseSchema = z
 // Mesmos filtros da lista, sem `status` (queremos o breakdown) nem paginação.
 export const payableCountsQuerySchema = z.object({
   documentType: documentTypeSchema.optional(),
-  supplierRef: z.uuid().optional(),
+  supplierRef: uuidV4().optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
 });
@@ -1302,13 +1303,13 @@ export const payableCountsResponseSchema = z
 // (sem `series`/`kind`/`retentionType`/`issueDate`/`version`/`grossValueCents`/`netValueCents`/`paidAt`
 // — o batch é focado no que o match card consome) + os 2 campos de fornecedor.
 export const payablesBatchBodySchema = z.object({
-  refs: z.array(z.uuid()).min(1).max(200),
+  refs: z.array(uuidV4()).min(1).max(200),
 });
 
 export const payableBatchItemSchema = z
   .object({
-    ref: z.uuid(),
-    documentId: z.uuid(),
+    ref: uuidV4(),
+    documentId: uuidV4(),
     documentNumber: z.string().nullable(),
     documentType: z.string().nullable(),
     valueCents: centsStringSchema,
@@ -1327,7 +1328,7 @@ export const payablesBatchResponseSchema = z
   .object({
     items: z.array(payableBatchItemSchema),
     // UUIDs válidos sem registro correspondente — o lote não aborta por isso (degradação graciosa).
-    missing: z.array(z.uuid()),
+    missing: z.array(uuidV4()),
   })
   .strict();
 
@@ -1337,12 +1338,12 @@ export const payablesBatchResponseSchema = z
 // — sem series/grossValueCents/paymentMethod/contractRef/issueDate/version (fora do que o drawer resolve
 // via batch). `ref` = documentId. Espelha o slice de payables (#357) trocando payable→documento.
 export const documentsBatchBodySchema = z.object({
-  refs: z.array(z.uuid()).min(1).max(200),
+  refs: z.array(uuidV4()).min(1).max(200),
 });
 
 export const documentBatchItemSchema = z
   .object({
-    ref: z.uuid(),
+    ref: uuidV4(),
     documentNumber: z.string().nullable(),
     type: z.string().nullable(),
     status: z.string(),
@@ -1360,14 +1361,14 @@ export const documentsBatchResponseSchema = z
   .object({
     items: z.array(documentBatchItemSchema),
     // UUIDs válidos sem registro correspondente — o lote não aborta por isso (degradação graciosa).
-    missing: z.array(z.uuid()),
+    missing: z.array(uuidV4()),
   })
   .strict();
 
 // ─── Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment ──
 export const documentPayableParamsSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do documento' }),
-  payableId: z.uuid().meta({ description: 'UUID do título (payable)' }),
+  id: uuidV4().meta({ description: 'UUID do documento' }),
+  payableId: uuidV4().meta({ description: 'UUID do título (payable)' }),
 });
 
 export const manualPaymentBodySchema = z.object({
@@ -1508,11 +1509,11 @@ export const remittancePreviewBodySchema = z
     // sem saber qual conta vai pagar, não há como repartir a seleção. É a mesma conta que a geração
     // recebe, e é de propósito — pré-voo e arquivo respondem à mesma pergunta ou o pré-voo não
     // serve para conferir.
-    cedenteAccountId: z.uuid(),
+    cedenteAccountId: uuidV4(),
     // TÍTULOS, não notas: o grid de Contas a Pagar é payable-centric e é dele que a seleção sai.
     // Cada título tem forma, vencimento e ciclo de vida próprios — inclusive as retenções, que são
     // títulos a pagar como qualquer outro e podem ficar em aberto com o pai já pago.
-    payableIds: z.array(z.uuid()).min(1).max(200),
+    payableIds: z.array(uuidV4()).min(1).max(200),
   })
   .strict();
 
@@ -1545,10 +1546,10 @@ export const remittancePreviewResponseSchema = z
     lines: z.array(
       z
         .object({
-          payableId: z.uuid(),
+          payableId: uuidV4(),
           // A nota de origem, para o front agrupar os títulos dela no grid. `null` em `not-found`:
           // sem o título lido não há vínculo a declarar.
-          documentId: z.uuid().nullable(),
+          documentId: uuidV4().nullable(),
           // `not-found` é status de linha, não erro da chamada: o id que o operador selecionou tem
           // de aparecer na resposta, ainda que o título não exista mais. `not-approved` (#736) é
           // distinto de `blocked`: falta aprovar, não falta dado do cadastro.
@@ -1622,9 +1623,9 @@ export type RemittancePreviewResponseDto = z.infer<typeof remittancePreviewRespo
 // arquivo pode contradizer.
 export const generateRemittanceBodySchema = z
   .object({
-    cedenteAccountId: z.uuid(),
+    cedenteAccountId: uuidV4(),
     // TÍTULOS. Mesma unidade do pré-voo e do grid — o operador confere e gera sobre a mesma lista.
-    payableIds: z.array(z.uuid()).min(1).max(200),
+    payableIds: z.array(uuidV4()).min(1).max(200),
   })
   .strict();
 
@@ -1633,7 +1634,7 @@ export const generateRemittanceBodySchema = z
 // objeto no bucket próprios.
 const generatedRemittanceFileSchema = z
   .object({
-    remittanceId: z.uuid(),
+    remittanceId: uuidV4(),
     fileName: z.string(),
     objectKey: z.string(),
     nsa: z.number().int().positive(),
@@ -1675,8 +1676,8 @@ const remittanceStatusSchema = z.enum(['Queued', 'Transmitted', 'Failed', 'Disca
 
 export const remittanceListItemSchema = z
   .object({
-    remittanceId: z.uuid(),
-    cedenteAccountId: z.uuid(),
+    remittanceId: uuidV4(),
+    cedenteAccountId: uuidV4(),
     nsa: z.number().int(),
     fileName: z.string(),
     status: remittanceStatusSchema,
@@ -1741,16 +1742,16 @@ export type VanReturnQuarantineResponseDto = z.infer<typeof vanReturnQuarantineR
 
 export const remittanceDetailResponseSchema = remittanceListItemSchema
   .extend({
-    payableIds: z.array(z.uuid()),
+    payableIds: z.array(uuidV4()),
     // As notas tocadas, deduplicadas: dois títulos da mesma nota aparecem uma vez só aqui.
-    documentIds: z.array(z.uuid()),
+    documentIds: z.array(uuidV4()),
   })
   .strict();
 
 export type RemittanceDetailResponseDto = z.infer<typeof remittanceDetailResponseSchema>;
 
 export const remittanceIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID da remessa' }),
+  id: uuidV4().meta({ description: 'UUID da remessa' }),
 });
 
 // ─── POST /financial/remittances/:id/discard (#792, ADR-0065 §4) ─────────────
@@ -1772,11 +1773,11 @@ export const discardRemittanceBodySchema = z
 
 export const discardRemittanceResponseSchema = z
   .object({
-    remittanceId: z.uuid(),
+    remittanceId: uuidV4(),
     // Os títulos que voltaram à fila. Devolver a lista, e não só um `ok`, é o que permite ao front
     // levar o operador ao passo seguinte (pagar fora da VAN e dar baixa manual) sem uma segunda
     // consulta — e é a lista que ele confere contra o que esperava liberar.
-    releasedPayableIds: z.array(z.uuid()),
+    releasedPayableIds: z.array(uuidV4()),
   })
   .strict();
 

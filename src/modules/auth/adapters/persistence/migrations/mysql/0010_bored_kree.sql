@@ -1,0 +1,1 @@
+ALTER TABLE `auth_user` ADD CONSTRAINT `auth_user_cpf_idx` UNIQUE(`cpf`);

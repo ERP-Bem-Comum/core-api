@@ -10,6 +10,8 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 const moneySchema = z.object({
   cents: z.number().int().nonnegative().meta({ description: 'Valor em centavos (inteiro)' }),
 });
@@ -102,7 +104,7 @@ export const contractListQuerySchema = z.object({
   search: z.string().min(1).optional(),
   status: z.enum(['Pending', 'Active', 'Expired', 'Terminated', 'Cancelled']).optional(),
   // #116: filtra os contratos de um contratante (supplierId = contractorId quando type='supplier').
-  contractorId: z.uuid().optional(),
+  contractorId: uuidV4().optional(),
   contractorType: z.enum(['supplier', 'financier', 'collaborator', 'act']).optional(),
 });
 
@@ -144,7 +146,7 @@ export type ContractListItemDto = z.infer<typeof contractListItemSchema>;
 
 /** Param de rota `:id` — UUID do contrato. Falha de formato → 400 (Zod, antes do domínio). */
 export const contractIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do contrato' }),
+  id: uuidV4().meta({ description: 'UUID do contrato' }),
 });
 
 /**
@@ -182,21 +184,21 @@ const contractWriteShape = {
   // Contratado obrigatório (FR-001). `type` enum fechado; `id` UUID v4.
   contractor: z.object({
     type: z.enum(['supplier', 'financier', 'collaborator', 'act']),
-    id: z.uuid(),
+    id: uuidV4(),
   }),
   // CTR-NUMBER-PROGRAM: classificação (ausente → default CT no domínio) + metadados de
   // cadastro opcionais. `programId`/`budgetPlanId` são referências UUID (validadas na borda);
   // `categorizacao`/`centroDeCusto` rótulos livres. `null` limpa o campo.
   classification: z.enum(['CT', 'OS']).optional(),
-  programId: z.uuid().nullable().optional(),
-  budgetPlanId: z.uuid().nullable().optional(),
+  programId: uuidV4().nullable().optional(),
+  budgetPlanId: uuidV4().nullable().optional(),
   categorizacao: z.string().min(1).max(255).nullable().optional(),
   centroDeCusto: z.string().min(1).max(255).nullable().optional(),
   // CTR-TAXONOMY-REFS: refs da árvore do plano (Centro → Categoria → Subcategoria). Opcionais;
   // formato UUID validado na borda (malformado → 400). Refs OPACOS: sem resolver contra o plano.
-  costCenterRef: z.uuid().nullable().optional(),
-  categoryRef: z.uuid().nullable().optional(),
-  subcategoryRef: z.uuid().nullable().optional(),
+  costCenterRef: uuidV4().nullable().optional(),
+  categoryRef: uuidV4().nullable().optional(),
+  subcategoryRef: uuidV4().nullable().optional(),
 };
 
 /** Body `POST /contracts` — discrimina cadastro (`Pending`) vs cadastro+assinatura (`Active`). */
@@ -220,9 +222,9 @@ export const patchContractMetadataBodySchema = z
     // CTR-TAXONOMY-REFS: os 3 refs da árvore do plano também são editáveis via PATCH (a tela
     // Incluir/Editar Contrato reenvia a cascata Centro → Categoria → Subcategoria). Refs opacos
     // (UUID cru validado na borda); `null` limpa o campo.
-    costCenterRef: z.uuid().nullable().optional(),
-    categoryRef: z.uuid().nullable().optional(),
-    subcategoryRef: z.uuid().nullable().optional(),
+    costCenterRef: uuidV4().nullable().optional(),
+    categoryRef: uuidV4().nullable().optional(),
+    subcategoryRef: uuidV4().nullable().optional(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, {
@@ -280,8 +282,8 @@ export const homologateBodySchema = z.object({ homologatedBy: z.string() });
 
 /** Params da rota de homologação — contrato + aditivo (ambos UUID). */
 export const amendmentParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do contrato' }),
-  amendmentId: z.uuid().meta({ description: 'UUID do aditivo' }),
+  id: uuidV4().meta({ description: 'UUID do contrato' }),
+  amendmentId: uuidV4().meta({ description: 'UUID do aditivo' }),
 });
 
 const amendmentDtoShape = {
@@ -360,7 +362,7 @@ export const amendmentDocumentUploadQuerySchema = uploadDocumentQuerySchema.exte
 
 /** Body de `POST …/documents/:documentId/supersede` (E3). */
 export const supersedeDocumentBodySchema = z.object({
-  supersededByDocumentId: z.uuid().meta({ description: 'UUID do documento substituto' }),
+  supersededByDocumentId: uuidV4().meta({ description: 'UUID do documento substituto' }),
 });
 
 /**
@@ -377,8 +379,8 @@ export const deleteDocumentBodySchema = z.object({
 
 /** Params da rota de supersede — contrato + documento. */
 export const documentParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do contrato' }),
-  documentId: z.uuid().meta({ description: 'UUID do documento' }),
+  id: uuidV4().meta({ description: 'UUID do contrato' }),
+  documentId: uuidV4().meta({ description: 'UUID do documento' }),
 });
 
 /** Resposta das rotas de documento — serialização do agregado `ContractDocument`. */

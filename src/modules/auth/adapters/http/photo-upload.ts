@@ -26,6 +26,16 @@ export const magicBytesMatch = (mimeType: string, bytes: Buffer): boolean => {
       return (
         startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && bytes.subarray(8, 12).toString() === 'WEBP'
       );
+    // ⚠️ fail-OPEN aqui, e NÃO por descuido: a ordem de validação desta rota é o inverso da do
+    // logo de programa. Aqui o magic-byte roda na BORDA (`me-plugin.ts`, `users-plugin.ts`) e a
+    // allowlist de MIME só é aplicada depois, dentro do use case (`photo-type-unsupported`).
+    // Fechar este `default` faria um MIME não suportado ser recusado como
+    // `photo-content-mismatch` em vez de `photo-type-unsupported` — mudança de contrato
+    // observável na API, não endurecimento.
+    //
+    // A irmã desta função (`programs/.../upload-program-logo.ts`) é fail-CLOSED porque lá a
+    // allowlist vem ANTES. A assimetria é a razão pela qual as duas NÃO foram fundidas num
+    // módulo compartilhado sem antes alinhar a ordem — ver a issue de unificação.
     default:
       return true;
   }

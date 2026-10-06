@@ -5,6 +5,8 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5;
 
@@ -21,7 +23,7 @@ export type FinancierListQuery = z.infer<typeof financierListQuerySchema>;
 
 /** Param `:id` — UUID do financiador. Formato inválido → 400. */
 export const financierIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do financiador (core-api)' }),
+  id: uuidV4().meta({ description: 'UUID do financiador (core-api)' }),
 });
 
 // Payment target (US1 feature 015) — espelha o molde de Supplier/Act. `agency` valida no domínio.
@@ -39,7 +41,7 @@ const pixKeySchema = z.object({
 
 /** Detalhe — espelha o schema `Financier` legado + payment target (US1). */
 export const financierDetailSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   legacyId: z.number().int().nullable(),
   name: z.string(),
   corporateName: z.string(),

@@ -110,6 +110,26 @@ export const authRole = mysqlTable(
 );
 
 // ─── auth_user ────────────────────────────────────────────────────────────────
+
+/**
+ * Nomes dos índices UNIQUE de `auth_user`, numa fonte única.
+ *
+ * Não é cosmético: estes nomes são **contrato de runtime**. O errno 1062 do MySQL não diz qual
+ * unicidade quebrou — quem distingue é o nome do índice dentro da `sqlMessage`, e é por ele que
+ * os adapters decidem entre erro nomeado (`email-already-registered`, `cpf-already-registered`),
+ * idempotência (`legacy_id` → skip) e falha de infra. Com o nome escrito à mão em cada adapter,
+ * um `drizzle-kit generate` que renomeie o índice passaria no gate e quebraria a tradução em
+ * silêncio: o 409 viraria 503/500 e a ETL leria dado duplicado como banco indisponível.
+ *
+ * Quem consome: `user-repository.drizzle.ts` e `provisioned-user-store.drizzle.ts`.
+ * Cobrado por `tests/modules/auth/adapters/persistence/schema-hardening.test.ts` (CA9/CA10).
+ */
+export const AUTH_USER_UNIQUE_INDEX = {
+  email: 'auth_user_email_idx',
+  legacyId: 'auth_user_legacy_id_idx',
+  cpf: 'auth_user_cpf_idx',
+} as const;
+
 // Usuário do sistema. password_hash nullable → OIDC-ready (usuários federados).
 // status: 'active' | 'disabled' (varchar+CHECK — ADR-0020 §"sem ENUM").
 export const authUser = mysqlTable(
@@ -156,10 +176,14 @@ export const authUser = mysqlTable(
 
     // Índice no email já coberto pela UNIQUE constraint (cria índice implícito no InnoDB).
     // Declaramos explicitamente para auditoria e para o teste CA3.
-    uniqueIndex('auth_user_email_idx').on(t.email),
+    uniqueIndex(AUTH_USER_UNIQUE_INDEX.email).on(t.email),
 
     // Idempotência da ETL: UNIQUE em legacy_id (múltiplos NULL permitidos no InnoDB).
-    uniqueIndex('auth_user_legacy_id_idx').on(t.legacyId),
+    uniqueIndex(AUTH_USER_UNIQUE_INDEX.legacyId).on(t.legacyId),
+
+    // Unicidade de CPF: um CPF por usuário. `cpf` é nullable (register/OIDC criam sem perfil), e o
+    // InnoDB permite múltiplos NULL num índice UNIQUE — então quem não tem CPF não colide.
+    uniqueIndex(AUTH_USER_UNIQUE_INDEX.cpf).on(t.cpf),
 
     // Índice em name: cobre ORDER BY name ASC da listagem paginada (UserQuery.list, spec 005 US1).
     // leading-% LIKE não usa B-Tree para range scan; benefício é evitar filesort no ORDER BY.

@@ -559,7 +559,7 @@ const budgetPlansRoutes =
 
     // GET /budget-plans/budget-results/by-budget/:budgetId — lançamentos + soma do orçamento (CA3).
     // Router find-my-way casa segmento estático (`by-budget`) antes de paramétrico, e o param `:id`
-    // de /budget-plans/:id é `z.uuid()` (rejeita "budget-results" com 400) — sem ambiguidade real.
+    // de /budget-plans/:id é `uuidV4()` (rejeita "budget-results" com 400) — sem ambiguidade real.
     scope.route({
       method: 'GET',
       url: '/budget-plans/budget-results/by-budget/:budgetId',

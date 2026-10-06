@@ -24,11 +24,17 @@ export const makeInMemoryUserStore = (): InMemoryUserStore => {
 
   const repository: UserRepository = {
     save: async (user) => {
-      // CA6: detectar e-mail duplicado com id diferente (DD-PERSIST-01).
-      // Varre o map; email ja normalizado no VO (lowercase, trim).
+      // CA6/CA7: espelha os dois UNIQUE de auth_user (auth_user_email_idx, auth_user_cpf_idx) —
+      // duplicata com id diferente. Varre o map; email e cpf ja normalizados nos VOs.
+      //
+      // `cpf` null NAO colide: o InnoDB permite multiplos NULL num indice UNIQUE, e quem nasce
+      // sem perfil (register/OIDC) tem cpf null. Comparar null === null daria uma colisao que o
+      // banco nao tem — o fake recusaria o que a producao aceita (CA8).
       for (const existing of map.values()) {
-        if (existing.email === user.email && existing.id !== user.id) {
-          return err('email-already-registered');
+        if (existing.id === user.id) continue;
+        if (existing.email === user.email) return err('email-already-registered');
+        if (user.cpf !== null && existing.cpf === user.cpf) {
+          return err('cpf-already-registered');
         }
       }
       map.set(user.id, user);
