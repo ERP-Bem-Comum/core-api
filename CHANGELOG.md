@@ -6,6 +6,28 @@ a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é reg
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·
 versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
+## [1.0.0-rc.4] — 2026-10-06
+
+### ⚠️ Mudanças incompatíveis
+
+- **api-collections:** Hurl substitui o Bruno (ADR-0074, supersede 0034 e 0038). api-collections/ (266 .bru) e @usebruno/cli removidos: -317 pacotes e as duas excecoes de supply-chain que o Bruno exigia. 241 requests convertidos em 23 arquivos. ([#1037](https://github.com/ERP-Bem-Comum/core-api/pull/1037))
+
+### Adicionado
+
+- **partners:** fornecedor pessoa física (CPF) — SupplierDocument, PF sem Razão Social/Nome Fantasia ([#1025](https://github.com/ERP-Bem-Comum/core-api/pull/1025))
+
+### Corrigido
+
+- **auth:** unicidade de CPF em auth_user (F7). UNIQUE auth_user_cpf_idx na migration 0010; os dois adapters que inserem em auth_user distinguem as TRES unicidades pelo nome do indice no errno 1062 — legacy_id (idempotencia), cpf (409 na borda; a ETL degrada e re-tenta) e email (propaga). Nome do indice em fonte unica (AUTH_USER_UNIQUE_INDEX), com gate que cobra a ausencia do literal nos adapters. ([#1037](https://github.com/ERP-Bem-Comum/core-api/pull/1037))
+- **http:** uuidV4 estrito na borda. z.uuid() do Zod v4 aceitava UUID nao-v4 e o dominio rejeitava, caindo no default 500 — violacao da invariante "nunca 500". Schema compartilhado em src/shared/http com teste de paridade contra o VO; 400 uniforme em toda rota :id. ([#1037](https://github.com/ERP-Bem-Comum/core-api/pull/1037))
+- **programs:** magic-byte no upload de logo (CWE-434). O default do switch e fail-closed aqui porque a allowlist roda antes; a funcao irma do auth FICA fail-open de proposito — la a ordem e inversa, e fechar trocaria o codigo de erro da API. ([#1037](https://github.com/ERP-Bem-Comum/core-api/pull/1037))
+- **deps:** audit de producao zerado. fastify 5.12.1->5.12.5, nodemailer 9.1.1->10.0.15, e os pisos dos overrides de fast-uri e brace-expansion subidos — eles SEGURAVAM a versao vulneravel em vez de exclui-la, exatamente como o comentario do pnpm-workspace.yaml previa. ([#1037](https://github.com/ERP-Bem-Comum/core-api/pull/1037))
+- **infra:** S3 de dev/teste passa ao fork Silo — minio/minio sumiu do Docker Hub ([#1028](https://github.com/ERP-Bem-Comum/core-api/pull/1028))
+
+### Alterado
+
+- **toolchain:** lint vira oxlint type-aware e o TypeScript 7 entra sem side-by-side (ADR-0072) ([#1035](https://github.com/ERP-Bem-Comum/core-api/pull/1035))
+
 ## [1.0.0-rc.3] — 2026-09-09
 
 ### Adicionado
