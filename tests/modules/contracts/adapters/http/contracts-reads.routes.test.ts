@@ -33,6 +33,14 @@ const PLAIN_EMAIL = 'plain@example.com'; // register normal: roles:[] (sem permi
 const CONTRACT_ID = '11111111-1111-4111-8111-111111111111'; // id default do buildContract
 const MISSING_ID = '22222222-2222-4222-8222-222222222222'; // não seedado
 
+// Passam em `z.uuid()` do Zod v4, mas o `rehydrate` do domínio (`isUuidV4`) os recusa.
+const NON_V4_IDS = [
+  '00000000-0000-0000-0000-000000000000',
+  'ffffffff-ffff-ffff-ffff-ffffffffffff',
+  'c232ab00-9414-11ec-b3c8-9f6bdeced846',
+  '886313e1-3b8a-5372-9b90-0c9aee199e5d',
+] as const;
+
 const makeApp = async () => {
   const authDeps = await buildAuthHttpDeps({
     driver: 'memory',
@@ -141,6 +149,23 @@ describe('CONTRACTS-HTTP-READS (C1) — GET /contracts/:id', () => {
       headers: bearer(token),
     });
     assert.equal(res.statusCode, 400);
+    await teardown();
+  });
+
+  it('UUID bem formado que não é v4 (nil, max, v1, v5) -> 400, nunca 500', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, READER_EMAIL);
+    for (const id of NON_V4_IDS) {
+      for (const suffix of ['', '/history']) {
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/v2/contracts/${id}${suffix}`,
+          headers: bearer(token),
+        });
+        assert.equal(res.statusCode, 400, `${id}${suffix}`);
+        assert.equal((res.json() as { error: { code: string } }).error.code, 'validation');
+      }
+    }
     await teardown();
   });
 });

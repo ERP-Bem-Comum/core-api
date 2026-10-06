@@ -10,7 +10,7 @@ import { uploadProgramLogo } from '#src/modules/programs/application/use-cases/u
 
 const NOW = new Date('2026-06-09T12:00:00.000Z');
 const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 const ABSENT_ID = '00000000-0000-4000-8000-000000000000';
 
 const makeCtx = () => {
@@ -56,6 +56,31 @@ describe('uploadProgramLogo', () => {
     });
     assert.ok(isErr(r));
     assert.equal(r.error, 'logo-type-unsupported');
+  });
+
+  it('bytes que não são PNG com mime image/png -> logo-content-mismatch e nada armazenado', async () => {
+    const { deps, storage } = makeCtx();
+    const p = await seed(deps);
+    const r = await uploadProgramLogo(deps)({
+      programId: String(p.id),
+      bytes: new TextEncoder().encode('<html><script>alert(1)</script></html>'),
+      mimeType: 'image/png',
+    });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'logo-content-mismatch');
+    assert.equal(storage.size(), 0);
+  });
+
+  it('PNG verdadeiro declarado como image/jpeg -> logo-content-mismatch', async () => {
+    const { deps } = makeCtx();
+    const p = await seed(deps);
+    const r = await uploadProgramLogo(deps)({
+      programId: String(p.id),
+      bytes: PNG,
+      mimeType: 'image/jpeg',
+    });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'logo-content-mismatch');
   });
 
   it('vazio -> logo-empty', async () => {

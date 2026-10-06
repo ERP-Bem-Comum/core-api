@@ -21,6 +21,7 @@
     "cli-state.json",
     "tests/reports/**",
     "tools/bugs-scripts/**",
+    ".tmp/**",
     "handbook/specs/**",
     ".claude/**",
     "epic/**",

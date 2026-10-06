@@ -6,7 +6,14 @@
  *      com esse role; findById reidrata roles[] com permissions[].
  * CA9: salvar User com roleId inexistente em auth_role -> erro (violacao FK auth_urt_role_fk).
  *
- * VALID_CONN: mesma string que o test do contracts (mysql://root:rootpw-migration-test-only@...).
+ * VALID_CONN: `AUTH_DATABASE_URL` quando definida, senao a conn derivada do helper canonico
+ * (`mysqlTestUrl`, que honra MYSQL_TEST_URL/MYSQL_PORT) — mesma precedencia que o contracts usa com
+ * `CONTRACTS_DATABASE_URL`. Sem env nenhuma o valor e identico ao de antes; o override existe para
+ * apontar a suite a um MySQL qualquer (p.ex. a infra de dev compartilhada), e nao so ao container
+ * do `test:integration`.
+ *
+ * ⚠️ Este arquivo faz DELETE em todas as tabelas auth_* no beforeEach. Apontar `AUTH_DATABASE_URL`
+ * para um banco com dado que importa o APAGA — usar sempre um database descartavel.
  * Truncate em ordem FK no beforeEach (auth_user_role -> auth_role_permission ->
  * auth_refresh_token -> auth_user -> auth_role -> auth_permission).
  * ASCII puro.
@@ -19,6 +26,7 @@ import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/my
 import type { AuthMysqlHandle } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleUserStore } from '#src/modules/auth/adapters/persistence/repos/user-repository.drizzle.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import { mysqlTestUrl } from '#tests/support/mysql-conn.ts';
 
 import * as UserId from '#src/modules/auth/domain/identity/user-id.ts';
 import * as RoleId from '#src/modules/auth/domain/authorization/role-id.ts';
@@ -30,7 +38,7 @@ import * as User from '#src/modules/auth/domain/identity/user/user.ts';
 
 import { runUserRepositoryContract } from './user-repository.contract.ts';
 
-const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
+const VALID_CONN = process.env['AUTH_DATABASE_URL'] ?? mysqlTestUrl();
 
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 

@@ -72,7 +72,6 @@ const INVOCATION_POINTS: readonly string[] = [
   'compose.yaml',
   'scripts/ci/test-integration.ts',
   'scripts/e2e/auth.sh',
-  'scripts/e2e/bruno-all.sh',
   'scripts/e2e/collaborators.sh',
   'scripts/e2e/contracts.sh',
   '.githooks/commit-msg',

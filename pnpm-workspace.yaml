@@ -5,9 +5,9 @@ allowBuilds:
   esbuild: true
   # Em desuso (ADR-0020 §228, CTR-CLEANUP-SQLITE). Build nativo dispensável até a remoção.
   'better-sqlite3': false
-  # Transitiva de @usebruno/cli (devDep de teste, ADR-0034). Build gera código gRPC/protobuf;
-  # as coleções .bru são REST e o `bru run` roda sem ele. Mantido false (explícito/auditável).
-  protobufjs: false
+  # `protobufjs: false` saiu em 2026-10-06: vinha SÓ de @usebruno/cli (medido com `pnpm why`), que
+  # foi removido junto com as coleções .bru (ADR-0074). Entrada de política para pacote que não
+  # está mais na árvore é ruído — descreve uma decisão sobre nada.
 
 # Version overrides para security fixes (Dependabot alerts)
 # - GHSA-67mh-4wv8-2f99: esbuild <=0.24.2 (via @esbuild-kit/core-utils@3.3.2 → esbuild@0.18.20)
@@ -45,9 +45,20 @@ allowBuilds:
 #   Piso subido para 3.1.6 — a MÍNIMA que fecha as quatro. A 3.1.7 existe e o fastify 5.12.1 já a
 #   resolve, mas caiu na quarentena de `minimumReleaseAge` (publicada em 02/09 11:06 UTC); a faixa
 #   `<4` deixa ela entrar sozinha assim que amadurecer, sem exigir novo override.
+#
+#   ⚠️ 5ª rodada, e o aviso se cumpriu pela QUINTA vez — exatamente como previsto acima, e pela
+#   razão já documentada: a esperança de que a 3.1.7 "entrasse sozinha ao amadurecer" não se
+#   realizou, porque faixa não empurra ninguém. O piso `>=3.1.6` seguiu satisfeito pela própria
+#   3.1.6, e `@fastify/ajv-compiler@4.0.6` continuou resolvendo para ela mesmo com o fastify em
+#   5.12.5. Corrigido em 06/10/2026: piso para **>=3.1.7** (resolve 3.1.8, publicada 15/09 e
+#   fora da quarentena). Advisory vigente corrige em >=3.1.7.
 # - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial (1ª/2ª rodada)
 # - GHSA-rgw5-rvv9-x895: brace-expansion <5.0.9 — DoS por arrays intermediários sem limite,
-#   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª, VIGENTE)
+#   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª)
+# - 4ª rodada (VIGENTE, corrigida em 06/10/2026): duas advisories `high` corrigidas em >=5.0.11 e
+#   >=5.0.10. Mesmo mecanismo das anteriores: o piso `>=5.0.9` era satisfeito pela própria 5.0.9 e
+#   `minimatch@10.2.5` seguia resolvendo para ela. Piso para **>=5.0.11** (resolve 5.0.12,
+#   publicada 14/09, fora da quarentena).
 #   Transitiva de runtime via @fastify/swagger-ui → @fastify/static → glob → minimatch.
 #   Exposição real BAIXA: exige o atacante controlar o input do expand(); aqui o glob serve os
 #   assets do /docs, com padrões internos.
@@ -67,8 +78,8 @@ allowBuilds:
 #   entre 9 e 10, validado por boot + fastify.inject do /docs (ver ticket #573).
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
-  fast-uri: '>=3.1.6 <4'
-  brace-expansion: '>=5.0.9 <6'
+  fast-uri: '>=3.1.7 <4'
+  brace-expansion: '>=5.0.11 <6'
   find-my-way: '^9.7.0'
   '@fastify/static': '^10.1.2'
 
@@ -91,12 +102,10 @@ trustPolicyExclude:
   # takeover. Exceção fixada na versão para não afrouxar a política globalmente.
   # Avaliado em CTR-PNPM-11-MIGRATION (2026-05-30).
   - 'undici-types@6.21.0'
-  # Transitivas de @usebruno/cli (devDep de teste, ADR-0034) via @babel/* → jscodeshift.
-  # semver 6.3.1/5.7.2 sem attestation de provenance, mas mantidas por npm-cli-ops e são as
-  # ULTIMAS de suas linhas major (dist-tags latest-6/legacy): downgrade de provenance, NAO
-  # takeover — mesmo caso de undici-types acima. Selector ÚNICO com `||` (entradas separadas do
-  # mesmo pacote não casam; ver settings.md#trustpolicyexclude). Avaliado em BRUNO-CLI-ADOPT.
-  - 'semver@5.7.2 || 6.3.1'
+  # `semver@5.7.2 || 6.3.1` saiu em 2026-10-06: vinham de @usebruno/cli via @babel/* →
+  # jscodeshift, e o Bruno foi removido (ADR-0074). Medido com `pnpm why semver@6`: nenhuma
+  # outra cadeia as traz. Exceção de trustPolicy para pacote fora da árvore afrouxaria a
+  # política sem necessidade — é o oposto do que o ADR-0011 pede.
 # Transitivas só de fontes confiáveis (registry/workspace), nunca git/tarball exótico.
 # Default no pnpm 11. Ver settings.md#blockexoticsubdeps.
 blockExoticSubdeps: true

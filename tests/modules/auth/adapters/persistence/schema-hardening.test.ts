@@ -14,6 +14,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { AUTH_USER_UNIQUE_INDEX } from '#src/modules/auth/adapters/persistence/schemas/mysql.ts';
+
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..', '..', '..');
 const PERSISTENCE = resolve(PROJECT_ROOT, 'src', 'modules', 'auth', 'adapters', 'persistence');
@@ -105,6 +107,106 @@ describe('AUTH-DB-SCHEMA — CA8: schema.ts declara as 6 tabelas', () => {
     const ts = read(SCHEMA_MYSQL);
     for (const table of TABLES) {
       assert.match(ts, new RegExp(`['\`]${table}['\`]`), `mysqlTable ${table} ausente no schema.`);
+    }
+  });
+});
+
+// F7 (ciclo de QA 05/10): CPF duplicado era aceito — dois usuarios, o mesmo documento, ambos 201.
+// A unicidade de email nasceu na 0000 (CA3); a de cpf veio na 0010, entao este guard varre TODAS
+// as migrations em vez de fixar um arquivo. O nome do arquivo e gerado pelo drizzle-kit e nao e
+// contrato; o UNIQUE no cpf e.
+describe('AUTH-DB-SCHEMA — CA9: unicidade de CPF (F7)', () => {
+  const allMigrations = (): string =>
+    readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => read(resolve(MIGRATIONS_DIR, f)))
+      .join('\n');
+
+  it('CA9: auth_user.cpf UNIQUE em alguma migration (-> cpf-already-registered)', () => {
+    assert.match(
+      allMigrations(),
+      /auth_user_cpf_idx/i,
+      'UNIQUE auth_user_cpf_idx ausente: CPF duplicado volta a ser aceito (F7).',
+    );
+  });
+
+  it('CA9: o schema declara o uniqueIndex do cpf (migration e schema nao divergem)', () => {
+    const ts = read(SCHEMA_MYSQL);
+    assert.match(
+      ts,
+      /uniqueIndex\(\s*AUTH_USER_UNIQUE_INDEX\.cpf\s*\)\s*\.on\(\s*t\.cpf\s*\)/,
+      'schema sem uniqueIndex em cpf: drizzle-kit geraria um DROP do indice na proxima migration.',
+    );
+  });
+
+  // A garantia tem de permitir CPF ausente: `cpf` nullable + multiplos NULL no UNIQUE do InnoDB
+  // e o que deixa register/OIDC criarem usuario sem perfil. Um NOT NULL aqui quebraria isso.
+  it('CA9: a coluna cpf permanece nullable (register/OIDC criam sem perfil)', () => {
+    const sql = allMigrations();
+    assert.doesNotMatch(
+      sql,
+      /`cpf`\s+varchar\(\d+\)[^,\n]*\bNOT\s+NULL/i,
+      'cpf NOT NULL impediria usuario sem perfil e faria NULL colidir no UNIQUE.',
+    );
+  });
+});
+
+// CA10 — o nome do indice e CONTRATO DE RUNTIME, nao cosmetica.
+//
+// O errno 1062 nao diz qual unicidade quebrou: quem distingue e o nome do indice dentro da
+// `sqlMessage`, e e por ele que os adapters escolhem entre erro nomeado, idempotencia e falha de
+// infra. Enquanto o nome era string escrita a mao em tres arquivos, um `drizzle-kit generate` que
+// o renomeasse passava no gate e quebrava a traducao EM SILENCIO — o 409 do cpf duplicado viraria
+// 500, e a ETL leria dado duplicado como banco indisponivel.
+//
+// Este gate assegura a PROPRIEDADE (fonte unica), nao a contagem: cada valor da constante existe
+// em alguma migration, e nenhum adapter repete o literal. A asserção que de fato fecha e a
+// NEGATIVA — `doesNotMatch` do literal nos adapters —, porque e ela que acusa a volta do defeito.
+describe('AUTH-DB-SCHEMA — CA10: nome de indice UNIQUE vem de fonte unica', () => {
+  const REPOS = [
+    'src/modules/auth/adapters/persistence/repos/user-repository.drizzle.ts',
+    'src/modules/auth/adapters/persistence/repos/provisioned-user-store.drizzle.ts',
+  ] as const;
+
+  const allMigrations = (): string =>
+    readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => read(resolve(MIGRATIONS_DIR, f)))
+      .join('\n');
+
+  it('CA10: cada indice declarado na constante existe em alguma migration', () => {
+    const sql = allMigrations();
+    for (const name of Object.values(AUTH_USER_UNIQUE_INDEX)) {
+      assert.ok(
+        sql.includes(name),
+        `${name} esta em AUTH_USER_UNIQUE_INDEX mas nao em migration alguma: ` +
+          'os adapters traduziriam um 1062 que o banco nunca levanta.',
+      );
+    }
+  });
+
+  it('CA10: nenhum adapter escreve o nome do indice a mao', () => {
+    for (const repo of REPOS) {
+      const src = read(resolve(PROJECT_ROOT, repo));
+      for (const name of Object.values(AUTH_USER_UNIQUE_INDEX)) {
+        assert.doesNotMatch(
+          src,
+          new RegExp(`['"\`]${name}['"\`]`),
+          `${repo} repete o literal '${name}'. Use AUTH_USER_UNIQUE_INDEX: com o nome em dois ` +
+            'lugares, renomear o indice quebra a traducao do 1062 sem nenhum teste acusar.',
+        );
+      }
+    }
+  });
+
+  it('CA10: os adapters de fato consomem a constante (guarda contra verde por vacuidade)', () => {
+    for (const repo of REPOS) {
+      assert.match(
+        read(resolve(PROJECT_ROOT, repo)),
+        /AUTH_USER_UNIQUE_INDEX\./,
+        `${repo} nao usa AUTH_USER_UNIQUE_INDEX — o teste acima passaria por ausencia, nao por ` +
+          'conformidade.',
+      );
     }
   });
 });

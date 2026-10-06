@@ -4,10 +4,10 @@ source: handbook/architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md
 decided_on: 2026-06-08
 
 declared:
-  status: Accepted
-  status_normalized: accepted
+  status: Superseded
+  status_normalized: superseded
   supersedes: []
-  superseded_by: []
+  superseded_by: [ADR-0074]
   related: [ADR-0034, ADR-0037]
 
 assessment:
@@ -165,7 +165,9 @@ claims:
         ela falha. O mecanismo é o próprio `bru run` — é o RED que já existe.
       expected_error: null
       blocker: null
-      enforced_by: ['scripts/e2e/bruno-all.sh']
+      # scripts/e2e/bruno-all.sh apagado em 2026-10-05 (desatualizado); o sucessor por arquivos .rest
+      # ainda não tem runner no repositório — a cláusula está, de fato, sem enforcement.
+      enforced_by: []
     rule:
       status: proposed
       disposition: adopt
@@ -280,7 +282,9 @@ claims:
         não enviava `mode` depois de o schema virar `z.discriminatedUnion('mode')`.
       expected_error: null
       blocker: null
-      enforced_by: ['scripts/e2e/bruno-all.sh']
+      # scripts/e2e/bruno-all.sh apagado em 2026-10-05 (desatualizado); o sucessor por arquivos .rest
+      # ainda não tem runner no repositório — a cláusula está, de fato, sem enforcement.
+      enforced_by: []
     rule:
       status: proposed
       disposition: drop
@@ -398,7 +402,9 @@ claims:
         falha — o rate-limit de login é o sintoma, e ele aparece como falha intermitente e confusa.
       expected_error: null
       blocker: null
-      enforced_by: ['scripts/e2e/bruno-all.sh']
+      # scripts/e2e/bruno-all.sh apagado em 2026-10-05 (desatualizado); o sucessor por arquivos .rest
+      # ainda não tem runner no repositório — a cláusula está, de fato, sem enforcement.
+      enforced_by: []
     rule:
       status: proposed
       disposition: adopt
@@ -438,7 +444,9 @@ claims:
         variável ausente. É o RED que prova a necessidade do processo único.
       expected_error: null
       blocker: null
-      enforced_by: ['scripts/e2e/bruno-all.sh']
+      # scripts/e2e/bruno-all.sh apagado em 2026-10-05 (desatualizado); o sucessor por arquivos .rest
+      # ainda não tem runner no repositório — a cláusula está, de fato, sem enforcement.
+      enforced_by: []
     rule:
       status: proposed
       disposition: drop

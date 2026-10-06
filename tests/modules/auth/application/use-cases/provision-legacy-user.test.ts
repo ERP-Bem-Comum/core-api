@@ -356,3 +356,109 @@ describe('provisionLegacyUser — perfil legado (AUTH-ETL-USER-FIELDS #277)', ()
     assert.equal(user.collaboratorId, null);
   });
 });
+
+// ─── F7 (ciclo de QA 05/10) — CPF legado DUPLICADO ────────────────────────────
+//
+// O UNIQUE auth_user_cpf_idx (migration 0010) fechou a duplicacao de CPF. Para a ETL isso criou
+// um risco novo: um CPF repetido no legado faria o provision estourar e o usuario NAO seria
+// migrado — perda de acesso por causa de um campo de perfil opcional. A politica e a MESMA do
+// CPF invalido (CA2b): degrada para null + warning, e o registro entra.
+describe('provisionLegacyUser — CPF duplicado no legado (F7)', () => {
+  it('CA5 — segundo legado com o MESMO cpf e criado com cpf null; o primeiro preserva o cpf', async () => {
+    const { provisioned, deps } = makeDeps();
+    const run = provisionLegacyUser(deps);
+
+    const first = await run({
+      legacyId: 601,
+      email: emailOf('primeiro@example.com'),
+      massApprove: false,
+      cpf: VALID_CPF,
+    });
+    assert.equal(first.ok, true);
+
+    const second = await run({
+      legacyId: 602,
+      email: emailOf('segundo@example.com'),
+      massApprove: false,
+      cpf: VALID_CPF, // mesmo documento, outro usuario do legado
+    });
+
+    // O registro ENTRA (nao e rejeitado nem vira erro de infra).
+    assert.equal(second.ok, true);
+    if (!second.ok) return;
+    assert.equal(second.value.outcome, 'created');
+
+    const saved = provisioned.saved();
+    assert.equal(saved.length, 2);
+
+    const a = saved.find((e) => e.legacyId === 601)?.user;
+    const b = saved.find((e) => e.legacyId === 602)?.user;
+    assert.equal(a?.cpf, VALID_CPF); // quem chegou primeiro mantem o documento
+    assert.equal(b?.cpf, null); // o duplicado degradou
+    assert.equal(b?.id, second.value.userRef);
+  });
+
+  it('CA6 — o retry preserva o resto do perfil e a correlacao legacy_id', async () => {
+    const { provisioned, deps } = makeDeps();
+    const run = provisionLegacyUser(deps);
+
+    await run({
+      legacyId: 611,
+      email: emailOf('dono@example.com'),
+      massApprove: false,
+      cpf: VALID_CPF,
+    });
+    const r = await run({
+      legacyId: 612,
+      email: emailOf('outro@example.com'),
+      massApprove: false,
+      name: 'Maria',
+      cpf: VALID_CPF,
+      telephone: VALID_TELEPHONE,
+      collaboratorRef: COLLABORATOR_REF,
+    });
+
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+
+    const user = provisioned.saved().find((e) => e.legacyId === 612)?.user;
+    assert.notEqual(user, undefined);
+    if (user === undefined) return;
+
+    // So o cpf cai; nada mais do perfil e perdido no caminho do retry.
+    assert.equal(user.cpf, null);
+    assert.equal(user.name, 'Maria');
+    assert.equal(user.telephone, VALID_TELEPHONE);
+    assert.equal(user.collaboratorId, COLLABORATOR_REF);
+    assert.equal(user.id, r.value.userRef);
+  });
+
+  it('CA7 — degradar e SO para cpf duplicado: falha de infra continua propagando', async () => {
+    const { deps } = makeDeps();
+    let calls = 0;
+    const r = await provisionLegacyUser({
+      ...deps,
+      store: {
+        findByLegacyId: () => Promise.resolve({ ok: true, value: null } as const),
+        provision: () => {
+          calls += 1;
+          return Promise.resolve({
+            ok: false,
+            error: 'provisioned-user-store-unavailable',
+          } as const);
+        },
+      },
+    })({
+      legacyId: 621,
+      email: emailOf('infra@example.com'),
+      massApprove: false,
+      cpf: VALID_CPF,
+    });
+
+    assert.equal(r.ok, false);
+    if (r.ok) return;
+    assert.equal(r.error, 'provisioned-user-store-unavailable');
+    // Sem retry: degradar um campo nao conserta banco indisponivel, e insistir mascararia a causa.
+    assert.equal(calls, 1);
+  });
+});

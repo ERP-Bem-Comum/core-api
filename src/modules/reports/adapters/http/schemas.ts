@@ -5,6 +5,8 @@
  */
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+
 export const teamMemberSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -72,11 +74,11 @@ export const supplierWithoutContractSchema = z
 // #694: filtros de servidor da rota /reports/suppliers-without-contract (paridade #588/#682). Objeto
 // simples (sem `.strict()`, como os schemas irmãos de filtro): parâmetro desconhecido é ignorado.
 export const suppliersWithoutContractQuerySchema = z.object({
-  programId: z.uuid().optional(), // → program_ref
-  budgetPlanId: z.uuid().optional(), // → budget_plan_ref
-  costCenterId: z.uuid().optional(), // → cost_center_ref
-  categoryId: z.uuid().optional(), // → category_ref
-  subCategoryId: z.uuid().optional(), // → subcategory_ref
+  programId: uuidV4().optional(), // → program_ref
+  budgetPlanId: uuidV4().optional(), // → budget_plan_ref
+  costCenterId: uuidV4().optional(), // → cost_center_ref
+  categoryId: uuidV4().optional(), // → category_ref
+  subCategoryId: uuidV4().optional(), // → subcategory_ref
   dueFrom: z.iso.date().optional(), // 'YYYY-MM-DD' inclusivo
   dueTo: z.iso.date().optional(), // 'YYYY-MM-DD' exclusivo (half-open)
 });
@@ -143,15 +145,15 @@ export const paymentPositionStatusValues = [
 // Objeto simples (sem `.strict()`, como `listDocumentsQuerySchema` do financial): parâmetro
 // desconhecido é ignorado, não vira 400. `dueFrom`/`dueTo` = janela half-open [dueFrom, dueTo).
 export const paymentPositionQuerySchema = z.object({
-  budgetPlanRef: z.uuid().optional(),
+  budgetPlanRef: uuidV4().optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
-  cedenteAccountRef: z.uuid().optional(), // → fin_payable_view.debit_account_ref
+  cedenteAccountRef: uuidV4().optional(), // → fin_payable_view.debit_account_ref
   status: z.enum(paymentPositionStatusValues).optional(), // via LEFT JOIN fin_documents.status
-  costCenterRef: z.uuid().optional(),
-  categoryRef: z.uuid().optional(),
-  subcategoryRef: z.uuid().optional(),
-  supplierRef: z.uuid().optional(),
+  costCenterRef: uuidV4().optional(),
+  categoryRef: uuidV4().optional(),
+  subcategoryRef: uuidV4().optional(),
+  supplierRef: uuidV4().optional(),
 });
 
 export type PaymentPositionQueryDto = z.infer<typeof paymentPositionQuerySchema>;
@@ -199,15 +201,15 @@ const isKnownColumn = (token: string): boolean =>
 // Objeto simples (sem `.strict()`, como o REP-4): parâmetro desconhecido é ignorado, não vira 400.
 // 9 filtros opcionais + search/order/page/limit + columns. `dueFrom`/`dueTo` = janela half-open.
 export const generalReportQuerySchema = z.object({
-  programId: z.uuid().optional(), // → program_ref
-  budgetPlanId: z.uuid().optional(), // → budget_plan_ref
+  programId: uuidV4().optional(), // → program_ref
+  budgetPlanId: uuidV4().optional(), // → budget_plan_ref
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
-  accountId: z.uuid().optional(), // → debit_account_ref
-  costCenterId: z.uuid().optional(), // → cost_center_ref
-  categoryId: z.uuid().optional(), // → category_ref
-  subCategoryId: z.uuid().optional(), // → subcategory_ref
-  entityId: z.uuid().optional(), // → supplier_ref
+  accountId: uuidV4().optional(), // → debit_account_ref
+  costCenterId: uuidV4().optional(), // → cost_center_ref
+  categoryId: uuidV4().optional(), // → category_ref
+  subCategoryId: uuidV4().optional(), // → subcategory_ref
+  entityId: uuidV4().optional(), // → supplier_ref
   status: z.enum(generalReportStatusValues).optional(), // via LEFT JOIN fin_documents.status
   search: z.string().min(1).optional(), // LIKE contains em document_number + fornecedor
   order: z.enum(generalReportOrderValues).optional(), // default dueDate:desc
@@ -303,15 +305,15 @@ export const cashflowStatusValues = [
 // 400. 10 filtros opcionais (AND). Nomes id-suffixed (padrão #442). `dueFrom`/`dueTo` = janela
 // half-open [dueFrom, dueTo). SEM paginação (é agregação — retorna todos os grupos).
 export const cashflowQuerySchema = z.object({
-  programId: z.uuid().optional(), // → program_ref
-  budgetPlanId: z.uuid().optional(), // → budget_plan_ref
+  programId: uuidV4().optional(), // → program_ref
+  budgetPlanId: uuidV4().optional(), // → budget_plan_ref
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
-  accountId: z.uuid().optional(), // → debit_account_ref
-  costCenterId: z.uuid().optional(), // → cost_center_ref (restringe a população; NÃO é eixo)
-  categoryId: z.uuid().optional(), // → category_ref
-  subCategoryId: z.uuid().optional(), // → subcategory_ref
-  entityId: z.uuid().optional(), // → supplier_ref
+  accountId: uuidV4().optional(), // → debit_account_ref
+  costCenterId: uuidV4().optional(), // → cost_center_ref (restringe a população; NÃO é eixo)
+  categoryId: uuidV4().optional(), // → category_ref
+  subCategoryId: uuidV4().optional(), // → subcategory_ref
+  entityId: uuidV4().optional(), // → supplier_ref
   status: z.enum(cashflowStatusValues).optional(), // via LEFT JOIN fin_documents.status
 });
 
@@ -366,10 +368,10 @@ export const analysisQuerySchema = z.object({
   dueStart: z.iso.date(), // 'YYYY-MM-DD' inclusivo
   dueEnd: z.iso.date(), // 'YYYY-MM-DD' exclusivo
   status: z.string().min(1).optional(),
-  programId: z.uuid().optional(), // → program_ref (fonte autoritativa; o front derivava do plano)
-  accountId: z.uuid().optional(), // → debit_account_ref
-  categoryId: z.uuid().optional(), // → category_ref
-  subCategoryId: z.uuid().optional(), // → subcategory_ref
+  programId: uuidV4().optional(), // → program_ref (fonte autoritativa; o front derivava do plano)
+  accountId: uuidV4().optional(), // → debit_account_ref
+  categoryId: uuidV4().optional(), // → category_ref
+  subCategoryId: uuidV4().optional(), // → subcategory_ref
 });
 
 export type AnalysisQueryDto = z.infer<typeof analysisQuerySchema>;
@@ -490,7 +492,7 @@ export type RealizedReportResponseDto = z.infer<typeof realizedReportResponseSch
 // desconhecido vira 400.
 export const dashboardRealizedQuerySchema = z
   .object({
-    budgetPlanId: z.uuid(),
+    budgetPlanId: uuidV4(),
     year: z.coerce.number().int(),
   })
   .strict();
