@@ -8,6 +8,7 @@
 
 import * as z from 'zod/v4';
 
+import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
 import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';
 
 const LIST_LIMIT_MAX = 100;
@@ -48,7 +49,7 @@ export const serviceRatingsSchema = z
 
 /** Param `:id` — UUID do fornecedor (core-api). Formato inválido → 400. */
 export const supplierIdParamSchema = z.object({
-  id: z.uuid().meta({ description: 'UUID do fornecedor (core-api)' }),
+  id: uuidV4().meta({ description: 'UUID do fornecedor (core-api)' }),
 });
 
 const bankAccountSchema = z.object({
@@ -72,7 +73,7 @@ const pixKeySchema = z.object({
  * existe para pessoa física, e `null` é como o JSON diz "ausente" (nunca sentinela).
  */
 export const supplierDetailSchema = z.object({
-  id: z.uuid(),
+  id: uuidV4(),
   legacyId: z.number().int().nullable(),
   name: z.string(),
   email: z.string(),
@@ -219,7 +220,7 @@ export type UpdateSupplierBody = z.infer<typeof updateSupplierBodySchema>;
  * escrita — deliberado, anti-DoS). Fundamento: OWASP AI Exchange, l.3735.
  */
 export const suppliersBatchBodySchema = z.object({
-  refs: z.array(z.uuid()).min(1).max(200),
+  refs: z.array(uuidV4()).min(1).max(200),
 });
 
 export type SuppliersBatchBody = z.infer<typeof suppliersBatchBodySchema>;
@@ -230,7 +231,7 @@ export type SuppliersBatchBody = z.infer<typeof suppliersBatchBodySchema>;
  * segunda linha de defesa: o serializer Zod descarta qualquer campo fora daqui.
  */
 const supplierBatchItemSchema = z.object({
-  ref: z.uuid(),
+  ref: uuidV4(),
   name: z.string(),
   taxId: z.string(),
   serviceCategory: z.string(),
@@ -239,7 +240,7 @@ const supplierBatchItemSchema = z.object({
 /** Resposta do POST /partners/suppliers:batch — `items` sem ordem garantida + `missing` (refs sem registro). */
 export const suppliersBatchResponseSchema = z.object({
   items: z.array(supplierBatchItemSchema),
-  missing: z.array(z.uuid()),
+  missing: z.array(uuidV4()),
 });
 
 export type SuppliersBatchResponseDto = z.infer<typeof suppliersBatchResponseSchema>;
