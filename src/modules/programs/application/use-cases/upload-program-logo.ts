@@ -31,8 +31,18 @@ const startsWith = (bytes: Uint8Array, sig: readonly number[], offset = 0): bool
  * Confere a assinatura real dos bytes contra o mimeType declarado: defesa em profundidade contra
  * content-type spoofing (CWE-434). O mimeType vem do cliente e não prova nada sobre o conteúdo —
  * as rotas-irmãs (foto de usuário, documentos) já checam magic-bytes; o logo precisa do mesmo.
- * MIME fora de jpeg/png/webp devolve `true` — a allowlist de MIME é barrada antes, por ALLOWED_MIME.
+ * MIME fora de jpeg/png/webp devolve `false` (fail-closed) — e isso é inalcançável hoje, porque
+ * `ALLOWED_MIME` barra antes, no começo do use case. A ordem importa: ver a nota abaixo.
  */
+// ⚠️ O `default` é fail-CLOSED de propósito, e só PODE ser porque aqui a allowlist roda ANTES
+// (`ALLOWED_MIME`, na entrada do use case). O perigo não é o código de hoje: é o dia em que
+// alguém acrescentar um MIME à allowlist e esquecer a assinatura — com `return true`, aquele
+// MIME passaria a aceitar conteúdo falsificado em silêncio (CWE-434, exatamente o defeito que
+// esta função veio corrigir). Fail-closed troca isso por um 422 visível no primeiro upload.
+//
+// A função irmã em `auth/adapters/http/photo-upload.ts` é fail-OPEN, e está certa em ser: lá o
+// magic-byte roda na borda e a allowlist só no use case, então fechar o default trocaria o
+// código de erro da API. Alinhar as duas exige alinhar a ORDEM primeiro.
 // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
 const imageMagicBytesMatch = (mimeType: string, bytes: Uint8Array): boolean => {
   switch (mimeType) {
@@ -43,7 +53,7 @@ const imageMagicBytesMatch = (mimeType: string, bytes: Uint8Array): boolean => {
     case 'image/webp':
       return startsWith(bytes, RIFF_SIGNATURE) && startsWith(bytes, WEBP_SIGNATURE, 8);
     default:
-      return true;
+      return false;
   }
 };
 

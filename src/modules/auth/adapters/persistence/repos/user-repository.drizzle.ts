@@ -4,7 +4,8 @@
 //   1. Timestamps: `now = clock.now()` injetado no topo do save (testavel).
 //   2. Upsert auth_user: SELECT FOR UPDATE -> UPDATE ou INSERT (ADR-0020 — sem ODKU).
 //   3. Replace auth_user_role: DELETE WHERE user_id + INSERT batch (skip se vazio).
-//   4. isEmailDupEntry: errno===1062 E sqlMessage.includes('auth_user_email_idx').
+//   4. isEmailDupEntry: errno===1062 E sqlMessage inclui o nome do indice de email
+//      (AUTH_USER_UNIQUE_INDEX.email — fonte unica; nao repetir o literal aqui).
 //   5. Reidratacao: 3 queries separadas (Q1/Q2/Q3). inArray na Q3. Skip Q3 se sem roles.
 //   6. buildUser: mapper userFromRows -> Result; falha -> user-repo-unavailable.
 //
@@ -25,6 +26,7 @@ import type { UserId } from '../../../domain/identity/user-id.ts';
 import type { Email } from '../../../domain/identity/email.ts';
 import type { Clock } from '../../../../../shared/ports/clock.ts';
 import type { AuthMysqlHandle } from '../drivers/mysql-driver.ts';
+import { AUTH_USER_UNIQUE_INDEX } from '../schemas/mysql.ts';
 import {
   userFromRows,
   userToInsert,
@@ -34,8 +36,9 @@ import {
 
 // ─── ER_DUP_ENTRY detection ────────────────────────────────────────────────────
 //
-// Blueprint §4: isEmailDupEntry = errno===1062 E sqlMessage.includes('auth_user_email_idx').
-// Distingue o dup do email (unico que retorna email-already-registered) do dup de PK
+// Blueprint §4: isEmailDupEntry = errno===1062 E a sqlMessage inclui o nome do indice de email,
+// que vem de AUTH_USER_UNIQUE_INDEX (fonte unica — o literal nao se repete aqui).
+// Distingue o dup do email (unico que retorna email-already-registered) e o do cpf do dup de PK
 // (corrida de inserts com mesmo id -> user-repo-unavailable).
 // Verifica tanto o erro direto quanto o cause (Drizzle pode encadear o mysql2 err).
 
@@ -56,18 +59,21 @@ const getDupEntryInfo = (e: unknown): { errno: number; sqlMessage: string } | nu
   return null;
 };
 
+// O nome do índice vem de `AUTH_USER_UNIQUE_INDEX` (schemas/mysql.ts), não de string escrita
+// aqui: é o nome que distingue QUAL unicidade quebrou dentro do errno 1062, e um
+// `drizzle-kit generate` que o renomeasse quebraria a tradução em silêncio — o 409 viraria 500.
 const isEmailDupEntry = (e: unknown): boolean => {
   const info = getDupEntryInfo(e);
   if (info === null) return false;
-  return info.sqlMessage.includes('auth_user_email_idx');
+  return info.sqlMessage.includes(AUTH_USER_UNIQUE_INDEX.email);
 };
 
-// Mesma distinção, para o UNIQUE de CPF (auth_user_cpf_idx): errno 1062 no índice do CPF
-// -> cpf-already-registered. Separado do email porque os dois têm código de erro distinto.
+// Mesma distinção, para o UNIQUE de CPF: errno 1062 no índice do CPF -> cpf-already-registered.
+// Separado do email porque os dois têm código de erro distinto na borda.
 const isCpfDupEntry = (e: unknown): boolean => {
   const info = getDupEntryInfo(e);
   if (info === null) return false;
-  return info.sqlMessage.includes('auth_user_cpf_idx');
+  return info.sqlMessage.includes(AUTH_USER_UNIQUE_INDEX.cpf);
 };
 
 // ─── safe wrapper ──────────────────────────────────────────────────────────────
