@@ -3,8 +3,8 @@
  *
  * Molde: tests/cleanup/*.test.ts (varrem o fonte e exigem um estado desejado).
  *
- * As três flags que 45 dos 64 scripts carregavam foram medidas no runtime do `devEngines`
- * (24.21.0) em 06/10/2026, e nenhuma fazia diferença:
+ * DUAS flags que 45 dos 64 scripts carregavam foram medidas no runtime do `devEngines` (24.21.0)
+ * em 06/10/2026 e não faziam diferença:
  *
  *   `--experimental-strip-types`  O stripping é DEFAULT desde o Node 23.6 (backport em 22.18) — a
  *                                 prova no `--help` é existir `--no-strip-types` como negação. O
@@ -13,25 +13,36 @@
  *   `--no-warnings`               Existia para silenciar o `ExperimentalWarning` do stripping. Sem
  *                                 a flag, a execução de script real e de `node --test` emite
  *                                 **zero** linha em stderr. Mantê-la passou a significar engolir
- *                                 `DeprecationWarning` futuro em 45 comandos.
- *   `--enable-source-maps`        O stripping troca tipo por espaço em branco, então a posição no
- *                                 `.ts` é preservada e o stack trace sai idêntico com e sem a
- *                                 flag (medido: mesmo `arquivo.ts:27:9`). E **nenhuma** das 10
- *                                 dependências de produção publica `.js.map` — a flag não tinha
- *                                 alvo algum neste repositório.
+ *                                 `DeprecationWarning` futuro em 45 comandos — o canal pelo qual
+ *                                 o Node anuncia o que quebra na próxima major.
  *
- * Este gate existe porque flag redundante não dá sintoma: ela não falha, não avisa e é copiada por
- * imitação do script vizinho — foi exatamente assim que chegou a 45. O custo não é performance, é
- * que `--no-warnings` **esconde** aviso de depreciação real, que é o canal pelo qual o Node avisa
- * o que vai quebrar na próxima major. Ver
+ * ## `--enable-source-maps` NÃO entra nesta lista, e a correção é o registro mais útil deste
+ * ## arquivo
+ *
+ * A primeira versão deste gate também a proibia, com a justificativa de que "nenhuma das 10
+ * dependências de produção publica `.js.map`". **Era falso, e por erro de medição:** o `find`
+ * rodou sem `-L`, e `node_modules/<dep>` é SYMLINK sob pnpm — a varredura nunca desceu no alvo.
+ * Medido de novo com `find -L`: `drizzle-orm` publica **444** arquivos `.js.map` e
+ * `fast-xml-parser` mais 4.
+ *
+ * O efeito é real e reproduzível num erro lançado dentro da lib:
+ *
+ *   sem a flag:  at getTableColumns (…/drizzle-orm/utils.js:109:15)
+ *   com a flag:  at getTableColumns (…/drizzle-orm/src/utils.ts:208:9)
+ *
+ * O raciocínio original — "o stripping preserva a posição no `.ts`" — está certo para o código
+ * DESTE repositório, e é justamente por isso que enganou: a flag nunca serviu a ele. Serve às
+ * dependências que publicam mapa, e `drizzle-orm` é a mais usada do projeto (183 imports). Por
+ * isso ela FICA em todo comando, e um gate que a proibisse travaria a volta de algo necessário.
+ *
+ * Este gate existe porque flag redundante não dá sintoma: não falha, não avisa e é copiada por
+ * imitação do script vizinho — foi assim que chegou a 45. Ver
  * [ADR-0073](../../handbook/architecture/adr/0073-nvmrc-single-source-supersedes-0058-partial.md)
- * para a disciplina de subida de runtime que torna essa informação acionável.
+ * para a disciplina de subida de runtime que torna o aviso de depreciação acionável.
  *
- * ⚠️ Este gate cobre o `package.json` — **não** os outros pontos que invocam `node` com flag
- * (`Dockerfile`/`NODE_OPTIONS`, `compose.yaml`, `Procfile`, `scripts/e2e/*.sh`, `.githooks/`,
- * `.claude/hooks/`, spawns em `scripts/ci/test-integration.ts`). Eles são frente própria e seguem
- * citando as flags; cobrá-los aqui deixaria o gate vermelho sem que o diff do manifesto esteja
- * errado.
+ * A varredura cobre o `package.json` **e** os demais pontos que invocam `node`, porque a flag
+ * morava neles também — `Procfile` e `.githooks/` entre eles. Cobrir só o manifesto deixaria a
+ * `rules/testing.md` prometendo por escrito uma garantia que o gate não dava.
  */
 
 import { describe, it } from 'node:test';
@@ -47,29 +58,88 @@ const REDUNDANT: Readonly<Record<string, string>> = {
   '--no-warnings':
     'sem o ExperimentalWarning do stripping não sobra aviso algum para silenciar — e a flag ' +
     'engoliria DeprecationWarning, que é como o Node anuncia o que quebra na próxima major',
-  '--enable-source-maps':
-    'o stripping preserva a posição no .ts (trace idêntico com e sem a flag) e nenhuma dep de ' +
-    'produção publica .js.map',
 };
+
+/**
+ * Onde a flag morava, além do manifesto. São os pontos que INVOCAM `node`; documentação fica de
+ * fora porque `handbook/specs/` e `handbook/interviews/` são acervo datado, onde a citação da
+ * flag é registro histórico e não instrução.
+ */
+const INVOCATION_POINTS: readonly string[] = [
+  'package.json',
+  'Dockerfile',
+  'Procfile',
+  'compose.yaml',
+  'scripts/ci/test-integration.ts',
+  'scripts/e2e/auth.sh',
+  'scripts/e2e/bruno-all.sh',
+  'scripts/e2e/collaborators.sh',
+  'scripts/e2e/contracts.sh',
+  '.githooks/commit-msg',
+  '.claude/hooks/pre-commit-tombstone.sh',
+  '.claude/hooks/regen-inquiry-index.sh',
+];
 
 const scripts = (): Readonly<Record<string, string>> =>
   (JSON.parse(readSource('package.json')) as { scripts: Record<string, string> }).scripts;
 
-describe('NODE-FLAGS — nenhum script passa flag que o Node 24 já dá por padrão', () => {
+/**
+ * Linhas de CÓDIGO do arquivo — comentário fora.
+ *
+ * A distinção não é preciosismo: na primeira execução deste gate ampliado, `Dockerfile` e
+ * `scripts/ci/test-integration.ts` foram acusados porque **documentam** a remoção das flags em
+ * comentário. Um gate que varre por nome reprova justamente o arquivo que explica a norma — a
+ * armadilha que `tests/support/source-scan.ts` registra no próprio docstring, e que este gate
+ * repetiu por usar `includes` sobre o texto cru.
+ *
+ * Cobre as duas sintaxes dos pontos de invocação: `#` (Dockerfile, shell, Procfile, YAML) e `//`
+ * (TypeScript). O `package.json` não tem comentário e passa inteiro, como deve.
+ */
+const codeLines = (path: string): readonly string[] =>
+  readSource(path)
+    .split('\n')
+    .filter((line) => {
+      const t = line.trimStart();
+      return !t.startsWith('#') && !t.startsWith('//') && !t.startsWith('*');
+    });
+
+const usesFlag = (path: string, flag: string): boolean =>
+  codeLines(path).some((line) => line.includes(flag));
+
+describe('NODE-FLAGS — nenhum ponto de invocação passa flag que o Node 24 já dá', () => {
   for (const [flag, why] of Object.entries(REDUNDANT)) {
-    it(`${flag} não aparece em script algum`, () => {
-      const offenders = Object.entries(scripts())
-        .filter(([, body]) => body.includes(flag))
-        .map(([name]) => name)
-        .sort();
+    it(`${flag} não aparece em ponto de invocação algum`, () => {
+      const offenders = INVOCATION_POINTS.filter((path) => usesFlag(path, flag)).sort();
       assert.deepEqual(
         offenders,
         [],
-        `${offenders.length} script(s) passam \`${flag}\`: ${offenders.join(', ')}.\n` +
+        `${offenders.length} arquivo(s) passam \`${flag}\`: ${offenders.join(', ')}.\n` +
           `Redundante porque ${why}.`,
       );
     });
   }
+
+  /**
+   * Entrada morta na lista é tão ruim quanto ponto não coberto: o arquivo some, o `readSource`
+   * estoura, e quem for mexer culpa o gate em vez da lista. A `rules/testing.md` afirma que a
+   * remoção vale para TODO comando do repositório — esta lista é o que sustenta a frase.
+   */
+  it('todo ponto de invocação listado existe', () => {
+    const missing = INVOCATION_POINTS.filter((path) => {
+      try {
+        readSource(path);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    assert.deepEqual(
+      missing,
+      [],
+      `caminho(s) na lista que não existem mais: ${missing.join(', ')}. Remover da lista ou ` +
+        'corrigir o caminho — entrada morta faz o gate falhar por motivo errado.',
+    );
+  });
 
   /**
    * Guarda contra verde por vacuidade. Sem ela, renomear `scripts` no manifesto (ou um erro de

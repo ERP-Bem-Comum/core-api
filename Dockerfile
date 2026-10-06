@@ -108,18 +108,24 @@ LABEL org.opencontainers.image.title="core-api" \
 # Variáveis de runtime.
 # - NODE_ENV=production: stripping de warnings, otimizações.
 #
-# NÃO há mais NODE_OPTIONS nem NODE_NO_WARNINGS aqui, e as duas remoções foram medidas no runtime
-# do `devEngines` (ver `tests/cleanup/node-flags-not-redundant.test.ts`):
+# Saíram daqui `--experimental-strip-types` e `NODE_NO_WARNINGS=1`/`--no-warnings`, medidos no
+# runtime do `devEngines` (ver `tests/cleanup/node-flags-not-redundant.test.ts`):
 #   - `--experimental-strip-types` é redundante: o stripping é DEFAULT desde o Node 23.6 — a prova
 #     é `--no-strip-types` existir como negação no `--help`. O ENTRYPOINT abaixo executa `.ts`
-#     direto, sem flag, porque o runtime já faz isso.
+#     direto porque o runtime já faz isso.
 #   - `NODE_NO_WARNINGS=1` + `--no-warnings` existiam para calar o `ExperimentalWarning` do
 #     stripping, que não é mais emitido. Mantê-los passou a significar **engolir
 #     `DeprecationWarning` em produção** — justamente o canal pelo qual o Node anuncia o que
 #     quebra na próxima major, e a informação que torna acionável a disciplina de subida de
-#     runtime do ADR-0073. Em contêiner, esse aviso vai para o stderr → log do ECS, que é onde
-#     deveria ter estado desde sempre.
-ENV NODE_ENV=production
+#     runtime do ADR-0073. Em contêiner, esse aviso vai para o stderr → log do ECS.
+#
+# `--enable-source-maps` FICA, e a razão é medida: `drizzle-orm` publica 444 arquivos `.js.map`
+# (mais 4 em `fast-xml-parser`). Sem a flag, um erro dentro da lib reporta o `.js` empacotado
+# (`drizzle-orm/utils.js:109`); com ela, o `.ts` de origem (`src/utils.ts:208`). O código DESTE
+# repositório não precisa dela — o type stripping preserva a posição —, mas ela nunca serviu a
+# ele: serve às dependências que publicam mapa, e é em produção que o stack trace importa.
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--enable-source-maps"
 
 # Copia node_modules do estágio deps.
 COPY --from=deps /app/node_modules ./node_modules

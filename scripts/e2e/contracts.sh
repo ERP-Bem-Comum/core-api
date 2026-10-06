@@ -39,7 +39,7 @@ e2e_compose up -d mysql --wait || exit 1
 
 # Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
 MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
-  node src/jobs/migrate/run.ts || exit 1
+  node --enable-source-maps src/jobs/migrate/run.ts || exit 1
 
 # Servidor real em background (applyMigrations:false — schema já provisionado). Semeia o operador
 # RBAC (CORE_API_E2E=1 + AUTH_SEED_JSON). Dual-pool: writer=root, reader=readonly_bi (SELECT-only).
@@ -60,10 +60,10 @@ S3_REGION=us-east-1 \
   AUTH_SEED_JSON='{"users":[{"email":"e2e-operator@example.com","password":"Str0ng-Passphrase-2026!","permissions":["contract:read","contract:write"]}]}' \
   PORT=3100 \
   LOG_LEVEL=warn \
-  node src/server.ts &
+  node --enable-source-maps src/server.ts &
 SRV=$!
 disown "$SRV" 2>/dev/null || true
 
 # Smoke via fetch — espera o /health no before(); seu exit code vira o do script (trap preserva).
 E2E_BASE_URL=http://127.0.0.1:3100 \
-  node --test tests/e2e/contracts-smoke.e2e.ts
+  node --enable-source-maps --test tests/e2e/contracts-smoke.e2e.ts

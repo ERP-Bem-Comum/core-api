@@ -67,7 +67,7 @@ type BootResult = Readonly<{ code: number | null; signal: NodeJS.Signals | null;
  */
 const bootServer = (env: Readonly<Record<string, string>>): Promise<BootResult> =>
   new Promise((resolvePromise) => {
-    const child = spawn(process.execPath, [SERVER], {
+    const child = spawn(process.execPath, ['--enable-source-maps', SERVER], {
       cwd: REPO_ROOT,
       env: { PATH: process.env['PATH'] ?? '', ...env },
     });

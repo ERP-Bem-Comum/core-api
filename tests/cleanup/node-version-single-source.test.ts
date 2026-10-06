@@ -191,6 +191,31 @@ describe('NODE-VERSION-SINGLE-SOURCE — o CI lê a fonte em vez de repetir o n�
     );
   });
 
+  /**
+   * O critério é QUEM RODA Node, não quem já declara `setup-node` — e a diferença não é teórica:
+   * `audit.yml` executava `corepack enable` + `pnpm audit` sem declarar runtime algum, caindo no
+   * Node pré-instalado da imagem do runner. É precisamente o "o CI escolhe sozinho" que o
+   * ADR-0073 §2 encerra, e um gate que varresse só quem tem `setup-node` seria cego justamente
+   * para o workflow em falta.
+   */
+  const RUNS_NODE = /^\s+run:.*\b(node|pnpm|npx|corepack)\b/m;
+
+  it('todo workflow que roda Node declara o runtime por setup-node', () => {
+    const offenders = workflows
+      .filter((f) => {
+        const body = readSource(f);
+        return RUNS_NODE.test(body) && !body.includes('actions/setup-node');
+      })
+      .sort();
+    assert.deepEqual(
+      offenders,
+      [],
+      `workflow(s) executando Node sem declarar a versão: ${offenders.join(', ')}. Sem ` +
+        '`setup-node` + `node-version-file: .nvmrc`, o job roda no Node pré-instalado do runner, ' +
+        'que muda sem aviso e sem diff.',
+    );
+  });
+
   for (const workflow of workflows) {
     const body = readSource(workflow);
     if (!body.includes('actions/setup-node')) continue;

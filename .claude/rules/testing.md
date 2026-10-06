@@ -15,7 +15,7 @@ verify:
     expect: ['scripts/handbook/link-scan.ts']
 ---
 
-Runner: Node test runner nativo, executando `.ts` direto — **sem flag**: o type stripping é default desde o Node 23.6, e `--experimental-strip-types`/`--enable-source-maps`/`--no-warnings` foram removidos de todos os comandos do repositório (medição em `tests/cleanup/node-flags-not-redundant.test.ts`, que impede o retorno). O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras de lint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`) estão no `.oxlintrc.json`, no override `files: ['tests/**/*.ts']`; o `naming-convention`, que o oxlint não tem, fica de fora de `tests/` no próprio gate `tests/cleanup/lint-gaps.test.ts`.
+Runner: Node test runner nativo, executando `.ts` direto. O type stripping é default desde o Node 23.6, e `--experimental-strip-types`/`--no-warnings` foram removidos de todos os pontos de invocação do repositório — `tests/cleanup/node-flags-not-redundant.test.ts` cobra cada um e impede o retorno. **`--enable-source-maps` permanece**, e não por inércia: `drizzle-orm` publica 444 `.js.map`, e sem a flag um erro dentro da lib reporta o `.js` empacotado em vez do `.ts` de origem. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras de lint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`) estão no `.oxlintrc.json`, no override `files: ['tests/**/*.ts']`; o `naming-convention`, que o oxlint não tem, fica de fora de `tests/` no próprio gate `tests/cleanup/lint-gaps.test.ts`.
 
 ## Quatro naturezas de arquivo, e só uma roda no gate
 
