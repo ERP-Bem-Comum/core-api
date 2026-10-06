@@ -64,6 +64,15 @@ const REDUNDANT: Readonly<Record<string, string>> = {
  * Onde a flag morava, além do manifesto. São os pontos que INVOCAM `node`; documentação fica de
  * fora porque `handbook/specs/` e `handbook/interviews/` são acervo datado, onde a citação da
  * flag é registro histórico e não instrução.
+ *
+ * O critério de entrada é EXECUTAR o runtime, não citá-lo: `block-npm.sh` e
+ * `block-inline-interpreter.sh` falam de `node` e `pnpm` dezenas de vezes no texto de ajuda que
+ * imprimem, e nenhuma dessas linhas invoca coisa alguma. Lista por menção acusaria justamente os
+ * arquivos que explicam a norma — a mesma armadilha que o `codeLines` abaixo registra.
+ *
+ * ⚠️ A lista é mantida à mão, e o caso `todo ponto de invocação listado existe` só guarda contra
+ * entrada MORTA — nada guarda contra entrada AUSENTE. Os três hooks de `.claude/hooks/` entraram
+ * em 06/10 por terem sido encontrados numa revisão, não pelo gate.
  */
 const INVOCATION_POINTS: readonly string[] = [
   'package.json',
@@ -77,6 +86,9 @@ const INVOCATION_POINTS: readonly string[] = [
   '.githooks/commit-msg',
   '.claude/hooks/pre-commit-tombstone.sh',
   '.claude/hooks/regen-inquiry-index.sh',
+  '.claude/hooks/pre-commit-typecheck.sh',
+  '.claude/hooks/stop-quality-gate.sh',
+  '.claude/hooks/prettier-write.sh',
 ];
 
 const scripts = (): Readonly<Record<string, string>> =>

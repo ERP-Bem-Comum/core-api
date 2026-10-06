@@ -65,20 +65,43 @@ const trackedTs = (): ReadonlySet<string> =>
       .filter((p) => p.endsWith('.ts') && !IGNORED_PREFIXES.some((d) => p.startsWith(d))),
   );
 
-const scan = (): Readonly<{ scanned: number; findings: readonly Located[] }> => {
+/**
+ * `unscanned` é o que separa este gate de um verde por vacuidade: são os `.ts` **versionados** que
+ * o programa do TypeScript não entrega, por caírem fora dos globs de `include` do `tsconfig.json`.
+ * Arquivo assim é rastreado e nunca varrido — escapa do banimento de `class` e da convenção de
+ * nomes sem que nada acuse.
+ *
+ * A guarda anterior era `scanned > 1500`, um limiar: com 2041 arquivos hoje, dezenas poderiam
+ * escapar sem derrubar o número. Contagem não é a propriedade — a propriedade é **nenhum arquivo
+ * versionado de fora**, e é ela que se afirma aqui (rule `testing.md`).
+ */
+const scan = (): Readonly<{
+  scanned: number;
+  trackedCount: number;
+  unscanned: readonly string[];
+  findings: readonly Located[];
+}> => {
   const tracked = trackedTs();
   const rel = (abs: string): string => abs.slice(PROJECT_ROOT.length + 1);
   return withProject(
     join(PROJECT_ROOT, 'tsconfig.json'),
     (abs) => tracked.has(rel(abs)),
-    (files) => ({
-      scanned: files.length,
-      findings: files.flatMap((sf) => {
-        const file = rel(sf.fileName);
-        const naming = file.startsWith('tests/') ? [] : findNaming(sf);
-        return [...findClasses(sf), ...findMemberOrder(sf), ...naming].map((f) => ({ ...f, file }));
-      }),
-    }),
+    (files) => {
+      const seen = new Set(files.map((sf) => rel(sf.fileName)));
+      return {
+        scanned: files.length,
+        trackedCount: tracked.size,
+        unscanned: [...tracked].filter((p) => !seen.has(p)).sort(),
+        findings: files.flatMap((sf) => {
+          const file = rel(sf.fileName);
+          const naming = file.startsWith('tests/') ? [] : findNaming(sf);
+          return [...findClasses(sf), ...findMemberOrder(sf), ...naming].map((f) => ({
+            ...f,
+            file,
+          }));
+        }),
+      };
+    },
   );
 };
 
@@ -90,7 +113,7 @@ const report = (xs: readonly Located[]): string =>
   xs.map((f) => `${f.file}:${String(f.line)}  ${f.name} — ${f.detail}`).join('\n');
 
 describe('LINT-GAPS — class, casing e ordem de membros', () => {
-  const { scanned, findings } = scan();
+  const { trackedCount, unscanned, findings } = scan();
 
   it('nenhuma classe no repositório', () => {
     const offenders = findings.filter((f) => f.rule === 'no-class');
@@ -114,8 +137,23 @@ describe('LINT-GAPS — class, casing e ordem de membros', () => {
     assert.deepEqual(stale, [], 'Exceção que não corresponde a nenhum achado — remover da lista');
   });
 
-  it('a varredura enxerga o repositório (guarda contra verde por vacuidade)', () => {
-    assert.ok(scanned > 1500, `esperado 1500+ arquivos, a API devolveu ${String(scanned)}`);
+  it('o git devolve fontes versionadas (guarda contra verde por lista vazia)', () => {
+    assert.ok(
+      trackedCount > 0,
+      '`git ls-files` não devolveu `.ts` algum — sem isso, os casos abaixo comparam conjuntos ' +
+        'vazios e passam sem verificar nada.',
+    );
+  });
+
+  it('todo `.ts` versionado entra na varredura (guarda contra verde por vacuidade)', () => {
+    assert.deepEqual(
+      unscanned,
+      [],
+      `${String(unscanned.length)} de ${String(trackedCount)} arquivo(s) versionado(s) ficaram ` +
+        `fora do programa do TypeScript:\n${unscanned.join('\n')}\n\n` +
+        'Eles escapam do banimento de `class` e da convenção de nomes sem acusar. Ou o arquivo ' +
+        'entra num glob de `include` do tsconfig.json, ou entra em IGNORED_PREFIXES com o motivo.',
+    );
   });
 
   it('o `typescript` está em versão EXATA (ADR-0072 D4)', () => {

@@ -197,8 +197,20 @@ describe('NODE-VERSION-SINGLE-SOURCE — o CI lê a fonte em vez de repetir o n�
    * Node pré-instalado da imagem do runner. É precisamente o "o CI escolhe sozinho" que o
    * ADR-0073 §2 encerra, e um gate que varresse só quem tem `setup-node` seria cego justamente
    * para o workflow em falta.
+   *
+   * O padrão cobre as QUATRO formas em que a invocação aparece, porque varrer só uma delas é
+   * aprovar por vacuidade quem usa as outras — e a versão anterior varria uma só, `run:` em linha
+   * própria. Media em 06/10: ela não casava nem `- run: pnpm install`, a forma mais comum, nem
+   * `run: |` com o comando na linha seguinte; `audit.yml` só foi pego porque, além dos três blocos
+   * escalares, tinha um `run: corepack enable` numa linha. Nenhum workflow de hoje depende da
+   * diferença (os 9 recebem o mesmo veredito nas duas versões): o buraco era latente, e o próximo
+   * workflow escrito com bloco escalar o tornaria vivo com o gate verde.
+   *
+   * O `\b` imediatamente após o prefixo opcional é o que mantém a precisão: `name: valida o pnpm`,
+   * `# pnpm install` e `uses:` não casam, porque neles o comando não abre a linha nem segue um
+   * `run:`.
    */
-  const RUNS_NODE = /^\s+run:.*\b(node|pnpm|npx|corepack)\b/m;
+  const RUNS_NODE = /^\s+(-\s+)?(run:\s*\|?.*)?\b(node|pnpm|npx|corepack)\b/m;
 
   it('todo workflow que roda Node declara o runtime por setup-node', () => {
     const offenders = workflows

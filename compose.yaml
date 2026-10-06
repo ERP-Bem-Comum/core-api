@@ -438,8 +438,11 @@ services:
   # hardening (no-new-privileges, cap_drop ALL, read_only, tmpfs /tmp), network
   # core-api, depends_on mysql+http healthy (schema migrado). WORKER_GROUP via
   # environment; DATABASE_URLs injetadas por wrapper sh + $(cat /run/secrets/...)
-  # + exec tini. Sem NODE_OPTIONS: o stripping de tipos é default no Node 24, então o `node` da
-  # imagem executa `.ts` sem flag. read_only: strip-types não grava em disco; mysql2 é JS puro.
+  # + exec tini. Nenhum serviço daqui declara NODE_OPTIONS: o stripping de tipos é default no
+  # Node 24, então o `node` da imagem executa `.ts` sem flag. O que vale em runtime é o
+  # NODE_OPTIONS="--enable-source-maps" do Dockerfile (ENV, linha 128), herdado por todos — a
+  # variável não está vazia, só não carrega flag de strip-types. read_only: strip-types não grava
+  # em disco; mysql2 é JS puro.
   # ──────────────────────────────────────────────────────────────────────────
 
   # Grupo A — outbox (contracts + partners). 1 pool compartilhado.
