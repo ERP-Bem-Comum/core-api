@@ -19,6 +19,13 @@ export default tseslint.config(
       // tools/bugs-scripts/ — scripts de diagnóstico black-box descartáveis
       // (já gitignored); não entram em nenhum tsconfig (projectService falha).
       'tools/bugs-scripts/**',
+      // .tmp/ — scratchpad DENTRO do repositório (gitignored). É onde script de
+      // medição/conversão tem de viver: no scratchpad da sessão o ESM resolve pelo path
+      // do ARQUIVO e dá MODULE_NOT_FOUND nos imports do projeto. Mesmo caso de
+      // tools/bugs-scripts/ acima — descartável, fora de qualquer tsconfig, o
+      // projectService type-aware falha. Sem esta linha, todo script ad-hoc em .tmp/
+      // reprova o `lint` e trava o gate do hook Stop.
+      '.tmp/**',
       // handbook/specs/ guarda o histórico de especificação das features. Os
       // contracts/*.ts de lá são esboços de port para documentar design — nunca
       // entraram em tsconfig algum, e o projectService type-aware falha neles.
