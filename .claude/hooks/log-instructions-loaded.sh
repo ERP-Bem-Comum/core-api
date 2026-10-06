@@ -15,12 +15,17 @@
 # Exit code: sempre 0 — observabilidade nunca bloqueia o trabalho.
 
 set -uo pipefail
+
+# Drena o stdin ANTES do primeiro `exit` — ver a nota longa em post-compact-rules-reminder.sh:
+# sair sem consumir o payload dá EPIPE em quem o escreve, de forma intermitente conforme o
+# tamanho couber ou não no buffer do pipe. Aqui o `cd` é a saída antecipada em questão.
+payload=$(cat 2>/dev/null || true)
+
 cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" || exit 0
 
 LOGFILE=".claude/.last-instructions.log"
 mkdir -p .claude
 
-payload=$(cat 2>/dev/null || true)
 [ -z "$payload" ] && exit 0
 
 printf '%s\t%s\n' "$(date -Iseconds)" "$payload" >> "$LOGFILE"
