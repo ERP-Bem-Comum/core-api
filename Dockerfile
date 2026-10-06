@@ -7,7 +7,7 @@
 # stage `deps` não precisa de toolchain C++.
 #
 # Camadas:
-#   1. base    — pin do node:24.15-bookworm-slim por digest (ADR-0011 supply chain)
+#   1. base    — pin do node:24.21-bookworm-slim por digest (ADR-0011 supply chain)
 #   2. deps    — instala dependências (sem toolchain C++)
 #   3. runtime — imagem final mínima, non-root, signal-safe
 #
@@ -32,10 +32,15 @@
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 1 — base
 # Pin: digest do índice multi-arch (amd64 + arm64), Debian 12 Bookworm Slim.
-# Para atualizar: `docker buildx imagetools inspect node:24.15-bookworm-slim --format '{{.Manifest.Digest}}'`
-# Digest atual (2026-06-07): sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d
+# Para atualizar: `docker buildx imagetools inspect node:24.21-bookworm-slim --format '{{.Manifest.Digest}}'`
+# Digest atual (2026-10-06): sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
+#
+# A major.minor desta tag é cobrada contra o `.nvmrc` por
+# `tests/cleanup/node-version-single-source.test.ts` — subir aqui sem subir lá (ou vice-versa) fica
+# vermelho no gate. O digest em si o teste NÃO cobra: a tag é reconstruída upstream a cada patch
+# de Debian, e digest errado já falha o build com `manifest unknown`.
 # ────────────────────────────────────────────────────────────────────────────
-FROM node:24.15-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d AS base
+FROM node:24.21-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
 
 # tini é o init mínimo (PID 1) para reaping de zumbis e forward de SIGTERM/SIGINT.
 # Disponível via apt em Debian — equivalente ao `apk add tini` do Alpine anterior.
@@ -86,7 +91,7 @@ LABEL org.opencontainers.image.title="core-api" \
       org.opencontainers.image.vendor="Envolve / Bem Comum" \
       org.opencontainers.image.source="https://github.com/envolve/bem-comum-core-api" \
       org.opencontainers.image.licenses="proprietary" \
-      org.opencontainers.image.base.name="docker.io/library/node:24.15-bookworm-slim"
+      org.opencontainers.image.base.name="docker.io/library/node:24.21-bookworm-slim"
 
 # Variáveis de runtime.
 # - NODE_ENV=production: stripping de warnings, otimizações.
