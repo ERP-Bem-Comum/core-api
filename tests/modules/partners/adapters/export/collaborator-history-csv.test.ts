@@ -22,6 +22,8 @@ const entry = (over: Partial<CollaboratorHistoryEntry>): CollaboratorHistoryEntr
   valueBefore: 'Diretor',
   valueAfter: 'Diretor Adjunto',
   occurredAt: new Date('2026-01-10T08:00:00.000Z'),
+  changedByUserId: null,
+  changedByName: null,
   ...over,
 });
 
@@ -38,11 +40,30 @@ const group = (over: Partial<CollaboratorHistoryGroup> = {}): CollaboratorHistor
 });
 
 const HEADER =
-  'nome;email;cpf;programa;inicio_contrato;tipo_alteracao;historico_antes;historico_depois;data_alteracao';
+  'nome;email;cpf;programa;inicio_contrato;tipo_alteracao;historico_antes;historico_depois;data_alteracao;alterado_por';
 
-describe('collaboratorHistoryToCsv (#126 — 9 colunas)', () => {
-  it('cabeçalho legado de 9 colunas', () => {
+describe('collaboratorHistoryToCsv (#126 — 9 colunas legadas + alterado_por #1029)', () => {
+  it('cabeçalho: 9 colunas legadas na ordem original + alterado_por no fim', () => {
     assert.ok(collaboratorHistoryToCsv([]).includes(HEADER));
+  });
+
+  it('#1029: alterado_por traz o nome do autor; vazio quando a linha não tem autor', () => {
+    const csv = collaboratorHistoryToCsv([
+      group({
+        entries: [
+          entry({ changedByUserId: 'u1', changedByName: 'Ana Revisora' }),
+          entry({
+            id: 'h2',
+            fieldLabel: 'Situação',
+            valueBefore: 'Active',
+            valueAfter: 'Inactive',
+          }),
+        ],
+      }),
+    ]);
+    const lines = csv.trim().split(/\r?\n/); // toCsv termina linhas em CRLF (RFC 4180)
+    assert.ok(lines[1]?.endsWith(';10/01/2026;Ana Revisora'), `autor ausente:\n${csv}`);
+    assert.ok(lines[2]?.endsWith(';10/01/2026;'), `linha sem autor deve terminar vazia:\n${csv}`);
   });
 
   it('linha combina identidade + alteração (programa preenchido, inicio_contrato dd/MM/aaaa)', () => {

@@ -59,6 +59,8 @@ export const createDrizzleCollaboratorHistory = (
           valueBefore: row.valueBefore,
           valueAfter: row.valueAfter,
           occurredAt: row.occurredAt,
+          changedByUserId: row.changedByUserId,
+          changedByName: row.changedByName,
         })),
       );
     } catch (cause) {

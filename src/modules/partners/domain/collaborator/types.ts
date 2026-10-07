@@ -111,6 +111,11 @@ export type EditCollaboratorInput = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  // #1029: ausente ou `null` MANTÉM o gravado; objeto valida e substitui. Remover não é suportado.
+  // ⚠️ Diverge do PUT do Fornecedor (lá `null` = sem dado) de propósito: o front em produção envia
+  // `null` em todo PUT de colaborador, e `null` = remover apagaria os dados bancários a cada edição.
+  bankAccount?: BankAccountInput | null | undefined;
+  pixKey?: PixKeyInput | null | undefined;
 }>;
 
 // Payload de auto-cadastro (campos pessoais; enums como string, validados no domínio).

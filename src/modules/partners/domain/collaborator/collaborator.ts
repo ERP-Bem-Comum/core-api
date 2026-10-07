@@ -63,6 +63,19 @@ const parsePaymentTargets = (
   return ok({ bankAccount: bank, pixKey: pix });
 };
 
+// Edição (#1029): ausente/null mantém o VO atual; objeto valida (mesma regra da criação) e substitui.
+const keepOrParseBankAccount = (
+  current: BankAccount | null,
+  input: BankAccountInput | null | undefined,
+): Result<BankAccount | null, PaymentTargetError> =>
+  input === undefined || input === null ? ok(current) : PaymentTarget.createBankAccount(input);
+
+const keepOrParsePixKey = (
+  current: PixKey | null,
+  input: PixKeyInput | null | undefined,
+): Result<PixKey | null, PaymentTargetError> =>
+  input === undefined || input === null ? ok(current) : PaymentTarget.createPixKey(input);
+
 export const register = (
   input: RegisterCollaboratorInput,
 ): Result<{ collaborator: ActiveCollaborator; event: CollaboratorEvent }, CollaboratorError> => {
@@ -142,7 +155,9 @@ export const register = (
 /**
  * Edição cadastral (PUT total): revalida os 7 campos cadastrais e os sobrescreve, **preservando**
  * via spread os campos pessoais, o `registrationStatus` e o estado de soft-delete (status/disableBy/
- * deactivatedAt). RBAC do campo vital (CPF) é decidido fora (use case/borda). Emite `CollaboratorEdited`.
+ * deactivatedAt). Banco/PIX (#1029): ausente ou `null` preserva; objeto valida e substitui — é o
+ * caminho para preencher os migrados do legado, que vieram sem. RBAC do campo vital (CPF) é decidido
+ * fora (use case/borda). Emite `CollaboratorEdited`.
  */
 export const edit = (
   collaborator: Collaborator,
@@ -163,6 +178,12 @@ export const edit = (
   const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
   if (!employmentRelationship.ok) return employmentRelationship;
 
+  const bankAccount = keepOrParseBankAccount(collaborator.bankAccount, input.bankAccount);
+  if (!bankAccount.ok) return bankAccount;
+
+  const pixKey = keepOrParsePixKey(collaborator.pixKey, input.pixKey);
+  if (!pixKey.ok) return pixKey;
+
   // Spread preserva pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
   const edited: Collaborator = immutable({
     ...collaborator,
@@ -173,6 +194,8 @@ export const edit = (
     role: input.role.trim(),
     startOfContract: input.startOfContract,
     employmentRelationship: employmentRelationship.value,
+    bankAccount: bankAccount.value,
+    pixKey: pixKey.value,
   });
 
   return ok({

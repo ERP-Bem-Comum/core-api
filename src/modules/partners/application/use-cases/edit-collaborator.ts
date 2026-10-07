@@ -20,10 +20,17 @@ import type {
   CollaboratorHistoryRepository,
   CollaboratorHistoryError,
 } from '#src/modules/partners/application/ports/collaborator-history.ts';
+import type { UserNameReader } from '#src/modules/partners/application/ports/user-name-reader.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/shared/payment-target.ts';
 
 export type EditCollaboratorCommand = Readonly<{
   collaboratorId: string;
   canEditSensitive: boolean;
+  /** Usuário autenticado que edita — autor das linhas de histórico (#1029). */
+  changedByUserId: string;
   name: string;
   email: string;
   cpf: string;
@@ -31,6 +38,9 @@ export type EditCollaboratorCommand = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  /** #1029: ausente ou `null` mantém o gravado; objeto valida e substitui. */
+  bankAccount?: BankAccountInput | null | undefined;
+  pixKey?: PixKeyInput | null | undefined;
 }>;
 
 export type EditCollaboratorError =
@@ -51,6 +61,7 @@ export type EditCollaboratorOutput = Readonly<{
 type Deps = Readonly<{
   collaboratorRepo: CollaboratorRepository;
   historyRepo: CollaboratorHistoryRepository;
+  userNameReader: UserNameReader;
   clock: Clock;
 }>;
 
@@ -78,6 +89,8 @@ export const editCollaborator =
         role: cmd.role,
         startOfContract: cmd.startOfContract,
         employmentRelationship: cmd.employmentRelationship,
+        bankAccount: cmd.bankAccount,
+        pixKey: cmd.pixKey,
       },
       now,
     );
@@ -106,13 +119,16 @@ export const editCollaborator =
     const saved = await deps.collaboratorRepo.save(next);
     if (!saved.ok) return saved;
 
-    // Audit trail (US4) — diff por campo, consistência forte (logo após o save).
+    // Audit trail (US4) — diff por campo, consistência forte (logo após o save). Autor (#1029): id
+    // sempre; nome no momento da ação, ou null se o auth não responder (não derruba a edição).
+    const userName = await deps.userNameReader.getUserName(cmd.changedByUserId);
     const recorded = await deps.historyRepo.record({
       collaboratorId: cmd.collaboratorId,
       eventType: 'CollaboratorEdited',
       before: current,
       after: next,
       occurredAt: now,
+      changedBy: { userId: cmd.changedByUserId, userName },
     });
     if (!recorded.ok) return recorded;
 

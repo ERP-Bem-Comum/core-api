@@ -9,6 +9,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
+import { ok } from '#src/shared/index.ts';
 import { buildApp } from '#src/shared/http/app.ts';
 import {
   authHttpPlugin,
@@ -40,6 +41,12 @@ const body = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+// #1029: port do auth injetado — qualquer usuário autenticado resolve para este nome.
+const EDITOR_NAME = 'Ana Revisora';
+const fakeAuthUserReadPort = {
+  getUserName: (id: string) => Promise.resolve(ok({ id, name: EDITOR_NAME })),
+};
+
 const makeApp = async () => {
   const authDeps = await buildAuthHttpDeps({
     driver: 'memory',
@@ -54,7 +61,10 @@ const makeApp = async () => {
       ],
     },
   });
-  const partnersDeps = await buildPartnersHttpDeps({ driver: 'memory' });
+  const partnersDeps = await buildPartnersHttpDeps({
+    driver: 'memory',
+    authUserReadPort: fakeAuthUserReadPort,
+  });
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
   const app = await buildApp({
     routes: [
@@ -74,7 +84,7 @@ const makeApp = async () => {
     await partnersDeps.shutdown();
     await authDeps.shutdown();
   };
-  return { app, teardown };
+  return { app, teardown, partnersDeps };
 };
 
 const login = async (app: Awaited<ReturnType<typeof buildApp>>, email: string): Promise<string> => {
@@ -203,6 +213,94 @@ describe('COLLABORATORS-HTTP-EDIT — PUT /api/v1/collaborators/:id', () => {
     const id = await create(app, token, {});
     assert.equal(await put(app, token, id, body({ name: '   ' })).then((r) => r.statusCode), 422);
     assert.equal(await put(app, token, id, body({ cpf: '123' })).then((r) => r.statusCode), 400);
+    await teardown();
+  });
+});
+
+// #1029 — banco/PIX no PUT. Os migrados do legado vieram sem; incluir e trocar passam por aqui.
+describe('COLLABORATORS-HTTP-EDIT — banco/PIX no PUT (#1029)', () => {
+  const BANK = { bank: '237', agency: '1234', accountNumber: '56789', checkDigit: '0' };
+  const PIX = { keyType: 'email', key: 'maria@bemcomum.org' };
+
+  const historyOf = async (
+    deps: Awaited<ReturnType<typeof makeApp>>['partnersDeps'],
+    id: string,
+  ) => {
+    const r = await deps.listCollaboratorHistory(id);
+    assert.ok(r.ok);
+    return r.value;
+  };
+
+  it('CA: write inclui banco/PIX em quem veio sem → 200, histórico com autor', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {});
+    const res = await put(app, token, id, body({ bankAccount: BANK, pixKey: PIX }));
+    assert.equal(res.statusCode, 200, res.body);
+
+    const bank = (await historyOf(partnersDeps, id)).find((e) => e.fieldName === 'bankAccount');
+    assert.ok(bank, 'esperava linha de bankAccount');
+    assert.equal(bank.fieldLabel, 'Dados bancários');
+    assert.equal(bank.valueAfter, '237/1234/56789-0');
+    assert.ok((bank.changedByUserId ?? '').length > 0, 'autor (userId) ausente');
+    assert.equal(bank.changedByName, EDITOR_NAME);
+    await teardown();
+  });
+
+  it('CA: troca a conta que já existia → linha antes/depois', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, { bankAccount: BANK });
+    const res = await put(
+      app,
+      token,
+      id,
+      body({ bankAccount: { ...BANK, accountNumber: '99999', checkDigit: '9' } }),
+    );
+    assert.equal(res.statusCode, 200, res.body);
+
+    const bank = (await historyOf(partnersDeps, id)).find((e) => e.fieldName === 'bankAccount');
+    assert.equal(bank?.valueBefore, '237/1234/56789-0');
+    assert.equal(bank?.valueAfter, '237/1234/99999-9');
+    await teardown();
+  });
+
+  it('CA: body do front atual (bankAccount/pixKey null) → 200 e NÃO apaga nem registra banco/PIX', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, { bankAccount: BANK, pixKey: PIX });
+    const res = await put(
+      app,
+      token,
+      id,
+      body({ role: 'Coordenadora', territory: null, bankAccount: null, pixKey: null }),
+    );
+    assert.equal(res.statusCode, 200, res.body);
+
+    const fields = (await historyOf(partnersDeps, id)).map((e) => e.fieldName);
+    assert.deepEqual(fields, ['role']);
+
+    // Prova de que o dado ficou: trocar só o DV agora registra antes = o banco original.
+    await put(
+      app,
+      token,
+      id,
+      body({ role: 'Coordenadora', bankAccount: { ...BANK, checkDigit: '1' } }),
+    );
+    const bank = (await historyOf(partnersDeps, id)).find((e) => e.fieldName === 'bankAccount');
+    assert.equal(bank?.valueBefore, '237/1234/56789-0');
+    assert.equal(bank?.valueAfter, '237/1234/56789-1');
+    await teardown();
+  });
+
+  it('CA: agência inválida → 422; keyType fora do enum → 400', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {});
+    const agency = await put(app, token, id, body({ bankAccount: { ...BANK, agency: '12' } }));
+    assert.equal(agency.statusCode, 422, agency.body);
+    const pix = await put(app, token, id, body({ pixKey: { keyType: 'fax', key: 'x' } }));
+    assert.equal(pix.statusCode, 400, pix.body);
     await teardown();
   });
 });

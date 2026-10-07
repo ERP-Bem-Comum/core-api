@@ -232,12 +232,28 @@ export const createCollaboratorBodySchema = z.object({
 
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
 
-/** Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais e banco/PIX não entram aqui. */
-export const updateCollaboratorBodySchema = createCollaboratorBodySchema.omit({
-  bankAccount: true,
-  pixKey: true,
-  territory: true,
-});
+/**
+ * Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais e território não
+ * entram aqui. Banco/PIX (#1029) entram com semântica PRÓPRIA: ausente ou `null` MANTÉM o gravado;
+ * objeto valida e substitui.
+ *
+ * ⚠️ Sem `.default(null)` e sem `null` = remover, ao contrário do create e do PUT do Fornecedor. O
+ * front em produção envia `bankAccount: null, pixKey: null` em TODO PUT de colaborador (antes eram
+ * descartados pelo `omit`); dar a esse `null` o sentido de "remover" apagaria os dados bancários a
+ * cada edição cadastral. Não "alinhar" com o Fornecedor sem antes mudar todos os clientes.
+ */
+export const updateCollaboratorBodySchema = createCollaboratorBodySchema
+  .omit({ bankAccount: true, pixKey: true, territory: true })
+  .extend({
+    bankAccount: bankAccountSchema
+      .nullable()
+      .optional()
+      .meta({ description: 'Ausente ou null mantém os dados gravados; objeto substitui' }),
+    pixKey: pixKeySchema
+      .nullable()
+      .optional()
+      .meta({ description: 'Ausente ou null mantém a chave gravada; objeto substitui' }),
+  });
 
 export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
 

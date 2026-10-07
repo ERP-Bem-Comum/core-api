@@ -183,3 +183,97 @@ describe('Collaborator.deactivate / reactivate', () => {
     if (!again.ok) assert.equal(again.error, 'collaborator-already-active');
   });
 });
+
+// #1029 — banco/PIX editáveis depois do cadastro (os migrados do legado vieram sem).
+describe('Collaborator.edit — banco/PIX (#1029)', () => {
+  const BANK = { bank: '237', agency: '1234', accountNumber: '56789', checkDigit: '0' };
+  const PIX = { keyType: 'email', key: 'maria@bemcomum.org' };
+
+  const editInput = (over: Record<string, unknown> = {}) => {
+    const { id: _id, registeredAt: _at, ...cadastrais } = baseRegister();
+    return { ...cadastrais, ...over };
+  };
+
+  const withTargets = () => {
+    const r = Collaborator.register({ ...baseRegister(), bankAccount: BANK, pixKey: PIX });
+    assert.ok(r.ok, `fixture register: ${r.ok ? '' : r.error}`);
+    return r.value.collaborator;
+  };
+
+  it('preenche banco e PIX de quem não tinha (migrado do legado)', () => {
+    const r = Collaborator.edit(
+      registerActive(),
+      editInput({ bankAccount: BANK, pixKey: PIX }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(r.value.collaborator.bankAccount, BANK);
+    assert.deepEqual(r.value.collaborator.pixKey, PIX);
+  });
+
+  it('troca a conta e a chave que já existiam', () => {
+    const r = Collaborator.edit(
+      withTargets(),
+      editInput({
+        bankAccount: { ...BANK, accountNumber: '99999', checkDigit: '9' },
+        pixKey: { keyType: 'phone', key: '+5585999990000' },
+      }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.equal(r.value.collaborator.bankAccount?.accountNumber, '99999');
+    assert.equal(r.value.collaborator.pixKey?.keyType, 'phone');
+  });
+
+  it('campos AUSENTES mantêm o gravado', () => {
+    const r = Collaborator.edit(withTargets(), editInput({ role: 'Coordenadora' }), LATER);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(r.value.collaborator.bankAccount, BANK);
+    assert.deepEqual(r.value.collaborator.pixKey, PIX);
+  });
+
+  it('null explícito MANTÉM o gravado (é o que o front em produção envia em todo PUT)', () => {
+    const r = Collaborator.edit(
+      withTargets(),
+      editInput({ bankAccount: null, pixKey: null }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(r.value.collaborator.bankAccount, BANK);
+    assert.deepEqual(r.value.collaborator.pixKey, PIX);
+  });
+
+  it('troca um e mantém o outro (bankAccount objeto, pixKey null)', () => {
+    const r = Collaborator.edit(
+      withTargets(),
+      editInput({ bankAccount: { ...BANK, bank: '001' }, pixKey: null }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.equal(r.value.collaborator.bankAccount?.bank, '001');
+    assert.deepEqual(r.value.collaborator.pixKey, PIX);
+  });
+
+  it('recusa com a mesma validação da criação: agência inválida, conta em branco, PIX inválido', () => {
+    const agency = Collaborator.edit(
+      registerActive(),
+      editInput({ bankAccount: { ...BANK, agency: '12' } }),
+      LATER,
+    );
+    assert.equal(agency.ok ? null : agency.error, 'invalid-bank-agency');
+
+    const blank = Collaborator.edit(
+      registerActive(),
+      editInput({ bankAccount: { ...BANK, accountNumber: '  ' } }),
+      LATER,
+    );
+    assert.equal(blank.ok ? null : blank.error, 'invalid-bank-account');
+
+    const pix = Collaborator.edit(
+      registerActive(),
+      editInput({ pixKey: { keyType: 'fax', key: 'x' } }),
+      LATER,
+    );
+    assert.equal(pix.ok ? null : pix.error, 'invalid-pix-key');
+  });
+});
