@@ -22,10 +22,12 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
 
-import { PROJECT_ROOT, walkFiles, readSource, isCommentLine } from '../support/source-scan.ts';
+import { PROJECT_ROOT, readSource, isCommentLine } from '../support/source-scan.ts';
 import { WORKLOADS } from '#src/deploy/workloads.ts';
+
+/** O próprio manifesto — sai da varredura de fonte, sob pena de o gate se auto-satisfazer. */
+const MANIFEST_PATH = 'src/deploy/workloads.ts';
 
 /** Acesso a variável de ambiente, pela FORMA — `process.env…` ou indexação de um `env`. */
 const ENV_READ = /process\.env\b|\benv\[/;
@@ -96,14 +98,6 @@ const LOCAL_ONLY_ENTRYPOINTS: readonly string[] = [
 const isConfigLike = (rel: string): boolean =>
   /(^|\/)[^/]*config[^/]*\.ts$|(^|\/)[^/]*composition[^/]*\.ts$|(^|\/)(run|server)\.ts$/.test(rel);
 
-/** Arquivos de `src/` que leem ambiente, pela forma de acesso. */
-const envReaders = (): readonly string[] =>
-  walkFiles(join(PROJECT_ROOT, 'src'), { ext: '.ts' }).filter((f) =>
-    readSource(f)
-      .split('\n')
-      .some((line) => !isCommentLine(line) && ENV_READ.test(line)),
-  );
-
 /** Caminhos versionados, perguntados ao git — nunca ao disco. */
 const trackedFiles = (): ReadonlySet<string> =>
   new Set(
@@ -111,6 +105,39 @@ const trackedFiles = (): ReadonlySet<string> =>
       .split('\n')
       .filter((l) => l !== ''),
   );
+
+/**
+ * Os `.ts` de `src/` que o git conhece.
+ *
+ * @remarks
+ * Perguntar ao git, e não ao disco, é exigência da `.claude/rules/testing.md` — "gate cuja
+ * resposta depende de onde roda não verifica nada". Um `.ts` não versionado (rascunho local,
+ * experimento) existe na máquina de quem escreve e não existe no runner: varrido pelo disco,
+ * ele deixa o gate vermelho aqui e verde no CI. As duas varreduras que usam este helper
+ * chamavam `walkFiles`, ao lado de um `trackedFiles` que já perguntava certo.
+ */
+const trackedTs = (): readonly string[] => [...trackedFiles()].filter((f) => f.endsWith('.ts'));
+
+/** Arquivos de `src/` que leem ambiente, pela forma de acesso. */
+const envReaders = (): readonly string[] =>
+  trackedTs().filter((f) =>
+    readSource(f)
+      .split('\n')
+      .some((line) => !isCommentLine(line) && ENV_READ.test(line)),
+  );
+
+/**
+ * O entrypoint que uma unidade executa — o primeiro `.ts` do `command`.
+ *
+ * @remarks
+ * Derivado, e não fixado em `command[1]`, porque `command` é `readonly string[]` e só o
+ * elemento 0 é contratado (`node`). Declarar `['node', '--max-old-space-size=512', 'x/run.ts']`
+ * com a posição fixa fazia o gate acusar a **flag** como entrypoint não versionado, e a
+ * varredura de órfãos reportar o arquivo real como "entrypoint que ninguém declara" — duas
+ * mensagens apontando para longe da causa.
+ */
+const entrypointOf = (w: (typeof WORKLOADS)[number]): string | undefined =>
+  w.command.find((a) => a.endsWith('.ts'));
 
 /** Toda variável citada por uma unidade, em qualquer das três listas ou nas constraints. */
 const allEnvsOf = (w: (typeof WORKLOADS)[number]): readonly string[] => [
@@ -133,11 +160,23 @@ describe('WORKLOADS-MANIFEST — forma do manifesto', () => {
     assert.equal(new Set(names).size, names.length, 'há nome de unidade repetido');
   });
 
+  it('todo command roda node e nomeia exatamente um entrypoint .ts', () => {
+    const bad = WORKLOADS.filter(
+      (w) => w.command[0] !== 'node' || w.command.filter((a) => a.endsWith('.ts')).length !== 1,
+    ).map((w) => `${w.name}: ${w.command.join(' ')}`);
+    assert.deepEqual(
+      bad,
+      [],
+      `Todo command é "node [flags] <um .ts>". Sem isso, o entrypoint não é derivável e as ` +
+        `duas asserções abaixo passam a medir a flag:\n${bad.join('\n')}`,
+    );
+  });
+
   it('todo command aponta para arquivo versionado', () => {
     const tracked = trackedFiles();
-    const missing = WORKLOADS.filter((w) => !tracked.has(w.command[1])).map(
-      (w) => `${w.name}: ${w.command[1]}`,
-    );
+    const missing = WORKLOADS.map((w) => ({ w, e: entrypointOf(w) }))
+      .filter(({ e }) => e === undefined || !tracked.has(e))
+      .map(({ w, e }) => `${w.name}: ${e ?? '(nenhum .ts no command)'}`);
     assert.deepEqual(
       missing,
       [],
@@ -193,6 +232,35 @@ describe('WORKLOADS-MANIFEST — a cadeia de precedência se sustenta', () => {
     );
   });
 
+  it('a precedência é acíclica — existe ordem de partida', () => {
+    // Nome inexistente e auto-referência já são barrados acima; ciclo de dois ou mais saltos
+    // passava, e descreve uma topologia que NUNCA inicia: a suíte promete que a cadeia se
+    // sustenta, e um ciclo é precisamente o que a derruba.
+    const deps = new Map<string, readonly string[]>(WORKLOADS.map((w) => [w.name, w.dependsOn]));
+    const state = new Map<string, 'visiting' | 'done'>();
+    const cycles: string[] = [];
+
+    const visit = (name: string, path: readonly string[]): void => {
+      if (state.get(name) === 'done') return;
+      if (state.get(name) === 'visiting') {
+        const from = path.indexOf(name);
+        cycles.push([...path.slice(from === -1 ? 0 : from), name].join(' → '));
+        return;
+      }
+      state.set(name, 'visiting');
+      for (const d of deps.get(name) ?? []) visit(d, [...path, name]);
+      state.set(name, 'done');
+    };
+
+    for (const w of WORKLOADS) visit(w.name, []);
+
+    assert.deepEqual(
+      [...new Set(cycles)].sort(),
+      [],
+      `Ciclo em dependsOn — nenhuma das unidades do ciclo tem como partir:\n${cycles.join('\n')}`,
+    );
+  });
+
   it('a migration precede o RBAC, que precede a borda HTTP', () => {
     // A invariante da #462: permissão nova que não é semeada antes de a porta abrir vira 403 mudo
     // — falha de autorização, não de boot, e por isso passa despercebida no deploy.
@@ -214,7 +282,15 @@ describe('WORKLOADS-MANIFEST — a cadeia de precedência se sustenta', () => {
 
 describe('WORKLOADS-MANIFEST — o manifesto casa com o código', () => {
   it('toda variável declarada aparece no fonte', () => {
-    const src = walkFiles(join(PROJECT_ROOT, 'src'), { ext: '.ts' })
+    // O manifesto sai da varredura, e é ele que decidia o resultado: `src/deploy/workloads.ts`
+    // vive DENTRO de `src/`, e cada variável aparece lá como literal `'NOME'` — então
+    // `src.includes("'NOME'")` era satisfeito pelo próprio arquivo sob verificação, `ghosts`
+    // era sempre `[]` e este gate NUNCA podia falhar. Apagar `SWEEP_BATCH_SIZE` de
+    // `src/jobs/contracts/sweeper/config.ts` mantinha o verde — exatamente a variável-fantasma
+    // que a `jobs-and-workers.md` promete acusar. Gate que não pode reprovar é pior que gate
+    // ausente: o ausente não dá confiança falsa.
+    const src = trackedTs()
+      .filter((f) => f !== MANIFEST_PATH)
       .map((f) => readSource(f))
       .join('\n');
     const ghosts = [...new Set(WORKLOADS.flatMap(allEnvsOf))]
@@ -253,9 +329,11 @@ describe('WORKLOADS-MANIFEST — o manifesto casa com o código', () => {
   });
 
   it('todo entrypoint de src/ está no manifesto ou é declarado local-only', () => {
-    const declared = new Set<string>(WORKLOADS.map((w) => w.command[1]));
+    const declared = new Set<string>(
+      WORKLOADS.map((w) => entrypointOf(w)).filter((e): e is string => e !== undefined),
+    );
     const localOnly = new Set(LOCAL_ONLY_ENTRYPOINTS);
-    const orphans = walkFiles(join(PROJECT_ROOT, 'src'), { ext: '.ts' })
+    const orphans = trackedTs()
       .filter((f) => /(^|\/)(run|server)\.ts$/.test(f))
       .filter((f) => !declared.has(f) && !localOnly.has(f))
       .sort();
