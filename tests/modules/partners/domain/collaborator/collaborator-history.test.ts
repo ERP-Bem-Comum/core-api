@@ -65,13 +65,49 @@ describe('diffCollaborator (US4)', () => {
 
   it('#126: mudança de banco e PIX → changes "bankAccount" e "pixKey"', () => {
     const before = make('Analista');
-    const after = {
+    const after: CollaboratorEntity = {
       ...before,
-      bankAccount: { bank: '237', agency: '1234', accountNumber: '56789' },
-      pixKey: { keyType: 'email' as const, key: 'maria@bemcomum.org' },
-    } as CollaboratorEntity;
+      bankAccount: { bank: '237', agency: '1234', accountNumber: '56789', checkDigit: '0' },
+      pixKey: { keyType: 'email', key: 'maria@bemcomum.org' },
+    };
     const changes = diffCollaborator(before, after);
-    assert.equal(changes.find((c) => c.fieldName === 'bankAccount')?.valueAfter, '237/1234/56789');
-    assert.equal(changes.find((c) => c.fieldName === 'pixKey')?.valueAfter, 'maria@bemcomum.org');
+    assert.equal(
+      changes.find((c) => c.fieldName === 'bankAccount')?.valueAfter,
+      '237/1234/56789-0',
+    );
+    assert.equal(
+      changes.find((c) => c.fieldName === 'pixKey')?.valueAfter,
+      'email:maria@bemcomum.org',
+    );
+  });
+
+  it('#1029: troca SÓ do tipo da chave PIX → change "pixKey"', () => {
+    const base = make('Analista');
+    const before: CollaboratorEntity = {
+      ...base,
+      pixKey: { keyType: 'phone', key: '11144477735' },
+    };
+    const after: CollaboratorEntity = { ...base, pixKey: { keyType: 'cpf', key: '11144477735' } };
+    const pix = diffCollaborator(before, after).find((c) => c.fieldName === 'pixKey');
+    assert.ok(pix, 'esperava change de pixKey');
+    assert.equal(pix.valueBefore, 'phone:11144477735');
+    assert.equal(pix.valueAfter, 'cpf:11144477735');
+  });
+
+  // #1029: sem o DV no texto, trocar só o dígito verificador não deixava rastro no histórico.
+  it('#1029: troca SÓ do DV → change "bankAccount" com antes/depois distintos', () => {
+    const base = make('Analista');
+    const before: CollaboratorEntity = {
+      ...base,
+      bankAccount: { bank: '237', agency: '1234', accountNumber: '56789', checkDigit: '0' },
+    };
+    const after: CollaboratorEntity = {
+      ...base,
+      bankAccount: { bank: '237', agency: '1234', accountNumber: '56789', checkDigit: '1' },
+    };
+    const bank = diffCollaborator(before, after).find((c) => c.fieldName === 'bankAccount');
+    assert.ok(bank, 'esperava change de bankAccount');
+    assert.equal(bank.valueBefore, '237/1234/56789-0');
+    assert.equal(bank.valueAfter, '237/1234/56789-1');
   });
 });

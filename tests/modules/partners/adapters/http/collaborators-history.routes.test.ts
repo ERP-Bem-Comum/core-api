@@ -95,6 +95,8 @@ const entry = (
   valueBefore: 'Diretor',
   valueAfter: 'Diretor Adjunto',
   occurredAt: CHANGED_AT,
+  changedByUserId: null,
+  changedByName: null,
   ...over,
 });
 
@@ -149,7 +151,7 @@ const login = async (app: Awaited<ReturnType<typeof buildApp>>): Promise<string>
 };
 
 const HEADER =
-  'nome;email;cpf;programa;inicio_contrato;tipo_alteracao;historico_antes;historico_depois;data_alteracao';
+  'nome;email;cpf;programa;inicio_contrato;tipo_alteracao;historico_antes;historico_depois;data_alteracao;alterado_por';
 
 describe('COLLABORATORS — export de histórico 9 colunas (#126)', () => {
   it('detalhe: GET /:id/export?type=history → 9 colunas com identidade preenchida', async () => {

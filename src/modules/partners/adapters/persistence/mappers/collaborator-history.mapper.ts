@@ -22,7 +22,7 @@ export const COLLABORATOR_FIELD_LABELS: Readonly<Record<string, string>> = {
   disableBy: 'Motivo de Desativação',
   // #126: novos campos rastreados (linhas adicionais no histórico).
   territory: 'Território',
-  bankAccount: 'Banco',
+  bankAccount: 'Dados bancários', // #1029: era 'Banco' — a linha traz banco/agência/conta-DV.
   pixKey: 'Chave PIX',
 };
 
@@ -43,6 +43,8 @@ export const buildHistoryEntries = (
         valueBefore: change.valueBefore,
         valueAfter: change.valueAfter,
         occurredAt: input.occurredAt,
+        changedByUserId: input.changedBy?.userId ?? null,
+        changedByName: input.changedBy?.userName ?? null,
       },
     ];
   });

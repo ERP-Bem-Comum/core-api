@@ -14,15 +14,17 @@ export type CollaboratorFieldChange = Readonly<{
 
 // Campos sob auditoria (os editáveis via PUT + situação). Cadastro/completeRegistration
 // inicial não passam por aqui. Projeção neutra (texto) — sem label PT, sem tradução de enum.
-// Serialização dos VOs opcionais (#126): território `UF/Município`, banco `código/agência/conta`,
-// PIX `chave`. null quando o VO está ausente.
+// Serialização dos VOs opcionais (#126): território `UF/Município`, banco `código/agência/conta-DV`,
+// PIX `tipo:chave`. null quando o VO está ausente. O DV e o tipo da chave entram (#1029): sem eles,
+// trocar só o dígito verificador ou só o tipo da chave não gerava linha de histórico.
 const territoryText = (c: Collaborator): string | null =>
   c.territory === null ? null : `${c.territory.uf ?? ''}/${c.territory.municipality ?? ''}`;
 const bankText = (c: Collaborator): string | null =>
   c.bankAccount === null
     ? null
-    : `${c.bankAccount.bank}/${c.bankAccount.agency}/${c.bankAccount.accountNumber}`;
-const pixText = (c: Collaborator): string | null => (c.pixKey === null ? null : c.pixKey.key);
+    : `${c.bankAccount.bank}/${c.bankAccount.agency}/${c.bankAccount.accountNumber}-${c.bankAccount.checkDigit}`;
+const pixText = (c: Collaborator): string | null =>
+  c.pixKey === null ? null : `${c.pixKey.keyType}:${c.pixKey.key}`;
 
 const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>> => ({
   name: c.name,

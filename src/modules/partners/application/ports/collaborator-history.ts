@@ -20,6 +20,13 @@ export type CollaboratorHistoryEventType =
   | 'CollaboratorDeactivated'
   | 'CollaboratorReactivated';
 
+/**
+ * Autor da alteração (#1029). `userName` é o nome NO MOMENTO da ação, desnormalizado na linha
+ * (imutabilidade histórica, como o `fieldLabel`); `null` quando o auth não respondeu — o `userId`
+ * continua sendo a referência autoritativa.
+ */
+export type HistoryAuthor = Readonly<{ userId: string; userName: string | null }>;
+
 /** Entrada de histórico já materializada (uma por campo alterado). */
 export type CollaboratorHistoryEntry = Readonly<{
   id: string;
@@ -30,6 +37,9 @@ export type CollaboratorHistoryEntry = Readonly<{
   valueBefore: string | null;
   valueAfter: string | null;
   occurredAt: Date;
+  /** `null` nas linhas anteriores à #1029 e nas de inativação/reativação (autor nelas: #1040). */
+  changedByUserId: string | null;
+  changedByName: string | null;
 }>;
 
 export type RecordHistoryInput = Readonly<{
@@ -38,6 +48,7 @@ export type RecordHistoryInput = Readonly<{
   before: Collaborator;
   after: Collaborator;
   occurredAt: Date;
+  changedBy: HistoryAuthor | null;
 }>;
 
 export type CollaboratorHistoryRepository = Readonly<{

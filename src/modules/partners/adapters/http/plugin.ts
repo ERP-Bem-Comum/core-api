@@ -443,7 +443,8 @@ const collaboratorsRoutes =
     });
 
     // Edição cadastral (PUT total dos 7 campos; pessoais/estado preservados). `collaborator:write`
-    // edita não-vitais; mudar o CPF (vital) exige `collaborator:edit-sensitive` (regra no use case).
+    // edita não-vitais, inclusive banco/PIX (#1029, decisão da P.O.); mudar o CPF (vital) exige
+    // `collaborator:edit-sensitive` (regra no use case). O autor do histórico é o `req.userId`.
     scope.route({
       method: 'PUT',
       url: '/collaborators/:id',
@@ -457,6 +458,7 @@ const collaboratorsRoutes =
         const result = await deps.editCollaborator({
           collaboratorId: req.params.id,
           canEditSensitive,
+          changedByUserId: req.userId,
           ...req.body,
         });
         if (!result.ok) return sendWriteError(reply, result.error);

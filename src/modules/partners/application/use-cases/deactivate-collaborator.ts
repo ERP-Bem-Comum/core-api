@@ -66,6 +66,7 @@ export const deactivateCollaborator =
       before: fetched.value,
       after: transition.value.collaborator,
       occurredAt: now,
+      changedBy: null, // autor na inativação: #1040
     });
     if (!recorded.ok) return recorded;
 
