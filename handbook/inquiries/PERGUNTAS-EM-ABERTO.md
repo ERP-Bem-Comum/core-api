@@ -11,8 +11,8 @@
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 13 de 37 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md)
-- **Total de perguntas em aberto:** **59**
+- **Inquiries cobertas:** 14 de 38 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0038](./0038-fim-do-compose-como-modelo-de-execucao.md)
+- **Total de perguntas em aberto:** **61**
 
 As demais 24 estão `decided` (19), `deferred` (3, com gatilho declarado) ou `superseded` (2) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -38,6 +38,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu a forma da recusa na tela em 02/09; restam as 4 saídas, que são execução | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
 | [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
 | [0036](#inquiry-0036--onde-a-documentação-deve-viver) | `open` | Dono do repo + o MCP `acdg-skills` de volta ao ar, para inventariar o que já indexa | Nada de código — decide o layout do repositório: 1.442 arquivos (84 % do volume) e 707 citações do harness | 2 |
+| [0038](#inquiry-0038--o-fim-do-composeyaml-como-modelo-de-execução) | `open` | Dono do repo em (a); em (b), olhar o `ERP-INFRA` | Remoção dos serviços do `compose.yaml` — hoje o único caminho local de integração, usado pelos 4 scripts de e2e; e a direção `compose → taskdef` que três artefatos afirmam e o [ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md) nega | 2 |
 
 ---
 
@@ -440,7 +441,25 @@ valer nesta branch**, onde o #814 já está integrado.
 
 ---
 
-> ⚠️ Este arquivo é mantido à mão e **nenhum gate o cobre** — a versão anterior ficou 3 meses divergindo do disco
-> sem que nada acusasse. Ao mexer numa inquiry `open`/`blocked`, passe aqui no mesmo commit.
+## Inquiry-0038 — O fim do `compose.yaml` como modelo de execução
+
+> **Origem:** [`0038-fim-do-compose-como-modelo-de-execucao.md`](./0038-fim-do-compose-como-modelo-de-execucao.md) §9 e §4
+> **Aberta em:** 2026-09-04 · **Destinatário:** dono do repo — (a) escolhe como a integração roda; (b) depende de olhar o `ERP-INFRA`
+> **Por que importa:** o `compose.yaml` acumula **três papéis** (§3.4), e só um deles tem substituto declarado. O
+> manifesto de unidades executáveis assume o papel de **declarar o que roda**; o papel de **infraestrutura efêmera de
+> teste** segue sem dono. Remover o compose antes de decidir (a) tira o único caminho local de integração — os 4
+> scripts de e2e sobem MySQL por ele.
+
+- [ ] **(a)** Como substituir a infraestrutura efêmera de teste? As três opções, com custo medido na §9: `services:` do Actions **perde paridade de config** (sobe antes do checkout) e está barrado por gate ativo; `docker run -v ./docker/mysql/conf.d:…` preserva a paridade e roda em CI, Mac e x99, ao custo de reescrever 3 probes de readiness; compose reduzido só à infra preserva tudo, ao custo de remover ~460 linhas de aplicação (745 → ~270). _Acompanha a questão: manter algum caminho local de integração, ou e2e e integração passam a existir apenas como job do Actions?_
+- [ ] **(b)** Existe gerador `compose → taskdef` no `ERP-INFRA`? Fecha a divergência de **direção** da §4: três artefatos (`tests/infra/module-driver-matrix-compose.test.ts:4-5`, `tests/infra/sync-permissions-compose.test.ts:4-5`, `.claude/rules/jobs-and-workers.md:33`) afirmam `compose.yaml → taskdef`; o [ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md):28 afirma `console AWS → taskdef`, com o compose restrito ao local. _`grep -i taskdef` fora do `handbook/` devolve só prosa — não há gerador nesta árvore, o que inclina a favor do ADR-0068 mas não fecha: ele poderia viver no `ERP-INFRA`, que não está neste repositório._
+
+**O que NÃO se decide aqui:** o que já está entregue e verde no gate (§8) — o manifesto declara as unidades executáveis e o que cada uma exige. A §7 lista as propriedades de `tests/infra/` que sobrevivem ao fim do compose e precisam ser **reapontadas ao manifesto antes** de remover os serviços, não depois.
+
+---
+
+> ⚠️ Este arquivo é mantido à mão. Ao mexer numa inquiry `open`/`blocked`, passe aqui **no mesmo commit** — a
+> versão anterior ficou 3 meses divergindo do disco. Hoje `tests/cleanup/inquiry-hygiene.test.ts` cobra a
+> correspondência nos dois sentidos: toda inquiry `open`/`blocked` precisa de bloco próprio, e bloco de inquiry
+> já resolvida reprova.
 
 > 🔁 Índice executivo — a fonte de verdade continua sendo cada inquiry individual.
