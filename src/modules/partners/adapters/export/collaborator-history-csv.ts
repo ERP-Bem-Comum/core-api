@@ -1,8 +1,12 @@
 /**
- * Export CSV do histórico de alterações do Colaborador (#126) — FORMATO LEGADO de 9 colunas.
+ * Export CSV do histórico de alterações do Colaborador (#126) — FORMATO LEGADO de 9 colunas + a
+ * 10ª `alterado_por` (#1029), acrescentada NO FIM para não deslocar as 9 legadas.
  *
  * Cabeçalho literal:
- *   nome;email;cpf;programa;inicio_contrato;tipo_alteracao;historico_antes;historico_depois;data_alteracao
+ *   nome;email;cpf;programa;inicio_contrato;tipo_alteracao;historico_antes;historico_depois;data_alteracao;alterado_por
+ *
+ * `alterado_por` = nome do autor no momento da alteração; vazio nas linhas sem autor (anteriores à
+ * #1029, inativação/reativação — #1040) ou quando o nome não pôde ser resolvido.
  *
  * A identidade (nome/email/cpf/programa/inicio_contrato) é repetida em cada linha de alteração;
  * `programa` = área de atuação. Serve tanto o export da LISTA (vários colaboradores) quanto o do
@@ -40,6 +44,7 @@ const HEADER: readonly string[] = [
   'historico_antes',
   'historico_depois',
   'data_alteracao',
+  'alterado_por',
 ];
 
 const formatDate = (d: Date): string => {
@@ -59,6 +64,7 @@ const groupToRows = (g: CollaboratorHistoryGroup): readonly (readonly string[])[
     e.valueBefore ?? '',
     e.valueAfter ?? '',
     formatDate(e.occurredAt),
+    e.changedByName ?? '',
   ]);
 
 export const collaboratorHistoryToCsv = (groups: readonly CollaboratorHistoryGroup[]): string =>

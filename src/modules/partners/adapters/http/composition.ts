@@ -23,6 +23,9 @@ import { makeInMemoryCollaboratorReader } from '../persistence/repos/collaborato
 import { createDrizzleCollaboratorReader } from '../persistence/repos/collaborator-reader.drizzle.ts';
 import { makeInMemoryCollaboratorHistory } from '../persistence/repos/collaborator-history-repository.in-memory.ts';
 import { createDrizzleCollaboratorHistory } from '../persistence/repos/collaborator-history-repository.drizzle.ts';
+import { makeAuthUserNameReader } from '../read/user-name-reader.auth.ts';
+import type { UserNameReader } from '../../application/ports/user-name-reader.ts';
+import type { AuthUserReadPort } from '#src/modules/auth/public-api/read.ts';
 import { makeInMemorySupplierReader } from '../persistence/repos/supplier-reader.in-memory.ts';
 import { createDrizzleSupplierReader } from '../persistence/repos/supplier-reader.drizzle.ts';
 import { makeInMemorySupplierStore } from '../persistence/repos/supplier-repository.in-memory.ts';
@@ -146,6 +149,12 @@ export type PartnersCompositionConfig = Readonly<{
   autocadastroBaseUrl?: string;
   /** TTL do convite em dias (default 7 — clarify). */
   inviteTtlDays?: number;
+  /**
+   * Nome do autor no histórico do colaborador (#1029). Aberto e fechado pelo composition root
+   * (`server.ts`, com a connection string do auth) e injetado aqui; ausente, o histórico grava o
+   * id do autor sem o nome.
+   */
+  authUserReadPort?: AuthUserReadPort;
 }>;
 
 const DEFAULT_AUTOCADASTRO_BASE_URL = 'http://localhost/api/v1/collaborators/autocadastro';
@@ -235,6 +244,7 @@ type Pools = Readonly<{
   collaboratorWriterRepo: CollaboratorRepository;
   collaboratorReader: CollaboratorReader;
   collaboratorHistory: CollaboratorHistoryRepository;
+  userNameReader: UserNameReader;
   inviteRepo: CollaboratorInviteTokenRepository;
   // PARTNERS-INVITE-DOMAIN-EVENT (ADR-0047): o convite vira evento no par_email_outbox; nao ha mais
   // mailer sincrono no fluxo. `getSentInvites` (driver memory/test) le os eventos emitidos e extrai
@@ -284,6 +294,7 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     collaboratorWriterRepo: repository,
     collaboratorReader: makeInMemoryCollaboratorReader(config.seed?.collaborators ?? []),
     collaboratorHistory: makeInMemoryCollaboratorHistory(config.seed?.collaboratorHistory ?? []),
+    userNameReader: makeAuthUserNameReader(config.authUserReadPort ?? null),
     inviteRepo: inviteStore.repository,
     getSentInvites,
     supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
@@ -330,6 +341,7 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
     collaboratorHistory: createDrizzleCollaboratorHistory(writerHandle),
+    userNameReader: makeAuthUserNameReader(config.authUserReadPort ?? null),
     // Invite (PARTNERS-INVITE-DOMAIN-EVENT / ADR-0047): repo Drizzle no writer pool; o saveWithEvents
     // emite CollaboratorInvited no par_email_outbox na MESMA tx. O e-mail e enviado pelo worker
     // email-dispatch (multi-fonte). Nao ha mais mailer sincrono no fluxo.
@@ -407,6 +419,7 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
     editCollaborator: editCollaborator({
       collaboratorRepo: pools.collaboratorWriterRepo,
       historyRepo: pools.collaboratorHistory,
+      userNameReader: pools.userNameReader,
       clock,
     }),
     listCollaboratorHistory: pools.collaboratorHistory.listByCollaborator,

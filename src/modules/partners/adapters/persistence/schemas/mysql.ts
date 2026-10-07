@@ -290,6 +290,11 @@ export const parCollaboratorHistory = mysqlTable(
     valueBefore: varchar('value_before', { length: 1000 }),
     valueAfter: varchar('value_after', { length: 1000 }),
     occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Autor da alteração (#1029). Nullable: linhas anteriores não têm autor, e inativação/reativação
+    // ainda não o gravam (#1040). Sem FK para auth_users: ADR-0014 (sem FK cross-módulo) — e o nome
+    // é desnormalizado (128 = auth_users.name) para o histórico não mudar se o usuário for renomeado.
+    changedByUserId: uuidKey('changed_by_user_id'),
+    changedByName: varchar('changed_by_name', { length: 128 }),
   },
   (t) => [
     // Export por colaborador ordenado por data (WHERE collaborator_id = ? ORDER BY occurred_at).
