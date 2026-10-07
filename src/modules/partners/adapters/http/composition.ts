@@ -25,7 +25,7 @@ import { makeInMemoryCollaboratorHistory } from '../persistence/repos/collaborat
 import { createDrizzleCollaboratorHistory } from '../persistence/repos/collaborator-history-repository.drizzle.ts';
 import { makeAuthUserNameReader } from '../read/user-name-reader.auth.ts';
 import type { UserNameReader } from '../../application/ports/user-name-reader.ts';
-import { buildAuthUserReadPort, type AuthUserReadPort } from '#src/modules/auth/public-api/read.ts';
+import type { AuthUserReadPort } from '#src/modules/auth/public-api/read.ts';
 import { makeInMemorySupplierReader } from '../persistence/repos/supplier-reader.in-memory.ts';
 import { createDrizzleSupplierReader } from '../persistence/repos/supplier-reader.drizzle.ts';
 import { makeInMemorySupplierStore } from '../persistence/repos/supplier-repository.in-memory.ts';
@@ -150,9 +150,9 @@ export type PartnersCompositionConfig = Readonly<{
   /** TTL do convite em dias (default 7 — clarify). */
   inviteTtlDays?: number;
   /**
-   * Nome do autor no histórico do colaborador (#1029). Injetado tem precedência (testes); ausente,
-   * o driver mysql abre o do auth no writer (auth_* no mesmo DB do monólito) e o memory grava autor
-   * sem nome.
+   * Nome do autor no histórico do colaborador (#1029). Aberto e fechado pelo composition root
+   * (`server.ts`, com a connection string do auth) e injetado aqui; ausente, o histórico grava o
+   * id do autor sem o nome.
    */
   authUserReadPort?: AuthUserReadPort;
 }>;
@@ -336,30 +336,12 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     readerHandle = readerR.value;
   }
 
-  // #1029: nome do autor no histórico. Injetado tem precedência; o construído abre pool próprio no
-  // writer (molde do financial, #207) e é fechado no shutdown. Aberto por último → só ele fecha os
-  // anteriores no caminho de erro.
-  let authUserReadPort: AuthUserReadPort | null = config.authUserReadPort ?? null;
-  let closeAuthUserPort: () => Promise<void> = () => Promise.resolve();
-  if (authUserReadPort === null) {
-    const authPortR = await buildAuthUserReadPort({ connectionString: writerUrl });
-    if (!authPortR.ok) {
-      if (readerHandle !== writerHandle) await readerHandle.close();
-      await writerHandle.close();
-      throw new Error(
-        `partners-composition: falha ao abrir auth user read port (${authPortR.error})`,
-      );
-    }
-    authUserReadPort = authPortR.value;
-    closeAuthUserPort = authPortR.value.close;
-  }
-
   return {
     collaboratorReaderRepo: createDrizzleCollaboratorStore(readerHandle, clock),
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
     collaboratorHistory: createDrizzleCollaboratorHistory(writerHandle),
-    userNameReader: makeAuthUserNameReader(authUserReadPort),
+    userNameReader: makeAuthUserNameReader(config.authUserReadPort ?? null),
     // Invite (PARTNERS-INVITE-DOMAIN-EVENT / ADR-0047): repo Drizzle no writer pool; o saveWithEvents
     // emite CollaboratorInvited no par_email_outbox na MESMA tx. O e-mail e enviado pelo worker
     // email-dispatch (multi-fonte). Nao ha mais mailer sincrono no fluxo.
@@ -377,7 +359,6 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     // Read-model de contagem (US6b): lê do reader pool (par_contract_count_view).
     contractCountStore: createDrizzleContractCountStore(readerHandle),
     shutdown: async () => {
-      await closeAuthUserPort();
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
     },

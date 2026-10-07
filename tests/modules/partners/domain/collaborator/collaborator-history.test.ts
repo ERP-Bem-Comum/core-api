@@ -75,7 +75,23 @@ describe('diffCollaborator (US4)', () => {
       changes.find((c) => c.fieldName === 'bankAccount')?.valueAfter,
       '237/1234/56789-0',
     );
-    assert.equal(changes.find((c) => c.fieldName === 'pixKey')?.valueAfter, 'maria@bemcomum.org');
+    assert.equal(
+      changes.find((c) => c.fieldName === 'pixKey')?.valueAfter,
+      'email:maria@bemcomum.org',
+    );
+  });
+
+  it('#1029: troca SÓ do tipo da chave PIX → change "pixKey"', () => {
+    const base = make('Analista');
+    const before: CollaboratorEntity = {
+      ...base,
+      pixKey: { keyType: 'phone', key: '11144477735' },
+    };
+    const after: CollaboratorEntity = { ...base, pixKey: { keyType: 'cpf', key: '11144477735' } };
+    const pix = diffCollaborator(before, after).find((c) => c.fieldName === 'pixKey');
+    assert.ok(pix, 'esperava change de pixKey');
+    assert.equal(pix.valueBefore, 'phone:11144477735');
+    assert.equal(pix.valueAfter, 'cpf:11144477735');
   });
 
   // #1029: sem o DV no texto, trocar só o dígito verificador não deixava rastro no histórico.

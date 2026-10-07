@@ -303,4 +303,13 @@ describe('COLLABORATORS-HTTP-EDIT — banco/PIX no PUT (#1029)', () => {
     assert.equal(pix.statusCode, 400, pix.body);
     await teardown();
   });
+
+  it('CA: campo maior que a coluna (DV com 6 caracteres) → 400 na borda, não 5xx', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {});
+    const res = await put(app, token, id, body({ bankAccount: { ...BANK, checkDigit: '123456' } }));
+    assert.equal(res.statusCode, 400, res.body);
+    await teardown();
+  });
 });

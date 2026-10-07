@@ -123,16 +123,18 @@ export type CollaboratorExportQuery = z.infer<typeof collaboratorExportQuerySche
  * (booleano separado). Datas em ISO 8601.
  */
 // Payment target (US1 feature 015) — espelha o molde de Supplier/Act. `agency` valida no domínio.
+// `.max` = tamanho da coluna em `par_collaborators` (#1029): acima dele o UPDATE estoura no MySQL
+// estrito e o cliente recebia 503 por um erro de validação; agora é 400 na borda.
 const bankAccountSchema = z.object({
-  bank: z.string(),
-  agency: z.string(),
-  accountNumber: z.string(),
-  checkDigit: z.string(),
+  bank: z.string().max(50),
+  agency: z.string().max(20),
+  accountNumber: z.string().max(30),
+  checkDigit: z.string().max(5),
 });
 
 const pixKeySchema = z.object({
   keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
-  key: z.string(),
+  key: z.string().max(255),
 });
 
 // Território (US3) — uf validada no domínio (catálogo geography); municipality texto livre.

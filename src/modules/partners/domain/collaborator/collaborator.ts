@@ -64,17 +64,12 @@ const parsePaymentTargets = (
 };
 
 // Edição (#1029): ausente/null mantém o VO atual; objeto valida (mesma regra da criação) e substitui.
-const keepOrParseBankAccount = (
-  current: BankAccount | null,
-  input: BankAccountInput | null | undefined,
-): Result<BankAccount | null, PaymentTargetError> =>
-  input === undefined || input === null ? ok(current) : PaymentTarget.createBankAccount(input);
-
-const keepOrParsePixKey = (
-  current: PixKey | null,
-  input: PixKeyInput | null | undefined,
-): Result<PixKey | null, PaymentTargetError> =>
-  input === undefined || input === null ? ok(current) : PaymentTarget.createPixKey(input);
+const keepOrParse = <I, V>(
+  current: V | null,
+  input: I | null | undefined,
+  parse: (raw: I) => Result<V, PaymentTargetError>,
+): Result<V | null, PaymentTargetError> =>
+  input === undefined || input === null ? ok(current) : parse(input);
 
 export const register = (
   input: RegisterCollaboratorInput,
@@ -178,10 +173,14 @@ export const edit = (
   const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
   if (!employmentRelationship.ok) return employmentRelationship;
 
-  const bankAccount = keepOrParseBankAccount(collaborator.bankAccount, input.bankAccount);
+  const bankAccount = keepOrParse(
+    collaborator.bankAccount,
+    input.bankAccount,
+    PaymentTarget.createBankAccount,
+  );
   if (!bankAccount.ok) return bankAccount;
 
-  const pixKey = keepOrParsePixKey(collaborator.pixKey, input.pixKey);
+  const pixKey = keepOrParse(collaborator.pixKey, input.pixKey, PaymentTarget.createPixKey);
   if (!pixKey.ok) return pixKey;
 
   // Spread preserva pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).

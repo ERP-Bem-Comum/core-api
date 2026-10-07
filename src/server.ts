@@ -32,6 +32,7 @@ import {
   rolesHttpPlugin,
   meHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
+import { buildAuthUserReadPort, type AuthReadPort } from '#src/modules/auth/public-api/read.ts';
 import {
   contractsHttpPlugin,
   buildContractsHttpDeps,
@@ -224,10 +225,23 @@ const main = async (): Promise<void> => {
   // OPCIONAL, também fora da guarda (#456 FR-008) — ausente → reusa o writer.
   const partners = modules.partners;
   const partnersReaderUrl = process.env['PARTNERS_READER_URL'];
+  // #1029: nome do autor no histórico do colaborador, lido do auth pela public-api e com a
+  // connection string DO AUTH. Falha de abertura DEGRADA, como o de programs: o histórico grava o
+  // id do autor sem o nome, e o boot não cai por uma leitura opcional.
+  let authUserReadPort: AuthReadPort | undefined = undefined;
+  {
+    const portR = await buildAuthUserReadPort({ connectionString: modules.auth.connectionString });
+    if (portR.ok) authUserReadPort = portR.value;
+    else
+      process.stderr.write(
+        `server: auth user read port indisponível (${portR.error}) — histórico sem nome do autor\n`,
+      );
+  }
   const partnersDeps = await buildPartnersHttpDeps({
     driver: 'mysql',
     writerUrl: partners.connectionString,
     ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
+    ...(authUserReadPort !== undefined ? { authUserReadPort } : {}),
     // campo legado PT do partners — rename rastreado na issue #333
     ...(autocadastroBaseUrl !== undefined ? { autocadastroBaseUrl } : {}),
   });
@@ -442,6 +456,8 @@ const main = async (): Promise<void> => {
     await reportsDeps.shutdown();
     // CTR-NUMBER-PROGRAM: fecha o pool do read port de programs injetado em contracts.
     if (programsReadPort !== undefined) await programsReadPort.close();
+    // #1029: fecha o pool do read port do auth injetado em partners.
+    if (authUserReadPort !== undefined) await authUserReadPort.close();
     app.log.info('Servidor encerrado.');
   };
 
