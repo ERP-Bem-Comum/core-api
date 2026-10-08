@@ -166,9 +166,21 @@ pnpm run logbook                       # idem --dead
 
 Detalhes completos: [`CLAUDE.md §Gotchas que não se descobre lendo o código`](./CLAUDE.md#gotchas-que-n%C3%A3o-se-descobre-lendo-o-c%C3%B3digo).
 
-> ⚠️ **`pnpm run dev` exige o [`overmind`](https://github.com/DarthSim/overmind) instalado** (`brew install overmind`) — ele não é dependência do projeto e não há gate que o cobre. Sem ele o comando falha com `command not found`, sem pista de origem. Alternativa: `pnpm run serve` mais os `pnpm run worker:*` em terminais separados.
+> ⚠️ **`pnpm run dev` exige o [`overmind`](https://github.com/DarthSim/overmind) instalado** (`brew install overmind`) — ele não é dependência do projeto e não há gate que o cobre. Sem ele o comando falha com `command not found`, sem pista de origem.
 >
 > O `Procfile` sobe `http` e os **quatro grupos** de worker. O grupo `van` exige as `VAN_S3_*`; para subir só um subconjunto, `OVERMIND_PROCESSES=http,worker-outbox pnpm run dev`.
+>
+> **Sem o overmind**, a mesma topologia se reproduz à mão — um terminal por grupo, porque **nenhum script `pnpm` invoca o runner**:
+>
+> ```bash
+> pnpm run serve                                                      # a borda HTTP
+> WORKER_GROUP=outbox      node --enable-source-maps src/workers/runner/run.ts
+> WORKER_GROUP=projections node --enable-source-maps src/workers/runner/run.ts
+> WORKER_GROUP=email       node --enable-source-maps src/workers/runner/run.ts
+> WORKER_GROUP=van         node --enable-source-maps src/workers/runner/run.ts
+> ```
+>
+> ⚠️ Os `pnpm run worker:*` **não** substituem isso: são os seis entrypoints standalone anteriores à consolidação #407, mantidos para **debug de um worker isolado** (ver [`.claude/rules/jobs-and-workers.md`](./.claude/rules/jobs-and-workers.md)). Não existe `worker:projections` nem `worker:van`, então quem os usa como stack sobe uma topologia diferente da que roda em produção — e **sem nenhum worker da VAN**.
 
 ---
 
