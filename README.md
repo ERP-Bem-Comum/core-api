@@ -150,7 +150,8 @@ pnpm run job:contracts:sweep           # oneshot: varredura de ciclo de vida de 
 pnpm run test:integration:financial    # idem :contracts :auth :partners :programs :notifications :storage :etl …
 pnpm run test:e2e:auth                 # smoke bash contra server real (idem :contracts :collaborators)
 
-# Suíte da borda em Hurl (ADR-0074) — fora do git, não é gate: ver api-collections-hurl/README.md
+# Suíte da borda em Hurl (ADR-0074) — NÃO versionada (api-collections-hurl/ está no .gitignore),
+# não é gate, e um clone novo não a tem. Contrato em .claude/rules/api-collections.md
 hurl --test --jobs 1 --variables-file api-collections-hurl/_vars.env api-collections-hurl/casos/**/*.hurl
 
 # Migrations (Drizzle Kit) — uma config por módulo em db/drizzle/
@@ -163,13 +164,22 @@ pnpm run secrets:setup                 # gera ./secrets/*.txt
 pnpm run logbook                       # idem --dead
 ```
 
-Detalhes completos: [`CLAUDE.md §Comandos não-óbvios`](./CLAUDE.md#comandos-n%C3%A3o-%C3%B3bvios).
+Detalhes completos: [`CLAUDE.md §Gotchas que não se descobre lendo o código`](./CLAUDE.md#gotchas-que-n%C3%A3o-se-descobre-lendo-o-c%C3%B3digo).
+
+> ⚠️ **`pnpm run dev` exige o [`overmind`](https://github.com/DarthSim/overmind) instalado** (`brew install overmind`) — ele não é dependência do projeto e não há gate que o cobre. Sem ele o comando falha com `command not found`, sem pista de origem. Alternativa: `pnpm run serve` mais os `pnpm run worker:*` em terminais separados.
+>
+> O `Procfile` sobe `http` e os **quatro grupos** de worker. O grupo `van` exige as `VAN_S3_*`; para subir só um subconjunto, `OVERMIND_PROCESSES=http,worker-outbox pnpm run dev`.
 
 ---
 
 ## 🐳 Ambiente local (Docker Compose)
 
-`compose.yaml` sobe o stack completo com hardening (`read_only`, `cap_drop`, `security_opt`): **MySQL 8.4**, **MinIO** (storage S3-compat dev, ADR-0019), **Mailpit** (captura de e-mail dev), o serviço `http` e os workers/jobs (`outbox-*`, `*-projection`, `email-dispatch`, `contracts-sweeper`, `migrate`). Variantes: `compose.ci.yaml` (CI) e `compose.etl.yaml` (ETL).
+`compose.yaml` sobe o stack completo com hardening (`read_only`, `cap_drop`, `security_opt`), e **só vale para ambiente local** — homologação e produção são provisionadas por _taskdef_ na console da AWS, por terceiro ([ADR-0068](./handbook/architecture/adr/0068-env-fail-fast-every-environment.md)).
+
+- **Infra:** **MySQL 8.4**, **MinIO** (storage S3-compat dev, ADR-0019) e **Mailpit** (captura de e-mail dev, `--profile mail`).
+- **Aplicação:** o serviço `http`, os workers por **grupo** — `worker-outbox`, `worker-projections`, `worker-email` (`--profile workers`) e `worker-van` (`--profile van`) — e os one-shot `migrate`, `sync-permissions`, `contracts-sweeper` e `supplier-view-backfill`.
+
+⚠️ **Um worker por grupo, não um por responsabilidade:** os processos sobem `src/workers/runner/run.ts` com `WORKER_GROUP`, consolidados na #407. O `Procfile` usado por `pnpm run dev` segue a mesma topologia. Variantes: `compose.ci.yaml` (CI, só remove o expose de portas) e `compose.etl.yaml` (ETL).
 
 ---
 
@@ -202,7 +212,6 @@ Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/referen
 | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           | Fastify 5 + plugins                 | ✅ ativo (ADR-0025) |
 | [`zod-expert`](./.claude/agents/zod-expert.md)                                 | Zod 4 (schemas de borda, ADR-0027)  | ✅ ativo            |
 | [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       | Nodemailer SMTP adapter             | ✅ ativo            |
-| [`bruno-api-client-expert`](./.claude/agents/bruno-api-client-expert.md)       | Bruno (`.bru`) — E2E HTTP           | ✅ suporte          |
 | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       | Segurança backend (Node/TS/Fastify) | ✅ ativo            |
 | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     | Segurança frontend (TanStack/React) | ✅ ativo            |
 
@@ -224,26 +233,6 @@ As skills cobrem disciplinas aplicadas — domínio, ports & adapters, schema, t
 - **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`) em **PT**; strings ao humano em **PT**.
 
 A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` completo, `verbatimModuleSyntax` (exige `import type`), `NodeNext` + `allowImportingTsExtensions` (exige extensão `.ts`). O resto vive nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
-
----
-
-## 📋 Status (2026-06-23)
-
-### ✅ Entregue
-
-- **8 módulos** com a mesma anatomia (`domain` → `application` → `adapters` → `public-api`): `auth`, `budget-plans`, `contracts`, `financial`, `notifications`, `partners`, `programs`, `reports`.
-- **Borda HTTP Fastify** real e versionada (`/api/v2` greenfield + `/api/v1` espelho do legado), contract-first com Zod 4 + OpenAPI 3.1 (ADR-0025/0027/0028/0033). CLI embutida **retirada** (ADR-0037).
-- **Auth & RBAC** próprios — JWT ES256 (`jose`), usuários, papéis/permissões, reset de senha, foto de perfil (ADR-0024).
-- **Financial** — títulos/payables, baixa manual, conciliação bancária, CNAB240, extrato/timeline, read-model de fornecedor.
-- **Eventos cross-módulo** via **Outbox MySQL** (ADR-0015) + **read-models por projeção** idempotente (ADR-0022/0045/0046), processados por **workers dedicados** e **oneshot jobs** (ADR-0041).
-- **Persistência** Drizzle + mysql2 sobre MySQL 8.4 único (ADR-0020), com read/write split (ADR-0026). **Storage** S3 + MinIO via `@aws-sdk/client-s3` (ADR-0019). **E-mail** transacional como evento de domínio (ADR-0047).
-- **E2E HTTP** via **Bruno** (`scripts/e2e/`, ADR-0034/0038); integração via Docker compose `--wait`.
-- **`.claude/` populado:** agentes por tecnologia, skills por disciplina, rules path-scoped e hooks — só primitivas nativas do Claude Code.
-
-### 🟡 Em andamento
-
-- **`024-fin-transactional-outbox`** — outbox transacional do Financeiro (tabela `fin_outbox` espelhando `ctr_outbox`; atomicidade estado+evento na mesma transação, issue #127 / ADR-0015). Ver `handbook/specs/024-fin-transactional-outbox/plan.md`.
-- **ADR-0048 (Proposed)** — Anticorruption Layer legado↔core, gate das Camadas 0–2 (spike #233 / épico #169).
 
 ---
 

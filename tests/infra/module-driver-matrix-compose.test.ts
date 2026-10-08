@@ -1,8 +1,17 @@
 /**
  * COMPOSE-DRIVER-MATRIX-GUARD — trava mecânica da matriz de drivers do `compose.yaml`.
  *
- * O `compose.yaml` (raiz) é a fonte de verdade que gera os taskdefs de PRODUÇÃO (deploy = push na
- * main). O guard de boot do #456 (`readModuleDriverConfigs`, `src/server.ts:124`) faz o boot FALHAR
+ * ⚠️ O `compose.yaml` **só vale para ambiente LOCAL** e **não gera os taskdefs** — o ADR-0068:28
+ * registra que homologação e produção são provisionadas manualmente, na console da AWS, por
+ * terceiro. A versão anterior deste docblock afirmava o contrário ("a fonte de verdade que gera os
+ * taskdefs de PRODUÇÃO"), e foi um dos três artefatos que sustentavam essa divergência.
+ *
+ * Isso NÃO enfraquece o teste, e é o ponto: ele trava a matriz de drivers do compose contra o guard
+ * de boot, o que vale por si no ambiente onde o compose roda. O que cai é só a pretensão de que
+ * passar aqui diga algo sobre produção — ali a matriz é posta à mão e **nada neste repositório a
+ * verifica**.
+ *
+ * O guard de boot do #456 (`readModuleDriverConfigs`, `src/server.ts:124`) faz o boot FALHAR
  * (exit 78) se um `<MODULO>_DRIVER` estiver ausente/inválido em produção — foi o que os incidentes
  * #374 (budget-plans) e #444 (reports) sofreram como degradação SILENCIOSA para `memory` (HTTP 200
  * com lista vazia).

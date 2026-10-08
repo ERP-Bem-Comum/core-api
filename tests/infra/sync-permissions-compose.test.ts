@@ -1,9 +1,15 @@
 /**
  * #462 — config do serviço one-shot `sync-permissions` no compose.
  *
- * O compose.yaml gera os taskdefs de produção, então a ORDEM declarada aqui é a ordem real do
- * deploy. O que o teste trava: `migrate` (schema) → `sync-permissions` (RBAC) → `http`. Sem o elo
- * final, o http subiria com catálogo defasado e responderia 403 mudo — o defeito da issue.
+ * O que o teste trava: `migrate` (schema) → `sync-permissions` (RBAC) → `http`. Sem o elo final, o
+ * http subiria com catálogo defasado e responderia 403 mudo — o defeito da issue.
+ *
+ * ⚠️ A ordem travada aqui é a do **compose, que só vale LOCALMENTE** — ele **não gera os taskdefs**
+ * (ADR-0068:28: homologação e produção são provisionadas à mão, na console da AWS, por terceiro). A
+ * versão anterior deste docblock dizia que o compose gerava os taskdefs e que "a ORDEM declarada
+ * aqui é a ordem real do deploy"; a primeira parte era falsa e a segunda não se segue. **A ordem em
+ * produção não é verificada por nada neste repositório** — é o que torna o 403 mudo possível lá
+ * apesar deste teste verde.
  *
  * Sem subir container: só `docker compose config`, que resolve profiles/secrets/depends_on.
  *
