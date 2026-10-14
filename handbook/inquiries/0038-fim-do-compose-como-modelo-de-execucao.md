@@ -69,9 +69,15 @@ Convenção `/ecs/erp-bem-comum-<unidade>-<env>`, `env ∈ {hml, prd}` — 12 de
 
 ---
 
-## 4. Divergência registrada, não resolvida
+## 4. Divergência registrada — a afirmação saiu; a pergunta continua aberta
 
-**Três artefatos afirmam** que o `compose.yaml` gera os taskdefs de produção:
+> ✅ **Resolvido em 2026-10-14.** Os três artefatos abaixo **deixaram de afirmar** que o `compose.yaml`
+> gera os taskdefs, e com eles duas ocorrências que esta seção não tinha listado, dentro do próprio
+> `compose.yaml` (`:298` e `:355`) — a varredura original seguiu esta lista em vez do assunto.
+> A afirmação foi **removida, não invertida**: o `open_output` do §4 (existe gerador no `ERP-INFRA`?)
+> **permanece aberto**, e é por isso que nenhum dos artefatos passou a afirmar a direção contrária.
+
+**Os três artefatos afirmavam** que o `compose.yaml` gera os taskdefs de produção:
 
 - `tests/infra/module-driver-matrix-compose.test.ts:4-5`
 - `tests/infra/sync-permissions-compose.test.ts:4-5`
