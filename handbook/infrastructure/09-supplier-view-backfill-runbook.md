@@ -24,7 +24,7 @@
 
 1. **Migrations aplicadas** no `financial` (tabela `fin_supplier_view`) e no `partners` (`par_*` + `par_outbox`). O job usa `applyMigrations: false` (prod-safe) e falha (`exit 1`) se o schema não existir.
 2. **Connection strings** disponíveis: `PARTNERS_DATABASE_URL` (leitura dos fornecedores) e `FINANCIAL_DATABASE_URL` (escrita do read-model).
-3. **Worker no ar** antes de novos cadastros (Procfile `supplier-projection`), para não acumular gap pós-backfill.
+3. **Worker no ar** antes de novos cadastros, para não acumular gap pós-backfill. ⚠️ Desde a consolidação #407 o processo chama-se **`worker-projections`** (`WORKER_GROUP=projections`): a projeção de fornecedor roda **dentro** dele, e não existe mais um processo com o nome dela.
 
 ---
 
@@ -32,13 +32,13 @@
 
 ### 1. Garantir o worker de projeção no ar (contínuo)
 
-Via Procfile (overmind/foreman sobem todos os processos, incluindo `supplier-projection`):
+Via Procfile (overmind/foreman sobem todos os processos, e a projeção de fornecedor vem dentro do **`worker-projections`** — `overmind status` lista esse nome, não `supplier-projection`):
 
 ```bash
 overmind start            # ou: foreman start — sobe http + workers do Procfile
 ```
 
-Isolado (debug):
+Isolado (debug) — entrypoint standalone anterior à #407, que sobe **só** esta projeção:
 
 ```bash
 CONTRACTS_DATABASE_URL=... FINANCIAL_DATABASE_URL=... PARTNERS_DATABASE_URL=... \
@@ -80,7 +80,7 @@ Log de sucesso (stderr): `[supplier-view-backfill] concluído — <applied> apli
 
 ## Agendamento
 
-O backfill é **one-shot** (cobertura de legados) — roda **uma vez** por ambiente após o deploy inicial; não precisa de cron. A consistência contínua é responsabilidade do **worker** `supplier-projection` (long-running no Procfile). Re-disparar o backfill só é necessário se o `fin_supplier_view` for truncado/reconstruído (ADR-0022 §"read-model reconstruível").
+O backfill é **one-shot** (cobertura de legados) — roda **uma vez** por ambiente após o deploy inicial; não precisa de cron. A consistência contínua é responsabilidade da projeção de fornecedor, que roda long-running dentro do processo **`worker-projections`** (`WORKER_GROUP=projections`, consolidado na #407). Re-disparar o backfill só é necessário se o `fin_supplier_view` for truncado/reconstruído (ADR-0022 §"read-model reconstruível").
 
 ---
 

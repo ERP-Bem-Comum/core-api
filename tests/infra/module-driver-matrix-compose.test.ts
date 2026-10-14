@@ -1,8 +1,17 @@
 /**
  * COMPOSE-DRIVER-MATRIX-GUARD — trava mecânica da matriz de drivers do `compose.yaml`.
  *
- * O `compose.yaml` (raiz) é a fonte de verdade que gera os taskdefs de PRODUÇÃO (deploy = push na
- * main). O guard de boot do #456 (`readModuleDriverConfigs`, `src/server.ts:124`) faz o boot FALHAR
+ * ⚠️ O `compose.yaml` **só vale para ambiente LOCAL** e **não gera os taskdefs** — o ADR-0068:28
+ * registra que as VARIÁVEIS DE AMBIENTE de homologação e produção são postas à mão na console da
+ * AWS, e que os dois ambientes são operados por terceiro e provisionados por taskdef. Quem escreve
+ * o taskdef não está dito ali; se existe gerador, ele não está nesta árvore (inquiry-0038 §4).
+ *
+ * Isso NÃO enfraquece o teste, e é o ponto: ele trava a matriz de drivers do compose contra o guard
+ * de boot, o que vale por si no ambiente onde o compose roda. O que cai é só a pretensão de que
+ * passar aqui diga algo sobre produção — ali a matriz é posta à mão e **nada neste repositório a
+ * verifica**.
+ *
+ * O guard de boot do #456 (`readModuleDriverConfigs`, `src/server.ts:91`) faz o boot FALHAR
  * (exit 78) se um `<MODULO>_DRIVER` estiver ausente/inválido em produção — foi o que os incidentes
  * #374 (budget-plans) e #444 (reports) sofreram como degradação SILENCIOSA para `memory` (HTTP 200
  * com lista vazia).
@@ -11,7 +20,7 @@
  * `BUDGET_PLANS_DRIVER: mysql` do serviço `http`, NENHUM teste acusa — só um boot real em produção
  * (o exit 78 do #456). Este teste fecha essa lacuna UM NÍVEL ACIMA (na config do deploy): assere,
  * módulo a módulo, que o serviço `http` declara `<MODULO>_DRIVER: mysql` + o export do secret + o
- * secret no serviço + o secret top-level, e que a cascata de `reports` (server.ts:268) tem as 4
+ * secret no serviço + o secret top-level, e que a cascata de `reports` (server.ts:292) tem as 4
  * fontes exportadas.
  *
  * Estilo: asserção de ESTRUTURA sobre o TEXTO do compose (molde de `integration-matrix-workflow.
@@ -75,7 +84,7 @@ const MODULES_WITH_OWN_URL = [
   },
 ] as const;
 
-// Reports é read-only (sem writer/URL própria): consome a cascata `REPORTS_* ?? *` (server.ts:268).
+// Reports é read-only (sem writer/URL própria): consome a cascata `REPORTS_* ?? *` (server.ts:292).
 const REPORTS_CASCADE_SOURCE_VARS = [
   'PARTNERS_DATABASE_URL',
   'FINANCIAL_DATABASE_URL',
@@ -134,7 +143,7 @@ describe('compose.yaml — matriz de drivers do serviço http (guard do #456, um
     assert.doesNotMatch(
       httpBlock,
       /REPORTS_DATABASE_URL:|reports_database_url/,
-      'reports usa a cascata REPORTS_* ?? * (server.ts:268) — não deve ter URL/secret própria',
+      'reports usa a cascata REPORTS_* ?? * (server.ts:292) — não deve ter URL/secret própria',
     );
   });
 
