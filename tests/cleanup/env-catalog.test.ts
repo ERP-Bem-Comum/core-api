@@ -32,6 +32,11 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 
+import {
+  ADAPTER_ENVS,
+  CAPABILITY_ADAPTERS,
+  adapterOwning,
+} from '#src/deploy/capability-adapters.ts';
 import { CATALOGUED_ENVS, envDoc } from '#src/deploy/env-catalog.ts';
 import { WORKLOADS } from '#src/deploy/workloads.ts';
 
@@ -129,19 +134,62 @@ describe('ENV-CATALOG — o catálogo cobre o manifesto e o código', () => {
     );
   });
 
-  it('entrada que nenhuma unidade declara traz `notComposed` dizendo por quê', () => {
+  it('entrada que ninguém declara traz `notComposed` dizendo por quê', () => {
     const declared = declaredInManifest();
+    const byAdapter = new Set(ADAPTER_ENVS);
     const unexplained = CATALOGUED_ENVS.filter(
-      (e) => !declared.has(e) && envDoc(e)?.notComposed === undefined,
+      (e) => !declared.has(e) && !byAdapter.has(e) && envDoc(e)?.notComposed === undefined,
     ).sort();
 
     assert.deepEqual(
       unexplained,
       [],
-      'Entrada no catálogo que nenhuma unidade do manifesto declara e que não explica o motivo. ' +
-        'Ou alguma unidade a exige — e então declare lá —, ou existe código que a lê sem estar no ' +
-        'caminho de boot, e aí o `notComposed` registra qual é, para a lacuna ficar visível em vez ' +
-        `de esquecida:\n${unexplained.join('\n')}`,
+      'Entrada no catálogo que nem unidade nem adapter declara, e que não explica o motivo. São ' +
+        'três lugares possíveis, e a escolha diz o que a variável É: lista da unidade (o processo ' +
+        'a exige sempre), `capability-adapters.ts` (só o adapter que a usa a exige) ou ' +
+        `\`notComposed\` (ninguém a lê no caminho de boot):\n${unexplained.join('\n')}`,
+    );
+  });
+
+  it('nenhuma variável é declarada por unidade E por adapter ao mesmo tempo', () => {
+    const declared = declaredInManifest();
+    const both = ADAPTER_ENVS.filter((e) => declared.has(e))
+      .map((e) => `${e} — adapter \`${adapterOwning(e)?.name ?? '?'}\` e também a unidade`)
+      .sort();
+
+    assert.deepEqual(
+      both,
+      [],
+      'Variável declarada nos dois lugares. É a divergência que a separação existe para impedir: ' +
+        'a lista da unidade afirma "o processo exige sempre" e o adapter afirma "só quando ele for ' +
+        'o escolhido" — as duas juntas garantem que uma delas mente, e o `.env.example` herda a ' +
+        `mentira. Tire do lugar errado:\n${both.join('\n')}`,
+    );
+  });
+
+  it('todo adapter atende capacidade que alguma unidade pede, e nomeia quem o valida', () => {
+    const required = new Set(WORKLOADS.flatMap((w) => w.requires.map((c) => c.kind)));
+    const orphans = CAPABILITY_ADAPTERS.filter((a) => !required.has(a.capability))
+      .map((a) => `${a.name} → capacidade \`${a.capability}\`, que nenhuma unidade requer`)
+      .sort();
+
+    assert.deepEqual(
+      orphans,
+      [],
+      `Adapter de capacidade que ninguém pede — ou a unidade esqueceu o \`requires\`, ou o adapter ` +
+        `não deveria estar declarado:\n${orphans.join('\n')}`,
+    );
+
+    const unvalidated = CAPABILITY_ADAPTERS.filter(
+      (a) => a.env.length + a.envWithDefault.length > 0 && a.validatedBy === '',
+    ).map((a) => a.name);
+
+    assert.deepEqual(
+      unvalidated,
+      [],
+      'Adapter que exige ambiente e não diz onde isso é validado. O `validatedBy` é o que torna a ' +
+        'declaração conferível: é lá que a ausência vira `Result` de erro em vez de comportamento ' +
+        `estranho adiante:\n${unvalidated.join('\n')}`,
     );
   });
 

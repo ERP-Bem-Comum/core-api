@@ -37,14 +37,18 @@ export type EnvDoc = Readonly<{
    *
    * @remarks
    * Preenchido significa: existe código que a LÊ, e esse código não está no caminho de boot de
-   * unidade alguma — export sem consumidor. Não é o mesmo que variável opcional: opcional é
-   * declarada em `envWithDefault`; isto aqui não é declarado porque afirmar que a unidade a exige
-   * seria falso.
+   * unidade alguma nem pertence a um adapter de capacidade — export sem consumidor. Não é o mesmo
+   * que variável opcional: opcional é declarada em `envWithDefault`; isto aqui não é declarado
+   * porque afirmar que a unidade a exige seria falso.
    *
-   * A presença deste campo é o que mantém a lacuna VISÍVEL em vez de esquecida, e sai da entrada
-   * no dia em que o código for composto — ou a entrada sai junto com o código. `env-catalog.test.ts`
-   * usa isto para isentar a variável da bijeção com o manifesto, e o gerador a mantém fora do
-   * `.env.example`: declarar no template o que nenhuma unidade lê é a mentira oposta.
+   * ⚠️ **Não use isto para variável de adapter.** Se a variável é exigida por um adapter concreto
+   * de uma `Capability` — transporte de e-mail, object storage —, o lugar dela é
+   * `capability-adapters.ts`, e é lá que mora o `notComposed` do ADAPTER quando nada o seleciona.
+   * A distinção importa: adapter não composto é uma peça inteira à espera de ligação; variável com
+   * `notComposed` aqui é resíduo de código que perdeu o chamador.
+   *
+   * A presença deste campo mantém a lacuna VISÍVEL em vez de esquecida, e sai no dia em que o
+   * código for composto — ou sai junto com o código.
    */
   notComposed?: string;
   /**
@@ -63,18 +67,6 @@ const LOCAL_MYSQL = 'mysql://dev:dev@localhost:3306/core';
 
 /** Endpoint do S3 local (Silo/MinIO) servido pela `~/.infra`. */
 const LOCAL_S3 = 'http://localhost:9000';
-
-/**
- * Por que as `MAGALU_*` não são declaradas por unidade alguma.
- *
- * @remarks
- * O `public-api/index.ts:36` do `contracts` ainda diz "magaluCloudConfig: virá no próximo ticket" e
- * a linha 58 **já exporta** `magaluCloudConfig` e `parseMagaluCloudEnv` — o comentário está vencido.
- * O que não existe é consumidor: nenhum composition root instancia o adapter, então as quatro
- * variáveis nunca são lidas em runtime.
- */
-const MAGALU_NOT_COMPOSED =
-  'O adapter existe e é exportado pelo `public-api` do `contracts`, mas nenhum composition root o instancia — o comentário em `public-api/index.ts:36` ainda o anuncia como trabalho futuro, com o export já feito na linha 58.';
 
 /**
  * Tipado pelo contrato, não por `as const satisfies`.
@@ -524,28 +516,24 @@ export const ENV_CATALOG: Readonly<Record<string, EnvDoc>> = {
   // ── Storage Magalu Cloud (object storage alternativo, ADR-0021) ────────────────────────────
   MAGALU_REGION: {
     description:
-      'Região do object storage da Magalu Cloud, adapter alternativo ao S3 da AWS. ⚠️ O ambiente da Magalu não recebe dado real nem pessoal (ADR-0021): produção e dado pessoal vivem na AWS, com residência no Brasil.',
+      'Região do object storage da Magalu Cloud. Exigida pelo adapter `magalu-object-storage` da capacidade `s3-compat` — ver `capability-adapters.ts`. ⚠️ O ambiente da Magalu não recebe dado real nem pessoal (ADR-0021): produção e dado pessoal vivem na AWS, com residência no Brasil.',
     readBy: 'modules/contracts/adapters/storage/magalu-cloud-config.ts',
     example: '',
-    notComposed: MAGALU_NOT_COMPOSED,
   },
   MAGALU_BUCKET: {
     description: 'Bucket na Magalu Cloud. Ver `MAGALU_REGION`.',
     readBy: 'modules/contracts/adapters/storage/magalu-cloud-config.ts',
     example: '',
-    notComposed: MAGALU_NOT_COMPOSED,
   },
   MAGALU_ACCESS_KEY_ID: {
-    description: 'Chave de acesso à Magalu Cloud.',
+    description: 'Chave de acesso à Magalu Cloud. Ver `MAGALU_REGION`.',
     readBy: 'modules/contracts/adapters/storage/magalu-cloud-config.ts',
     example: '',
-    notComposed: MAGALU_NOT_COMPOSED,
   },
   MAGALU_SECRET_ACCESS_KEY: {
-    description: 'Segredo da chave da Magalu Cloud.',
+    description: 'Segredo da chave da Magalu Cloud. Ver `MAGALU_REGION`.',
     readBy: 'modules/contracts/adapters/storage/magalu-cloud-config.ts',
     example: '',
-    notComposed: MAGALU_NOT_COMPOSED,
   },
 
   // ── Outbox (relay e projeções) ─────────────────────────────────────────────────────────────
@@ -586,7 +574,7 @@ export const ENV_CATALOG: Readonly<Record<string, EnvDoc>> = {
   // ── E-mail ─────────────────────────────────────────────────────────────────────────────────
   EMAIL_PROVIDER: {
     description:
-      'Provedor de envio: `smtp`, `resend` ou `memory`. ⚠️ Ausente, o worker cai em `memory` e DESCARTA todo e-mail de reset e convite, com boot verde (#1047).',
+      'Provedor de envio: `smtp`, `resend` ou `memory`. ⚠️ Ausente, o worker cai em `memory` e DESCARTA todo e-mail de reset e convite, com boot verde (#1047). ⚠️ E o valor escolhido torna outras variáveis OBRIGATÓRIAS: `smtp` exige `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER` e `SMTP_PASS` não-vazios; `resend` exige `RESEND_API_KEY`. Nenhuma dessas aparece em `env` no manifesto, porque a obrigação depende DESTE valor — e o `worker-email` sai com 78 quando falta alguma.',
     readBy: 'modules/notifications/adapters/email/email-config.ts',
     example: 'smtp',
   },
@@ -664,14 +652,16 @@ export const ENV_CATALOG: Readonly<Record<string, EnvDoc>> = {
     example: 'false',
   },
   SMTP_USER: {
-    description: 'Usuário SMTP. Vazio em servidor local sem autenticação.',
+    description:
+      'Usuário SMTP. ⚠️ **Obrigatório e não-vazio sob `EMAIL_PROVIDER=smtp`** — está em `REQUIRED_FIELDS` (`nodemailer-config.ts:40-46`), e a validação recusa `undefined` E string vazia. Declarar vazio derruba o `worker-email` com exit 78, que sob o overmind leva os outros quatro processos. O Mailpit local não autentica, então qualquer valor serve.',
     readBy: 'modules/notifications/adapters/email/nodemailer-config.ts',
-    example: '',
+    example: 'dev',
   },
   SMTP_PASS: {
-    description: 'Senha SMTP. Vazio em servidor local sem autenticação.',
+    description:
+      'Senha SMTP. ⚠️ **Obrigatória e não-vazia sob `EMAIL_PROVIDER=smtp`** — ver `SMTP_USER`. O Mailpit local não autentica, então qualquer valor serve.',
     readBy: 'modules/notifications/adapters/email/nodemailer-config.ts',
-    example: '',
+    example: 'dev',
   },
   SMTP_POOL: {
     description: 'Reaproveita conexões SMTP em vez de abrir uma por envio.',

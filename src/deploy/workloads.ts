@@ -332,15 +332,10 @@ export const WORKLOADS = [
       'EMAIL_FROM_ALLOWED_DOMAINS',
       'EMAIL_FROM_NOTIFICATION',
       'EMAIL_SANDBOX_TO',
-      'SMTP_HOST',
-      'SMTP_PORT',
-      'SMTP_SECURE',
-      'SMTP_USER',
-      'SMTP_PASS',
-      'SMTP_MAX_CONNS',
-      'SMTP_POOL',
-      'SMTP_REQUIRE_TLS',
-      'RESEND_API_KEY',
+      // As variáveis de TRANSPORTE não estão aqui, e a omissão é deliberada: elas pertencem ao
+      // adapter que atende a capacidade `smtp`, declarado em `capability-adapters.ts`. Listá-las
+      // em `envWithDefault` afirmava que a ausência não derruba — e `SMTP_USER` vazio faz este
+      // worker sair com 78, levando os outros quatro processos sob o overmind.
     ],
     constraints: [
       {

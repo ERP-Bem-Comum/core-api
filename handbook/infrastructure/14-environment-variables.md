@@ -19,9 +19,9 @@ Este documento responde outra pergunta: **o que cada variável faz e onde ela en
 | :--- | ---: | :--- |
 | **Obrigatória** | 21 | ausente, o processo não sobe |
 | Exigida por relação | 6 | nenhuma lista a exige sozinha; a regra está nas relações |
-| Com default no código | 69 | tem substituto; ausência não derruba |
+| Com default no código | 60 | tem substituto; ausência não derruba |
 | Só em produção | 5 | exigida sob `NODE_ENV=production` |
-| Sem unidade que a declare | 5 | existe código que a lê, fora do caminho de boot |
+| Sem unidade que a declare | 1 | existe código que a lê, fora do caminho de boot |
 | **Total catalogado** | **106** | |
 
 Unidades de deploy declaradas: **13**. O sufixo `*` numa unidade significa
@@ -165,19 +165,10 @@ Têm substituto no código; declarar é opcional, e o valor do exemplo é o que 
 | **`REPORTS_DATABASE_URL`** | _(vazio)_ | `shared/persistence/module-driver-config.ts` | backend |
 | **`REPORTS_FINANCIAL_DATABASE_URL`** | _(vazio)_ | `shared/persistence/module-driver-config.ts` | backend |
 | **`REQUEST_TIMEOUT_MS`** | `30000` | `shared/http/config.ts` | backend, worker-outbox, worker-projections, worker-email, worker-van*, migrate, sync-permissions, payable-view-backfill, supplier-view-backfill*, contract-count-backfill*, renumber-by-vigencia*, contracts-sweeper*, outbox-sweeper* |
-| **`RESEND_API_KEY`** | _(vazio)_ | `modules/notifications/adapters/email/resend-config.ts` | worker-email |
 | **`S3_ACCESS_KEY_ID`** | `dev` | `modules/contracts/adapters/storage/s3-config-aws.ts` | backend |
 | **`S3_ENDPOINT`** | `http://localhost:9000` | `modules/contracts/adapters/storage/s3-config-aws.ts` | backend |
 | **`S3_FORCE_PATH_STYLE`** | `true` | `modules/contracts/adapters/storage/s3-config-aws.ts` | backend |
 | **`S3_SECRET_ACCESS_KEY`** | `devpassword` | `modules/contracts/adapters/storage/s3-config-aws.ts` | backend |
-| **`SMTP_HOST`** | `localhost` | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
-| **`SMTP_MAX_CONNS`** | _(vazio)_ | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
-| **`SMTP_PASS`** | _(vazio)_ | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
-| **`SMTP_POOL`** | _(vazio)_ | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
-| **`SMTP_PORT`** | `1025` | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
-| **`SMTP_REQUIRE_TLS`** | `false` | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
-| **`SMTP_SECURE`** | `false` | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
-| **`SMTP_USER`** | _(vazio)_ | `modules/notifications/adapters/email/nodemailer-config.ts` | worker-email |
 | **`SWEEP_BATCH_SIZE`** | _(vazio)_ | `jobs/contracts/sweeper/config.ts` | contracts-sweeper* |
 | **`TRUST_PROXY`** | `false` | `shared/http/config.ts` | backend, worker-outbox, worker-projections, worker-email, worker-van*, migrate, sync-permissions, payable-view-backfill, supplier-view-backfill*, contract-count-backfill*, renumber-by-vigencia*, contracts-sweeper*, outbox-sweeper* |
 | **`VAN_S3_ACCESS_KEY_ID`** | `dev` | `modules/financial/adapters/van/van-s3-config.ts` | backend, worker-van* |
@@ -218,7 +209,7 @@ Têm substituto no código; declarar é opcional, e o valor do exemplo é o que 
 
 **`EMAIL_FROM_NOTIFICATION`** — Remetente das notificações gerais.
 
-**`EMAIL_PROVIDER`** — Provedor de envio: `smtp`, `resend` ou `memory`. ⚠️ Ausente, o worker cai em `memory` e DESCARTA todo e-mail de reset e convite, com boot verde (#1047).
+**`EMAIL_PROVIDER`** — Provedor de envio: `smtp`, `resend` ou `memory`. ⚠️ Ausente, o worker cai em `memory` e DESCARTA todo e-mail de reset e convite, com boot verde (#1047). ⚠️ E o valor escolhido torna outras variáveis OBRIGATÓRIAS: `smtp` exige `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER` e `SMTP_PASS` não-vazios; `resend` exige `RESEND_API_KEY`. Nenhuma dessas aparece em `env` no manifesto, porque a obrigação depende DESTE valor — e o `worker-email` sai com 78 quando falta alguma.
 
 **`EMAIL_RATE_LIMIT_MAX`** — E-mails por janela, para não estourar a cota do provedor.
 
@@ -276,8 +267,6 @@ Têm substituto no código; declarar é opcional, e o valor do exemplo é o que 
 
 **`REQUEST_TIMEOUT_MS`** — Teto de duração de uma requisição na borda.
 
-**`RESEND_API_KEY`** — Credencial do provedor Resend. Só usada com `EMAIL_PROVIDER=resend`.
-
 **`S3_ACCESS_KEY_ID`** — Chave de acesso ao bucket de documentos. ⚠️ Vai JUNTO com `S3_SECRET_ACCESS_KEY`; ausentes as duas, o SDK cai na provider chain do IAM — que é o caminho de produção.
 
 **`S3_ENDPOINT`** — Endpoint S3. Preenchido aponta para o S3 local; vazio usa o endpoint padrão da AWS.
@@ -285,22 +274,6 @@ Têm substituto no código; declarar é opcional, e o valor do exemplo é o que 
 **`S3_FORCE_PATH_STYLE`** — Endereçamento por path em vez de subdomínio. Obrigatório contra S3 local; desnecessário na AWS.
 
 **`S3_SECRET_ACCESS_KEY`** — Segredo da chave de acesso. Ver `S3_ACCESS_KEY_ID`.
-
-**`SMTP_HOST`** — Host SMTP. A `~/.infra` sobe o Mailpit, com UI em `http://localhost:8025`.
-
-**`SMTP_MAX_CONNS`** — Teto de conexões simultâneas no pool SMTP.
-
-**`SMTP_PASS`** — Senha SMTP. Vazio em servidor local sem autenticação.
-
-**`SMTP_POOL`** — Reaproveita conexões SMTP em vez de abrir uma por envio.
-
-**`SMTP_PORT`** — Porta SMTP.
-
-**`SMTP_REQUIRE_TLS`** — Exige STARTTLS e recusa a conexão sem ele.
-
-**`SMTP_SECURE`** — TLS desde a conexão (porta 465). Falso usa STARTTLS quando disponível.
-
-**`SMTP_USER`** — Usuário SMTP. Vazio em servidor local sem autenticação.
 
 **`SWEEP_BATCH_SIZE`** — Contratos processados por rodada na varredura de ciclo de vida.
 
@@ -371,25 +344,80 @@ Existe código que as lê, e esse código não está no caminho de boot de unida
 | Variável | Exemplo | Lida em | Unidades |
 | :--- | :--- | :--- | :--- |
 | **`BUDGET_PLANS_SEED_JSON`** | _(vazio)_ | `modules/budget-plans/adapters/http/e2e-seed.ts` | — |
-| **`MAGALU_ACCESS_KEY_ID`** | _(vazio)_ | `modules/contracts/adapters/storage/magalu-cloud-config.ts` | — |
-| **`MAGALU_BUCKET`** | _(vazio)_ | `modules/contracts/adapters/storage/magalu-cloud-config.ts` | — |
-| **`MAGALU_REGION`** | _(vazio)_ | `modules/contracts/adapters/storage/magalu-cloud-config.ts` | — |
-| **`MAGALU_SECRET_ACCESS_KEY`** | _(vazio)_ | `modules/contracts/adapters/storage/magalu-cloud-config.ts` | — |
 
 **`BUDGET_PLANS_SEED_JSON`** — Semente de planos orçamentários para a suíte E2E, em JSON. Só tem efeito com `CORE_API_E2E` ligada.
 <br>⚠️ Nenhuma unidade a declara: `parseE2eBudgetPlansSeed` ficou órfã quando o ramo `memory` saiu do `server.ts` — o próprio arquivo registra isso em `server.ts:65`. O `public-api/http.ts` ainda a exporta, e ninguém a chama.
 
-**`MAGALU_ACCESS_KEY_ID`** — Chave de acesso à Magalu Cloud.
-<br>⚠️ Nenhuma unidade a declara: O adapter existe e é exportado pelo `public-api` do `contracts`, mas nenhum composition root o instancia — o comentário em `public-api/index.ts:36` ainda o anuncia como trabalho futuro, com o export já feito na linha 58.
+## Por adapter de capacidade
+
+A unidade declara que precisa de uma **capacidade** (`requires: [{ kind: … }]`), nunca de um
+fornecedor. Quem a atende é um adapter, e as variáveis são **dele** — exigidas só quando ele é
+o escolhido. Entre os adapters de uma mesma capacidade, o código avalia **um ramo só**.
+
+Declaração em [`src/deploy/capability-adapters.ts`](../../src/deploy/capability-adapters.ts).
+
+### Capacidade `smtp`
+
+**`nodemailer-smtp`** — selecionado por `EMAIL_PROVIDER=smtp`. Validado em `modules/notifications/adapters/email/nodemailer-config.ts`.
+
+| Variável | Exigência | Exemplo |
+| :--- | :--- | :--- |
+| `SMTP_HOST` | **obrigatória, não-vazia** | `localhost` |
+| `SMTP_PORT` | **obrigatória, não-vazia** | `1025` |
+| `SMTP_SECURE` | **obrigatória, não-vazia** | `false` |
+| `SMTP_USER` | **obrigatória, não-vazia** | `dev` |
+| `SMTP_PASS` | **obrigatória, não-vazia** | `dev` |
+| `SMTP_POOL` | tem default | _(vazio)_ |
+| `SMTP_MAX_CONNS` | tem default | _(vazio)_ |
+| `SMTP_REQUIRE_TLS` | tem default | `false` |
+
+**`SMTP_HOST`** — Host SMTP. A `~/.infra` sobe o Mailpit, com UI em `http://localhost:8025`.
+
+**`SMTP_PORT`** — Porta SMTP.
+
+**`SMTP_SECURE`** — TLS desde a conexão (porta 465). Falso usa STARTTLS quando disponível.
+
+**`SMTP_USER`** — Usuário SMTP. ⚠️ **Obrigatório e não-vazio sob `EMAIL_PROVIDER=smtp`** — está em `REQUIRED_FIELDS` (`nodemailer-config.ts:40-46`), e a validação recusa `undefined` E string vazia. Declarar vazio derruba o `worker-email` com exit 78, que sob o overmind leva os outros quatro processos. O Mailpit local não autentica, então qualquer valor serve.
+
+**`SMTP_PASS`** — Senha SMTP. ⚠️ **Obrigatória e não-vazia sob `EMAIL_PROVIDER=smtp`** — ver `SMTP_USER`. O Mailpit local não autentica, então qualquer valor serve.
+
+**`SMTP_POOL`** — Reaproveita conexões SMTP em vez de abrir uma por envio.
+
+**`SMTP_MAX_CONNS`** — Teto de conexões simultâneas no pool SMTP.
+
+**`SMTP_REQUIRE_TLS`** — Exige STARTTLS e recusa a conexão sem ele.
+
+**`resend-http`** — selecionado por `EMAIL_PROVIDER=resend`. Validado em `modules/notifications/adapters/email/resend-config.ts`.
+
+| Variável | Exigência | Exemplo |
+| :--- | :--- | :--- |
+| `RESEND_API_KEY` | **obrigatória, não-vazia** | _(vazio)_ |
+
+**`RESEND_API_KEY`** — Credencial do provedor Resend. Só usada com `EMAIL_PROVIDER=resend`.
+
+**`email-in-memory`** — selecionado por `EMAIL_PROVIDER=memory`. Validado em `modules/notifications/adapters/email/email-config.ts`.
+
+Não exige variável nenhuma.
+
+### Capacidade `s3-compat`
+
+**`magalu-object-storage`** — **sem seletor** — não há variável que o escolha. Validado em `modules/contracts/adapters/storage/magalu-cloud-config.ts`.
+<br>⚠️ **Não composto:** O adapter existe e é exportado pelo `public-api` do `contracts`, mas nenhum composition root o instancia — o comentário em `public-api/index.ts:36` ainda o anuncia como trabalho futuro, com o export já feito na linha 58. ⚠️ O ambiente da Magalu não recebe dado real nem pessoal (ADR-0021).
+
+| Variável | Exigência | Exemplo |
+| :--- | :--- | :--- |
+| `MAGALU_REGION` | **obrigatória, não-vazia** | _(vazio)_ |
+| `MAGALU_BUCKET` | **obrigatória, não-vazia** | _(vazio)_ |
+| `MAGALU_ACCESS_KEY_ID` | **obrigatória, não-vazia** | _(vazio)_ |
+| `MAGALU_SECRET_ACCESS_KEY` | **obrigatória, não-vazia** | _(vazio)_ |
+
+**`MAGALU_REGION`** — Região do object storage da Magalu Cloud. Exigida pelo adapter `magalu-object-storage` da capacidade `s3-compat` — ver `capability-adapters.ts`. ⚠️ O ambiente da Magalu não recebe dado real nem pessoal (ADR-0021): produção e dado pessoal vivem na AWS, com residência no Brasil.
 
 **`MAGALU_BUCKET`** — Bucket na Magalu Cloud. Ver `MAGALU_REGION`.
-<br>⚠️ Nenhuma unidade a declara: O adapter existe e é exportado pelo `public-api` do `contracts`, mas nenhum composition root o instancia — o comentário em `public-api/index.ts:36` ainda o anuncia como trabalho futuro, com o export já feito na linha 58.
 
-**`MAGALU_REGION`** — Região do object storage da Magalu Cloud, adapter alternativo ao S3 da AWS. ⚠️ O ambiente da Magalu não recebe dado real nem pessoal (ADR-0021): produção e dado pessoal vivem na AWS, com residência no Brasil.
-<br>⚠️ Nenhuma unidade a declara: O adapter existe e é exportado pelo `public-api` do `contracts`, mas nenhum composition root o instancia — o comentário em `public-api/index.ts:36` ainda o anuncia como trabalho futuro, com o export já feito na linha 58.
+**`MAGALU_ACCESS_KEY_ID`** — Chave de acesso à Magalu Cloud. Ver `MAGALU_REGION`.
 
-**`MAGALU_SECRET_ACCESS_KEY`** — Segredo da chave da Magalu Cloud.
-<br>⚠️ Nenhuma unidade a declara: O adapter existe e é exportado pelo `public-api` do `contracts`, mas nenhum composition root o instancia — o comentário em `public-api/index.ts:36` ainda o anuncia como trabalho futuro, com o export já feito na linha 58.
+**`MAGALU_SECRET_ACCESS_KEY`** — Segredo da chave da Magalu Cloud. Ver `MAGALU_REGION`.
 
 ## Relações entre variáveis
 

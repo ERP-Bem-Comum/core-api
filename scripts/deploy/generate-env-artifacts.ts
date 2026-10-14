@@ -19,6 +19,11 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
+import {
+  CAPABILITY_ADAPTERS,
+  adapterOwning,
+  adaptersFor,
+} from '#src/deploy/capability-adapters.ts';
 import { CATALOGUED_ENVS, envDoc, type EnvDoc } from '#src/deploy/env-catalog.ts';
 import { WORKLOADS } from '#src/deploy/workloads.ts';
 
@@ -27,7 +32,7 @@ const ROOT = resolve(import.meta.dirname, '..', '..');
 const ENV_EXAMPLE = '.env.example';
 const DOC = 'handbook/infrastructure/14-environment-variables.md';
 
-type Category = 'required' | 'withDefault' | 'productionOnly' | 'constraintOnly';
+type Category = 'required' | 'withDefault' | 'productionOnly' | 'constraintOnly' | 'adapter';
 
 /** A entrada do catálogo. Nome fora dele é defeito de programação, não estado de entrada. */
 const docOf = (name: string): EnvDoc => {
@@ -51,6 +56,9 @@ const inList = (list: readonly string[], name: string): boolean => list.some((e)
  * mesmo trabalho, que é o defeito que ele existe para impedir.
  */
 const categoryOf = (name: string): Category | undefined => {
+  // Adapter primeiro: a obrigação dela é condicional à escolha, e ela sai numa seção por adapter.
+  // Sem este desvio, apareceria DUAS vezes no template — uma na categoria plana e outra no bloco.
+  if (adapterOwning(name) !== undefined) return 'adapter';
   if (WORKLOADS.some((w) => inList(w.env, name))) return 'required';
   if (WORKLOADS.some((w) => inList(w.envProductionOnly, name))) return 'productionOnly';
   if (WORKLOADS.some((w) => inList(w.envWithDefault, name))) return 'withDefault';
@@ -90,6 +98,68 @@ const asComment = (text: string, prefix = '# '): string => {
   }
   if (current !== '') lines.push(current);
   return lines.map((l) => `${prefix}${l}`).join('\n');
+};
+
+/**
+ * As variáveis de adapter, agrupadas por adapter e por capacidade.
+ *
+ * @remarks
+ * Seção própria porque a obrigação delas é CONDICIONAL à escolha: entre os adapters de uma mesma
+ * capacidade, só o selecionado exige o seu bloco. Misturá-las com as da unidade produziria um
+ * template que afirma exigir, ao mesmo tempo, `SMTP_USER` e `RESEND_API_KEY` — e nenhuma
+ * configuração real precisa dos dois.
+ */
+const adapterSections = (): readonly string[] => {
+  const out: string[] = [];
+  const capabilities = [...new Set(CAPABILITY_ADAPTERS.map((a) => a.capability))];
+  for (const cap of capabilities) {
+    const adapters = adaptersFor(cap);
+    const selectable = adapters.filter((a) => a.selectedBy !== undefined);
+    const title = `CAPACIDADE \`${cap}\` — ESCOLHA UM ADAPTER`;
+    out.push(`# ─── ${title} ${'─'.repeat(Math.max(0, 72 - title.length))}`, '');
+
+    if (selectable.length > 0) {
+      const sel = selectable[0]?.selectedBy;
+      if (sel !== undefined) {
+        out.push(
+          asComment(
+            `A escolha é \`${sel.env}\`. Só o bloco do adapter escolhido é exigido; os demais são ignorados — o código avalia um ramo só.`,
+          ),
+          '',
+        );
+      }
+    }
+
+    for (const a of adapters) {
+      const how =
+        a.selectedBy === undefined
+          ? 'adapter sem seletor'
+          : `quando ${a.selectedBy.env}=${a.selectedBy.value}`;
+      out.push(`# ▸ ${a.name} — ${how}`);
+      out.push(`#   validado em: src/${a.validatedBy}`);
+      if (a.notComposed !== undefined)
+        out.push(asComment(`NÃO COMPOSTO: ${a.notComposed}`, '#   '));
+      if (a.env.length + a.envWithDefault.length === 0) {
+        out.push('#   (não exige variável nenhuma)', '');
+        continue;
+      }
+      out.push('');
+      for (const name of [...a.env, ...a.envWithDefault]) {
+        const d = docOf(name);
+        const required = a.env.includes(name);
+        out.push(asComment(d.description));
+        out.push(`# lida em: src/${d.readBy}`);
+        if (d.defaultValue !== undefined) out.push(`# default no código: ${d.defaultValue}`);
+        // Só o bloco do adapter sem seletor, ou do primeiro selecionável, nasce ativo: um template
+        // com dois blocos ativos da mesma capacidade descreveria uma config impossível.
+        const active = a.notComposed === undefined && a.name === adapters[0]?.name;
+        out.push(`${active ? '' : '# '}${name}=${d.example}`);
+        if (!required) out.push('#   (tem default; declarar é opcional)');
+        out.push('');
+      }
+    }
+  }
+  return out;
 };
 
 const envExampleContent = (): string => {
@@ -137,6 +207,7 @@ const envExampleContent = (): string => {
     byCategory('productionOnly'),
     true,
   );
+  out.push(...adapterSections());
 
   const constraints = WORKLOADS.flatMap((w) => w.constraints.map((c) => ({ unit: w.name, ...c })));
   if (constraints.length > 0) {
@@ -238,6 +309,45 @@ const docContent = (): string => {
     CATALOGUED_ENVS.filter((n) => categoryOf(n) === undefined),
     'Existe código que as lê, e esse código não está no caminho de boot de unidade alguma. Ficam aqui para a lacuna permanecer visível.',
   );
+
+  // Adapters: a obrigação é CONDICIONAL à escolha, então a tabela é por adapter, não por categoria.
+  out.push(
+    '## Por adapter de capacidade',
+    '',
+    'A unidade declara que precisa de uma **capacidade** (`requires: [{ kind: … }]`), nunca de um',
+    'fornecedor. Quem a atende é um adapter, e as variáveis são **dele** — exigidas só quando ele é',
+    'o escolhido. Entre os adapters de uma mesma capacidade, o código avalia **um ramo só**.',
+    '',
+    'Declaração em [`src/deploy/capability-adapters.ts`](../../src/deploy/capability-adapters.ts).',
+    '',
+  );
+  for (const cap of [...new Set(CAPABILITY_ADAPTERS.map((a) => a.capability))]) {
+    out.push(`### Capacidade \`${cap}\``, '');
+    for (const a of adaptersFor(cap)) {
+      const how =
+        a.selectedBy === undefined
+          ? '**sem seletor** — não há variável que o escolha'
+          : `selecionado por \`${a.selectedBy.env}=${a.selectedBy.value}\``;
+      out.push(`**\`${a.name}\`** — ${how}. Validado em \`${a.validatedBy}\`.`);
+      if (a.notComposed !== undefined) out.push(`<br>⚠️ **Não composto:** ${a.notComposed}`);
+      out.push('');
+      if (a.env.length + a.envWithDefault.length === 0) {
+        out.push('Não exige variável nenhuma.', '');
+        continue;
+      }
+      out.push('| Variável | Exigência | Exemplo |', '| :--- | :--- | :--- |');
+      for (const name of [...a.env, ...a.envWithDefault]) {
+        const d = docOf(name);
+        const ex = d.example === '' ? '_(vazio)_' : `\`${d.example}\``;
+        const req = a.env.includes(name) ? '**obrigatória, não-vazia**' : 'tem default';
+        out.push(`| \`${name}\` | ${req} | ${ex} |`);
+      }
+      out.push('');
+      for (const name of [...a.env, ...a.envWithDefault]) {
+        out.push(`**\`${name}\`** — ${docOf(name).description}`, '');
+      }
+    }
+  }
 
   const constraints = WORKLOADS.flatMap((w) => w.constraints.map((c) => ({ unit: w.name, ...c })));
   if (constraints.length > 0) {
