@@ -58,6 +58,7 @@ import { runReturnScanLoop } from '../van-return-scan/scan-loop.ts';
 // ── notifications (composição de e-mail por env) ──────────────────────────────
 import {
   buildEmailSender,
+  describeEmailConfigError,
   parseEmailConfig,
   resolveFrom,
 } from '#src/modules/notifications/public-api/index.ts';
@@ -274,7 +275,14 @@ export const buildEmailDispatchSpec: SpecBuilder = (registry, env) => {
 
   // Config de e-mail (provider + remetente) resolvida por env — falha alta no boot (fail-loud).
   const config = parseEmailConfig(env);
-  if (!config.ok) return err(`email-dispatch: config de e-mail inválida (${config.error.tag})`);
+  // `describeEmailConfigError` e não `error.tag`: o tag sozinho ("invalid-provider-config") não diz
+  // QUAL variável falta, e o operador recebia exit 78 sem pista — sob o overmind, com os outros
+  // quatro processos caindo em cima da mensagem. O ADR-0068 exige que o processo diga o campo.
+  if (!config.ok) {
+    return err(
+      `email-dispatch: config de e-mail inválida — ${describeEmailConfigError(config.error)}`,
+    );
+  }
   const from = resolveFrom('reset', config.value) ?? resolveFrom('invite', config.value);
   if (from === undefined) {
     return err('email-dispatch: remetente (EMAIL_FROM) não configurado');

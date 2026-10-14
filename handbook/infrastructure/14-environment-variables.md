@@ -242,7 +242,7 @@ Têm substituto no código; declarar é opcional, e o valor do exemplo é o que 
 
 **`PARTNERS_READER_URL`** — Réplica de leitura do `partners`. Ver `CONTRACTS_READER_URL`.
 
-**`PORT`** — Porta da borda HTTP. ⚠️ Sob `pnpm run dev` o overmind define `PORT` por processo, então a porta efetiva não é esta — conferir com `overmind status`.
+**`PORT`** — Porta da borda HTTP. **Declarada aqui, é ela que vale** — medido em 14/10/2026: com `PORT=3000` no `.env`, `overmind start` subiu a borda em `127.0.0.1:3000`. O overmind atribui uma porta por processo quando a variável NÃO está declarada (base 5000, passo 100, no fonte dele), e esse caminho não foi exercitado aqui.
 <br>Default no código: `3000`.
 
 **`PROGRAMS_LOGO_S3_ACCESS_KEY_ID`** — Chave de acesso ao bucket de logo.
