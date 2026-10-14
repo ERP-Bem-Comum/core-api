@@ -116,9 +116,9 @@ export const createBradescoMultipagTranslator = (): CnabRemittanceTranslator => 
     });
     if (!fileName.ok) return err('cnab-file-name-failed');
 
-    // Última barreira antes de o use case enfileirar dinheiro. Sem ambiente de homologação
-    // (ADR-0061), é a única validação que existe antes do banco — e fica DENTRO do tradutor para
-    // que o chamador não possa esquecê-la.
+    // Última barreira antes de o use case enfileirar dinheiro. Como não existe arquivo de ensaio —
+    // gravar no prefixo de saída É enfileirar pagamento (ADR-0075) —, é a única validação que
+    // existe antes do banco, e fica DENTRO do tradutor para que o chamador não possa esquecê-la.
     if (inspectRemittanceFile(file.value.content).length > 0) return err('cnab-malformed-file');
 
     return ok({

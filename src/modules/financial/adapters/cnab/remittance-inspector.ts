@@ -4,10 +4,11 @@
 // numeração dos detalhes, presença do par A+B e — o mais caro — se os totais declarados nos
 // trailers batem com o que o arquivo de fato contém.
 //
-// POR QUE EXISTE: hoje não há ambiente de homologação para remessa de pagamento. A única conexão é
-// a de produção, no convênio real, onde um arquivo de teste vira pagamento de verdade (ADR-0061
-// §"O que continua em aberto"). Enquanto isso não se resolve, validar a FORMA é o mais longe que
-// dá para ir sem mover dinheiro.
+// POR QUE EXISTE: não existe arquivo de ensaio. Gravar objeto no prefixo de saída É enfileirar
+// pagamento, e quem transmite é o cliente, sobre título real, por decisão da P.O. (ADR-0075) —
+// então validar a FORMA aqui é o mais longe que dá para ir sem mover dinheiro. A transmissão está
+// em produção desde 06/09/2026; o que segue ausente é a possibilidade de ENSAIAR, não a de
+// transmitir, e é essa ausência que justifica este inspetor.
 //
 // ⚠️ O QUE ELE NÃO FAZ: não valida conteúdo de negócio. Um arquivo bem formado pode pagar o
 // favorecido errado, o valor errado ou na data errada — nada disso é estrutura. "Zero defeitos"

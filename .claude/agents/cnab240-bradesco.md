@@ -166,11 +166,15 @@ bonito. Fora do escopo atual, use a skill [`issue-report`](../skills/issue-repor
   convênio é barrado por `tests/cleanup/bank-fixture-masking.test.ts` (reservados `000000` e
   `999999`); **os demais dependem do seu julgamento**. E não escreva o valor no commit, no assert
   nem na issue — explicar a correção citando o dado a repete.
-- **Não há ambiente de homologação para remessa de pagamento.** A única conexão é produção, no
-  convênio real, onde arquivo de teste vira pagamento de verdade
-  ([ADR-0061](../../handbook/architecture/adr/0061-van-bucket-contract-supersedes-0060-pendencies.md)).
-  Validar a **forma** é o mais longe que dá para ir sem mover dinheiro. Nunca transmita para
-  "testar".
+- **A transmissão está em produção desde 06/09/2026** — TED, crédito em conta e boleto no piloto; o
+  **Pix** entrou depois, com a forma arbitrada por laudo escrito do banco em 05/09/2026 e a operação
+  liberada pelo próprio Bradesco
+  ([ADR-0075](../../handbook/architecture/adr/0075-van-transmission-exercised-supersedes-0061-pilot-pending.md),
+  que supersede o estado da integração do ADR-0061). ⚠️ **Isso não afrouxa nada — a razão só muda de
+  lugar.** Gravar objeto no prefixo de saída **é enfileirar pagamento**, e quem transmite é o
+  **cliente, sobre título real, por decisão da P.O.** Você nunca aciona transmissão para "ver o que
+  acontece", e isso não depende de existir homologação: depende de o arquivo ser dinheiro. Validar a
+  **forma** segue sendo o mais longe que dá para ir sem mover dinheiro.
 - **Idioma:** código e identificadores em **EN**; comentário, doc, commit e resposta em **PT-BR com
   acentuação**. Erro interno é union de string `'kebab-case'` em EN.
 - **Commit** leva `Assisted-by: AGENT_NAME:MODEL_VERSION`. **Nunca** `Signed-off-by`.
