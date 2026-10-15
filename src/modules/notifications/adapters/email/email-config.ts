@@ -25,6 +25,7 @@
  */
 
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import { echoEnvValue } from '../../../../shared/runtime/env-echo.ts';
 import {
   parse as parseEmailAddress,
   type EmailAddress,
@@ -65,6 +66,58 @@ export type EmailConfigError =
   | Readonly<{ tag: 'from-domain-not-allowed'; field: string; domain: string }>
   // rate-limit (#133 M3): env presente porem malformado — boot falha alto (fail-loud, nao desliga em silencio).
   | Readonly<{ tag: 'invalid-rate-limit'; reason: string }>;
+
+/**
+ * Mensagem de boot que NOMEIA a variável culpada.
+ *
+ * @remarks
+ * Existe porque quem formatava o erro imprimia só o `tag`: `config de e-mail inválida
+ * (invalid-provider-config)`. O `reason` — que carrega o `field` — era descartado, e o operador
+ * recebia um exit 78 sem saber qual variável preencher. Sob o overmind o estrago cresce: o
+ * `worker-email` morre e leva os outros quatro processos, então o terminal fica cheio de
+ * `Interrupting...` e nenhuma pista. Medido em dois boots seguidos, que só se resolveram com uma
+ * sonda que chamava esta mesma função.
+ *
+ * O [ADR-0068](../../../../../handbook/architecture/adr/0068-env-fail-fast-every-environment.md)
+ * é explícito sobre o que justifica o fail-fast: *"o modo de falha barato — o processo não sobe **e
+ * diz qual campo falta** — é o único que chega a quem tem a mão no problema"*. Sem o nome do campo,
+ * só a primeira metade era cumprida.
+ *
+ * ⚠️ Segurança, pela mesma régua de `describeVanS3ConfigError`: das variantes abaixo, só
+ * `invalid-port` e `invalid-max-connections` carregam `raw`, e nenhuma delas vem de credencial —
+ * `SMTP_USER` e `SMTP_PASS` falham como `missing-env`, que traz apenas o NOME (CWE-532). O `raw`
+ * que é ecoado passa por `echoEnvValue`, contra forja de linha no stderr (CWE-117). Variante nova
+ * que devolva `raw` de campo sensível precisa de guarda própria.
+ */
+export const describeEmailConfigError = (error: EmailConfigError): string => {
+  switch (error.tag) {
+    case 'invalid-provider':
+      // Os aceitos são escritos aqui, e não derivados de `PROVIDERS`, porque a constante é
+      // declarada adiante no arquivo — e trazê-la para cima só por causa desta mensagem moveria
+      // uma declaração de domínio para servir um formatador.
+      return `EMAIL_PROVIDER invalido "${echoEnvValue(error.raw)}" — aceitos: smtp, resend, memory`;
+    case 'invalid-provider-config': {
+      const r = error.reason;
+      const detail =
+        r.tag === 'missing-env'
+          ? `${r.field} ausente ou VAZIA (string vazia conta como ausente)`
+          : r.tag === 'invalid-port'
+            ? `SMTP_PORT invalida "${echoEnvValue(r.raw)}"`
+            : `SMTP_MAX_CONNS invalida "${echoEnvValue(r.raw)}"`;
+      return `provider "${error.provider}" selecionado e sua config nao resolve: ${detail}`;
+    }
+    case 'invalid-from':
+      return `${error.field} nao e endereco valido (${error.reason})`;
+    case 'from-domain-not-allowed':
+      return `${error.field} usa dominio "${echoEnvValue(error.domain)}", fora de EMAIL_FROM_ALLOWED_DOMAINS`;
+    case 'invalid-rate-limit':
+      return `rate limit de e-mail mal configurado: ${error.reason}`;
+    default: {
+      const _exhaustive: never = error;
+      return _exhaustive;
+    }
+  }
+};
 
 const PROVIDERS: readonly EmailProvider[] = ['smtp', 'resend', 'memory'];
 

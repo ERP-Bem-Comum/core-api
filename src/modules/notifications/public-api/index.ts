@@ -44,7 +44,11 @@ export type {
   EmailProvider,
   EmailFromKind,
 } from '../adapters/email/email-config.ts';
-export { parseEmailConfig, resolveFrom } from '../adapters/email/email-config.ts';
+export {
+  describeEmailConfigError,
+  parseEmailConfig,
+  resolveFrom,
+} from '../adapters/email/email-config.ts';
 
 export { withSandboxRedirect } from '../adapters/email/sandbox-redirect.ts';
 

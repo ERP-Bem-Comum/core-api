@@ -341,8 +341,138 @@ docker compose --profile app up -d --build      # sobe mysql + minio + app já c
 - `scripts/setup/secrets.ts` — gera os secrets.
 - `src/modules/contracts/adapters/storage/s3-config-aws.ts` — envs `S3_*` (canônicas).
 - `src/modules/contracts/adapters/http/composition.ts` — S3 obrigatório no driver mysql.
+---
+
+## 9. O ciclo completo com overmind — e as sete armadilhas que ele esconde
+
+> Medido em 14/10/2026, subindo a stack de ponta a ponta a partir do `.env.example` **gerado**
+> (#1059) até a suíte Hurl. Cada item abaixo custou pelo menos um ciclo de diagnóstico, e nenhum
+> deles produz erro no boot: todos falham em silêncio e o sintoma aparece adiante.
+
+Reprodução em um comando: `swift scripts/debug/macos/local-e2e.swift --reset`. Ele derruba, recria o banco,
+regera o ambiente de E2E, sobe daemonizado, **espera cada etapa por condição medida**, autentica os
+8 perfis e roda a suíte.
+
+### 9.1 `PORT` vem do `.env`, não do overmind
+
+O overmind atribui porta por processo (base 5000, passo 100) **apenas quando a variável não está
+declarada**. O `.env.example` gerado declara `PORT=3000`, e foi isso que a borda usou:
+`Server listening at http://127.0.0.1:3000`, com `GET /health` → 200.
+
+### 9.2 ⚠️ Precedência de env tem TRÊS camadas, e a ordem decide
+
+É a armadilha mais cara, e custou três ciclos. Medido:
+
+```bash
+X_TESTE=do-ambiente node --env-file=arq.env -e 'console.log(process.env.X_TESTE)'
+# → do-ambiente
+```
+
+**`--env-file` do Node NÃO sobrescreve env de processo.** E o overmind carrega o `.env` e o injeta
+como env de processo no filho. Como o `.env` gerado traz `AUTH_SEED_JSON=""` e
+`CORE_API_E2E="false"` — valores corretos para um template —, um `--env-file` com o seed **nunca
+vencia**: o `parseE2eAuthSeed` via string vazia, devolvia `undefined` (o caminho **certo** de
+produção) e o seed ficava inerte **sem erro nenhum**. O sintoma apareceu 8 requests depois, como
+401 por usuário inexistente.
+
+| Mecanismo | Sintaxe aceita | Vence env de processo? |
+| :--- | :--- | :--- |
+| `--env-file` do Node | valor cru | **não** |
+| `set -a; . arquivo` (source) | quoting de shell | **sim** |
+| inline na linha do Procfile | shell | **sim** |
+
+A regra: **o mecanismo de carregamento define a sintaxe E a precedência, e os dois têm de casar.**
+Trocar `--env-file` por `source` sem requotar o arquivo fez o shell comer as aspas duplas do JSON —
+2255 caracteres viraram 1999, exatamente as 256 aspas, e o valor chegou corrompido.
+
+### 9.3 `--root` do overmind: um defeito, três sintomas
+
+O default de `--root` é *"the directory containing the Procfile"*. Rodando com
+`overmind start -f .tmp/Procfile.logged` **sem `-d .`**, tudo relativo resolve de `.tmp/`:
+
+- `tee: .tmp/logs/http.jsonl: No such file or directory` (procurou `.tmp/.tmp/logs/`)
+- `Cannot find module '.../.tmp/src/server.ts'`
+- **a versão do Node mudou** (24.20 em vez de 24.21), porque o `.nvmrc` ficou fora de alcance
+
+O sinal que nomeia a causa é a primeira linha, antes de qualquer erro: `Tmux session ID: -tmp`.
+
+### 9.4 ⚠️ São DOIS rate limits, independentes
+
+| Variável | Default | Protege de |
+| :--- | ---: | :--- |
+| `AUTH_LOGIN_RATE_LIMIT_MAX` | 5/min | força bruta de credencial |
+| `RATE_LIMIT_MAX` | 100/janela | abuso de uso geral |
+
+Subir um **não** afeta o outro. Com 8 logins seguidos, os três últimos tomam 429; resolvido o de
+login, a suíte dispara 185 requests em ~1 s e **142 de 347** voltaram 429 no limite geral.
+
+### 9.5 `CORE_API_E2E` é comparado como string literal `'1'`
+
+`parseE2eAuthSeed` faz `env['CORE_API_E2E'] !== '1'`. `true`, `yes` ou `on` deixam o seed **inerte,
+sem aviso**. O template traz `false`, que é o valor desligado correto.
+
+### 9.6 `seed:admin` não sobrescreve — por desenho
+
+Se o e-mail já existe, ele encerra **com sucesso** sem tocar a senha. Em produção é a garantia
+certa (impede trocar a senha do administrador real por engano); em desenvolvimento produz 401
+silencioso, porque o script imprime uma senha que não vale. Um `admin@local.test` de oito dias
+antes custou dois ciclos. **Pergunte ao banco antes de confiar na mensagem.**
+
+### 9.7 Logs: `tee` para arquivo, não `capture-pane`
+
+O overmind roda os processos no tmux e o scrollback existe — `capture-pane -S -` devolveu 2047
+linhas. Mas ele devolve o texto **renderizado**: com o pane em 90 colunas, **1436 linhas tinham
+exatamente 90 caracteres** e o JSON do Pino chegava partido. Nenhum `reqId` sobrevivia para
+correlacionar `req` com `res`. Serve para ler, não para analisar.
+
+A saída é um Procfile alternativo com `2>&1 | tee -a .tmp/logs/<proc>.jsonl` — **zero código de
+produção**. Endpoint de log seria superfície HTTP nova numa borda que o [ADR-0049](../architecture/adr/0049-core-api-bff-boundary.md)
+fixa como pública em definitivo, servindo conteúdo com `reqId` e corpo de erro.
+
+### 9.8 O access token expira em minutos
+
+Gere-o **imediatamente antes** de usar. Medido: um token que funcionou em `/api/v1/me` devolveu 401
+poucos minutos depois; o mesmo fluxo com token fresco passou 3/3.
+
+### 9.9 Estado medido da suíte Hurl, e o que a limita
+
+Com banco limpo e os 8 perfis semeados: **191 de 241 requests enviados**, 6 arquivos verdes,
+**zero erro 500** e **zero defeito de aplicação**. O que impede os 50 restantes:
+
+| Causa | Nº | Natureza |
+| :--- | ---: | :--- |
+| `[Captures]` não cruzam arquivos | 48 | **limite do Hurl** — nenhum valor de env resolve |
+| Asserts de `403` | 24 | **`AUTH_RBAC_MODE` em bypass** ([#634](https://github.com/ERP-Bem-Comum/core-api/issues/634)) |
+| Assert de `409` | 1 | a asserção supõe resíduo; `--reset` a invalida |
+| `jsonpath "$.meta" exists` | 2 | condicional perdida na conversão do `.bru` |
+
+⚠️ **A suíte não pode chegar a 100% enquanto o RBAC estiver em bypass.** Os 24 casos verificam
+*"autenticado sem permissão → 403"*, e sob bypass todo autenticado é super-usuário — o modo está
+**fixado por código** (`server.ts`, duas linhas marcadas `← religar`). Quem olhar a suíte hoje não
+distingue "RBAC desligado" de "autorização quebrada".
+
+Os dois casos de `meta` são defeito da **asserção**, não da borda: o comentário do próprio caso diz
+*"se 200: meta coerente"* — era condicional, e o Hurl não tem condicional, então virou obrigação.
+Medido: `page=0` e `page=-1` devolvem **400** com envelope `{error}`; `page=1` e `pageSize=99999`
+devolvem 200 com `{items, meta}`. Recusar explicitamente é a melhor das três opções que o caso
+aceitava.
+
+### 9.10 Outros detalhes operacionais
+
+- **`--file-root .`** é obrigatório no Hurl: sem ele os `PUT .../photo` morrem com
+  `unauthorized access to file ../../tests/fixtures/...`. Não está no README da suíte.
+- **`api-collections-hurl/` é gitignored** — existe só no checkout principal, nunca numa worktree.
+  De dentro de uma worktree, resolva com `git rev-parse --path-format=absolute --git-common-dir`,
+  não contando níveis de `..`.
+- **Recriar o banco é mais seguro que truncar**: `fin_categories` e `fin_cost_centers` carregam seed
+  de migration, e apagá-las não as repõe. `DROP` + `CREATE` + `migrate` traz os seeds de volta.
+
+---
+
 - `src/server.ts` — envs de driver/DB por módulo + `PROGRAMS_LOGO_S3_*`.
 - `src/shared/http/config.ts` — defaults HTTP (`PORT`/`HOST`/...).
+- Catálogo completo de variáveis, gerado do manifesto:
+  [`handbook/infrastructure/14-environment-variables.md`](../infrastructure/14-environment-variables.md).
 - Detalhes formais de ambiente e secrets: `handbook/infrastructure/02-environments.md`,
   `handbook/infrastructure/03-secrets-catalog.md`.
 - ADRs: 0011 (supply-chain/secrets), 0013 (MySQL), 0014 (isolamento por prefixo), 0015 (outbox),

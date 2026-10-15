@@ -178,7 +178,7 @@ Detalhes completos: [`CLAUDE.md §Gotchas que não se descobre lendo o código`]
 >
 > ⚠️ **Um processo que morre leva os outros.** O overmind interrompe o grupo inteiro quando um processo sai, a menos que ele esteja em `OVERMIND_CAN_DIE`. Em config incompleta, isso aparece como "o `pnpm run dev` não sobe", sem apontar qual processo falhou primeiro — ler o stderr do que morreu antes de culpar os demais.
 >
-> ⚠️ **O overmind define `PORT` por processo**, então a porta da borda sob `pnpm run dev` **não** é a mesma do `pnpm run serve` (que usa o `DEFAULT_PORT` de `src/shared/http/config.ts`). Conferir com `overmind status` antes de apontar o BFF ou o Hurl para uma porta fixa.
+> ⚠️ **A porta é a do seu `.env`** — medido em 14/10/2026: com `PORT=3000` declarada, `overmind start` subiu a borda em `127.0.0.1:3000`, e `GET /health` respondeu 200. O overmind atribui porta por processo apenas quando a variável **não** está declarada; o `.env.example` gerado a declara, então esse caminho não aparece no uso normal. `overmind status` continua sendo a forma de conferir.
 >
 > **Sem o overmind**, a mesma topologia se reproduz à mão — um terminal por grupo, porque **nenhum script `pnpm` invoca o runner**. A ordem importa: o manifesto declara `dependsOn: ['migrate', 'sync-permissions']` para o `backend` (`src/deploy/workloads.ts:211`), e subir a borda sem semear o catálogo devolve **403 mudo** em permissão nova ([#462](https://github.com/ERP-Bem-Comum/core-api/issues/462)):
 >

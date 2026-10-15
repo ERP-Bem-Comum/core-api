@@ -8,10 +8,11 @@ paths:
   - 'tests/workers/**/*.ts'
   - 'tests/modules/*/worker/**/*.ts'
 verify:
-  - claim: 'a topologia é por grupo; o seletor é LIDO só no runner e DECLARADO só no manifesto'
+  - claim: 'a topologia é por grupo; o seletor é LIDO só no runner, DECLARADO só no manifesto e DESCRITO só no catálogo'
     root: 'src'
     pattern: 'WORKER_GROUP'
     expect:
+      - 'src/deploy/env-catalog.ts'
       - 'src/deploy/workloads.ts'
       - 'src/workers/runner/run.ts'
       - 'src/workers/runner/specs.ts'
