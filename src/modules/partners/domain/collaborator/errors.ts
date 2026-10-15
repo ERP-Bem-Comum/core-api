@@ -24,6 +24,9 @@ export type CollaboratorError =
   | 'collaborator-already-active'
   | 'collaborator-inactive-requires-disable-reason'
   | 'collaborator-children-inconsistent'
+  // #1053: PUT pode SUBSTITUIR o território, nunca APAGÁ-LO — zerar UF e município de quem já tem
+  // território gravado é recusado (decisão da P.O.).
+  | 'collaborator-territory-removal-forbidden'
   | PaymentTargetError
   | SexError
   | MaritalStatusError

@@ -237,3 +237,57 @@ describe('COLLABORATORS — export de histórico 9 colunas (#126)', () => {
     await teardown();
   });
 });
+
+// #1053 — a alteração de Território aparece no CSV (detalhe e grid) com tipo_alteracao=Território e
+// alterado_por. `historico_antes` vazio no caso sem→com território. Linha de histórico de território
+// (fieldLabel 'Território', valores UF/Município) injetada via override, como no bloco #126 acima.
+describe('COLLABORATORS — Território no export de histórico (#1053)', () => {
+  const territoryEntry = entry(String(ID_A), {
+    fieldName: 'territory',
+    fieldLabel: 'Território',
+    valueBefore: null, // sem → com território: historico_antes vazio
+    valueAfter: 'SP/Campinas',
+    changedByName: 'Ana Revisora',
+  });
+  // linha esperada do colaborador A: ...;DCE;03/06/2026;Território;<vazio>;SP/Campinas;18/06/2026;Ana Revisora
+  const EXPECTED_ROW = ';DCE;03/06/2026;Território;;SP/Campinas;18/06/2026;Ana Revisora';
+
+  it('detalhe: GET /:id/export?type=history → linha Território + alterado_por, antes vazio', async () => {
+    const { app, teardown } = await makeApp([RECORD_A], (deps) => ({
+      ...deps,
+      listCollaboratorHistory: (id: string) =>
+        Promise.resolve(ok(id === String(ID_A) ? [territoryEntry] : [])),
+    }));
+    const token = await login(app);
+    const exp = await app.inject({
+      method: 'GET',
+      url: `/api/v1/collaborators/${String(ID_A)}/export?type=history`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(exp.statusCode, 200, exp.body);
+    assert.ok(exp.body.includes(HEADER), `cabeçalho ausente:\n${exp.body}`);
+    assert.ok(exp.body.includes(EXPECTED_ROW), `linha de Território ausente:\n${exp.body}`);
+    await teardown();
+  });
+
+  it('lista: GET /collaborators/export?type=history → colaborador alterado com linha de Território', async () => {
+    const { app, teardown } = await makeApp([RECORD_A, RECORD_B], (deps) => ({
+      ...deps,
+      listCollaboratorHistory: (id: string) =>
+        Promise.resolve(ok(id === String(ID_A) ? [territoryEntry] : [])),
+    }));
+    const token = await login(app);
+    const exp = await app.inject({
+      method: 'GET',
+      url: '/api/v1/collaborators/export?type=history',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(exp.statusCode, 200, exp.body);
+    assert.ok(
+      exp.body.includes('Cazé TV;leka.devcode@gmail.com'),
+      `falta o colaborador alterado:\n${exp.body}`,
+    );
+    assert.ok(exp.body.includes(EXPECTED_ROW), `linha de Território no grid ausente:\n${exp.body}`);
+    await teardown();
+  });
+});
