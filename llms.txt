@@ -28,7 +28,7 @@ Idioma: prosa em PT-BR, identificadores de código/rotas/erros em EN.
 ## Guias do projeto (raiz)
 
 - [CLAUDE.md](CLAUDE.md): invariantes, anti-padrões e os gotchas que não se descobre lendo o código
-- [Regras por camada](/.claude/rules/): 17 rules que carregam por `path_glob_match` — domain, application,
+- [Regras por camada](/.claude/rules/): 18 rules que carregam por `path_glob_match` — domain, application,
   adapters, http-edge, testing, supply-chain e uma por módulo
 - [package.json](package.json): scripts (typecheck, lint, test, test:e2e:*, db:generate, docs:links)
 
