@@ -156,6 +156,7 @@ export const collaboratorDetailSchema = z.object({
   dateOfBirth: z.string().nullable(),
   employmentRelationship: z.string(),
   genderIdentity: z.string().nullable(),
+  genderIdentityDescription: z.string().nullable(),
   race: z.string().nullable(),
   education: z.string().nullable(),
   foodCategory: z.string().nullable(),
@@ -277,6 +278,9 @@ export const completeRegistrationBodySchema = z.object({
   rg: z.string().nullable().default(null),
   dateOfBirth: z.coerce.date().nullable().default(null),
   genderIdentity: z.string().nullable().default(null),
+  // #1054: texto livre de "Outra identidade de gênero". max(120) é bound de borda (coluna é 255);
+  // a coerência com genderIdentity = OUTRO é invariante de domínio (422). autocadastro herda via extend.
+  genderIdentityDescription: z.string().trim().max(120).nullable().default(null),
   race: z.string().nullable().default(null),
   education: z.string().nullable().default(null),
   foodCategory: z.string().nullable().default(null),

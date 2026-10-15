@@ -41,6 +41,7 @@ const complete = (base: CollaboratorEntity): CollaboratorEntity => {
       rg: null,
       dateOfBirth: null,
       genderIdentity: 'MULHER_CIS',
+      genderIdentityDescription: null,
       race: 'PARDO',
       education: 'ENSINO_SUPERIOR',
       foodCategory: null,

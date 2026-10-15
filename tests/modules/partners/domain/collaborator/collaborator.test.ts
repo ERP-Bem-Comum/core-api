@@ -32,6 +32,7 @@ const personal = () => ({
   rg: '12.345.678-9',
   dateOfBirth: new Date('1990-05-20T00:00:00.000Z'),
   genderIdentity: 'MULHER_CIS',
+  genderIdentityDescription: null,
   race: 'PARDO',
   education: 'ENSINO_SUPERIOR',
   foodCategory: 'VEGETARIANO',

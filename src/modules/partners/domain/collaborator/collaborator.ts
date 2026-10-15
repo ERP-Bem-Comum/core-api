@@ -131,6 +131,7 @@ export const register = (
     rg: null,
     dateOfBirth: null,
     genderIdentity: null,
+    genderIdentityDescription: null,
     race: null,
     education: null,
     foodCategory: null,
@@ -240,6 +241,17 @@ export const completeRegistration = (
     input.genderIdentity === null ? ok(null) : GenderIdentity.parse(input.genderIdentity);
   if (!genderIdentity.ok) return genderIdentity;
 
+  // #1054: o texto livre de "Outra identidade de gênero" só é coerente com genderIdentity = OUTRO.
+  // O foodCategory não guarda o caso análogo (grava sem validar); a issue decidiu RECUSAR aqui,
+  // alinhado ao ethos fail-fast do repo. OUTRO SEM descrição continua válido (o texto é opcional).
+  if (
+    input.genderIdentityDescription !== null &&
+    !isBlank(input.genderIdentityDescription) &&
+    genderIdentity.value !== 'OUTRO'
+  ) {
+    return err('gender-identity-description-requires-other');
+  }
+
   const race = input.race === null ? ok(null) : Race.parse(input.race);
   if (!race.ok) return race;
 
@@ -271,6 +283,7 @@ export const completeRegistration = (
     rg: input.rg,
     dateOfBirth: input.dateOfBirth,
     genderIdentity: genderIdentity.value,
+    genderIdentityDescription: input.genderIdentityDescription,
     race: race.value,
     education: education.value,
     foodCategory: foodCategory.value,
