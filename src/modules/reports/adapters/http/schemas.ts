@@ -1,7 +1,7 @@
 /**
  * Schemas Zod da rota de relatórios (ADR-0027). Zod só na borda.
  *
- * `teamMemberSchema` espelha `TeamMember` (13 colunas — 10 do #238 + as 3 demográficas).
+ * `teamMemberSchema` espelha `TeamMember` (14 colunas — 10 do #238 + as 3 demográficas + geração).
  */
 import * as z from 'zod/v4';
 
@@ -23,6 +23,9 @@ export const teamMemberSchema = z.object({
   genderIdentity: z.string().nullable(),
   race: z.string().nullable(),
   age: z.number().nullable(),
+  // REPORTS-TEAM-GENERATION (#1055): código da geração (recorte Pew pelo ano de nascimento),
+  // derivado no `partners`. NUNCA null (sem data de nascimento → 'NA'); rótulo PT-BR fica no front.
+  generation: z.string(),
 });
 
 export type TeamMemberDto = z.infer<typeof teamMemberSchema>;

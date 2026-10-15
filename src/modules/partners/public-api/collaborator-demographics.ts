@@ -51,7 +51,13 @@ const OTHERS_LABEL = 'Outros';
 export const NOT_AVAILABLE_ID = 'NA';
 const NOT_AVAILABLE_LABEL = 'N/A';
 
-const notAvailable: CategoryCount = { id: NOT_AVAILABLE_ID, label: NOT_AVAILABLE_LABEL, count: 0 };
+// Exportado para `generation.ts` reusar o MESMO bucket NA que os três templates demográficos
+// compartilham — fonte única do par `id: 'NA'` / `label: 'N/A'`.
+export const notAvailable: CategoryCount = {
+  id: NOT_AVAILABLE_ID,
+  label: NOT_AVAILABLE_LABEL,
+  count: 0,
+};
 
 // As listas canonicas sao o TEMPLATE zerado da distribuicao: todo bucket aparece na resposta
 // mesmo com count 0 (CA4), entao o grafico do front nao muda de forma conforme a amostra.

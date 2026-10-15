@@ -17,8 +17,9 @@ import { openCollaboratorProjectionReader } from '#src/modules/partners/public-a
 const CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
 const clock = ClockFixed(new Date('2026-06-01T12:00:00.000Z'));
 
-// REPORTS-TEAM-DEMOGRAPHIC-COLUMNS: 10 colunas do #238 + as 3 demográficas da tabela Equipe ABC.
-// `dateOfBirth` NÃO entra — só `age` (idade calculada com o Clock injetado).
+// REPORTS-TEAM-DEMOGRAPHIC-COLUMNS: 10 colunas do #238 + as 3 demográficas da tabela Equipe ABC;
+// #1055 acrescenta `generation`. `dateOfBirth` NÃO entra — só `age` (idade com o Clock injetado) e
+// `generation` (código derivado do ano de nascimento) atravessam.
 const PROJECTION_KEYS = [
   'active',
   'age',
@@ -26,6 +27,7 @@ const PROJECTION_KEYS = [
   'employmentRelationship',
   'experienceInPublicSector',
   'genderIdentity',
+  'generation',
   'id',
   'name',
   'program',
@@ -93,8 +95,8 @@ if (process.env['MYSQL_INTEGRATION'] !== '1') {
       assert.equal(m.active, true);
       assert.equal(m.program, null, 'programa não existe no core-api → null');
 
-      // CA3/CA6: o objeto projetado tem EXATAMENTE as 13 chaves do contrato — e `dateOfBirth`
-      // não é uma delas (só `age`).
+      // CA3/CA6: o objeto projetado tem EXATAMENTE as 14 chaves do contrato — e `dateOfBirth`
+      // não é uma delas (só `age` e `generation`, ambas derivadas).
       assert.deepEqual([...Object.keys(m)].sort(), [...PROJECTION_KEYS].sort());
     });
   });
