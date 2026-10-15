@@ -313,3 +313,142 @@ describe('COLLABORATORS-HTTP-EDIT — banco/PIX no PUT (#1029)', () => {
     await teardown();
   });
 });
+
+// #1053 — Território no PUT. Território pode ser SUBSTITUÍDO, nunca APAGADO (decisão da P.O.).
+// A captura PUT→diff→histórico é inspecionada via `listCollaboratorHistory` (porta compartilhada,
+// escrita pelo PUT). O export CSV é coberto ponta a ponta em `collaborators-history.routes.test.ts`.
+describe('COLLABORATORS-HTTP-EDIT — território no PUT (#1053)', () => {
+  const CE = { uf: 'CE', municipality: 'Fortaleza' };
+  const SP = { uf: 'SP', municipality: 'Campinas' };
+
+  const historyOf = async (
+    deps: Awaited<ReturnType<typeof makeApp>>['partnersDeps'],
+    id: string,
+  ) => {
+    const r = await deps.listCollaboratorHistory(id);
+    assert.ok(r.ok);
+    return r.value;
+  };
+  const territoryLine = (entries: Awaited<ReturnType<typeof historyOf>>) =>
+    entries.find((e) => e.fieldName === 'territory');
+
+  it('CA: troca o território (CE/Fortaleza → SP/Campinas) → 200, linha de histórico com autor', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, { territory: CE });
+    const res = await put(app, token, id, body({ territory: SP }));
+    assert.equal(res.statusCode, 200, res.body);
+
+    const line = territoryLine(await historyOf(partnersDeps, id));
+    assert.ok(line, 'esperava linha de territory');
+    assert.equal(line.fieldLabel, 'Território');
+    assert.equal(line.valueBefore, 'CE/Fortaleza');
+    assert.equal(line.valueAfter, 'SP/Campinas');
+    assert.ok((line.changedByUserId ?? '').length > 0, 'autor (userId) ausente');
+    assert.equal(line.changedByName, EDITOR_NAME);
+    await teardown();
+  });
+
+  it('CA: sem → com território → 200 e historico_antes vazio (valueBefore null)', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {}); // criado sem território
+    const res = await put(app, token, id, body({ territory: CE }));
+    assert.equal(res.statusCode, 200, res.body);
+
+    const line = territoryLine(await historyOf(partnersDeps, id));
+    assert.equal(line?.valueBefore, null);
+    assert.equal(line?.valueAfter, 'CE/Fortaleza');
+    await teardown();
+  });
+
+  it('CA: territory ausente ou null NÃO gera linha de Território', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, { territory: CE });
+    assert.equal((await put(app, token, id, body({ role: 'Coord.' }))).statusCode, 200); // ausente
+    assert.equal(
+      (await put(app, token, id, body({ role: 'Coord.', territory: null }))).statusCode,
+      200,
+    ); // null
+    const fields = (await historyOf(partnersDeps, id)).map((e) => e.fieldName);
+    assert.ok(
+      !fields.includes('territory'),
+      `não devia haver linha de territory: ${fields.join(',')}`,
+    );
+    await teardown();
+  });
+
+  it('CA: substituição parcial (troca UF e zera município) → 200 e depois = "SP/"', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, { territory: CE });
+    const res = await put(app, token, id, body({ territory: { uf: 'SP', municipality: '' } }));
+    assert.equal(res.statusCode, 200, res.body);
+    const line = territoryLine(await historyOf(partnersDeps, id));
+    assert.equal(line?.valueBefore, 'CE/Fortaleza');
+    assert.equal(line?.valueAfter, 'SP/');
+    await teardown();
+  });
+
+  it('CA: zerar os dois com território gravado → 422 (removal-forbidden), nada muda', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, { territory: CE });
+    for (const terr of [
+      { uf: '', municipality: '' },
+      { uf: null, municipality: null },
+      { uf: '  ', municipality: '  ' },
+    ]) {
+      const res = await put(app, token, id, body({ territory: terr }));
+      assert.equal(res.statusCode, 422, res.body);
+    }
+    const fields = (await historyOf(partnersDeps, id)).map((e) => e.fieldName);
+    assert.ok(!fields.includes('territory'), 'recusa não devia escrever histórico');
+    await teardown();
+  });
+
+  it('CA: zerar os dois SEM território gravado → 200 (mantém null), sem linha', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {}); // criado sem território
+    const res = await put(app, token, id, body({ territory: { uf: '', municipality: '' } }));
+    assert.equal(res.statusCode, 200, res.body);
+    const fields = (await historyOf(partnersDeps, id)).map((e) => e.fieldName);
+    assert.ok(!fields.includes('territory'), 'não devia haver linha de territory');
+    await teardown();
+  });
+
+  it('CA: UF que não é sigla BR → 422 (territory-uf-invalid)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {});
+    const res = await put(
+      app,
+      token,
+      id,
+      body({ territory: { uf: 'XX', municipality: 'Qualquer' } }),
+    );
+    assert.equal(res.statusCode, 422, res.body);
+    await teardown();
+  });
+
+  it('CA: funciona no colaborador COMPLETE (registrationStatus preservado)', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, { territory: CE });
+    const completed = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/collaborators/${id}/complete-registration`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    assert.equal(completed.statusCode, 200, completed.body);
+
+    const res = await put(app, token, id, body({ territory: SP }));
+    assert.equal(res.statusCode, 200, res.body);
+    const line = territoryLine(await historyOf(partnersDeps, id));
+    assert.equal(line?.valueAfter, 'SP/Campinas');
+    await teardown();
+  });
+});

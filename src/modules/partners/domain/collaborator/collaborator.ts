@@ -71,6 +71,26 @@ const keepOrParse = <I, V>(
 ): Result<V | null, PaymentTargetError> =>
   input === undefined || input === null ? ok(current) : parse(input);
 
+// Edição do território (#1053) — território pode ser SUBSTITUÍDO, nunca APAGADO (decisão da P.O.):
+//   - ausente/`null`                              → MANTÉM o gravado.
+//   - objeto com ao menos um campo preenchido     → valida (mesma regra da criação) e SUBSTITUI;
+//                                                    substituição parcial é permitida (ex.: trocar a
+//                                                    UF e zerar o município).
+//   - os dois vazios/brancos com território gravado → RECUSA (apagar não é suportado).
+//   - os dois vazios/brancos sem território gravado → "mantém" (segue `null`).
+const resolveTerritoryEdit = (
+  current: Territory.Territory | null,
+  input: Territory.TerritoryInput | null | undefined,
+): Result<Territory.Territory | null, CollaboratorError> => {
+  if (input === undefined || input === null) return ok(current);
+  const ufBlank = input.uf === null || isBlank(input.uf);
+  const municipalityBlank = input.municipality === null || isBlank(input.municipality);
+  if (ufBlank && municipalityBlank) {
+    return current === null ? ok(null) : err('collaborator-territory-removal-forbidden');
+  }
+  return Territory.createTerritory(input);
+};
+
 export const register = (
   input: RegisterCollaboratorInput,
 ): Result<{ collaborator: ActiveCollaborator; event: CollaboratorEvent }, CollaboratorError> => {
@@ -151,8 +171,10 @@ export const register = (
  * Edição cadastral (PUT total): revalida os 7 campos cadastrais e os sobrescreve, **preservando**
  * via spread os campos pessoais, o `registrationStatus` e o estado de soft-delete (status/disableBy/
  * deactivatedAt). Banco/PIX (#1029): ausente ou `null` preserva; objeto valida e substitui — é o
- * caminho para preencher os migrados do legado, que vieram sem. RBAC do campo vital (CPF) é decidido
- * fora (use case/borda). Emite `CollaboratorEdited`.
+ * caminho para preencher os migrados do legado, que vieram sem. Território (#1053): mesma semântica
+ * de "preserva ou substitui", com a ressalva de que ESVAZIAR um território gravado é recusado (ver
+ * `resolveTerritoryEdit`). RBAC do campo vital (CPF) é decidido fora (use case/borda). Emite
+ * `CollaboratorEdited`.
  */
 export const edit = (
   collaborator: Collaborator,
@@ -183,6 +205,9 @@ export const edit = (
   const pixKey = keepOrParse(collaborator.pixKey, input.pixKey, PaymentTarget.createPixKey);
   if (!pixKey.ok) return pixKey;
 
+  const territory = resolveTerritoryEdit(collaborator.territory, input.territory);
+  if (!territory.ok) return territory;
+
   // Spread preserva pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
   const edited: Collaborator = immutable({
     ...collaborator,
@@ -195,6 +220,7 @@ export const edit = (
     employmentRelationship: employmentRelationship.value,
     bankAccount: bankAccount.value,
     pixKey: pixKey.value,
+    territory: territory.value,
   });
 
   return ok({
