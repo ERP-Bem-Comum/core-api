@@ -116,6 +116,10 @@ export type EditCollaboratorInput = Readonly<{
   // `null` em todo PUT de colaborador, e `null` = remover apagaria os dados bancários a cada edição.
   bankAccount?: BankAccountInput | null | undefined;
   pixKey?: PixKeyInput | null | undefined;
+  // #1053: território pode ser SUBSTITUÍDO, nunca APAGADO. Ausente/`null` MANTÉM o gravado; objeto
+  // com ao menos um campo preenchido valida e substitui (substituição parcial permitida); os dois
+  // vazios com território gravado é RECUSADO (`collaborator-territory-removal-forbidden`).
+  territory?: TerritoryInput | null | undefined;
 }>;
 
 // Payload de auto-cadastro (campos pessoais; enums como string, validados no domínio).

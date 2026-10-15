@@ -235,14 +235,19 @@ export const createCollaboratorBodySchema = z.object({
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
 
 /**
- * Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais e território não
- * entram aqui. Banco/PIX (#1029) entram com semântica PRÓPRIA: ausente ou `null` MANTÉM o gravado;
- * objeto valida e substitui.
+ * Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais não entram aqui.
+ * Banco/PIX (#1029) e território (#1053) entram com semântica PRÓPRIA: ausente ou `null` MANTÉM o
+ * gravado; objeto valida e substitui.
  *
  * ⚠️ Sem `.default(null)` e sem `null` = remover, ao contrário do create e do PUT do Fornecedor. O
  * front em produção envia `bankAccount: null, pixKey: null` em TODO PUT de colaborador (antes eram
  * descartados pelo `omit`); dar a esse `null` o sentido de "remover" apagaria os dados bancários a
  * cada edição cadastral. Não "alinhar" com o Fornecedor sem antes mudar todos os clientes.
+ *
+ * #1053: território pode ser SUBSTITUÍDO, nunca APAGADO. Ausente ou `null` mantém; objeto com ao
+ * menos um campo preenchido valida (UF por sigla IBGE no domínio) e substitui — substituição parcial
+ * permitida; zerar UF e município de quem já tem território é recusado no domínio com
+ * `collaborator-territory-removal-forbidden` (422).
  */
 export const updateCollaboratorBodySchema = createCollaboratorBodySchema
   .omit({ bankAccount: true, pixKey: true, territory: true })
@@ -255,6 +260,10 @@ export const updateCollaboratorBodySchema = createCollaboratorBodySchema
       .nullable()
       .optional()
       .meta({ description: 'Ausente ou null mantém a chave gravada; objeto substitui' }),
+    territory: territorySchema.nullable().optional().meta({
+      description:
+        'Ausente ou null mantém o território gravado; objeto com ao menos um campo preenchido substitui (parcial permitido); zerar os dois de quem já tem território é recusado (422)',
+    }),
   });
 
 export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
