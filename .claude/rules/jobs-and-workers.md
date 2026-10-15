@@ -8,10 +8,12 @@ paths:
   - 'tests/workers/**/*.ts'
   - 'tests/modules/*/worker/**/*.ts'
 verify:
-  - claim: 'a topologia de produção é por grupo, e o seletor vive só no runner'
+  - claim: 'a topologia é por grupo; o seletor é LIDO só no runner, DECLARADO só no manifesto e DESCRITO só no catálogo'
     root: 'src'
     pattern: 'WORKER_GROUP'
     expect:
+      - 'src/deploy/env-catalog.ts'
+      - 'src/deploy/workloads.ts'
       - 'src/workers/runner/run.ts'
       - 'src/workers/runner/specs.ts'
   - claim: 'a spec de worker é declarada num lugar só, e é o mesmo que agrupa'
@@ -29,9 +31,15 @@ verify:
 
 A disciplina one-shot do job — sem `setInterval`, sem listener de sinal — e o shutdown cooperativo do worker contínuo são cobrados por `tests/cleanup/jobs-oneshot-discipline.test.ts`, com a razão de cada uma no docblock de lá. Não repetir aqui.
 
-- **Produção roda um processo por GRUPO, não um por worker.** O `compose.yaml` — que gera os taskdefs — sobe `src/workers/runner/run.ts` com `WORKER_GROUP=outbox|projections|email|van`. Os 6 workers standalone foram consolidados (#407) para cortar tasks Fargate e pools contra o RDS depois do [Incident-0001](../../handbook/incidents/0001-prod-rds-connection-exhaustion-2026-07-10.md); o `van` entrou depois, e a lista vive em `run.ts` e em `GROUPS` (`specs.ts`) — **contá-los aqui só produz um número que envelhece**. Ao raciocinar sobre paralelismo ou conexões, a unidade é o **grupo**, não o worker.
+- **Produção roda um processo por GRUPO, não um por worker.** O processo é `src/workers/runner/run.ts` com `WORKER_GROUP=outbox|projections|email|van` — é assim no `compose.yaml` e no `Procfile`, **que são os dois locais**. ⚠️ **Nos taskdefs são três, não quatro:** o `worker-van` está declarado com `provisioning: 'declared-only'` ([`workloads.ts:366`](../../src/deploy/workloads.ts)), e a [inquiry-0038](../../handbook/inquiries/0038-fim-do-compose-como-modelo-de-execucao.md) mediu no CloudWatch, em 04/09, que ele **não existe em nenhum ambiente**. Declarado não é provisionado.
+
+  ⚠️ **O `compose.yaml` NÃO gera os taskdefs.** O que o [ADR-0068](../../handbook/architecture/adr/0068-env-fail-fast-every-environment.md):28 registra é que as **variáveis de ambiente** de homologação e produção são postas à mão na console da AWS, e que os dois ambientes são operados por terceiro e **provisionados por taskdef** — quem *escreve* o taskdef não está dito ali, e se existe gerador ele não está nesta árvore. A divergência e o que falta medir: [inquiry-0038](../../handbook/inquiries/0038-fim-do-compose-como-modelo-de-execucao.md) §4. **Não inverta a direção sem medir** — foi afirmá-la sem medida que criou o defeito.
+
+  Os 6 workers standalone foram consolidados (#407) para cortar tasks Fargate e pools contra o RDS depois do [Incident-0001](../../handbook/incidents/0001-prod-rds-connection-exhaustion-2026-07-10.md); o `van` entrou depois, e a lista vive em `run.ts` e em `GROUPS` (`specs.ts`) — **contá-los aqui só produz um número que envelhece**. Ao raciocinar sobre paralelismo ou conexões, a unidade é o **grupo**, não o worker.
 
   ⚠️ Os grupos **não são todos do mesmo profile do compose**: `outbox`, `projections` e `email` estão sob `--profile workers`; o `van`, sob `--profile van`. Por isso `tests/infra/worker-runner-compose.test.ts` afirma três serviços e está correto — ele mede o profile, não o runner. Comparar as duas contagens sem essa distinção faz uma parecer defeito da outra.
+
+- **A unidade de deploy se declara em [`src/deploy/workloads.ts`](../../src/deploy/workloads.ts), e o que ela EXIGE do ambiente também.** O manifesto é a fonte auto-contida do que este repositório sabe executar — `command`, regime (`service`/`task`/`scheduled`), capacidades e as três listas de variáveis (obrigatória, com default, exigida só em produção). Nada de ARN, subnet ou cluster entra ali: isso é de quem opera. `tests/cleanup/workloads-manifest.test.ts` o amarra ao código — entrypoint novo sem declaração, variável declarada que sumiu do fonte e leitura de ambiente fora de módulo de configuração são vermelho.
 
 - **Responsabilidade nova = `SpecBuilder` novo, NUNCA processo novo.** Acrescentar um worker é escrever a factory em `src/workers/runner/specs.ts` e listá-la num dos grupos do `GROUPS` — não criar entrypoint. O `SpecBuilder` recebe `env` e o `PoolRegistry` por parâmetro, devolve `Result<WorkerSpec, string>`, e o `WorkerSpec` é só `{ name, run(signal) }`: **cadência e ciclo de vida não entram nele** — quem cuida de SIGTERM e do `abortSignal` é o `run.ts` do runner. Spec que lê `process.env`, abre pool próprio ou agenda a si mesma quebra a consolidação e devolve o pool redundante que o Incident-0001 custou. [ADR-0041](../../handbook/architecture/adr/0041-specialized-workers-and-oneshot-jobs.md) pedia um entrypoint por responsabilidade; o que sobrevive dele é a **separação de responsabilidades na spec** — a contagem de PROCESSOS é decisão operacional (pools contra o RDS, tasks Fargate), não consequência de quantas responsabilidades existem.
 

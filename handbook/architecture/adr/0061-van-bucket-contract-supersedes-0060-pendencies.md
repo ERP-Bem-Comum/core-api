@@ -2,7 +2,10 @@
 
 # ADR-0061: O contrato do bucket da VAN — cinco prefixos, `status/` como única janela, caixa compartilhada por convênio (supersede parcial do ADR-0060)
 
-- **Status:** Accepted
+- **Status:** Accepted — **o estado da integração (`:23-27`) e a pendência 2 (`:137`) foram superseded pelo [ADR-0075](./0075-van-transmission-exercised-supersedes-0061-pilot-pending.md); a consequência sobre `Transmitted` (`:117`), pelo [ADR-0065](./0065-remittance-responsibility-boundary-supersedes-0060-0061-transmitted.md)**
+- **Superseded by (parcial):**
+  - [ADR-0075](./0075-van-transmission-exercised-supersedes-0061-pilot-pending.md) (2026-10-14) — cai a afirmação de que *"a transmissão nunca foi exercitada"* (`:23-27`) e a **pendência 2** (`:137`). **TED, crédito em conta e boleto estão em produção desde 06/09/2026**; o **Pix** entrou depois, liberado pelo próprio banco. ⚠️ **Todo o contrato do bucket abaixo permanece vigente e inalterado** — os cinco prefixos, o `status/` como única janela, a caixa compartilhada por convênio, a idempotência do lado do agente e a credencial por role.
+  - [ADR-0065](./0065-remittance-responsibility-boundary-supersedes-0060-0061-transmitted.md) (2026-08-24) — a consequência *"o backend consegue decidir a transição de `Transmitted` a partir de um contrato explícito"* (`:117`) passa a descrever só a **remessa**: o título vira `Transmitted` na geração. (A cláusula *"a transição passa a depender de sinal externo"* é do [ADR-0060](./0060-van-transport-via-s3-bucket-supersedes-0008-relay.md) `:78-79`, não deste documento.)
 - **Date:** 2026-08-10
 - **Deciders:** Infra (Codebit) — desenho e implementação do agente · Gabriel Aderaldo (Tech Lead) — aceite do contrato e fronteira da aplicação
 - **Supersedes (parcial):** [ADR-0060](./0060-van-transport-via-s3-bucket-supersedes-0008-relay.md) — a tabela de prefixos (`:41-46`) e as pendências 1, 2 e 3 (`:94-97`), **respondidas**. A decisão de rota do 0060 (transporte por bucket, aplicação nunca toca a instância) **permanece vigente e inalterada** — é a premissa deste ADR.

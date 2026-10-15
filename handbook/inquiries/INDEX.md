@@ -9,13 +9,13 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 8 | quem trabalha nela |
+| `open` | 9 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
 | `decided` | 19 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 2 | — |
 
-Total: **37**.
+Total: **38**.
 
 ---
 
@@ -31,6 +31,7 @@ Total: **37**.
 | [0032](./0032-titulo-remetido-fronteira-do-agregado.md) | Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock | 2026-08-23 |  |
 | [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) | Duas normas que a medição contradiz — migration "sempre gerada" e a proibição global de ODKU | 2026-09-01 |  |
 | [0036](./0036-onde-a-documentacao-deve-viver.md) | Onde a documentação deve viver — o critério do `grep` e os 30 MB de handbook/reference | 2026-09-02 |  |
+| [0038](./0038-fim-do-compose-como-modelo-de-execucao.md) | O fim do `compose.yaml` como modelo de execução — o que o substitui, e o que ele carregava sem estar declarado | 2026-09-04 |  |
 
 ---
 

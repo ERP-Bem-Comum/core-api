@@ -37,6 +37,8 @@
     "docs:index": "node --enable-source-maps scripts/handbook/inquiry-index.ts",
     "docs:refs": "node --enable-source-maps scripts/handbook/refs.ts",
     "docs:links": "node --enable-source-maps scripts/handbook/link-scan.ts",
+    "env:generate": "node --enable-source-maps scripts/deploy/generate-env-artifacts.ts",
+    "env:check": "node --enable-source-maps scripts/deploy/generate-env-artifacts.ts --check",
     "wiki:sync": "node --enable-source-maps scripts/handbook/wiki-sync.ts",
     "cnab:index": "node --enable-source-maps scripts/financial/cnab-manual-index.ts",
     "logbook": "node --enable-source-maps scripts/claude/logbook.ts",

@@ -140,17 +140,22 @@ pnpm test                              # tests/**/*.test.ts via node:test (execu
 # Servidor + processos de background
 pnpm run serve                         # sobe a borda HTTP (node src/server.ts); config via env
 pnpm run dev                           # overmind start — HTTP + workers juntos (Procfile)
+pnpm run job:migrate                   # aplica migrations
+pnpm run job:contracts:sweep           # oneshot: varredura de ciclo de vida de contratos
+
+# ⚠️ DEBUG de um worker isolado — NÃO é a stack. São entrypoints anteriores à consolidação
+# #407, e não existe `worker:projections` nem `worker:van`: quem os usa como stack sobe
+# topologia diferente da de produção, sem worker da VAN. Ver a nota após este bloco.
 pnpm run worker:outbox                 # relay do outbox de contracts (idem :partners)
 pnpm run worker:email-dispatch         # consumidor de e-mail (notifications)
 pnpm run worker:supplier-projection    # projeção fin_supplier_view
-pnpm run job:migrate                   # aplica migrations
-pnpm run job:contracts:sweep           # oneshot: varredura de ciclo de vida de contratos
 
 # Testes de integração (sobem MySQL/S3 via Docker compose --wait) e smoke E2E HTTP
 pnpm run test:integration:financial    # idem :contracts :auth :partners :programs :notifications :storage :etl …
 pnpm run test:e2e:auth                 # smoke bash contra server real (idem :contracts :collaborators)
 
-# Suíte da borda em Hurl (ADR-0074) — fora do git, não é gate: ver api-collections-hurl/README.md
+# Suíte da borda em Hurl (ADR-0074) — NÃO versionada (api-collections-hurl/ está no .gitignore),
+# não é gate, e um clone novo não a tem. Contrato em .claude/rules/api-collections.md
 hurl --test --jobs 1 --variables-file api-collections-hurl/_vars.env api-collections-hurl/casos/**/*.hurl
 
 # Migrations (Drizzle Kit) — uma config por módulo em db/drizzle/
@@ -163,13 +168,45 @@ pnpm run secrets:setup                 # gera ./secrets/*.txt
 pnpm run logbook                       # idem --dead
 ```
 
-Detalhes completos: [`CLAUDE.md §Comandos não-óbvios`](./CLAUDE.md#comandos-n%C3%A3o-%C3%B3bvios).
+Detalhes completos: [`CLAUDE.md §Gotchas que não se descobre lendo o código`](./CLAUDE.md#gotchas-que-n%C3%A3o-se-descobre-lendo-o-c%C3%B3digo).
+
+> ⚠️ **`pnpm run dev` exige o [`overmind`](https://github.com/DarthSim/overmind) instalado** (`brew install overmind`) — ele não é dependência do projeto e não há gate que o cobre. Sem ele o comando falha com `command not found`, sem pista de origem.
+>
+> O `Procfile` sobe `http` e os **quatro grupos** de worker.
+>
+> ⚠️ **`VAN_S3_REGION` e `VAN_S3_BUCKET` não são opcionais, e não são só do grupo `van`: sem elas o `http` também não sobe.** `buildVanStorage` (`src/modules/financial/adapters/http/composition.ts:782`) faz `throw` quando a config não resolve, e é chamado de forma eager na composição do `financial` sob `FINANCIAL_DRIVER=mysql` (`:949`) — fail-fast deliberado do [ADR-0068](./handbook/architecture/adr/0068-env-fail-fast-every-environment.md). O manifesto declara as duas no `env` obrigatório da unidade `backend` (`src/deploy/workloads.ts:232-233`). Logo **não existe subconjunto que dispense as `VAN_S3_*`** — nem via `OVERMIND_PROCESSES`, nem via `pnpm run serve`.
+>
+> ⚠️ **Um processo que morre leva os outros.** O overmind interrompe o grupo inteiro quando um processo sai, a menos que ele esteja em `OVERMIND_CAN_DIE`. Em config incompleta, isso aparece como "o `pnpm run dev` não sobe", sem apontar qual processo falhou primeiro — ler o stderr do que morreu antes de culpar os demais.
+>
+> ⚠️ **A porta é a do seu `.env`** — medido em 14/10/2026: com `PORT=3000` declarada, `overmind start` subiu a borda em `127.0.0.1:3000`, e `GET /health` respondeu 200. O overmind atribui porta por processo apenas quando a variável **não** está declarada; o `.env.example` gerado a declara, então esse caminho não aparece no uso normal. `overmind status` continua sendo a forma de conferir.
+>
+> **Sem o overmind**, a mesma topologia se reproduz à mão — um terminal por grupo, porque **nenhum script `pnpm` invoca o runner**. A ordem importa: o manifesto declara `dependsOn: ['migrate', 'sync-permissions']` para o `backend` (`src/deploy/workloads.ts:211`), e subir a borda sem semear o catálogo devolve **403 mudo** em permissão nova ([#462](https://github.com/ERP-Bem-Comum/core-api/issues/462)):
+>
+> ```bash
+> pnpm run job:migrate                                                # 1. schema
+> node --enable-source-maps src/jobs/auth/sync-permissions/run.ts     # 2. catálogo de permissões
+> pnpm run serve                                                      # 3. a borda HTTP
+> WORKER_GROUP=outbox      node --enable-source-maps src/workers/runner/run.ts
+> WORKER_GROUP=projections node --enable-source-maps src/workers/runner/run.ts
+> WORKER_GROUP=email       node --enable-source-maps src/workers/runner/run.ts
+> WORKER_GROUP=van         node --enable-source-maps src/workers/runner/run.ts
+> ```
+>
+> ⚠️ Os `pnpm run worker:*` **não** substituem isso: são os seis entrypoints standalone anteriores à consolidação #407, mantidos para **debug de um worker isolado** (ver [`.claude/rules/jobs-and-workers.md`](./.claude/rules/jobs-and-workers.md)). Não existe `worker:projections` nem `worker:van`, então quem os usa como stack sobe uma topologia diferente da que roda em produção — e **sem nenhum worker da VAN**.
 
 ---
 
 ## 🐳 Ambiente local (Docker Compose)
 
-`compose.yaml` sobe o stack completo com hardening (`read_only`, `cap_drop`, `security_opt`): **MySQL 8.4**, **MinIO** (storage S3-compat dev, ADR-0019), **Mailpit** (captura de e-mail dev), o serviço `http` e os workers/jobs (`outbox-*`, `*-projection`, `email-dispatch`, `contracts-sweeper`, `migrate`). Variantes: `compose.ci.yaml` (CI) e `compose.etl.yaml` (ETL).
+`compose.yaml` sobe o stack local com hardening (`read_only`, `cap_drop`, `security_opt`), e **só vale para ambiente local** — homologação e produção são operadas por terceiro e provisionadas por _taskdef_, com as **variáveis de ambiente** postas à mão na console da AWS ([ADR-0068](./handbook/architecture/adr/0068-env-fail-fast-every-environment.md):28). ⚠️ **Se existe gerador de taskdef, ele não está nesta árvore e ninguém verificou onde vive** — ver [inquiry-0038](./handbook/inquiries/0038-fim-do-compose-como-modelo-de-execucao.md) §4.
+
+⚠️ **Todo serviço de aplicação está atrás de um `profile`, então `docker compose up` sobe só a infra** — sem erro algum, o que é o modo de falha fácil de confundir com "subiu".
+
+- **Infra (sem profile, sobe sempre):** **MySQL 8.4** e **MinIO** (storage S3-compat dev, ADR-0019). **Mailpit** (captura de e-mail dev) exige `--profile mail`.
+- **Aplicação:** o serviço `http` (`--profile app`) e os workers por **grupo** — `worker-outbox`, `worker-projections`, `worker-email` (`--profile workers`) e `worker-van` (`--profile van`).
+- **One-shot:** `migrate` e `sync-permissions` (em `app`, `workers` **e** `jobs`, porque os três cenários dependem deles); `contracts-sweeper` e `supplier-view-backfill` (`--profile jobs`).
+
+⚠️ **Um worker por grupo, não um por responsabilidade:** os processos sobem `src/workers/runner/run.ts` com `WORKER_GROUP`, consolidados na #407. O `Procfile` usado por `pnpm run dev` segue a mesma topologia. Variantes: `compose.ci.yaml` (CI, só remove o expose de portas) e `compose.etl.yaml` (ETL).
 
 ---
 
@@ -202,7 +239,6 @@ Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/referen
 | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           | Fastify 5 + plugins                 | ✅ ativo (ADR-0025) |
 | [`zod-expert`](./.claude/agents/zod-expert.md)                                 | Zod 4 (schemas de borda, ADR-0027)  | ✅ ativo            |
 | [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       | Nodemailer SMTP adapter             | ✅ ativo            |
-| [`bruno-api-client-expert`](./.claude/agents/bruno-api-client-expert.md)       | Bruno (`.bru`) — E2E HTTP           | ✅ suporte          |
 | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       | Segurança backend (Node/TS/Fastify) | ✅ ativo            |
 | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     | Segurança frontend (TanStack/React) | ✅ ativo            |
 
@@ -224,26 +260,6 @@ As skills cobrem disciplinas aplicadas — domínio, ports & adapters, schema, t
 - **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`) em **PT**; strings ao humano em **PT**.
 
 A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` completo, `verbatimModuleSyntax` (exige `import type`), `NodeNext` + `allowImportingTsExtensions` (exige extensão `.ts`). O resto vive nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
-
----
-
-## 📋 Status (2026-06-23)
-
-### ✅ Entregue
-
-- **8 módulos** com a mesma anatomia (`domain` → `application` → `adapters` → `public-api`): `auth`, `budget-plans`, `contracts`, `financial`, `notifications`, `partners`, `programs`, `reports`.
-- **Borda HTTP Fastify** real e versionada (`/api/v2` greenfield + `/api/v1` espelho do legado), contract-first com Zod 4 + OpenAPI 3.1 (ADR-0025/0027/0028/0033). CLI embutida **retirada** (ADR-0037).
-- **Auth & RBAC** próprios — JWT ES256 (`jose`), usuários, papéis/permissões, reset de senha, foto de perfil (ADR-0024).
-- **Financial** — títulos/payables, baixa manual, conciliação bancária, CNAB240, extrato/timeline, read-model de fornecedor.
-- **Eventos cross-módulo** via **Outbox MySQL** (ADR-0015) + **read-models por projeção** idempotente (ADR-0022/0045/0046), processados por **workers dedicados** e **oneshot jobs** (ADR-0041).
-- **Persistência** Drizzle + mysql2 sobre MySQL 8.4 único (ADR-0020), com read/write split (ADR-0026). **Storage** S3 + MinIO via `@aws-sdk/client-s3` (ADR-0019). **E-mail** transacional como evento de domínio (ADR-0047).
-- **E2E HTTP** via **Bruno** (`scripts/e2e/`, ADR-0034/0038); integração via Docker compose `--wait`.
-- **`.claude/` populado:** agentes por tecnologia, skills por disciplina, rules path-scoped e hooks — só primitivas nativas do Claude Code.
-
-### 🟡 Em andamento
-
-- **`024-fin-transactional-outbox`** — outbox transacional do Financeiro (tabela `fin_outbox` espelhando `ctr_outbox`; atomicidade estado+evento na mesma transação, issue #127 / ADR-0015). Ver `handbook/specs/024-fin-transactional-outbox/plan.md`.
-- **ADR-0048 (Proposed)** — Anticorruption Layer legado↔core, gate das Camadas 0–2 (spike #233 / épico #169).
 
 ---
 
