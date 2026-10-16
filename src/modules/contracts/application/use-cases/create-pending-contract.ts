@@ -14,14 +14,15 @@ import type {
   ContractRepository,
   ContractRepositoryError,
 } from '../../domain/contract/repository.ts';
+import { pickSequentialNumber, fromSaveError } from './sequential-number-input.ts';
 
 // CTR-USECASE-CREATE-PENDING-CONTRACT (ADR-0023): cadastra um contrato `Pending`
 // (sem assinatura). Porta de entrada para `Contract.createPending`. O `createdAt`
 // do evento `ContractCreated` é injetado via `clock` (não há `signedAt` aqui).
 
 export type CreatePendingContractCommand = Readonly<{
-  // CTR-CONTRACT-SEQUENTIAL-NUMBER: opcional — gerado pelo backend (ano do clock)
-  // quando ausente. Espelha `createContract` (POST /contracts modo Pending).
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER (#1024): opcional — gerado pelo backend (ano do clock)
+  // quando ausente/vazio; informado pelo usuário é normalizado. Espelha `createContract`.
   sequentialNumber?: string;
   title: string;
   objective: string;
@@ -74,20 +75,11 @@ export const createPendingContract =
     const contractor = ContractorRef.make(cmd.contractorType, cmd.contractorId);
     if (!contractor.ok) return contractor;
 
-    // CTR-CONTRACT-SEQUENTIAL-NUMBER: gera por ano quando ausente; preserva se fornecido.
-    let sequentialNumber = cmd.sequentialNumber;
-    if (sequentialNumber === undefined || sequentialNumber === '') {
-      const generated = await deps.contractRepo.nextSequentialNumber(
-        deps.clock.now().getFullYear(),
-      );
-      if (!generated.ok) return generated;
-      sequentialNumber = generated.value;
-    }
-
-    // Unicidade de sequentialNumber (R4) — antes do save (UNIQUE INDEX é a rede).
-    const existing = await deps.contractRepo.findBySequentialNumber(sequentialNumber);
-    if (!existing.ok) return existing;
-    if (existing.value !== null) return err('contract-sequential-number-duplicated');
+    // CTR-CONTRACT-SEQUENTIAL-NUMBER (#1024): gera por ano quando ausente/vazio; informado é
+    // normalizado (`NNNN/AAAA`) e recusado se já existir — R4, antes do save.
+    const picked = await pickSequentialNumber(deps, cmd.sequentialNumber);
+    if (!picked.ok) return picked;
+    const sequentialNumber = picked.value;
 
     const created = Contract.createPending({
       id: ContractId.generate(),
@@ -112,7 +104,7 @@ export const createPendingContract =
     if (!created.ok) return created;
 
     const saved = await deps.contractRepo.save(created.value.contract, [created.value.event]);
-    if (!saved.ok) return saved;
+    if (!saved.ok) return err(fromSaveError(saved.error));
 
     return ok(created.value);
   };

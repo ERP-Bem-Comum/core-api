@@ -391,6 +391,10 @@ const contractsRoutes =
         const body = req.body;
         if (body.mode === 'Pending') {
           const result = await deps.createPendingContract({
+            // #1024: número informado é repassado; ausente/vazio → o use case gera.
+            ...(body.sequentialNumber !== undefined
+              ? { sequentialNumber: body.sequentialNumber }
+              : {}),
             title: body.title,
             objective: body.objective,
             originalValueCents: body.originalValueCents,
@@ -421,6 +425,10 @@ const contractsRoutes =
         // O body usa `periodStart`/`periodEnd` (API uniforme entre Pending|Active); o
         // `CreateContractCommand` os nomeia `originalPeriodStart`/`originalPeriodEnd`.
         const result = await deps.createContract({
+          // #1024: número informado é repassado; ausente/vazio → o use case gera.
+          ...(body.sequentialNumber !== undefined
+            ? { sequentialNumber: body.sequentialNumber }
+            : {}),
           title: body.title,
           objective: body.objective,
           signedAt: body.signedAt,

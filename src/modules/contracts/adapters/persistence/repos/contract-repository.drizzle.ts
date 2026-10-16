@@ -12,9 +12,24 @@ import type { PlainDate as PlainDateType } from '../../../../../shared/kernel/pl
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { contractFromRow, contractToInsert, type ContractRow } from '../mappers/contract.mapper.ts';
-import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
-import { formatSequentialNumber } from '../../../domain/contract/sequential-number.ts';
+import { appendOutboxInTx, isDupEntry } from './outbox-repository.drizzle.ts';
+import {
+  formatSequentialNumber,
+  sequentialNumberSpellings,
+} from '../../../domain/contract/sequential-number.ts';
 import process from 'node:process';
+
+// #1024: a violação é do `UNIQUE(sequential_number)` — e não de outra chave (PK, outbox) — quando o
+// nome do índice aparece na mensagem do MySQL (`Duplicate entry '…' for key '…sequential_number…'`).
+// Drizzle pode encadear o erro original em `cause`; as duas camadas são lidas.
+const isSequentialNumberDup = (cause: unknown): boolean => {
+  if (!isDupEntry(cause)) return false;
+  const layers: unknown[] = [cause];
+  if (cause instanceof Error && cause.cause !== undefined) layers.push(cause.cause);
+  return layers.some((c) =>
+    String(c instanceof Error ? c.message : c).includes('sequential_number'),
+  );
+};
 
 // Boundary: try/catch que converte para Result. mysql2/Drizzle lança em erros
 // de I/O e violação de constraints (UNIQUE, CHECK, FK) — capturamos aqui.
@@ -206,7 +221,25 @@ export const createDrizzleContractRepository = (
             .where(eq(schema.ctrContractSeq.year, year))
             .for('update');
 
-          const nextSeq = (rows[0]?.lastSeq ?? 0) + 1;
+          // #1024: número INFORMADO à mão não move o contador. Sem pular, o contador alcançaria
+          // um `0050/2026` digitado e quem deixou o campo vazio levaria 409 sem ter digitado
+          // nada. Pula as grafias ocupadas, como o `reassign()` do job de renumeração. NÃO leva
+          // o contador ao maior informado (`GREATEST`): um `0300/2027` digitado faria 2027
+          // começar em `0301`, e a regra da P.O. é começar em `0001`.
+          const isTaken = async (seq: number): Promise<boolean> => {
+            const hit = await tx
+              .select({ id: schema.contracts.id })
+              .from(schema.contracts)
+              .where(
+                inArray(schema.contracts.sequentialNumber, [
+                  ...sequentialNumberSpellings(seq, year),
+                ]),
+              )
+              .limit(1);
+            return hit.length > 0;
+          };
+          let nextSeq = (rows[0]?.lastSeq ?? 0) + 1;
+          while (await isTaken(nextSeq)) nextSeq += 1;
           await tx
             .update(schema.ctrContractSeq)
             .set({ lastSeq: nextSeq })
@@ -319,14 +352,25 @@ export const createDrizzleContractRepository = (
     // CA-3: save(contract, events) abre UMA transação que persiste state + outbox atomicamente.
     // appendOutboxInTx é chamado dentro do mesmo callback — rollback automático se qualquer
     // operação falhar (Drizzle garante rollback quando o callback lança).
-    save: async (contract: Contract, events: readonly ContractsModuleEvent[]) =>
-      safe('save', async () => {
+    //
+    // #1024: duas criações com o mesmo número passam juntas pela checagem prévia do use case; a
+    // perdedora bate no `UNIQUE(sequential_number)`. Isso é conflito (`contract-repo-conflict` → 409
+    // `contract-sequential-number-duplicated` no use case), não indisponibilidade — o `safe()`
+    // genérico o transformaria em 503.
+    save: async (contract: Contract, events: readonly ContractsModuleEvent[]) => {
+      try {
         await db.transaction(async (tx) => {
           await persistContractInTx(tx, contract);
           // US6a (ADR-0046): enriquece os eventos de ciclo de vida com contractorRef (Opção A).
           await appendOutboxInTx(tx, schema, events, contract.contractor);
         });
-      }),
+        return ok(undefined);
+      } catch (cause) {
+        if (isSequentialNumberDup(cause)) return err('contract-repo-conflict');
+        process.stderr.write(`[contract-repo:save] ${String(cause)}\n`);
+        return err('contract-repo-unavailable');
+      }
+    },
 
     // CTR-AUTO-EXPIRE (issue #39 · ADR-0041): contratos elegíveis para expiração automática.
     //
