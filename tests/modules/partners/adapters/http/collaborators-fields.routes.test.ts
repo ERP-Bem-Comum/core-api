@@ -56,7 +56,8 @@ const seedComplete = (): { id: string; record: CollaboratorReadRecord } => {
     {
       rg: null,
       dateOfBirth: null,
-      genderIdentity: null,
+      genderIdentity: 'OUTRO',
+      genderIdentityDescription: 'Pessoa agênero',
       race: null,
       education: null,
       foodCategory: null,
@@ -177,6 +178,9 @@ describe('COLLABORATORS — campos de perfil (US2)', () => {
     assert.equal(b.maritalStatus, 'married');
     assert.deepEqual(b.childrenAges, [5, 8]);
     assert.equal(b.publicSectorExperienceDuration, '4 anos');
+    // #1054: "Outra identidade de gênero" + texto livre voltam no detalhe.
+    assert.equal(b.genderIdentity, 'OUTRO');
+    assert.equal(b.genderIdentityDescription, 'Pessoa agênero');
     await teardown();
   });
 
@@ -205,6 +209,48 @@ describe('COLLABORATORS — campos de perfil (US2)', () => {
       payload: { maritalStatus: 'complicated' },
     });
     assert.equal(res.statusCode, 422);
+    await teardown();
+  });
+
+  it('#1054: genderIdentity=OUTRO com texto livre → 200', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app);
+    const id = await createPre(app, token);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/collaborators/${id}/complete-registration`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { genderIdentity: 'OUTRO', genderIdentityDescription: 'Agênero' },
+    });
+    assert.equal(res.statusCode, 200);
+    await teardown();
+  });
+
+  it('#1054: genderIdentityDescription com genderIdentity ≠ OUTRO → 422', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app);
+    const id = await createPre(app, token);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/collaborators/${id}/complete-registration`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { genderIdentity: 'MULHER_CIS', genderIdentityDescription: 'Agênero' },
+    });
+    assert.equal(res.statusCode, 422);
+    await teardown();
+  });
+
+  it('#1054: genderIdentityDescription acima de 120 chars → 400 (Zod)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app);
+    const id = await createPre(app, token);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/collaborators/${id}/complete-registration`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { genderIdentity: 'OUTRO', genderIdentityDescription: 'x'.repeat(121) },
+    });
+    assert.equal(res.statusCode, 400);
     await teardown();
   });
 });
