@@ -1,0 +1,1 @@
+ALTER TABLE `par_collaborators` ADD `gender_identity_description` varchar(255);

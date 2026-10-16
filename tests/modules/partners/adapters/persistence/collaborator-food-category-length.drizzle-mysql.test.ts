@@ -75,6 +75,7 @@ const completeWithFoodCategory = (base: ReturnType<typeof buildBase>, foodCatego
       rg: null,
       dateOfBirth: null,
       genderIdentity: null,
+      genderIdentityDescription: null,
       race: null,
       education: null,
       foodCategory,
