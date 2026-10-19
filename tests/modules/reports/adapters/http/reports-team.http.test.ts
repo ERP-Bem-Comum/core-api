@@ -55,6 +55,8 @@ const member = (over: Partial<TeamMember> = {}): TeamMember => ({
   genderIdentity: 'MULHER_CIS',
   race: 'PARDO',
   age: 41,
+  // #1055: geração entrou no contrato de `TeamMember` — a fixture a declara para seguir espelhando o port.
+  generation: 'MILLENNIAL',
   ...over,
 });
 

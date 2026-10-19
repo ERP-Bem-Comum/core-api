@@ -48,7 +48,9 @@ describe('createPendingContract', () => {
     assert.equal(r.value.contract.status, 'Pending');
     assert.equal('signedAt' in r.value.contract, false, 'Pending não tem signedAt');
 
-    const persisted = await contractRepo.repo.findBySequentialNumber('001/2026');
+    // #1024: número informado é gravado normalizado para 4 dígitos (`001/2026` → `0001/2026`).
+    assert.equal(r.value.contract.sequentialNumber, '0001/2026');
+    const persisted = await contractRepo.repo.findBySequentialNumber('0001/2026');
     if (!persisted.ok || persisted.value === null) throw new Error('não persistido');
     assert.equal(persisted.value.status, 'Pending');
   });

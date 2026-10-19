@@ -28,6 +28,7 @@ import type { Collaborator } from '#src/modules/partners/domain/collaborator/typ
 import { openPartnersMysql } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleCollaboratorReader } from '../adapters/persistence/repos/collaborator-reader.drizzle.ts';
 import { completedYears } from './completed-years.ts';
+import { generationIdOf } from './generation.ts';
 
 export type CollaboratorTeamProjection = Readonly<{
   id: string;
@@ -47,6 +48,11 @@ export type CollaboratorTeamProjection = Readonly<{
   race: string | null;
   /** Idade DERIVADA: anos completos em `today`. `dateOfBirth` morre neste mapper e nao cruza a borda. */
   age: number | null;
+  /**
+   * Geracao DERIVADA do ANO de nascimento (recorte Pew — #1055). CODIGO, nunca `null`: sem data de
+   * nascimento -> `'NA'`. Nem a data nem o ano cruzam a borda, so o codigo (LGPD, igual a `age`).
+   */
+  generation: string;
 }>;
 
 export type CollaboratorProjectionReader = Readonly<{
@@ -75,6 +81,8 @@ export const toTeamProjection = (
   genderIdentity: c.genderIdentity,
   race: c.race,
   age: c.dateOfBirth === null ? null : completedYears(PlainDate.fromDate(c.dateOfBirth), today),
+  // Geracao independe do `today`: so do ano de nascimento (ver `generation.ts`).
+  generation: generationIdOf(c.dateOfBirth),
 });
 
 export const openCollaboratorProjectionReader = async (

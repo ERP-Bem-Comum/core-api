@@ -48,7 +48,7 @@ const CURRENT_TEN_KEYS = [
   'experienceInPublicSector',
 ];
 
-const NEW_KEYS = ['genderIdentity', 'race', 'age'];
+const NEW_KEYS = ['genderIdentity', 'race', 'age', 'generation'];
 
 /** Colaborador em pré-cadastro: campos pessoais todos null. */
 const makeActive = (): CollaboratorType => {
@@ -107,6 +107,20 @@ describe('partners/public-api — toTeamProjection (REPORTS-TEAM-DEMOGRAPHIC-COL
     // Assert
     assert.equal(p.genderIdentity, 'MULHER_CIS');
     assert.equal(p.race, 'PARDO');
+  });
+
+  it('#1055: projeta a geração derivada do ano de nascimento (nunca null)', () => {
+    // Arrange — nasceu 1990-05-10 (Millennial); pré-cadastro sem data de nascimento → NA.
+    const complete = makeComplete();
+    const semData = makeActive();
+
+    // Act
+    const p = Projection.toTeamProjection(complete, today('2026-06-01'));
+    const semDataP = Projection.toTeamProjection(semData, today('2026-06-01'));
+
+    // Assert
+    assert.equal(p.generation, 'MILLENNIAL');
+    assert.equal(semDataP.generation, 'NA', 'sem data de nascimento → NA, nunca null');
   });
 
   it('CA2: aniversário JÁ feito no ano → anos completos', () => {
@@ -235,7 +249,7 @@ describe('partners/public-api — toTeamProjection (REPORTS-TEAM-DEMOGRAPHIC-COL
     assert.equal(p.experienceInPublicSector, true);
   });
 
-  it('CA6: a projeção tem EXATAMENTE 13 chaves (10 atuais + 3 novas)', () => {
+  it('CA6: a projeção tem EXATAMENTE 14 chaves (10 atuais + 4 novas)', () => {
     // Arrange
     const collaborator = makeComplete();
 
