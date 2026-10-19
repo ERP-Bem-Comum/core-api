@@ -77,6 +77,7 @@ const makeComplete = (dateOfBirth: Date | null = DEFAULT_BIRTH): CollaboratorTyp
       rg: '12.345.678-9',
       dateOfBirth,
       genderIdentity: 'MULHER_CIS',
+      genderIdentityDescription: null,
       race: 'PARDO',
       education: 'ENSINO_SUPERIOR',
       foodCategory: 'ONIVORO',

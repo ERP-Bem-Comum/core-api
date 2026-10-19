@@ -35,6 +35,8 @@ type PersonalFields = Readonly<{
   rg: string | null;
   dateOfBirth: Date | null;
   genderIdentity: GenderIdentity | null;
+  // Texto livre de "Outra identidade de gênero" (#1054) — só coerente quando genderIdentity = OUTRO.
+  genderIdentityDescription: string | null;
   race: Race | null;
   education: Education | null;
   foodCategory: FoodCategory | null;
@@ -136,6 +138,7 @@ export type CompleteRegistrationInput = Readonly<{
   rg: string | null;
   dateOfBirth: Date | null;
   genderIdentity: string | null;
+  genderIdentityDescription: string | null;
   race: string | null;
   education: string | null;
   foodCategory: string | null;
