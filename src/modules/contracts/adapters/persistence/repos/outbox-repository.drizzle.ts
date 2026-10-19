@@ -44,7 +44,7 @@ import type * as schema from '../schemas/mysql.ts';
 
 // mysql2 expõe `errno: 1062` e `code: 'ER_DUP_ENTRY'` no objeto Error lançado.
 // Drizzle pode encadear o erro original em `cause`. Verificamos ambas as camadas.
-const isDupEntry = (e: unknown): boolean => {
+export const isDupEntry = (e: unknown): boolean => {
   const candidates: unknown[] = [e];
   if (e instanceof Error && e.cause !== undefined) candidates.push(e.cause);
   return candidates.some((c) => {

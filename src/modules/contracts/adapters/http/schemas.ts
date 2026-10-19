@@ -173,9 +173,13 @@ export type TimelineEntryDto = z.infer<typeof timelineEntrySchema>;
 // domínio (smart constructor) — data malformada vira 422 (invariante), não 400 (Zod).
 // Valor em centavos também não trava sinal no Zod; `Money` rejeita → 422.
 
-// CTR-CONTRACT-SEQUENTIAL-NUMBER: `sequentialNumber` NÃO entra no body — o backend
-// gera `NNNN/YYYY` por ano. O número gerado volta na resposta (via `registrationShape`).
+// CTR-CONTRACT-SEQUENTIAL-NUMBER (#1024): `sequentialNumber` é INFORMÁVEL na criação — contratos
+// vigentes do cliente têm numeração própria. Ausente ou vazio → o backend gera `NNNN/YYYY` pelo ano
+// corrente. Presente → normalizado para 4 dígitos e checado contra duplicata (409). O formato NÃO é
+// travado aqui: `NNN(N)/AAAA` é invariante do domínio, então formato inválido vira 422, não 400.
+// Imutável depois de criado: o PATCH (`.strict()`) segue recusando o campo.
 const contractWriteShape = {
+  sequentialNumber: z.string().trim().optional(),
   title: z.string(),
   objective: z.string(),
   originalValueCents: z.number().int(),

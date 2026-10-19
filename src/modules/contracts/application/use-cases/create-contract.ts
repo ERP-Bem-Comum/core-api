@@ -14,6 +14,7 @@ import type {
   ContractRepository,
   ContractRepositoryError,
 } from '../../domain/contract/repository.ts';
+import { pickSequentialNumber, fromSaveError } from './sequential-number-input.ts';
 
 // CA-5+CA-6 (CTR-OUTBOX-INTEGRATION-IN-REPOS):
 //   - eventBus removido de Deps — use case NÃO conhece mais EventBus.
@@ -21,8 +22,8 @@ import type {
 //     persiste state + outbox atomicamente (D2, ADR-0015).
 
 export type CreateContractCommand = Readonly<{
-  // CTR-CONTRACT-SEQUENTIAL-NUMBER: opcional. Ausente → o backend gera `NNNN/YYYY`
-  // pelo ano do clock (POST /contracts). Presente → preservado (import legado).
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER (#1024): opcional. Ausente/vazio → o backend gera `NNNN/YYYY`
+  // pelo ano do clock. Informado (POST /contracts) → normalizado para 4 dígitos e checado.
   sequentialNumber?: string;
   title: string;
   objective: string;
@@ -128,29 +129,18 @@ export const createContract =
   async (
     cmd: CreateContractCommand,
   ): Promise<Result<CreateContractOutput, CreateContractError>> => {
-    // CTR-CONTRACT-SEQUENTIAL-NUMBER: número gerado por ano quando ausente; preservado
-    // quando fornecido (import legado). A geração é transacional no adapter (FOR UPDATE).
-    let sequentialNumber = cmd.sequentialNumber;
-    if (sequentialNumber === undefined || sequentialNumber === '') {
-      const generated = await deps.contractRepo.nextSequentialNumber(
-        deps.clock.now().getFullYear(),
-      );
-      if (!generated.ok) return generated;
-      sequentialNumber = generated.value;
-    }
+    // CTR-CONTRACT-SEQUENTIAL-NUMBER (#1024): gerado por ano quando ausente/vazio (transacional
+    // no adapter, FOR UPDATE, pulando ocupados); informado é normalizado e recusado se já existir
+    // (Defeito #5 / R4 — antes do save; o UNIQUE INDEX é a rede).
+    const picked = await pickSequentialNumber(deps, cmd.sequentialNumber);
+    if (!picked.ok) return picked;
 
-    const built = buildContract({ ...cmd, sequentialNumber });
+    const built = buildContract({ ...cmd, sequentialNumber: picked.value });
     if (!built.ok) return built;
-
-    // Defeito #5: regra de unicidade de sequentialNumber (R4 do handbook).
-    // Check antes do save; MySQL real terá UNIQUE INDEX como rede de segurança.
-    const existing = await deps.contractRepo.findBySequentialNumber(sequentialNumber);
-    if (!existing.ok) return existing;
-    if (existing.value !== null) return err('contract-sequential-number-duplicated');
 
     // CA-5: evento passado diretamente no save — persiste state + outbox atomicamente.
     const saveResult = await deps.contractRepo.save(built.value.contract, [built.value.event]);
-    if (!saveResult.ok) return saveResult;
+    if (!saveResult.ok) return err(fromSaveError(saveResult.error));
 
     return ok(built.value);
   };
