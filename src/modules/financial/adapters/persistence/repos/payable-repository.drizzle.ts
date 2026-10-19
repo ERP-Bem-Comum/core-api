@@ -31,7 +31,6 @@ import type {
   MarkPaidInput,
   RescheduleInput,
   UndoPaidInput,
-  UndoTransmittedInput,
 } from '../../../domain/payable/repository.ts';
 import type { FinancialTimelineEntry } from '../../../domain/timeline/types.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
@@ -70,8 +69,7 @@ const readCasConflict = (cause: unknown): CasConflictError | null => {
   const slug = (cause as unknown as Record<symbol, unknown>)[CAS_CONFLICT_SYMBOL];
   return slug === 'payable-payment-conflict' ||
     slug === 'payable-reschedule-conflict' ||
-    slug === 'payable-payment-undo-conflict' ||
-    slug === 'payable-transmission-undo-conflict'
+    slug === 'payable-payment-undo-conflict'
     ? slug
     : null;
 };
@@ -252,33 +250,5 @@ export const createDrizzlePayableRepository = (
     });
   };
 
-  // #61: desfazer a transmissão. Só o status do título muda; `fin_remittance_payables` fica — é o
-  // vínculo que mantém a retransmissão bloqueada.
-  const undoTransmitted = async (
-    input: UndoTransmittedInput,
-  ): Promise<Result<void, PayableRepositoryError>> => {
-    const payableId = input.payableId as unknown as string;
-
-    return writeWithCas({
-      ctx: 'undoTransmitted',
-      payableId,
-      conflictError: 'payable-transmission-undo-conflict',
-      applyUpdate: async (tx) =>
-        rowsAffected(
-          await tx
-            .update(schema.finPayables)
-            .set({ status: 'Approved' })
-            .where(
-              and(
-                eq(schema.finPayables.id, payableId),
-                eq(schema.finPayables.status, 'Transmitted'),
-              ),
-            ),
-        ),
-      timelineEntries: input.timelineEntries,
-      events: input.events,
-    });
-  };
-
-  return { markPaid, reschedule, undoPaid, undoTransmitted };
+  return { markPaid, reschedule, undoPaid };
 };

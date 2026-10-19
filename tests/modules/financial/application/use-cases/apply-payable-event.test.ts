@@ -377,22 +377,4 @@ describe('financial/application — applyPayableEvent: desfazimentos (#61)', () 
     assert.equal(r.ok ? null : r.error, 'payable-event-payload-invalid');
     assert.equal((await rowOf(store))?.status, 'Paid');
   });
-
-  it('TransmissionUndone → status Approved', async () => {
-    const store = createInMemoryPayableViewStore();
-    const apply = applyPayableEvent({ store });
-    await apply({ eventType: 'DocumentSaved', occurredAt: OCCURRED_AT, payload: documentSaved() });
-    await apply({
-      eventType: 'PayableTransmitted',
-      occurredAt: OCCURRED_AT,
-      payload: statusEvent(P1),
-    });
-    const r = await apply({
-      eventType: 'TransmissionUndone',
-      occurredAt: OCCURRED_AT,
-      payload: JSON.stringify({ documentId: DOC, payableId: P1, reason: 'x' }),
-    });
-    assert.equal(r.ok, true);
-    assert.equal((await rowOf(store))?.status, 'Approved');
-  });
 });

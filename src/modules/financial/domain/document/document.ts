@@ -391,14 +391,13 @@ export const payPayableManually = (
   );
 };
 
-// ─── #61: desfazer a baixa e a transmissão (decisões da P.O., 02/10, 03/10 e 19/10) ──────────────
+// ─── #61: desfazer a baixa (decisões da P.O., 02/10, 03/10 e 19/10) ──────────────────────────────
 //
-// O desfazimento é EM SEQUÊNCIA, cada etapa com a sua trava e o seu motivo:
+//   Aprovado/Transmitido ──baixa──▶ Pago ──conciliação──▶ Conciliado
+//          ◀── undoManualPayment ──    ◀── undo da conciliação (já existe)
 //
-//   Aprovado ──remessa──▶ Transmitido ──baixa──▶ Pago ──conciliação──▶ Conciliado
-//      ◀─ undoTransmission ─      ◀── undoManualPayment ──    ◀── undo da conciliação (já existe)
-//
-// Os dois são por TÍTULO, como a baixa: o documento segue `Approved`, os irmãos não mudam.
+// Por TÍTULO, como a baixa: o documento segue `Approved`, os irmãos não mudam. (O desfazer da
+// transmissão foi abortado pela P.O. em 19/10 — o título transmitido segue o seu ciclo.)
 
 const isBlankReason = (s: string): boolean => s.trim().length === 0;
 
@@ -461,46 +460,6 @@ export const undoManualPayment = (
           restoredStatus: input.restoreTo,
           undoneBy: input.by,
           reason,
-        },
-      ],
-    }),
-  );
-};
-
-export type UndoTransmissionInput = Readonly<{
-  document: ApprovedDocument;
-  payables: Payables;
-  payableId: PayableId.PayableId;
-  /** A remessa que prende o título — só para a auditoria; a regra da fila é do use case. */
-  remittanceId: string;
-  by: UserRef;
-  reason: string;
-}>;
-
-// `Transmitted` → `Approved`. O vínculo com a remessa NÃO é desfeito aqui nem em lugar nenhum: é ele
-// que mantém a retransmissão bloqueada (ver `TransmissionUndone` em events.ts).
-export const undoTransmission = (
-  input: UndoTransmissionInput,
-): Result<UndoPayableOutput, DocumentError> => {
-  const target = findPayable(input.payables, input.payableId);
-  if (target === undefined) return err('payable-not-found');
-  if (target.status !== 'Transmitted') return err('payable-not-transmitted');
-  if (isBlankReason(input.reason)) return err('undo-requires-reason');
-
-  return ok(
-    immutable<UndoPayableOutput>({
-      document: input.document,
-      payables: replacePayable(input.payables, input.payableId, (p) =>
-        immutable<Payable>({ ...p, status: 'Approved' }),
-      ),
-      events: [
-        {
-          type: 'TransmissionUndone',
-          documentId: input.document.id,
-          payableId: input.payableId,
-          remittanceId: input.remittanceId,
-          undoneBy: input.by,
-          reason: input.reason.trim(),
         },
       ],
     }),
@@ -889,16 +848,17 @@ export type UndoApprovalOutput = Readonly<{
 // Desfazer aprovação (US5): Approved → Open; filhos voltam a `Open` (reaproveitados). A alteração de valores
 // — que dispara hard delete + recriação dos filhos (R8.1) — ocorre no `adjust` subsequente.
 //
-// #61 (P.O., 19/10): só com TODOS os títulos em `Approved`. Antes, um título `Transmitted` ou `Paid`
-// ia direto a `Open` — passando por cima do desfazer baixa e do desfazer transmissão, sem motivo e sem
-// checar a remessa. "Voltar para edição" continua permitido para erro grave de lançamento, mas a partir
-// de `Approved`: as etapas posteriores se desfazem antes, cada uma com a sua trava. (`Refused` ainda
-// não tem transição que o grave — retorno do banco, #690 — e bloqueia por cair fora de `Approved`.)
+// #61 (P.O., 19/10): recusado com título PAGO ou CONCILIADO — antes, "voltar para edição" levava a
+// `Open` até título pago, passando por cima do desfazer baixa (sem motivo) e da conciliação. Essas
+// etapas se desfazem antes, cada uma com a sua trava. `Transmitted` NÃO trava: o desfazer da
+// transmissão foi abortado (P.O., 19/10), e sem ele o documento nunca mais voltaria para edição.
+const PAYMENT_PROGRESSED: readonly DocumentStatus[] = ['Paid', 'PartiallyReconciled', 'Reconciled'];
+
 export const undoApproval = (
   input: UndoApprovalInput,
 ): Result<UndoApprovalOutput, DocumentError> => {
-  const progressed = [input.payables.parent, ...input.payables.children].some(
-    (p) => p.status !== 'Approved',
+  const progressed = [input.payables.parent, ...input.payables.children].some((p) =>
+    PAYMENT_PROGRESSED.includes(p.status),
   );
   if (progressed) return err('document-has-progressed-payable');
 

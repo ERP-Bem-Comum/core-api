@@ -33,9 +33,7 @@ import { buildTimelineEntries } from '../timeline-recording.ts';
 //      volta à origem da segunda baixa, não da primeira.
 //   2. Sem baixa na trilha (anterior à 0020): pela REMESSA — título com vínculo numa remessa viva
 //      volta a `Transmitted`, senão a `Approved` (decisão da P.O., 19/10). É a mesma evidência que o
-//      levou a `Transmitted`. ⚠️ Só serve a baixa ANTIGA: depois do desfazer transmissão (que mantém o
-//      vínculo de propósito), uma baixa a partir de `Approved` deixaria a remessa dizendo o contrário —
-//      e é exatamente por isso que a trilha tem precedência.
+//      levou a `Transmitted`. A trilha tem precedência: é o registro do que de fato aconteceu na baixa.
 export type UndoManualPaymentDeps = Readonly<{
   repo: DocumentRepository;
   payableRepo: PayableRepository;

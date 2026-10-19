@@ -1,4 +1,4 @@
-// #61 — desfazer a baixa, desfazer a transmissão e a trava do "Voltar para edição" (decisões da
+// #61 — desfazer a baixa e a trava do "Voltar para edição" (decisões da
 // P.O., 02/10, 03/10 e 19/10). Domínio puro: o status anterior chega pronto (o use case o lê da
 // trilha), e a regra da fila da remessa é do use case — aqui só as transições e as recusas.
 
@@ -145,55 +145,18 @@ describe('#61 — undoManualPayment (Pago → status anterior)', () => {
   });
 });
 
-describe('#61 — undoTransmission (Transmitido → Aprovado)', () => {
-  it('volta a Approved e o evento carrega a remessa de onde voltou', () => {
+describe('#61 — undoApproval recusa título pago ou conciliado (P.O., 19/10)', () => {
+  it('título Transmitido NÃO trava (o desfazer da transmissão foi abortado) → Open', () => {
     const ap = approved();
-    const r = Document.undoTransmission({
+    const r = Document.undoApproval({
       document: ap.document,
       payables: withParent(ap, 'Transmitted'),
-      payableId: ap.payables.parent.id,
-      remittanceId: 'rem-1',
-      by: by(),
-      reason: 'Banco não processou a remessa',
     });
     assert.ok(r.ok, r.ok ? '' : r.error);
-    assert.equal(r.value.payables.parent.status, 'Approved');
-    const event = r.value.events[0];
-    assert.equal(event?.type, 'TransmissionUndone');
-    assert.equal(event?.type === 'TransmissionUndone' ? event.remittanceId : null, 'rem-1');
+    assert.equal(r.value.document.status, 'Open');
   });
 
-  for (const status of ['Approved', 'Paid'] as const) {
-    it(`título ${status} → payable-not-transmitted`, () => {
-      const ap = approved();
-      const r = Document.undoTransmission({
-        document: ap.document,
-        payables: withParent(ap, status),
-        payableId: ap.payables.parent.id,
-        remittanceId: 'rem-1',
-        by: by(),
-        reason: 'x',
-      });
-      assert.equal(r.ok ? null : r.error, 'payable-not-transmitted');
-    });
-  }
-
-  it('motivo em branco → undo-requires-reason', () => {
-    const ap = approved();
-    const r = Document.undoTransmission({
-      document: ap.document,
-      payables: withParent(ap, 'Transmitted'),
-      payableId: ap.payables.parent.id,
-      remittanceId: 'rem-1',
-      by: by(),
-      reason: '',
-    });
-    assert.equal(r.ok ? null : r.error, 'undo-requires-reason');
-  });
-});
-
-describe('#61 — undoApproval só com todos os títulos em Aprovado (P.O., 19/10)', () => {
-  for (const status of ['Transmitted', 'Paid', 'PartiallyReconciled', 'Reconciled'] as const) {
+  for (const status of ['Paid', 'PartiallyReconciled', 'Reconciled'] as const) {
     it(`um título ${status} → document-has-progressed-payable (nada muda)`, () => {
       const ap = approved();
       const r = Document.undoApproval({ document: ap.document, payables: withParent(ap, status) });
@@ -201,13 +164,13 @@ describe('#61 — undoApproval só com todos os títulos em Aprovado (P.O., 19/1
     });
   }
 
-  it('um FILHO transmitido também trava — a nota volta inteira para edição', () => {
+  it('um FILHO pago também trava — a nota volta inteira para edição', () => {
     const ap = approved();
     const [first, ...rest] = ap.payables.children;
     if (first === undefined) throw new Error('fixture sem filhos');
     const payables = immutable<Payables>({
       parent: ap.payables.parent,
-      children: [immutable<Payable>({ ...first, status: 'Transmitted' }), ...rest],
+      children: [immutable<Payable>({ ...first, status: 'Paid' }), ...rest],
     });
     const r = Document.undoApproval({ document: ap.document, payables });
     assert.equal(r.ok ? null : r.error, 'document-has-progressed-payable');

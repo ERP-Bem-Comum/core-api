@@ -40,14 +40,11 @@ type Deps = Readonly<{ store: PayableViewStore }>;
 //
 // `parsePayableIds` já cobre o payload deste evento: ele carrega `payableId` no singular, que é o
 // segundo ramo daquela função.
-//
-// `TransmissionUndone` (#61) volta o título a `Approved` sem tocar `paid_at` (ele nunca foi pago).
 const STATUS_BY_EVENT: Readonly<Record<string, PayableViewStatus>> = {
   PayableApproved: 'Approved',
   PayableTransmitted: 'Transmitted',
   DocumentCancelled: 'Cancelled',
   ApprovalUndone: 'Open',
-  TransmissionUndone: 'Approved',
 };
 
 type PayloadError = 'payable-event-payload-invalid';

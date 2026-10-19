@@ -1,8 +1,7 @@
-// #61 — casos de uso do desfazer baixa e do desfazer transmissão (decisões da P.O., 19/10).
+// #61 — caso de uso do desfazer baixa (decisões da P.O., 19/10).
 //
 // O que só o use case decide, e por isso só se mede aqui:
 //   - DE ONDE vem o status anterior à baixa: a trilha, com a remessa de reserva para baixa antiga;
-//   - a trava da remessa na FILA no desfazer transmissão.
 //
 // A remessa é um dublê mínimo (`findHeldPayables` + `findById`): gerar uma remessa de verdade em
 // memória arrastaria conta-cedente, convênio e tradução CNAB para um teste que não mede nada disso.
@@ -31,7 +30,6 @@ import {
 import type { RemittanceRepository } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import { registerManualPayment } from '#src/modules/financial/application/use-cases/register-manual-payment.ts';
 import { undoManualPayment } from '#src/modules/financial/application/use-cases/undo-manual-payment.ts';
-import { undoTransmission } from '#src/modules/financial/application/use-cases/undo-transmission.ts';
 
 const SUP = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
@@ -159,15 +157,7 @@ const setup = async () => {
       clock: CLOCK,
     })({ documentId, payableId: parentId, undoneBy: USER, reason });
 
-  const undoTransmit = (held: RemittanceStatus | null, reason = 'Banco não processou') =>
-    undoTransmission({ repo, payableRepo, remittances: remittances(held), clock: CLOCK })({
-      documentId,
-      payableId: parentId,
-      undoneBy: USER,
-      reason,
-    });
-
-  return { setParent, parent, pay, timeline, undoPay, undoTransmit };
+  return { setParent, parent, pay, timeline, undoPay };
 };
 
 describe('#61 — undoManualPayment: o status anterior vem da TRILHA', () => {
@@ -199,21 +189,6 @@ describe('#61 — undoManualPayment: o status anterior vem da TRILHA', () => {
     const r = await s.undoPay('Transmitted');
     assert.ok(r.ok, JSON.stringify(r));
     assert.equal((await s.parent()).status, 'Transmitted');
-  });
-
-  it('vale a ÚLTIMA baixa, e a trilha vence a remessa quando as duas discordam', async () => {
-    // Transmitido → baixa → desfaz (volta a Transmitido) → desfaz transmissão (Aprovado, vínculo
-    // com a remessa MANTIDO) → nova baixa a partir de Aprovado → desfaz. A remessa ainda prende o
-    // título e diria "Transmitido"; a trilha diz "Aprovado" — e é a trilha que está certa.
-    const s = await setup();
-    s.setParent('Transmitted');
-    await s.pay();
-    assert.ok((await s.undoPay('Transmitted')).ok);
-    assert.ok((await s.undoTransmit('Transmitted')).ok);
-    await s.pay();
-    const r = await s.undoPay('Transmitted');
-    assert.ok(r.ok, JSON.stringify(r));
-    assert.equal((await s.parent()).status, 'Approved');
   });
 });
 
@@ -255,42 +230,5 @@ describe('#61 — undoManualPayment: recusas', () => {
     const r = await s.undoPay(null, '  ');
     assert.equal(r.ok ? null : r.error, 'undo-requires-reason');
     assert.equal((await s.parent()).status, 'Paid');
-  });
-});
-
-describe('#61 — undoTransmission', () => {
-  for (const held of ['Transmitted', 'Failed'] as const) {
-    it(`remessa ${held} → título volta a Aprovado; trilha com motivo`, async () => {
-      const s = await setup();
-      s.setParent('Transmitted');
-      const r = await s.undoTransmit(held);
-      assert.ok(r.ok, JSON.stringify(r));
-      assert.equal((await s.parent()).status, 'Approved');
-      const entry = s
-        .timeline()
-        .find((e) => e.eventType === 'TransmissionUndone' && e.target.kind === 'Payable');
-      assert.equal(entry?.reason, 'Banco não processou');
-    });
-  }
-
-  it('remessa ainda na FILA → transmission-undo-remittance-queued, e o título segue Transmitido', async () => {
-    const s = await setup();
-    s.setParent('Transmitted');
-    const r = await s.undoTransmit('Queued');
-    assert.equal(r.ok ? null : r.error, 'transmission-undo-remittance-queued');
-    assert.equal((await s.parent()).status, 'Transmitted');
-  });
-
-  it('Transmitido sem remessa que o prenda → transmission-undo-remittance-not-found', async () => {
-    const s = await setup();
-    s.setParent('Transmitted');
-    const r = await s.undoTransmit(null);
-    assert.equal(r.ok ? null : r.error, 'transmission-undo-remittance-not-found');
-  });
-
-  it('título não transmitido → payable-not-transmitted', async () => {
-    const s = await setup();
-    const r = await s.undoTransmit('Transmitted');
-    assert.equal(r.ok ? null : r.error, 'payable-not-transmitted');
   });
 });

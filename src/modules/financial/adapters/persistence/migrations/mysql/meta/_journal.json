@@ -421,6 +421,13 @@
       "when": 1792441983464,
       "tag": "0059_true_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1792450444856,
+      "tag": "0060_thick_photon",
+      "breakpoints": true
     }
   ]
 }

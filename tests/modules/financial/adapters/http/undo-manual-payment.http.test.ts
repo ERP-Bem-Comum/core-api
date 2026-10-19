@@ -1,10 +1,6 @@
 /**
  * #61 — borda HTTP do desfazer baixa (POST /documents/:id/payables/:payableId/undo-manual-payment)
  * e da trava do "Voltar para edição" (POST /documents/:id/undo-approval). Driver memory; auth FAKE.
- *
- * O desfazer TRANSMISSÃO é medido no use case (`undo-manual-payment-and-transmission.test.ts`): aqui
- * ele exigiria gerar remessa de verdade, com conta-cedente e convênio, para provar o que a rota já
- * prova pela mesma costura — schema, permissão e tradução de erro.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -179,7 +175,7 @@ describe('#61 — "Voltar para edição" com título além de Aprovado', () => {
     assert.equal(blocked.statusCode, 409, blocked.body);
     assert.match(
       (blocked.json() as { error: { message: string } }).error.message,
-      /desfaça essas etapas antes/,
+      /desfaça antes a conciliação e a baixa/,
     );
 
     assert.equal((await post(undoUrl(id, parentId), { version, reason: 'x' })).statusCode, 200);

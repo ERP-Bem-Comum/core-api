@@ -897,29 +897,6 @@ const financialRoutes =
       },
     });
 
-    // #61 — desfazer a transmissão de UM título: `Transmitted` → `Approved`. O título SEGUE preso à
-    // remessa (retransmissão bloqueada); remessa ainda na fila é recusada — descarta-se a remessa.
-    scope.route({
-      method: 'POST',
-      url: '/financial/documents/:id/payables/:payableId/undo-transmission',
-      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.payableApprove)],
-      schema: {
-        params: documentPayableParamsSchema,
-        body: undoPayableBodySchema,
-        response: { 200: documentResponseSchema },
-      } satisfies FastifyZodOpenApiSchema,
-      handler: async (req, reply) => {
-        const result = await deps.undoTransmission({
-          documentId: req.params.id,
-          payableId: req.params.payableId,
-          undoneBy: req.userId,
-          reason: req.body.reason,
-        });
-        if (!result.ok) return sendDomainError(reply, result.error);
-        return loadAndSerialize(deps, reply, req.params.id);
-      },
-    });
-
     // PATCH /financial/documents/:id/payables/:payableId — vencimento de UM título isolado (#270).
     // Não propaga ao documento-pai nem aos irmãos (contrasta com PATCH /documents/:id → editMetadata).
     scope.route({

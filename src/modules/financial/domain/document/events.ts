@@ -94,23 +94,6 @@ export type ManualPaymentUndone = Readonly<{
   reason: string;
 }>;
 
-// #61 (P.O., 19/10): desfazer a transmissão de UM título — `Transmitted` → `Approved`. O banco não
-// processou a remessa e o título será pago de outra forma (ex.: baixa manual); desfazer mantém a
-// verdade para quem lê a tela: o pagamento não saiu pela remessa.
-//
-// ⚠️ NÃO libera o título para outra remessa, e é de propósito: o vínculo em
-// `fin_remittance_payables` permanece, e o `generate-remittance` recusa título preso a remessa viva
-// (`remittance-payables-already-held`). Quem LIBERA é o descarte da remessa (`PayableTransmissionDiscarded`),
-// que é outra decisão. `remittanceId` viaja para a auditoria responder "de qual remessa ele voltou".
-export type TransmissionUndone = Readonly<{
-  type: 'TransmissionUndone';
-  documentId: DocumentId;
-  payableId: PayableId;
-  remittanceId: string;
-  undoneBy: UserRef;
-  reason: string;
-}>;
-
 // As duas origens de uma baixa manual (ADR-0065 §6) — o destino possível de `ManualPaymentUndone`.
 export type PaymentOrigin = 'Approved' | 'Transmitted';
 
@@ -179,7 +162,6 @@ export type DocumentEvent =
   | DocumentCancelled
   | PayableManuallyPaid
   | ManualPaymentUndone
-  | TransmissionUndone
   | PayableTransmitted
   | PayableTransmissionDiscarded
   | ApproverEscalated;
@@ -203,7 +185,6 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
   'DocumentCancelled',
   'PayableManuallyPaid',
   'ManualPaymentUndone',
-  'TransmissionUndone',
   'PayableTransmitted',
   'PayableTransmissionDiscarded',
   'ApproverEscalated',
@@ -236,7 +217,6 @@ export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
   'ApprovalUndone',
   'DocumentDraftSaved',
   'PayableManuallyPaid',
-  // #61: os dois desfazimentos aparecem na trilha, com autor e motivo (migration 0059).
+  // #61: o desfazimento da baixa aparece na trilha, com autor e motivo (migration 0059).
   'ManualPaymentUndone',
-  'TransmissionUndone',
 ] as const);

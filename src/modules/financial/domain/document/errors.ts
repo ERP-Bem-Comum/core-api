@@ -29,12 +29,8 @@ export type DocumentError =
   // #61: desfazer a baixa exige o título `Paid`. Conciliado não está `Paid` e cai aqui de propósito:
   // primeiro se desfaz a conciliação (decisão da P.O., 03/10).
   | 'payable-not-paid'
-  // #61: desfazer a transmissão exige o título `Transmitted`.
-  | 'payable-not-transmitted'
-  // #61: os dois desfazimentos exigem motivo — é o que a auditoria procura depois.
+  // #61: o desfazimento exige motivo — é o que a auditoria procura depois.
   | 'undo-requires-reason'
-  // #61 (P.O., 19/10): "Voltar para edição" só com TODOS os títulos em `Approved`. Antes, o
-  // `undoApproval` levava a `Open` até título transmitido ou pago, sem motivo e sem checar a remessa;
-  // o desfazimento passa a ser em sequência — conciliação, baixa, transmissão —, cada etapa com a
-  // sua trava.
+  // #61 (P.O., 19/10): "Voltar para edição" recusado com título pago ou conciliado — desfaz-se a
+  // conciliação e a baixa antes, cada uma com a sua trava.
   | 'document-has-progressed-payable';

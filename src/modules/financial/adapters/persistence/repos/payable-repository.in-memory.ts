@@ -7,7 +7,6 @@ import type {
   MarkPaidInput,
   RescheduleInput,
   UndoPaidInput,
-  UndoTransmittedInput,
 } from '#src/modules/financial/domain/payable/repository.ts';
 import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
 import type { DocumentEvent } from '#src/modules/financial/domain/document/events.ts';
@@ -138,18 +137,6 @@ export const createInMemoryPayableRepository = (
         conflictError: 'payable-payment-undo-conflict',
         holds: (target) => target.status === 'Paid',
         apply: (p) => immutable<Payable>({ ...p, status: input.restoreTo, paidAt: null }),
-        timelineEntries: input.timelineEntries,
-        events: input.events,
-      }),
-
-    undoTransmitted: async (
-      input: UndoTransmittedInput,
-    ): Promise<Result<void, PayableRepositoryError>> =>
-      writeOne({
-        payableId: String(input.payableId),
-        conflictError: 'payable-transmission-undo-conflict',
-        holds: (target) => target.status === 'Transmitted',
-        apply: (p) => immutable<Payable>({ ...p, status: 'Approved' }),
         timelineEntries: input.timelineEntries,
         events: input.events,
       }),
