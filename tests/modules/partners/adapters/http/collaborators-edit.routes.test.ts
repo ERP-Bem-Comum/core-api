@@ -452,3 +452,114 @@ describe('COLLABORATORS-HTTP-EDIT — território no PUT (#1053)', () => {
     await teardown();
   });
 });
+
+describe('COLLABORATORS-HTTP-EDIT — RG, nascimento e raça preenchidos uma vez (P.O. 19/10)', () => {
+  const historyOf = async (
+    deps: Awaited<ReturnType<typeof makeApp>>['partnersDeps'],
+    id: string,
+  ) => {
+    const r = await deps.listCollaboratorHistory(id);
+    assert.ok(r.ok);
+    return r.value;
+  };
+
+  // Caso real: cadastro completado com os três em branco.
+  const createCompleteWithout = async (
+    app: Awaited<ReturnType<typeof buildApp>>,
+    token: string,
+  ) => {
+    const id = await create(app, token, {});
+    const completed = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/collaborators/${id}/complete-registration`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {},
+    });
+    assert.equal(completed.statusCode, 200, completed.body);
+    return id;
+  };
+
+  const FILLED = { rg: '12.345.678-9', dateOfBirth: '1990-05-20', race: 'PARDO' };
+
+  it('CA: completo com os três vazios → PUT preenche → 200, histórico com label PT e autor', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await createCompleteWithout(app, token);
+
+    const res = await put(app, token, id, body(FILLED));
+    assert.equal(res.statusCode, 200, res.body);
+
+    const entries = await historyOf(partnersDeps, id);
+    const byField = (f: string) => entries.find((e) => e.fieldName === f);
+    assert.equal(byField('rg')?.fieldLabel, 'RG');
+    assert.equal(byField('rg')?.valueBefore, null);
+    assert.equal(byField('rg')?.valueAfter, '12.345.678-9');
+    assert.equal(byField('dateOfBirth')?.fieldLabel, 'Data de Nascimento');
+    assert.equal(byField('dateOfBirth')?.valueAfter, '1990-05-20');
+    assert.equal(byField('race')?.fieldLabel, 'Raça/Cor');
+    assert.equal(byField('race')?.valueAfter, 'PARDO');
+    assert.equal(byField('race')?.changedByName, EDITOR_NAME);
+    await teardown();
+  });
+
+  it('CA: depois de gravado, reenviar o mesmo valor → 200 sem linha nova; trocar → 409', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await createCompleteWithout(app, token);
+    assert.equal((await put(app, token, id, body(FILLED))).statusCode, 200);
+    const before = (await historyOf(partnersDeps, id)).length;
+
+    // O PUT é total: o front reenvia o que leu — não pode virar recusa nem linha de histórico.
+    assert.equal((await put(app, token, id, body(FILLED))).statusCode, 200);
+    assert.equal((await historyOf(partnersDeps, id)).length, before);
+
+    for (const change of [
+      { rg: '00.000.000-0' },
+      { dateOfBirth: '1991-01-01' },
+      { race: 'BRANCO' },
+    ]) {
+      const res = await put(app, token, id, body({ ...FILLED, ...change }));
+      assert.equal(res.statusCode, 409, res.body);
+      assert.equal(
+        (res.json() as { error: { code: string } }).error.code,
+        'collaborator-personal-data-immutable',
+      );
+    }
+    assert.equal(
+      (await historyOf(partnersDeps, id)).length,
+      before,
+      'recusa não escreve histórico',
+    );
+    await teardown();
+  });
+
+  it('CA: o body atual do front (sem os três) → 200 e não mexe em nada', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await createCompleteWithout(app, token);
+    assert.equal((await put(app, token, id, body(FILLED))).statusCode, 200);
+
+    const res = await put(
+      app,
+      token,
+      id,
+      body({ role: 'Coordenadora', rg: null, dateOfBirth: null, race: null }),
+    );
+    assert.equal(res.statusCode, 200, res.body);
+    // Se `null` tivesse apagado, o reenvio do valor original voltaria a gravar (sem 409).
+    const swap = await put(app, token, id, body({ race: 'BRANCO' }));
+    assert.equal(swap.statusCode, 409, swap.body);
+    const fields = (await historyOf(partnersDeps, id)).map((e) => e.fieldName);
+    assert.equal(fields.filter((f) => f === 'race').length, 1, 'só a linha do preenchimento');
+    await teardown();
+  });
+
+  it('CA: raça fora do enum → 422; data inválida → 400', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await createCompleteWithout(app, token);
+    assert.equal((await put(app, token, id, body({ race: 'XYZ' }))).statusCode, 422);
+    assert.equal((await put(app, token, id, body({ dateOfBirth: 'não-é-data' }))).statusCode, 400);
+    await teardown();
+  });
+});

@@ -30,6 +30,9 @@ export type CollaboratorError =
   // #1053: PUT pode SUBSTITUIR o território, nunca APAGÁ-LO — zerar UF e município de quem já tem
   // território gravado é recusado (decisão da P.O.).
   | 'collaborator-territory-removal-forbidden'
+  // RG, nascimento e raça: o PUT preenche o que está vazio, mas não troca o que já foi gravado
+  // (decisão da P.O., 19/10/2026).
+  | 'collaborator-personal-data-immutable'
   | PaymentTargetError
   | SexError
   | MaritalStatusError

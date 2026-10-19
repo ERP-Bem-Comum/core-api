@@ -104,7 +104,10 @@ export type RegisterCollaboratorInput = Readonly<{
   registeredAt: Date;
 }>;
 
-/** Payload de edição cadastral (PUT total): os 7 campos cadastrais. Pessoais/estado preservados. */
+/**
+ * Payload de edição cadastral (PUT total): os 7 campos cadastrais. Pessoais/estado preservados,
+ * exceto RG/nascimento/raça, que o PUT pode preencher quando estão vazios.
+ */
 export type EditCollaboratorInput = Readonly<{
   name: string;
   email: string;
@@ -122,6 +125,12 @@ export type EditCollaboratorInput = Readonly<{
   // com ao menos um campo preenchido valida e substitui (substituição parcial permitida); os dois
   // vazios com território gravado é RECUSADO (`collaborator-territory-removal-forbidden`).
   territory?: TerritoryInput | null | undefined;
+  // RG, nascimento e raça são PREENCHIDOS UMA VEZ (decisão da P.O., 19/10/2026): ausente, `null` ou
+  // branco MANTÉM o gravado; com o campo vazio, valida e grava; igual ao gravado mantém (o PUT é
+  // total e reenvia o que leu); diferente do gravado é RECUSADO (`collaborator-personal-data-immutable`).
+  rg?: string | null | undefined;
+  dateOfBirth?: Date | null | undefined;
+  race?: string | null | undefined;
 }>;
 
 // Payload de auto-cadastro (campos pessoais; enums como string, validados no domínio).

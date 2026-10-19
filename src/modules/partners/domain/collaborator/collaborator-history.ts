@@ -40,6 +40,11 @@ const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>>
   territory: territoryText(c),
   bankAccount: bankText(c),
   pixKey: pixText(c),
+  // RG, nascimento e raça podem ser preenchidos pelo PUT depois do cadastro completo — entram no
+  // audit trail. Nascimento é dia civil (o banco guarda DATE).
+  rg: c.rg,
+  dateOfBirth: c.dateOfBirth === null ? null : c.dateOfBirth.toISOString().slice(0, 10),
+  race: c.race,
 });
 
 /**

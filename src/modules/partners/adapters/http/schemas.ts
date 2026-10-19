@@ -236,7 +236,8 @@ export const createCollaboratorBodySchema = z.object({
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
 
 /**
- * Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais não entram aqui.
+ * Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais não entram aqui,
+ * exceto RG/nascimento/raça (preenche-uma-vez, abaixo).
  * Banco/PIX (#1029) e território (#1053) entram com semântica PRÓPRIA: ausente ou `null` MANTÉM o
  * gravado; objeto valida e substitui.
  *
@@ -249,6 +250,10 @@ export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema
  * menos um campo preenchido valida (UF por sigla IBGE no domínio) e substitui — substituição parcial
  * permitida; zerar UF e município de quem já tem território é recusado no domínio com
  * `collaborator-territory-removal-forbidden` (422).
+ *
+ * RG, nascimento e raça são preenchidos UMA vez (decisão da P.O., 19/10/2026): ausente ou `null`
+ * mantém; com o campo vazio no gravado, grava; igual ao gravado mantém; diferente do gravado é
+ * recusado com `collaborator-personal-data-immutable` (409).
  */
 export const updateCollaboratorBodySchema = createCollaboratorBodySchema
   .omit({ bankAccount: true, pixKey: true, territory: true })
@@ -264,6 +269,18 @@ export const updateCollaboratorBodySchema = createCollaboratorBodySchema
     territory: territorySchema.nullable().optional().meta({
       description:
         'Ausente ou null mantém o território gravado; objeto com ao menos um campo preenchido substitui (parcial permitido); zerar os dois de quem já tem território é recusado (422)',
+    }),
+    rg: z.string().nullable().optional().meta({
+      description:
+        'Ausente ou null mantém; preenche se vazio; trocar o RG gravado é recusado (409)',
+    }),
+    dateOfBirth: z.coerce.date().nullable().optional().meta({
+      description:
+        'ISO date. Ausente ou null mantém; preenche se vazio; trocar a data gravada é recusado (409)',
+    }),
+    race: z.string().nullable().optional().meta({
+      description:
+        'Ausente ou null mantém; preenche se vazio (enum validado no domínio); trocar a raça gravada é recusado (409)',
     }),
   });
 

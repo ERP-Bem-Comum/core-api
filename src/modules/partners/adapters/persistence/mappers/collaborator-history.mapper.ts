@@ -24,6 +24,10 @@ export const COLLABORATOR_FIELD_LABELS: Readonly<Record<string, string>> = {
   territory: 'Território',
   bankAccount: 'Dados bancários', // #1029: era 'Banco' — a linha traz banco/agência/conta-DV.
   pixKey: 'Chave PIX',
+  // Preenchidos pelo PUT depois do cadastro completo (decisão da P.O., 19/10/2026).
+  rg: 'RG',
+  dateOfBirth: 'Data de Nascimento',
+  race: 'Raça/Cor',
 };
 
 /** Diff por campo → entradas materializadas (id, label PT). Diff vazio → []. */

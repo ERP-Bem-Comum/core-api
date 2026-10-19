@@ -44,6 +44,10 @@ export type EditCollaboratorCommand = Readonly<{
   pixKey?: PixKeyInput | null | undefined;
   /** #1053: ausente ou `null` mantém o gravado; objeto substitui; esvaziar território gravado recusa. */
   territory?: TerritoryInput | null | undefined;
+  /** RG, nascimento e raça: ausente/`null` mantém; preenche o que está vazio; trocar o gravado recusa. */
+  rg?: string | null | undefined;
+  dateOfBirth?: Date | null | undefined;
+  race?: string | null | undefined;
 }>;
 
 export type EditCollaboratorError =
@@ -95,6 +99,9 @@ export const editCollaborator =
         bankAccount: cmd.bankAccount,
         pixKey: cmd.pixKey,
         territory: cmd.territory,
+        rg: cmd.rg,
+        dateOfBirth: cmd.dateOfBirth,
+        race: cmd.race,
       },
       now,
     );

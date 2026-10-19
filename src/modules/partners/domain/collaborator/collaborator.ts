@@ -91,6 +91,28 @@ const resolveTerritoryEdit = (
   return Territory.createTerritory(input);
 };
 
+// RG, nascimento e raça (decisão da P.O., 19/10/2026) — dado gravado não muda, mas dado que FALTA
+// pode ser preenchido depois do cadastro completo:
+//   - ausente/`null`/branco (normalizado em `next = null`) → MANTÉM o gravado.
+//   - nada gravado                                           → GRAVA o valor recebido.
+//   - igual ao gravado                                       → mantém (o PUT é total e reenvia o que leu).
+//   - diferente do gravado                                   → RECUSA.
+const fillOnce = <V>(
+  current: V | null,
+  next: V | null,
+  same: (a: V, b: V) => boolean,
+): Result<V | null, CollaboratorError> => {
+  if (next === null) return ok(current);
+  if (current === null) return ok(next);
+  return same(current, next) ? ok(current) : err('collaborator-personal-data-immutable');
+};
+
+// Data de nascimento é dia civil: compara a data, não o instante (o banco guarda DATE).
+const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+
+const blankToNull = (raw: string | null | undefined): string | null =>
+  raw === undefined || raw === null || isBlank(raw) ? null : raw.trim();
+
 export const register = (
   input: RegisterCollaboratorInput,
 ): Result<{ collaborator: ActiveCollaborator; event: CollaboratorEvent }, CollaboratorError> => {
@@ -174,7 +196,8 @@ export const register = (
  * deactivatedAt). Banco/PIX (#1029): ausente ou `null` preserva; objeto valida e substitui — é o
  * caminho para preencher os migrados do legado, que vieram sem. Território (#1053): mesma semântica
  * de "preserva ou substitui", com a ressalva de que ESVAZIAR um território gravado é recusado (ver
- * `resolveTerritoryEdit`). RBAC do campo vital (CPF) é decidido fora (use case/borda). Emite
+ * `resolveTerritoryEdit`). RG, nascimento e raça: preenche o que falta, recusa trocar o gravado (ver
+ * `fillOnce`). RBAC do campo vital (CPF) é decidido fora (use case/borda). Emite
  * `CollaboratorEdited`.
  */
 export const edit = (
@@ -209,7 +232,23 @@ export const edit = (
   const territory = resolveTerritoryEdit(collaborator.territory, input.territory);
   if (!territory.ok) return territory;
 
-  // Spread preserva pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
+  const rg = fillOnce(collaborator.rg, blankToNull(input.rg), (a, b) => a.trim() === b);
+  if (!rg.ok) return rg;
+
+  const dateOfBirth = fillOnce(
+    collaborator.dateOfBirth,
+    input.dateOfBirth ?? null,
+    (a, b) => isoDay(a) === isoDay(b),
+  );
+  if (!dateOfBirth.ok) return dateOfBirth;
+
+  const raceRaw = blankToNull(input.race);
+  const parsedRace = raceRaw === null ? ok(null) : Race.parse(raceRaw);
+  if (!parsedRace.ok) return parsedRace;
+  const race = fillOnce(collaborator.race, parsedRace.value, (a, b) => a === b);
+  if (!race.ok) return race;
+
+  // Spread preserva os demais pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
   const edited: Collaborator = immutable({
     ...collaborator,
     name: input.name.trim(),
@@ -222,6 +261,9 @@ export const edit = (
     bankAccount: bankAccount.value,
     pixKey: pixKey.value,
     territory: territory.value,
+    rg: rg.value,
+    dateOfBirth: dateOfBirth.value,
+    race: race.value,
   });
 
   return ok({
