@@ -324,7 +324,7 @@ const SLUG_MESSAGES: Record<string, string> = {
   'undo-requires-reason':
     'Informe o motivo. Ele fica registrado no Histórico do documento e é o que permite auditar depois por que a etapa foi desfeita.',
   'document-has-progressed-payable':
-    'Há título deste documento pago ou conciliado. Para voltar o documento para edição, desfaça antes a conciliação e a baixa, nesta ordem.',
+    'Só é possível voltar para edição com todos os títulos do documento em Aprovado. Se algum está pago ou conciliado, desfaça antes a conciliação e a baixa, nesta ordem.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',

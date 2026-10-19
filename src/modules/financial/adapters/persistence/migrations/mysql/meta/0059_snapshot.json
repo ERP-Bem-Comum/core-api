@@ -528,7 +528,7 @@
         },
         "ck_fin_tl_event_type": {
           "name": "ck_fin_tl_event_type",
-          "value": "`fin_document_timeline`.`event_type` IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved','PayableManuallyPaid','ManualPaymentUndone','TransmissionUndone')"
+          "value": "`fin_document_timeline`.`event_type` IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved','PayableManuallyPaid','ManualPaymentUndone')"
         }
       }
     },

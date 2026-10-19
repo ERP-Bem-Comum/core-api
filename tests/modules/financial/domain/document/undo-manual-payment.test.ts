@@ -145,18 +145,8 @@ describe('#61 — undoManualPayment (Pago → status anterior)', () => {
   });
 });
 
-describe('#61 — undoApproval recusa título pago ou conciliado (P.O., 19/10)', () => {
-  it('título Transmitido NÃO trava (o desfazer da transmissão foi abortado) → Open', () => {
-    const ap = approved();
-    const r = Document.undoApproval({
-      document: ap.document,
-      payables: withParent(ap, 'Transmitted'),
-    });
-    assert.ok(r.ok, r.ok ? '' : r.error);
-    assert.equal(r.value.document.status, 'Open');
-  });
-
-  for (const status of ['Paid', 'PartiallyReconciled', 'Reconciled'] as const) {
+describe('#61 — undoApproval só com todos os títulos Aprovados (P.O., 19/10)', () => {
+  for (const status of ['Transmitted', 'Paid', 'PartiallyReconciled', 'Reconciled'] as const) {
     it(`um título ${status} → document-has-progressed-payable (nada muda)`, () => {
       const ap = approved();
       const r = Document.undoApproval({ document: ap.document, payables: withParent(ap, status) });

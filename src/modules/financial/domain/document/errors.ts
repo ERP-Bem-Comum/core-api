@@ -31,6 +31,6 @@ export type DocumentError =
   | 'payable-not-paid'
   // #61: o desfazimento exige motivo — é o que a auditoria procura depois.
   | 'undo-requires-reason'
-  // #61 (P.O., 19/10): "Voltar para edição" recusado com título pago ou conciliado — desfaz-se a
-  // conciliação e a baixa antes, cada uma com a sua trava.
+  // #61 (P.O., 19/10): "Voltar para edição" recusado com título fora de `Approved` — pago ou
+  // conciliado desfaz-se antes (conciliação, depois baixa); transmitido não volta.
   | 'document-has-progressed-payable';

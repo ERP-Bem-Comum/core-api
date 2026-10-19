@@ -848,17 +848,15 @@ export type UndoApprovalOutput = Readonly<{
 // Desfazer aprovação (US5): Approved → Open; filhos voltam a `Open` (reaproveitados). A alteração de valores
 // — que dispara hard delete + recriação dos filhos (R8.1) — ocorre no `adjust` subsequente.
 //
-// #61 (P.O., 19/10): recusado com título PAGO ou CONCILIADO — antes, "voltar para edição" levava a
-// `Open` até título pago, passando por cima do desfazer baixa (sem motivo) e da conciliação. Essas
-// etapas se desfazem antes, cada uma com a sua trava. `Transmitted` NÃO trava: o desfazer da
-// transmissão foi abortado (P.O., 19/10), e sem ele o documento nunca mais voltaria para edição.
-const PAYMENT_PROGRESSED: readonly DocumentStatus[] = ['Paid', 'PartiallyReconciled', 'Reconciled'];
-
+// #61 (P.O., 19/10): só com TODOS os títulos em `Approved` — antes, "voltar para edição" levava a
+// `Open` até título transmitido ou pago, passando por cima do desfazer baixa (sem motivo) e da
+// conciliação. Conciliado e pago se desfazem antes, em sequência, cada um com a sua trava; transmitido
+// não volta para edição.
 export const undoApproval = (
   input: UndoApprovalInput,
 ): Result<UndoApprovalOutput, DocumentError> => {
-  const progressed = [input.payables.parent, ...input.payables.children].some((p) =>
-    PAYMENT_PROGRESSED.includes(p.status),
+  const progressed = [input.payables.parent, ...input.payables.children].some(
+    (p) => p.status !== 'Approved',
   );
   if (progressed) return err('document-has-progressed-payable');
 
