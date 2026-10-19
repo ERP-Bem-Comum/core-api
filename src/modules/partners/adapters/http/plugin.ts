@@ -97,6 +97,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'collaborator-already-complete',
   'collaborator-already-inactive',
   'collaborator-already-active',
+  // Trocar RG/nascimento/raça já gravados — conflito com o estado (tela desatualizada, inclusive).
+  'collaborator-personal-data-immutable',
 ]);
 const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'complete-collaborator-registration-not-found',
