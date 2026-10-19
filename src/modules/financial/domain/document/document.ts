@@ -29,7 +29,7 @@ import type {
   DocumentStatus,
 } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
-import type { DocumentEvent, PayableSnapshot } from './events.ts';
+import type { DocumentEvent, PayableSnapshot, PaymentOrigin } from './events.ts';
 import type { DocumentError } from './errors.ts';
 import { computeNetValue } from './financial-data.ts';
 import { allowedRetentionsFor } from './document-type-metadata.ts';
@@ -387,6 +387,122 @@ export const payPayableManually = (
         children: input.payables.children.map(pay),
       }),
       events: [event],
+    }),
+  );
+};
+
+// ─── #61: desfazer a baixa e a transmissão (decisões da P.O., 02/10, 03/10 e 19/10) ──────────────
+//
+// O desfazimento é EM SEQUÊNCIA, cada etapa com a sua trava e o seu motivo:
+//
+//   Aprovado ──remessa──▶ Transmitido ──baixa──▶ Pago ──conciliação──▶ Conciliado
+//      ◀─ undoTransmission ─      ◀── undoManualPayment ──    ◀── undo da conciliação (já existe)
+//
+// Os dois são por TÍTULO, como a baixa: o documento segue `Approved`, os irmãos não mudam.
+
+const isBlankReason = (s: string): boolean => s.trim().length === 0;
+
+export type UndoManualPaymentInput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  payableId: PayableId.PayableId;
+  /**
+   * O status em que o título estava ANTES da baixa. O domínio não o deduz — a origem está na trilha
+   * (ou, para baixa antiga, na remessa), e quem a lê é o use case. Aqui só se aplica.
+   */
+  restoreTo: PaymentOrigin;
+  by: UserRef;
+  reason: string;
+}>;
+
+export type UndoPayableOutput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+const replacePayable = (
+  payables: Payables,
+  payableId: PayableId.PayableId,
+  change: (p: Payable) => Payable,
+): Payables => {
+  const apply = (p: Payable): Payable => (p.id === payableId ? change(p) : p);
+  return immutable<Payables>({
+    parent: apply(payables.parent),
+    children: payables.children.map(apply),
+  });
+};
+
+const findPayable = (payables: Payables, payableId: PayableId.PayableId): Payable | undefined =>
+  [payables.parent, ...payables.children].find((p) => p.id === payableId);
+
+// `Paid` → status anterior à baixa; a data de pagamento SOME (o título deixa de ser realizado).
+// Só `Paid`: conciliado não está `Paid` e cai em `payable-not-paid` — desfaz-se a conciliação antes.
+export const undoManualPayment = (
+  input: UndoManualPaymentInput,
+): Result<UndoPayableOutput, DocumentError> => {
+  const target = findPayable(input.payables, input.payableId);
+  if (target === undefined) return err('payable-not-found');
+  if (target.status !== 'Paid') return err('payable-not-paid');
+  if (isBlankReason(input.reason)) return err('undo-requires-reason');
+
+  const reason = input.reason.trim();
+  return ok(
+    immutable<UndoPayableOutput>({
+      document: input.document,
+      payables: replacePayable(input.payables, input.payableId, (p) =>
+        immutable<Payable>({ ...p, status: input.restoreTo, paidAt: null }),
+      ),
+      events: [
+        {
+          type: 'ManualPaymentUndone',
+          documentId: input.document.id,
+          payableId: input.payableId,
+          restoredStatus: input.restoreTo,
+          undoneBy: input.by,
+          reason,
+        },
+      ],
+    }),
+  );
+};
+
+export type UndoTransmissionInput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  payableId: PayableId.PayableId;
+  /** A remessa que prende o título — só para a auditoria; a regra da fila é do use case. */
+  remittanceId: string;
+  by: UserRef;
+  reason: string;
+}>;
+
+// `Transmitted` → `Approved`. O vínculo com a remessa NÃO é desfeito aqui nem em lugar nenhum: é ele
+// que mantém a retransmissão bloqueada (ver `TransmissionUndone` em events.ts).
+export const undoTransmission = (
+  input: UndoTransmissionInput,
+): Result<UndoPayableOutput, DocumentError> => {
+  const target = findPayable(input.payables, input.payableId);
+  if (target === undefined) return err('payable-not-found');
+  if (target.status !== 'Transmitted') return err('payable-not-transmitted');
+  if (isBlankReason(input.reason)) return err('undo-requires-reason');
+
+  return ok(
+    immutable<UndoPayableOutput>({
+      document: input.document,
+      payables: replacePayable(input.payables, input.payableId, (p) =>
+        immutable<Payable>({ ...p, status: 'Approved' }),
+      ),
+      events: [
+        {
+          type: 'TransmissionUndone',
+          documentId: input.document.id,
+          payableId: input.payableId,
+          remittanceId: input.remittanceId,
+          undoneBy: input.by,
+          reason: input.reason.trim(),
+        },
+      ],
     }),
   );
 };
@@ -772,9 +888,20 @@ export type UndoApprovalOutput = Readonly<{
 
 // Desfazer aprovação (US5): Approved → Open; filhos voltam a `Open` (reaproveitados). A alteração de valores
 // — que dispara hard delete + recriação dos filhos (R8.1) — ocorre no `adjust` subsequente.
+//
+// #61 (P.O., 19/10): só com TODOS os títulos em `Approved`. Antes, um título `Transmitted` ou `Paid`
+// ia direto a `Open` — passando por cima do desfazer baixa e do desfazer transmissão, sem motivo e sem
+// checar a remessa. "Voltar para edição" continua permitido para erro grave de lançamento, mas a partir
+// de `Approved`: as etapas posteriores se desfazem antes, cada uma com a sua trava. (`Refused` ainda
+// não tem transição que o grave — retorno do banco, #690 — e bloqueia por cair fora de `Approved`.)
 export const undoApproval = (
   input: UndoApprovalInput,
 ): Result<UndoApprovalOutput, DocumentError> => {
+  const progressed = [input.payables.parent, ...input.payables.children].some(
+    (p) => p.status !== 'Approved',
+  );
+  if (progressed) return err('document-has-progressed-payable');
+
   const d = input.document;
   const toOpen = (p: Payable): Payable => immutable<Payable>({ ...p, status: 'Open' });
   const payables = immutable<Payables>({

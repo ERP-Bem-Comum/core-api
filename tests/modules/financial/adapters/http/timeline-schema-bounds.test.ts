@@ -19,6 +19,7 @@ const baseEntry = {
   target: { kind: 'Document', id: '11111111-1111-4111-8111-111111111111' },
   occurredAt: '2026-06-16T12:00:00.000Z',
   actor: null,
+  reason: null,
   changes: [{ field: 'netValueCents', before: null, after: '1000' }],
 } as const;
 

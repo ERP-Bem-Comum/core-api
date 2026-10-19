@@ -52,7 +52,27 @@ export type PayableRepositoryError =
   | 'payable-payment-conflict'
   // O reagendamento não casou: o vencimento mudou entre a leitura do cliente e a escrita.
   | 'payable-reschedule-conflict'
+  // #61: o desfazer baixa não casou — o título deixou de estar `Paid` (outro desfez, ou conciliou).
+  | 'payable-payment-undo-conflict'
+  // #61: o desfazer transmissão não casou — o título deixou de estar `Transmitted` (baixa, descarte).
+  | 'payable-transmission-undo-conflict'
   | 'payable-repository-failure';
+
+// #61: desfazer a baixa — `Paid` → `restoreTo`, `paid_at` → NULL. O destino é decisão do use case
+// (trilha ou remessa); o repositório só persiste com a pré-condição `status = 'Paid'`.
+export type UndoPaidInput = Readonly<{
+  payableId: PayableId;
+  restoreTo: 'Approved' | 'Transmitted';
+  timelineEntries: readonly FinancialTimelineEntry[];
+  events: readonly DocumentEvent[];
+}>;
+
+// #61: desfazer a transmissão — `Transmitted` → `Approved`. O vínculo com a remessa NÃO é tocado.
+export type UndoTransmittedInput = Readonly<{
+  payableId: PayableId;
+  timelineEntries: readonly FinancialTimelineEntry[];
+  events: readonly DocumentEvent[];
+}>;
 
 export type MarkPaidInput = Readonly<{
   payableId: PayableId;
@@ -100,4 +120,10 @@ export type PayableRepository = Readonly<{
    * escrita sempre — last-write-wins mudo, justo onde hoje existe detecção.
    */
   reschedule: (input: RescheduleInput) => Promise<Result<void, PayableRepositoryError>>;
+
+  /** #61: desfazer a baixa de UM título — TRANSIÇÃO, CAS por estado (`WHERE status = 'Paid'`). */
+  undoPaid: (input: UndoPaidInput) => Promise<Result<void, PayableRepositoryError>>;
+
+  /** #61: desfazer a transmissão de UM título — TRANSIÇÃO, CAS por estado (`WHERE status = 'Transmitted'`). */
+  undoTransmitted: (input: UndoTransmittedInput) => Promise<Result<void, PayableRepositoryError>>;
 }>;

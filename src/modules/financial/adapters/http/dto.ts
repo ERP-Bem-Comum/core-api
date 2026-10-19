@@ -387,6 +387,7 @@ export const timelineToDto = (
     },
     occurredAt: entry.occurredAt.toISOString(),
     actor: entry.actor !== null ? String(entry.actor) : null,
+    reason: entry.reason,
     changes: entry.changes.map((c) => ({
       field: c.field,
       before: c.before,

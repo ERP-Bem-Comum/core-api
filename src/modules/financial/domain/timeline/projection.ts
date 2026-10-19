@@ -93,6 +93,7 @@ export const projectReclassification = (
   const base = {
     eventId: input.eventId,
     documentId: input.documentId,
+    reason: null,
     // `DocumentSaved` é o marco honesto: a reclassificação É um save do documento, e é o literal que
     // o CHECK `ck_fin_tl_event_type` já aceita. Um tipo novo custaria migration e não diria mais.
     eventType: 'DocumentSaved' as const,
@@ -141,6 +142,8 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
   }
 
   const documentId = input.after.id;
+  // #61: o motivo vem do PAYLOAD do evento — é o único dado da trilha que não sai do diff de estado.
+  const reason = 'reason' in input.event ? (input.event.reason ?? null) : null;
   const entries: FinancialTimelineEntry[] = [
     {
       eventId: input.eventId,
@@ -149,6 +152,7 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
       eventType,
       occurredAt: input.occurredAt,
       actor: input.actor,
+      reason,
       changes: diffDocument(input.before, input.after),
     },
   ];
@@ -170,6 +174,7 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
       eventType,
       occurredAt: input.occurredAt,
       actor: input.actor,
+      reason,
       changes,
     });
   }

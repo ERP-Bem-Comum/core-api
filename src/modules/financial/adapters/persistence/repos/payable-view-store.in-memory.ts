@@ -62,6 +62,17 @@ export const createInMemoryPayableViewStore = (): PayableViewStore => {
       return Promise.resolve(ok(undefined));
     },
 
+    unmarkPaid: async (
+      payableIds: readonly string[],
+      status: PayableViewStatus,
+    ): Promise<Result<void, PayableViewStoreError>> => {
+      for (const id of payableIds) {
+        const existing = rows.get(id);
+        if (existing !== undefined) rows.set(id, { ...existing, status, paidAt: null });
+      }
+      return Promise.resolve(ok(undefined));
+    },
+
     list: async (): Promise<Result<readonly PayableView[], PayableViewStoreError>> =>
       Promise.resolve(ok([...rows.values()])),
 

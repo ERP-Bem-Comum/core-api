@@ -205,6 +205,8 @@ import { approveDocument } from '../../application/use-cases/approve-document.ts
 import { registerManualPayment } from '../../application/use-cases/register-manual-payment.ts';
 import { updatePayableDueDate } from '../../application/use-cases/update-payable-due-date.ts';
 import { undoApproval } from '../../application/use-cases/undo-approval.ts';
+import { undoManualPayment } from '../../application/use-cases/undo-manual-payment.ts';
+import { undoTransmission } from '../../application/use-cases/undo-transmission.ts';
 import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
 import { getDocumentTimeline } from '../../application/use-cases/get-document-timeline.ts';
@@ -327,6 +329,10 @@ export type FinancialHttpDeps = Readonly<{
   /** Vencimento de título isolado (#270) — PATCH /documents/:id/payables/:payableId. */
   updatePayableDueDate: ReturnType<typeof updatePayableDueDate>;
   undoApproval: ReturnType<typeof undoApproval>;
+  /** #61 — POST /documents/:id/payables/:payableId/undo-manual-payment (Pago → status anterior). */
+  undoManualPayment: ReturnType<typeof undoManualPayment>;
+  /** #61 — POST /documents/:id/payables/:payableId/undo-transmission (Transmitido → Aprovado). */
+  undoTransmission: ReturnType<typeof undoTransmission>;
   cancelDocument: ReturnType<typeof cancelDocument>;
   submitDraft: ReturnType<typeof submitDraft>;
   /** Leitura direta do repositório — usado pelo GET /documents/:id. */
@@ -1066,6 +1072,13 @@ const makeDeps = (
     registerManualPayment: registerManualPayment(deps),
     updatePayableDueDate: updatePayableDueDate(deps), // #270: mesmas deps (repo + clock)
     undoApproval: undoApproval(deps),
+    // #61: os desfazimentos leem a remessa (vínculo e fila) e, a baixa, a trilha (status anterior).
+    undoManualPayment: undoManualPayment({
+      ...deps,
+      timelineRepo: pools.timelineRepo,
+      remittances: pools.remittanceRepo,
+    }),
+    undoTransmission: undoTransmission({ ...deps, remittances: pools.remittanceRepo }),
     cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
     findDocumentById: pools.repo.findById,

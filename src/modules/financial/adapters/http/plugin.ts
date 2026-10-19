@@ -94,6 +94,7 @@ import {
   documentIdParamSchema,
   documentPayableParamsSchema,
   manualPaymentBodySchema,
+  undoPayableBodySchema,
   updatePayableDueDateBodySchema,
   listDocumentsQuerySchema,
   documentResponseSchema,
@@ -867,6 +868,52 @@ const financialRoutes =
           // #232: data de pagamento informada pelo operador (ancora o match da conciliação).
           ...(req.body.paidAt !== undefined ? { paidAt: req.body.paidAt } : {}),
           ...(req.body.reason !== undefined ? { reason: req.body.reason } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // #61 — desfazer a baixa de UM título: `Paid` → status anterior à baixa (Aprovado ou Transmitido),
+    // data de pagamento some, motivo obrigatório na trilha. Mesma permissão da baixa (decisão da P.O.).
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents/:id/payables/:payableId/undo-manual-payment',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.payableApprove)],
+      schema: {
+        params: documentPayableParamsSchema,
+        body: undoPayableBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.undoManualPayment({
+          documentId: req.params.id,
+          payableId: req.params.payableId,
+          undoneBy: req.userId,
+          reason: req.body.reason,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // #61 — desfazer a transmissão de UM título: `Transmitted` → `Approved`. O título SEGUE preso à
+    // remessa (retransmissão bloqueada); remessa ainda na fila é recusada — descarta-se a remessa.
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents/:id/payables/:payableId/undo-transmission',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.payableApprove)],
+      schema: {
+        params: documentPayableParamsSchema,
+        body: undoPayableBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.undoTransmission({
+          documentId: req.params.id,
+          payableId: req.params.payableId,
+          undoneBy: req.userId,
+          reason: req.body.reason,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);

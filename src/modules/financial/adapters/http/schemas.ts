@@ -445,6 +445,10 @@ export const timelineEntrySchema = z
     actor: uuidV4().nullable().meta({
       description: 'UUID do usuário responsável pela ação; nulo em ações automáticas do sistema',
     }),
+    reason: z.string().max(500).nullable().meta({
+      description:
+        'Motivo informado na ação (desfazer baixa/transmissão exigem; baixa manual aceita); nulo nas demais',
+    }),
     changes: z
       .array(
         z
@@ -1377,6 +1381,16 @@ export const manualPaymentBodySchema = z.object({
   paidAt: z.iso.date().optional(),
   // #223: motivo opcional (a trilha já captura quem+quando).
   reason: z.string().min(1).max(500).optional(),
+});
+
+// ─── #61: desfazer baixa e transmissão — POST /documents/:id/payables/:payableId/undo-* ─────────
+// Mesmo corpo para os dois. `version` segue o contrato da baixa (o front já a envia; a pré-condição
+// real é o CAS por estado no título). `reason` é OBRIGATÓRIO — molde do descarte de remessa.
+export const undoPayableBodySchema = z.object({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  reason: z.string().trim().min(1).max(500).meta({
+    description: 'Motivo do desfazimento — obrigatório, registrado no Histórico do documento',
+  }),
 });
 
 // ─── Vencimento de título isolado (#270) — PATCH /documents/:id/payables/:payableId ──────────────

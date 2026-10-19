@@ -331,3 +331,68 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
     }
   });
 });
+
+// #61 — os desfazimentos no read-model. Sem estes ramos o evento caía no "fora do contrato → skip",
+// e o título seguia `Paid` no `fin_payable_view` — de onde Dashboard, fluxo de caixa e realizado somam.
+describe('financial/application — applyPayableEvent: desfazimentos (#61)', () => {
+  const paidRow = async () => {
+    const store = createInMemoryPayableViewStore();
+    const apply = applyPayableEvent({ store });
+    await apply({ eventType: 'DocumentSaved', occurredAt: OCCURRED_AT, payload: documentSaved() });
+    await apply({
+      eventType: 'PayableManuallyPaid',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
+    return { store, apply };
+  };
+  const rowOf = async (store: ReturnType<typeof createInMemoryPayableViewStore>) => {
+    const l = await store.list();
+    assert.ok(l.ok);
+    return l.value.find((r) => r.payableId === P1);
+  };
+
+  for (const restoredStatus of ['Approved', 'Transmitted'] as const) {
+    it(`ManualPaymentUndone → status ${restoredStatus} e paidAt null`, async () => {
+      const { store, apply } = await paidRow();
+      const r = await apply({
+        eventType: 'ManualPaymentUndone',
+        occurredAt: OCCURRED_AT,
+        payload: JSON.stringify({ documentId: DOC, payableId: P1, restoredStatus, reason: 'x' }),
+      });
+      assert.equal(r.ok, true);
+      const row = await rowOf(store);
+      assert.equal(row?.status, restoredStatus);
+      assert.equal(row?.paidAt, null);
+    });
+  }
+
+  it('ManualPaymentUndone com destino fora de Aprovado/Transmitido → payload inválido, nada muda', async () => {
+    const { store, apply } = await paidRow();
+    const r = await apply({
+      eventType: 'ManualPaymentUndone',
+      occurredAt: OCCURRED_AT,
+      payload: JSON.stringify({ documentId: DOC, payableId: P1, restoredStatus: 'Open' }),
+    });
+    assert.equal(r.ok ? null : r.error, 'payable-event-payload-invalid');
+    assert.equal((await rowOf(store))?.status, 'Paid');
+  });
+
+  it('TransmissionUndone → status Approved', async () => {
+    const store = createInMemoryPayableViewStore();
+    const apply = applyPayableEvent({ store });
+    await apply({ eventType: 'DocumentSaved', occurredAt: OCCURRED_AT, payload: documentSaved() });
+    await apply({
+      eventType: 'PayableTransmitted',
+      occurredAt: OCCURRED_AT,
+      payload: statusEvent(P1),
+    });
+    const r = await apply({
+      eventType: 'TransmissionUndone',
+      occurredAt: OCCURRED_AT,
+      payload: JSON.stringify({ documentId: DOC, payableId: P1, reason: 'x' }),
+    });
+    assert.equal(r.ok, true);
+    assert.equal((await rowOf(store))?.status, 'Approved');
+  });
+});
