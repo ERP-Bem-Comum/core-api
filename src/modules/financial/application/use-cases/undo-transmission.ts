@@ -29,8 +29,10 @@ import { buildTimelineEntries } from '../timeline-recording.ts';
 //
 // REMESSA NA FILA É RECUSADA
 //   Com a remessa `Queued`, ela ainda não foi ao banco — e ainda pode ir. Se o título voltasse a
-//   `Approved` agora, uma baixa manual nele pagaria em dobro quando a remessa saísse. Para esse caso a
-//   ação certa é descartar a remessa, que existe e devolve os títulos dela.
+//   `Approved` agora, uma baixa manual nele pagaria em dobro quando a remessa saísse. A ação certa é
+//   AGUARDAR o desfecho (o agente transmite → `Transmitted`, ou falha → `Failed`). ⚠️ Descartar não é
+//   saída aqui: com o arquivo já no bucket, o próprio descarte recusa (`remittance-discard-requires-failure`)
+//   pelo mesmo motivo — a mensagem não pode mandar o operador para esse beco.
 export type UndoTransmissionDeps = Readonly<{
   repo: DocumentRepository;
   payableRepo: PayableRepository;

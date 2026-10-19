@@ -334,7 +334,7 @@ const SLUG_MESSAGES: Record<string, string> = {
   'document-has-progressed-payable':
     'Há título deste documento transmitido, pago ou conciliado. Para voltar o documento para edição, desfaça essas etapas antes, nesta ordem: conciliação, baixa e transmissão.',
   'transmission-undo-remittance-queued':
-    'A remessa deste título ainda não foi enviada ao banco e pode sair a qualquer momento. Em vez de desfazer a transmissão do título, descarte a remessa — o descarte devolve os títulos dela.',
+    'A remessa deste título ainda está na fila da VAN: o arquivo aguarda o agente de transporte e pode sair para o banco a qualquer momento. Aguarde o desfecho da remessa (transmitida ou com falha) e desfaça a transmissão depois.',
   'transmission-undo-remittance-not-found':
     'Não foi encontrada a remessa que transmitiu este título. Confira o título na lista de remessas antes de desfazer a transmissão.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
