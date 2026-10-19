@@ -23,6 +23,7 @@ const HEADER: readonly string[] = [
   'rg',
   'dateOfBirth',
   'genderIdentity',
+  'genderIdentityDescription',
   'race',
   'education',
   'foodCategory',
@@ -41,7 +42,7 @@ const HEADER: readonly string[] = [
 const isoOrEmpty = (d: Date | null): string => (d === null ? '' : d.toISOString());
 const boolOrEmpty = (b: boolean | null): string => (b === null ? '' : String(b));
 
-// Achata o agregado em 26 células (ordem do HEADER). Campos pessoais nullable viram '' quando null.
+// Achata o agregado em 27 células (ordem do HEADER). Campos pessoais nullable viram '' quando null.
 // `disableBy`/`deactivatedAt` discriminados por `status` (só nos Inactive).
 const collaboratorToCells = (c: Collaborator): readonly string[] => {
   const core = [
@@ -60,6 +61,7 @@ const collaboratorToCells = (c: Collaborator): readonly string[] => {
     c.rg ?? '',
     isoOrEmpty(c.dateOfBirth),
     c.genderIdentity ?? '',
+    c.genderIdentityDescription ?? '',
     c.race ?? '',
     c.education ?? '',
     c.foodCategory ?? '',

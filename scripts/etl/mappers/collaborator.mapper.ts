@@ -144,6 +144,8 @@ export const mapLegacyCollaboratorRow = (
     rg: row.rg,
     dateOfBirth: row.dateOfBirth,
     genderIdentity,
+    // #1054: o legado não tem coluna de "Outra identidade de gênero"; nasce null no core.
+    genderIdentityDescription: null,
     race,
     education,
     foodCategory,

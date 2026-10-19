@@ -25,6 +25,7 @@ const EXPECTED_HEADER = [
   'rg',
   'dateOfBirth',
   'genderIdentity',
+  'genderIdentityDescription',
   'race',
   'education',
   'foodCategory',
@@ -57,6 +58,7 @@ const completeInput = () => ({
   rg: '12.345.678-9',
   dateOfBirth: new Date('1990-05-10T00:00:00.000Z'),
   genderIdentity: 'MULHER_CIS',
+  genderIdentityDescription: null,
   race: 'PARDO',
   education: 'ENSINO_SUPERIOR',
   foodCategory: 'ONIVORO',
@@ -118,9 +120,10 @@ describe('collaboratorsToCsv — Active + PreRegistration', () => {
     assert.equal(cells[9], 'Active'); // status
     assert.equal(cells[10], ''); // rg
     assert.equal(cells[12], ''); // genderIdentity
-    assert.equal(cells[23], ''); // experienceInThePublicSector
-    assert.equal(cells[24], ''); // disableBy
-    assert.equal(cells[25], ''); // deactivatedAt
+    assert.equal(cells[13], ''); // genderIdentityDescription
+    assert.equal(cells[24], ''); // experienceInThePublicSector
+    assert.equal(cells[25], ''); // disableBy
+    assert.equal(cells[26], ''); // deactivatedAt
   });
 
   it('startOfContract em ISO 8601', () => {
@@ -134,10 +137,24 @@ describe('collaboratorsToCsv — Active + Complete', () => {
     const cells = dataLines(collaboratorsToCsv([makeComplete()]))[0]?.split(',') ?? [];
     assert.equal(cells[8], 'Complete'); // registrationStatus
     assert.equal(cells[12], 'MULHER_CIS'); // genderIdentity
-    assert.equal(cells[13], 'PARDO'); // race
-    assert.equal(cells[14], 'ENSINO_SUPERIOR'); // education
-    assert.equal(cells[15], 'ONIVORO'); // foodCategory
-    assert.equal(cells[23], 'true'); // experienceInThePublicSector
+    assert.equal(cells[13], ''); // genderIdentityDescription (null → vazio quando não é OUTRO)
+    assert.equal(cells[14], 'PARDO'); // race
+    assert.equal(cells[15], 'ENSINO_SUPERIOR'); // education
+    assert.equal(cells[16], 'ONIVORO'); // foodCategory
+    assert.equal(cells[24], 'true'); // experienceInThePublicSector
+  });
+
+  it('genderIdentity=OUTRO expõe o complemento na coluna genderIdentityDescription (#1054)', () => {
+    const base = makeActive();
+    const done = Collaborator.completeRegistration(
+      base,
+      { ...completeInput(), genderIdentity: 'OUTRO', genderIdentityDescription: 'Agênero' },
+      NOW,
+    );
+    assert.ok(done.ok, `fixture inválido: ${done.ok ? '' : done.error}`);
+    const cells = dataLines(collaboratorsToCsv([done.value.collaborator]))[0]?.split(',') ?? [];
+    assert.equal(cells[12], 'OUTRO'); // genderIdentity
+    assert.equal(cells[13], 'Agênero'); // genderIdentityDescription
   });
 });
 
@@ -145,8 +162,8 @@ describe('collaboratorsToCsv — Inactive', () => {
   it('status=Inactive, disableBy preenchido, deactivatedAt em ISO 8601', () => {
     const cells = dataLines(collaboratorsToCsv([makeInactive()]))[0]?.split(',') ?? [];
     assert.equal(cells[9], 'Inactive');
-    assert.equal(cells[24], 'TEMPO_CONTRATO_FINALIZADO');
-    assert.equal(cells[25], DEACTIVATED_AT.toISOString());
+    assert.equal(cells[25], 'TEMPO_CONTRATO_FINALIZADO');
+    assert.equal(cells[26], DEACTIVATED_AT.toISOString());
   });
 });
 

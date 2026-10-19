@@ -32,6 +32,7 @@ const baseComplete = {
   rg: null,
   dateOfBirth: null,
   genderIdentity: null,
+  genderIdentityDescription: null,
   race: null,
   education: null,
   foodCategory: null,
@@ -124,5 +125,62 @@ describe('Collaborator.completeRegistration — campos de perfil (US2)', () => {
       assert.equal(r.value.collaborator.maritalStatus, null);
       assert.equal(r.value.collaborator.childrenAges, null);
     }
+  });
+});
+
+describe('Collaborator.completeRegistration — "Outra identidade de gênero" (#1054)', () => {
+  it('grava o texto livre quando genderIdentity = OUTRO', () => {
+    const r = Collaborator.completeRegistration(
+      preRegistered(),
+      { ...baseComplete, genderIdentity: 'OUTRO', genderIdentityDescription: 'Agênero' },
+      NOW,
+    );
+    assert.ok(r.ok, `esperado ok: ${r.ok ? '' : r.error}`);
+    if (r.ok) {
+      assert.equal(r.value.collaborator.genderIdentity, 'OUTRO');
+      assert.equal(r.value.collaborator.genderIdentityDescription, 'Agênero');
+    }
+  });
+
+  it('OUTRO sem descrição continua válido (texto é opcional)', () => {
+    const r = Collaborator.completeRegistration(
+      preRegistered(),
+      { ...baseComplete, genderIdentity: 'OUTRO', genderIdentityDescription: null },
+      NOW,
+    );
+    assert.ok(r.ok, `esperado ok: ${r.ok ? '' : r.error}`);
+    if (r.ok) {
+      assert.equal(r.value.collaborator.genderIdentity, 'OUTRO');
+      assert.equal(r.value.collaborator.genderIdentityDescription, null);
+    }
+  });
+
+  it('descrição com genderIdentity ≠ OUTRO → gender-identity-description-requires-other', () => {
+    const r = Collaborator.completeRegistration(
+      preRegistered(),
+      { ...baseComplete, genderIdentity: 'MULHER_CIS', genderIdentityDescription: 'Agênero' },
+      NOW,
+    );
+    assert.ok(!r.ok);
+    assert.equal(r.error, 'gender-identity-description-requires-other');
+  });
+
+  it('descrição com genderIdentity null (nenhuma escolhida) também recusa', () => {
+    const r = Collaborator.completeRegistration(
+      preRegistered(),
+      { ...baseComplete, genderIdentity: null, genderIdentityDescription: 'Agênero' },
+      NOW,
+    );
+    assert.ok(!r.ok);
+    assert.equal(r.error, 'gender-identity-description-requires-other');
+  });
+
+  it('descrição em branco com genderIdentity ≠ OUTRO é ignorada (não recusa)', () => {
+    const r = Collaborator.completeRegistration(
+      preRegistered(),
+      { ...baseComplete, genderIdentity: 'MULHER_CIS', genderIdentityDescription: '   ' },
+      NOW,
+    );
+    assert.ok(r.ok, `esperado ok: ${r.ok ? '' : r.error}`);
   });
 });

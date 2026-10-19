@@ -199,6 +199,9 @@ export const parCollaborators = mysqlTable(
     rg: varchar('rg', { length: 20 }),
     dateOfBirth: datetime('date_of_birth', { mode: 'date', fsp: 3 }),
     genderIdentity: varchar('gender_identity', { length: 30 }),
+    // Texto livre do "Outra identidade de gênero" (#1054) — só preenchido quando genderIdentity =
+    // 'OUTRO' (coerência no domínio). Espelha food_category_description: varchar(255) nullable.
+    genderIdentityDescription: varchar('gender_identity_description', { length: 255 }),
     race: varchar('race', { length: 30 }),
     education: varchar('education', { length: 30 }),
     // varchar(30) alinhado com gender_identity/race/education (#274 — 'PREFIRO_NAO_RESPONDER' = 21 chars)
