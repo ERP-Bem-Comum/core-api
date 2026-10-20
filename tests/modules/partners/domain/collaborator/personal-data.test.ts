@@ -10,12 +10,15 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { is } from 'drizzle-orm';
+import { MySqlVarChar } from 'drizzle-orm/mysql-core';
 
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import * as PersonalData from '#src/modules/partners/domain/collaborator/personal-data.ts';
 import { diffCollaborator } from '#src/modules/partners/domain/collaborator/collaborator-history.ts';
 import type { Collaborator as CollaboratorEntity } from '#src/modules/partners/domain/collaborator/types.ts';
+import { parCollaborators } from '#src/modules/partners/adapters/persistence/schemas/mysql.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
 const LATER = new Date('2026-06-02T12:00:00.000Z');
@@ -199,6 +202,47 @@ describe("#1072 CA2 — `''` gravado conta como vazio", () => {
   });
 });
 
+// A normalização na escrita não pode virar linha de auditoria: o histórico é atribuído a quem fez o
+// PUT, e "RG: '' → null" diria que a pessoa de RH mexeu num dado que ela nem enviou.
+describe('#1072 — normalizar não gera histórico fantasma', () => {
+  const rgChanges = (before: CollaboratorEntity, after: CollaboratorEntity) =>
+    diffCollaborator(before, after).filter((c) => c.fieldName === 'rg');
+
+  for (const stored of ['', '   ']) {
+    it(`rg gravado ${JSON.stringify(stored)} + PUT sem rg → nenhuma linha de RG`, () => {
+      const before: CollaboratorEntity = { ...completed(), rg: stored };
+      const r = Collaborator.edit(before, editInput({ role: 'Coordenadora' }), LATER);
+      assert.ok(r.ok, r.ok ? '' : r.error);
+      assert.deepEqual(rgChanges(before, r.value.collaborator), []);
+    });
+  }
+
+  it("rg gravado ' 123 ' + PUT reenviando '123' → nenhuma linha de RG", () => {
+    const before: CollaboratorEntity = { ...completed(), rg: ' 123 ' };
+    const r = Collaborator.edit(before, editInput({ rg: '123' }), LATER);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(rgChanges(before, r.value.collaborator), []);
+  });
+
+  it("rg gravado '' + PUT com rg → a linha diz que estava vazio (null), não ''", () => {
+    const before: CollaboratorEntity = { ...completed(), rg: '' };
+    const r = Collaborator.edit(before, editInput({ rg: '12345' }), LATER);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(rgChanges(before, r.value.collaborator), [
+      { fieldName: 'rg', valueBefore: null, valueAfter: '12345' },
+    ]);
+  });
+
+  it('genderIdentityDescription não é campo rastreado (o PUT não a escreve) — nenhuma linha', () => {
+    const before: CollaboratorEntity = { ...completed(), genderIdentityDescription: ' x ' };
+    const after: CollaboratorEntity = { ...before, genderIdentityDescription: 'x' };
+    assert.deepEqual(
+      diffCollaborator(before, after).filter((c) => c.fieldName === 'genderIdentityDescription'),
+      [],
+    );
+  });
+});
+
 describe("#1072 CA3 — branco grava null, nunca ''", () => {
   it('register nasce com rg e genderIdentityDescription null', () => {
     const c = preRegistered();
@@ -228,9 +272,22 @@ describe('#1072 CA4 — limites no domínio (sem a borda), erro nomeado', () => 
   const rg21 = '1'.repeat(PersonalData.RG_MAX_LENGTH + 1);
   const desc121 = 'x'.repeat(PersonalData.GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH + 1);
 
-  it('os limites espelham as colunas e o contrato de borda', () => {
-    assert.equal(PersonalData.RG_MAX_LENGTH, 20);
-    assert.equal(PersonalData.GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH, 120);
+  // Amarra o domínio ao schema de persistência sem que um importe o outro: quem liga os dois é o
+  // teste. Comparar com literais (20, 120) só provaria que o número foi digitado duas vezes.
+  it('o teto do RG é o varchar de par_collaborators.rg', () => {
+    const column = parCollaborators.rg;
+    assert.ok(is(column, MySqlVarChar), 'rg deveria ser varchar');
+    assert.equal(PersonalData.RG_MAX_LENGTH, column.length);
+  });
+
+  it('o teto da descrição de gênero cabe no varchar de par_collaborators', () => {
+    const column = parCollaborators.genderIdentityDescription;
+    assert.ok(is(column, MySqlVarChar), 'gender_identity_description deveria ser varchar');
+    assert.ok(column.length !== undefined, 'varchar sem length declarado');
+    assert.ok(
+      PersonalData.GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH <= column.length,
+      `${String(PersonalData.GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH)} > ${String(column.length)}`,
+    );
   });
 
   it('rg com 21 caracteres no edit → collaborator-rg-too-long', () => {

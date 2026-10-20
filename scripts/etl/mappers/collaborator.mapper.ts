@@ -4,7 +4,8 @@
  * Enums literais (ADR-0031 §D2 — quarentena se fora do Set); `status` legado
  * PRE_CADASTRO/CADASTRO_COMPLETO → registrationStatus PreRegistration/Complete.
  * D10: inativo sem `disableBy` → backfill `LEGACY_MIGRATION` (+ deactivatedAt=updatedAt).
- * D13: `biography`>2000 / `telephone`>30 → Overflow (nunca trunca).
+ * D13: `biography`>2000 / `telephone`>30 / `rg`>20 → Overflow (nunca trunca). O `rg` passa antes
+ * pela normalização do domínio (#1072): trim, branco → null.
  */
 
 import { type Result, ok, err, combine, mapErr } from '#src/shared/primitives/result.ts';
@@ -49,16 +50,19 @@ const requireRole = (raw: string | null): Result<string, QuarantineReason> =>
 // Gravado como `''`, ele travava o "preenche uma vez" do PUT (409 eterno). Acima da coluna
 // varchar(20) vira `Overflow` (D13: nunca trunca). O agregado entra por `rehydrate`, que não
 // revalida — por isso a normalização mora aqui.
+// `null` é tratado antes: só um RG presente pode estourar, e o `attempted` é ele mesmo.
 const normalizeRg = (raw: string | null): Result<string | null, QuarantineReason> =>
-  mapErr(
-    PersonalData.parseRg(raw),
-    (): QuarantineReason => ({
-      tag: 'Overflow',
-      field: 'rg',
-      attempted: raw ?? '',
-      maxLength: PersonalData.RG_MAX_LENGTH,
-    }),
-  );
+  raw === null
+    ? ok(null)
+    : mapErr(
+        PersonalData.parseRg(raw),
+        (): QuarantineReason => ({
+          tag: 'Overflow',
+          field: 'rg',
+          attempted: raw,
+          maxLength: PersonalData.RG_MAX_LENGTH,
+        }),
+      );
 
 // D10: active=1 → null. active=0 → motivo legado válido OU backfill LEGACY_MIGRATION.
 const resolveDisableBy = (

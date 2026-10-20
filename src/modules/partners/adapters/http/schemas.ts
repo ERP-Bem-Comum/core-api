@@ -9,6 +9,10 @@
 import * as z from 'zod/v4';
 
 import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+import {
+  RG_MAX_LENGTH,
+  GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH,
+} from '../../domain/collaborator/personal-data.ts';
 
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5; // default do legado (PaginatedEnvelope.Limit).
@@ -216,9 +220,9 @@ export type CollaboratorPaginatedDto = z.infer<typeof collaboratorPaginatedSchem
 
 // ─── P2 — escrita ────────────────────────────────────────────────────────────
 
-// #1072: RG cabe na coluna `varchar(20)`. O domínio repete o limite (ADR-0027): a borda dá o 400
-// cedo, o domínio cobre quem não passa por aqui (ETL). Sem ele, o MySQL recusava (1406) → 503 falso.
-const RG_MAX = 20;
+// #1072: os limites de RG e da descrição de gênero vêm do domínio — fonte única. A validação nas duas
+// camadas é deliberada (ADR-0027): a borda dá o 400 cedo, o domínio cobre quem não passa por aqui
+// (ETL). O NÚMERO é um só, para que as duas nunca discordem.
 
 /**
  * Nascimento como DIA CIVIL (#1072). Aceita `YYYY-MM-DD` ou data-hora ISO (com `Z`, offset ou sem
@@ -299,7 +303,7 @@ export const updateCollaboratorBodySchema = createCollaboratorBodySchema
       description:
         'Ausente ou null mantém o território gravado; objeto com ao menos um campo preenchido substitui (parcial permitido); zerar os dois de quem já tem território é recusado (422)',
     }),
-    rg: z.string().trim().max(RG_MAX).nullable().optional().meta({
+    rg: z.string().trim().max(RG_MAX_LENGTH).nullable().optional().meta({
       description:
         'Até 20 caracteres. Ausente, null ou branco mantém; preenche se vazio; trocar o RG gravado é recusado (409)',
     }),
@@ -323,12 +327,18 @@ export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema
 export const completeRegistrationBodySchema = z.object({
   // #1072: RG, nascimento e raça seguem o "preenche uma vez" também aqui — `null` (inclusive o
   // default de campo ausente) MANTÉM o que o PUT já gravou; valor diferente do gravado → 409.
-  rg: z.string().trim().max(RG_MAX).nullable().default(null),
+  rg: z.string().trim().max(RG_MAX_LENGTH).nullable().default(null),
   dateOfBirth: civilDateSchema.nullable().default(null),
   genderIdentity: z.string().nullable().default(null),
-  // #1054: texto livre de "Outra identidade de gênero". max(120) é bound de borda (coluna é 255);
-  // a coerência com genderIdentity = OUTRO é invariante de domínio (422). autocadastro herda via extend.
-  genderIdentityDescription: z.string().trim().max(120).nullable().default(null),
+  // #1054: texto livre de "Outra identidade de gênero". O teto (120) é contrato de produto, abaixo da
+  // coluna (255); a coerência com genderIdentity = OUTRO é invariante de domínio (422). autocadastro
+  // herda via extend.
+  genderIdentityDescription: z
+    .string()
+    .trim()
+    .max(GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .default(null),
   race: z.string().nullable().default(null),
   education: z.string().nullable().default(null),
   foodCategory: z.string().nullable().default(null),
