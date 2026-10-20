@@ -160,6 +160,22 @@ const parsePaid = (
   return ok({ payableIds: ids.value, paidAt });
 };
 
+// #61: baixa desfeita — payableId + o status de destino, que SÓ o evento conhece (a origem da baixa
+// está na trilha, não no read-model). Destino fora de `Approved`/`Transmitted` é payload inválido.
+const parseUndonePayment = (
+  raw: string,
+): Result<{ payableIds: readonly string[]; status: PayableViewStatus }, PayloadError> => {
+  const ids = parsePayableIds(raw);
+  if (!ids.ok) return ids;
+  const parsed = safeJsonParse(raw);
+  if (!parsed.ok) return parsed;
+  const restored = asString(parsed.value.restoredStatus);
+  if (restored !== 'Approved' && restored !== 'Transmitted') {
+    return err('payable-event-payload-invalid');
+  }
+  return ok({ payableIds: ids.value, status: restored });
+};
+
 export const applyPayableEvent =
   (deps: Deps) =>
   async (input: ApplyPayableEventInput): Promise<Result<void, ApplyPayableEventError>> => {
@@ -174,6 +190,11 @@ export const applyPayableEvent =
       const paid = parsePaid(input.payload);
       if (!paid.ok) return err(paid.error);
       return deps.store.markPaid(paid.value.payableIds, paid.value.paidAt);
+    }
+    if (input.eventType === 'ManualPaymentUndone') {
+      const undone = parseUndonePayment(input.payload);
+      if (!undone.ok) return err(undone.error);
+      return deps.store.unmarkPaid(undone.value.payableIds, undone.value.status);
     }
     const status = STATUS_BY_EVENT[input.eventType];
     if (status === undefined) return ok(undefined); // fora do contrato → skip

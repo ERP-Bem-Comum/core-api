@@ -6,6 +6,7 @@ import type {
   PayableRepositoryError,
   MarkPaidInput,
   RescheduleInput,
+  UndoPaidInput,
 } from '#src/modules/financial/domain/payable/repository.ts';
 import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
 import type { DocumentEvent } from '#src/modules/financial/domain/document/events.ts';
@@ -125,6 +126,17 @@ export const createInMemoryPayableRepository = (
         // igualdade contra a coluna DATE de verdade é `payable-cas-concurrency.drizzle-mysql`.
         holds: (target) => target.dueDate.getTime() === input.expectedDueDate.getTime(),
         apply: (p) => immutable<Payable>({ ...p, dueDate: input.dueDate }),
+        timelineEntries: input.timelineEntries,
+        events: input.events,
+      }),
+
+    // #61: as mesmas pré-condições que viajam no `WHERE` do adapter real.
+    undoPaid: async (input: UndoPaidInput): Promise<Result<void, PayableRepositoryError>> =>
+      writeOne({
+        payableId: String(input.payableId),
+        conflictError: 'payable-payment-undo-conflict',
+        holds: (target) => target.status === 'Paid',
+        apply: (p) => immutable<Payable>({ ...p, status: input.restoreTo, paidAt: null }),
         timelineEntries: input.timelineEntries,
         events: input.events,
       }),

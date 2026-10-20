@@ -78,6 +78,25 @@ export type PayableManuallyPaid = Readonly<{
   reason?: string;
 }>;
 
+// #61 (decisões da P.O., 02/10 e 19/10): desfazer a baixa manual de UM título. `Paid` volta ao
+// status DIRETAMENTE anterior à baixa — `Approved` ou `Transmitted`, nunca sempre `Approved`: um
+// título que saiu pela remessa e voltasse a `Approved` ficaria elegível a nova remessa.
+//
+// `restoredStatus` viaja no evento porque quem o consome (a projeção do `fin_payable_view`) não tem
+// como deduzi-lo — a origem da baixa está na trilha, não no read-model. `reason` é obrigatório: é a
+// resposta que a auditoria procura quando um pagamento "some" dos relatórios.
+export type ManualPaymentUndone = Readonly<{
+  type: 'ManualPaymentUndone';
+  documentId: DocumentId;
+  payableId: PayableId;
+  restoredStatus: PaymentOrigin;
+  undoneBy: UserRef;
+  reason: string;
+}>;
+
+// As duas origens de uma baixa manual (ADR-0065 §6) — o destino possível de `ManualPaymentUndone`.
+export type PaymentOrigin = 'Approved' | 'Transmitted';
+
 // #792 / ADR-0065 §2: o título saiu da alçada do core-api. Emitido POR TÍTULO na mesma transação em
 // que a remessa é registrada e os títulos reservados — o evento existe se e somente se a transição
 // `Approved → Transmitted` foi persistida.
@@ -142,6 +161,7 @@ export type DocumentEvent =
   | DocumentDraftSaved
   | DocumentCancelled
   | PayableManuallyPaid
+  | ManualPaymentUndone
   | PayableTransmitted
   | PayableTransmissionDiscarded
   | ApproverEscalated;
@@ -164,6 +184,7 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
   'DocumentDraftSaved',
   'DocumentCancelled',
   'PayableManuallyPaid',
+  'ManualPaymentUndone',
   'PayableTransmitted',
   'PayableTransmissionDiscarded',
   'ApproverEscalated',
@@ -196,4 +217,6 @@ export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
   'ApprovalUndone',
   'DocumentDraftSaved',
   'PayableManuallyPaid',
+  // #61: o desfazimento da baixa aparece na trilha, com autor e motivo (migration 0059).
+  'ManualPaymentUndone',
 ] as const);

@@ -458,6 +458,10 @@ export const finDocumentTimeline = mysqlTable(
 
     // Ref ao autor (cross-BC — sem FK física; ADR-0014). Nullable: FR-005 best-effort.
     actorRef: uuidKey('actor_ref'),
+
+    // #61: o porquê do marco (desfazer baixa/transmissão exigem). Nullable: a maioria dos marcos
+    // não tem motivo. 500 = o teto do body HTTP, igual ao motivo do descarte de remessa.
+    reason: varchar('reason', { length: 500 }),
   },
   (t) => [
     // CHECKs de defesa em profundidade (domain valida primeiro):
@@ -466,7 +470,8 @@ export const finDocumentTimeline = mysqlTable(
       'ck_fin_tl_event_type',
       // #56b: sem 'DocumentCancelled' — inalcançável na trilha (cancelar faz hard-delete + cascade).
       // #223: + 'PayableManuallyPaid' (baixa manual aparece na trilha do operador).
-      sql`${t.eventType} IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved','PayableManuallyPaid')`,
+      // #61: + 'ManualPaymentUndone' (baixa desfeita, com motivo).
+      sql`${t.eventType} IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved','PayableManuallyPaid','ManualPaymentUndone')`,
     ),
 
     // FK intra-módulo ON DELETE CASCADE: data-model.md §"FK ON DELETE CASCADE".

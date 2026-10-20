@@ -568,6 +568,7 @@ describe('timelineEntrySchema — .strict() (#384)', () => {
     target: targetFixture,
     occurredAt: '2026-07-01T12:00:00.000Z',
     actor: null,
+    reason: null,
     changes: [{ field: 'netValueCents', before: null, after: '1000' }],
   };
 

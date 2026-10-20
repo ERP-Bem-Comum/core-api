@@ -107,6 +107,7 @@ export const mapRowToTimelineEntry = (
     eventType: entryRow.eventType,
     occurredAt: entryRow.occurredAt,
     actor,
+    reason: entryRow.reason ?? null,
     changes,
   });
 };
@@ -135,6 +136,7 @@ export const mapEntryToRows = (entry: FinancialTimelineEntry): EntryRows => {
     eventType: entry.eventType,
     occurredAt: entry.occurredAt,
     actorRef: entry.actor !== null ? (entry.actor as unknown as string) : null,
+    reason: entry.reason,
   };
 
   const changeRows: NewTimelineFieldChangeRow[] = entry.changes.map((change) => ({
