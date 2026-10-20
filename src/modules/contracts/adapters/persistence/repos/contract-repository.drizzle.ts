@@ -380,10 +380,12 @@ export const createDrizzleContractRepository = (
     // appendOutboxInTx é chamado dentro do mesmo callback — rollback automático se qualquer
     // operação falhar (Drizzle garante rollback quando o callback lança).
     //
-    // #1024: duas criações com o mesmo número passam juntas pela checagem prévia do use case; a
-    // perdedora bate no `UNIQUE(sequential_number)`. Isso é conflito (`contract-repo-conflict` → 409
-    // `contract-sequential-number-duplicated` no use case), não indisponibilidade — o `safe()`
-    // genérico o transformaria em 503.
+    // #1024/#1071: a criação que perde a corrida pelo mesmo número bate no `UNIQUE(sequential_number)`.
+    // Isso é conflito (`contract-repo-conflict`), não indisponibilidade — o `safe()` genérico o
+    // transformaria em 503 —, e só essa violação o é (`isSequentialNumberDup`). O use case decide o
+    // desfecho pela origem do número: DIGITADO → 409 `contract-sequential-number-duplicated`; GERADO →
+    // nova tentativa com o próximo número (`sequential-number-input.ts`), e 503
+    // `contract-sequential-number-generation-exhausted` se as tentativas acabarem.
     save: async (contract: Contract, events: readonly ContractsModuleEvent[]) => {
       try {
         await db.transaction(async (tx) => {
