@@ -178,8 +178,15 @@ export type TimelineEntryDto = z.infer<typeof timelineEntrySchema>;
 // corrente. Presente → normalizado para 4 dígitos e checado contra duplicata (409). O formato NÃO é
 // travado aqui: `NNN(N)/AAAA` é invariante do domínio, então formato inválido vira 422, não 400.
 // Imutável depois de criado: o PATCH (`.strict()`) segue recusando o campo.
+//
+// #1071: o que não cabe na coluna (`varchar(16)` de `ctr_contracts.sequential_number`) é shape, não
+// regra — 400 aqui, antes do use case, em vez de estourar no INSERT. O teto conta DEPOIS do `trim`
+// (as checagens do Zod v4 rodam em ordem). A borda não importa o schema de persistência; quem amarra
+// este número à coluna é `tests/modules/contracts/adapters/http/schemas.test.ts`.
+export const SEQUENTIAL_NUMBER_MAX_LENGTH = 16;
+
 const contractWriteShape = {
-  sequentialNumber: z.string().trim().optional(),
+  sequentialNumber: z.string().trim().max(SEQUENTIAL_NUMBER_MAX_LENGTH).optional(),
   title: z.string(),
   objective: z.string(),
   originalValueCents: z.number().int(),

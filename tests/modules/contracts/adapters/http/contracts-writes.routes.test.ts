@@ -404,6 +404,41 @@ describe('#1024 — POST /contracts com sequentialNumber informado', () => {
     });
   }
 
+  // #1071 (CA5): o que não cabe em `varchar(16)` para na borda (400), antes do use case — senão o
+  // INSERT estoura no banco. Até 16 o formato segue sendo do domínio (422).
+  it('mais de 16 caracteres → 400 antes do use case; 16 de formato inválido → 422', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const tooLong = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: '1'.repeat(17) }),
+    );
+    assert.equal(tooLong.statusCode, 400);
+    assert.doesNotMatch(tooLong.body, /ContractSequentialNumberInvalidFormat/);
+    const pendingTooLong = await postContract(
+      app,
+      token,
+      pendingBody({ sequentialNumber: `0001/2026${'x'.repeat(8)}` }),
+    );
+    assert.equal(pendingTooLong.statusCode, 400);
+    const atLimit = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: '1'.repeat(16) }),
+    );
+    assert.equal(atLimit.statusCode, 422);
+    assert.match(atLimit.body, /ContractSequentialNumberInvalidFormat/);
+    // Espaço em volta não conta para o limite: o trim vem antes do max.
+    const padded = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: `   0042/2020${' '.repeat(10)}` }),
+    );
+    assert.equal(padded.statusCode, 201);
+    await teardown();
+  });
+
   it('PATCH com sequentialNumber continua recusado (imutável) → 400', async () => {
     const { app, teardown } = await makeApp();
     const token = await loginSeeded(app, WRITER_EMAIL);
