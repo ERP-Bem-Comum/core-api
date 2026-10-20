@@ -15,6 +15,11 @@ import type { RemittanceRepository } from '../ports/remittance-repository.ts';
 import type { RemittancePaymentReader } from '../ports/remittance-payment-reader.ts';
 import type { VanStoragePort } from '../ports/van-storage.ts';
 import type { CnabRemittanceTranslator } from '../ports/cnab-remittance-translator.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
+import { newUuid } from '../../../../shared/utils/id.ts';
+import { projectTransmission } from '../../domain/timeline/projection.ts';
+import type { DocumentId } from '../../domain/shared/document-id.ts';
+import type { PayableId } from '../../domain/shared/payable-id.ts';
 
 export type GenerateRemittanceDeps = Readonly<{
   cedenteAccounts: CedenteAccountStore;
@@ -33,6 +38,8 @@ export type GenerateRemittanceDeps = Readonly<{
 export type GenerateRemittanceInput = Readonly<{
   cedenteAccountId: CedenteAccountId;
   payableIds: readonly string[];
+  // #823: quem gerou — o autor do marco "Transmitido" na trilha de cada título.
+  generatedBy: UserRef;
 }>;
 
 // Razão social do cedente — posições 073-102 do header de arquivo E do header de lote.
@@ -447,9 +454,31 @@ export const generateRemittance =
       })),
     );
 
+    // #823: a trilha da transmissão — uma entry por título, um marco (`eventId`) por arquivo, com o
+    // NSA e o `your_number` do título NAQUELE arquivo. Gravada pelo `saveAll` na mesma transação da
+    // transição: se o CAS recusar, nenhuma entry fica.
+    //
+    // Os ids vêm do agregado da remessa, montado de títulos que o reader leu do banco — o cast é o
+    // mesmo do mapper da trilha (o banco só guarda UUID v4 nessas colunas).
+    const transmittedTimeline = prepared.flatMap(({ remittance, nsa }) => {
+      const eventId = newUuid();
+      return remittance.payables.map((p) =>
+        projectTransmission({
+          eventId,
+          documentId: p.documentId as unknown as DocumentId,
+          payableId: p.payableId as unknown as PayableId,
+          nsa,
+          yourNumber: p.yourNumber,
+          actor: input.generatedBy,
+          occurredAt: generatedAt,
+        }),
+      );
+    });
+
     const persisted = await deps.remittances.saveAll(
       prepared.map((p) => p.remittance),
       transmittedEvents,
+      transmittedTimeline,
     );
     if (!persisted.ok) {
       switch (persisted.error) {

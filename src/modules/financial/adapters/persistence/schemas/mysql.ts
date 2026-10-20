@@ -471,7 +471,9 @@ export const finDocumentTimeline = mysqlTable(
       // #56b: sem 'DocumentCancelled' — inalcançável na trilha (cancelar faz hard-delete + cascade).
       // #223: + 'PayableManuallyPaid' (baixa manual aparece na trilha do operador).
       // #61: + 'ManualPaymentUndone' (baixa desfeita, com motivo).
-      sql`${t.eventType} IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved','PayableManuallyPaid','ManualPaymentUndone')`,
+      // #823/#406: + 'PayableTransmitted' (remessa gerada), 'PayableReconciled' e
+      // 'ReconciliationUndone' (conciliação e seu desfazimento).
+      sql`${t.eventType} IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved','PayableManuallyPaid','ManualPaymentUndone','PayableTransmitted','PayableReconciled','ReconciliationUndone')`,
     ),
 
     // FK intra-módulo ON DELETE CASCADE: data-model.md §"FK ON DELETE CASCADE".

@@ -421,6 +421,13 @@
       "when": 1792441983464,
       "tag": "0059_true_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1792455796177,
+      "tag": "0060_free_gateway",
+      "breakpoints": true
     }
   ]
 }
