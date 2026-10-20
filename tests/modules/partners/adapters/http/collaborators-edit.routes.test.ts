@@ -563,3 +563,137 @@ describe('COLLABORATORS-HTTP-EDIT — RG, nascimento e raça preenchidos uma vez
     await teardown();
   });
 });
+
+describe('#1072 — dado pessoal normalizado e "preenche uma vez" em todo comando (borda)', () => {
+  const historyOf = async (
+    deps: Awaited<ReturnType<typeof makeApp>>['partnersDeps'],
+    id: string,
+  ) => {
+    const r = await deps.listCollaboratorHistory(id);
+    assert.ok(r.ok);
+    return r.value;
+  };
+  const patchComplete = (
+    app: Awaited<ReturnType<typeof buildApp>>,
+    token: string,
+    id: string,
+    payload: Record<string, unknown>,
+  ) =>
+    app.inject({
+      method: 'PATCH',
+      url: `/api/v1/collaborators/${id}/complete-registration`,
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+  const codeOf = (res: { json: () => unknown }): string =>
+    (res.json() as { error: { code: string } }).error.code;
+  const createCompleteWithout = async (
+    app: Awaited<ReturnType<typeof buildApp>>,
+    token: string,
+  ): Promise<string> => {
+    const id = await create(app, token, {});
+    const completed = await patchComplete(app, token, id, {});
+    assert.equal(completed.statusCode, 200, completed.body);
+    return id;
+  };
+
+  it('CA1: PUT grava o RG em PreRegistration; complete-registration sem rg NÃO apaga; com rg diferente → 409', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {});
+    assert.equal((await put(app, token, id, body({ rg: '123' }))).statusCode, 200);
+
+    const conflict = await patchComplete(app, token, id, { rg: '999' });
+    assert.equal(conflict.statusCode, 409, conflict.body);
+    assert.equal(codeOf(conflict), 'collaborator-personal-data-immutable');
+
+    const completed = await patchComplete(app, token, id, {});
+    assert.equal(completed.statusCode, 200, completed.body);
+    // Se o complete tivesse apagado o RG, o PUT abaixo preencheria (200) em vez de recusar.
+    const swap = await put(app, token, id, body({ rg: '999' }));
+    assert.equal(swap.statusCode, 409, swap.body);
+    assert.equal((await put(app, token, id, body({ rg: '123' }))).statusCode, 200);
+    await teardown();
+  });
+
+  it('CA4: RG com 21 caracteres → 400 na borda (PUT e complete-registration), nunca 503', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {});
+    const rg21 = '1'.repeat(21);
+    assert.equal((await put(app, token, id, body({ rg: rg21 }))).statusCode, 400);
+    assert.equal((await patchComplete(app, token, id, { rg: rg21 })).statusCode, 400);
+    assert.equal((await put(app, token, id, body({ rg: '1'.repeat(20) }))).statusCode, 200);
+    await teardown();
+  });
+
+  it('CA5: data com fuso -03:00 grava o dia civil digitado; reenviar a data pura → 200 sem mudança', async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await createCompleteWithout(app, token);
+
+    const first = await put(app, token, id, body({ dateOfBirth: '1990-05-10T22:00:00-03:00' }));
+    assert.equal(first.statusCode, 200, first.body);
+    const entries = await historyOf(partnersDeps, id);
+    const dob = entries.filter((e) => e.fieldName === 'dateOfBirth');
+    assert.equal(dob.length, 1);
+    assert.equal(dob[0]?.valueAfter, '1990-05-10');
+
+    const again = await put(app, token, id, body({ dateOfBirth: '1990-05-10' }));
+    assert.equal(again.statusCode, 200, again.body);
+    assert.equal((await historyOf(partnersDeps, id)).length, entries.length, 'sem linha nova');
+    await teardown();
+  });
+
+  it("CA5: dateOfBirth '' mantém o gravado (contrato do #1070), não 400", async () => {
+    const { app, teardown, partnersDeps } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await createCompleteWithout(app, token);
+    assert.equal((await put(app, token, id, body({ dateOfBirth: '1990-05-10' }))).statusCode, 200);
+    const before = (await historyOf(partnersDeps, id)).length;
+
+    const blank = await put(app, token, id, body({ dateOfBirth: '' }));
+    assert.equal(blank.statusCode, 200, blank.body);
+    assert.equal((await historyOf(partnersDeps, id)).length, before);
+    // Se '' tivesse apagado, a troca abaixo preencheria (200) em vez de recusar.
+    assert.equal((await put(app, token, id, body({ dateOfBirth: '1991-01-01' }))).statusCode, 409);
+    await teardown();
+  });
+
+  it('CA5: data futura → 422 (domínio); calendário impossível, número e texto livre → 400', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await createCompleteWithout(app, token);
+
+    const future = await put(app, token, id, body({ dateOfBirth: '2090-01-01' }));
+    assert.equal(future.statusCode, 422, future.body);
+    assert.equal(codeOf(future), 'collaborator-date-of-birth-in-future');
+
+    for (const dateOfBirth of ['2026-02-30', 0, '10/05/1990', '1990-05-10T25:00:00Z']) {
+      const res = await put(app, token, id, body({ dateOfBirth }));
+      assert.equal(res.statusCode, 400, `${String(dateOfBirth)}: ${res.body}`);
+    }
+
+    // Abaixo do piso do DATETIME: o domínio recusa (422), em vez do MySQL recusar e virar 503.
+    // '0050' é o caso traiçoeiro: `Date.UTC(50, …)` vira 1950 — teria passado como data válida.
+    for (const dateOfBirth of ['0500-01-01', '0050-01-01']) {
+      const ancient = await put(app, token, id, body({ dateOfBirth }));
+      assert.equal(ancient.statusCode, 422, `${dateOfBirth}: ${ancient.body}`);
+      assert.equal(codeOf(ancient), 'collaborator-date-of-birth-invalid');
+    }
+    await teardown();
+  });
+
+  it('contrato: /docs/json gera e documenta rg (maxLength 20) e dateOfBirth (string) no PUT', async () => {
+    const { app, teardown } = await makeApp();
+    const res = await app.inject({ method: 'GET', url: '/docs/json' });
+    assert.equal(res.statusCode, 200, res.body);
+    const doc = res.json() as {
+      paths: Record<string, Record<string, { requestBody?: unknown }>>;
+    };
+    const putBody = JSON.stringify(doc.paths['/api/v1/collaborators/{id}']?.['put']?.requestBody);
+    assert.match(putBody, /"rg":\{[^}]*"maxLength":20/);
+    assert.match(putBody, /"dateOfBirth":\{[^}]*"string"/);
+    await teardown();
+  });
+});

@@ -96,6 +96,28 @@ describe('mapLegacyCollaboratorRow', () => {
     assert.ok(r.error.some((e) => e.tag === 'EnumUnknown' && e.field === 'occupation_area'));
   });
 
+  // #1072: `''` gravado travava o "preenche uma vez" (409 eterno no PUT). O ETL normaliza o RG pela
+  // mesma regra do domínio: branco → null, trim, e o limite da coluna vira quarentena (nunca trunca).
+  for (const blank of ['', '   ']) {
+    it(`rg legado ${JSON.stringify(blank)} → null no agregado (nunca grava '')`, () => {
+      const r = mapLegacyCollaboratorRow(base({ rg: blank }));
+      assert.ok(r.ok);
+      assert.equal(r.value.aggregate.rg, null);
+    });
+  }
+
+  it('rg legado com espaços nas pontas → gravado sem eles', () => {
+    const r = mapLegacyCollaboratorRow(base({ rg: ' 123456789 ' }));
+    assert.ok(r.ok);
+    assert.equal(r.value.aggregate.rg, '123456789');
+  });
+
+  it('rg legado > 20 → Overflow (cabe na coluna varchar(20); nunca trunca)', () => {
+    const r = mapLegacyCollaboratorRow(base({ rg: '1'.repeat(21) }));
+    assert.ok(!r.ok);
+    assert.ok(r.error.some((e) => e.tag === 'Overflow' && e.field === 'rg'));
+  });
+
   it('acumula cpf inválido + role ausente', () => {
     const r = mapLegacyCollaboratorRow(base({ cpf: '1', role: null }));
     assert.ok(!r.ok);

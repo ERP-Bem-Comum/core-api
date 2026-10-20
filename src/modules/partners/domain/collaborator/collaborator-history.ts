@@ -3,6 +3,7 @@
 // mudança por campo rastreado. Domínio EN-puro: produz `fieldName` (EN) + valores como
 // texto neutro; o label PT e a formatação do CSV legado ficam no adapter/export.
 
+import { civilDayIso } from './personal-data.ts';
 import type { Collaborator } from './types.ts';
 
 /** Mudança de um campo: nome interno (EN) + valor antes/depois serializado (texto). */
@@ -41,9 +42,13 @@ const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>>
   bankAccount: bankText(c),
   pixKey: pixText(c),
   // RG, nascimento e raça podem ser preenchidos pelo PUT depois do cadastro completo — entram no
-  // audit trail. Nascimento é dia civil (o banco guarda DATE).
+  // audit trail. Nascimento é dia civil: mesmo helper da comparação do "preenche uma vez" (#1072),
+  // para que o histórico e a regra nunca discordem sobre o dia.
   rg: c.rg,
-  dateOfBirth: c.dateOfBirth === null ? null : c.dateOfBirth.toISOString().slice(0, 10),
+  dateOfBirth:
+    c.dateOfBirth === null || Number.isNaN(c.dateOfBirth.getTime())
+      ? null
+      : civilDayIso(c.dateOfBirth),
   race: c.race,
 });
 

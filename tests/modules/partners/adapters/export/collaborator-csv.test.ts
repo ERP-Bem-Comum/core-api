@@ -11,7 +11,9 @@ const NOW = new Date('2026-06-01T12:00:00.000Z');
 const START = new Date('2025-02-01T00:00:00.000Z');
 const DEACTIVATED_AT = new Date('2026-06-02T15:30:00.000Z');
 
-const EXPECTED_HEADER = [
+// #1072 CA6: as 26 colunas como eram ANTES do #1068 (conferido em `git show 8f018460^`). Quem lê o
+// CSV por posição não pode ter coluna deslocada; coluna nova só entra no FIM (mudança aditiva).
+const HEADER_BEFORE_1068 = [
   'id',
   'name',
   'email',
@@ -25,7 +27,6 @@ const EXPECTED_HEADER = [
   'rg',
   'dateOfBirth',
   'genderIdentity',
-  'genderIdentityDescription',
   'race',
   'education',
   'foodCategory',
@@ -39,7 +40,9 @@ const EXPECTED_HEADER = [
   'experienceInThePublicSector',
   'disableBy',
   'deactivatedAt',
-].join(',');
+] as const;
+
+const EXPECTED_HEADER = [...HEADER_BEFORE_1068, 'genderIdentityDescription'].join(',');
 
 const baseRegister = (over: Record<string, unknown> = {}) => ({
   id: CollaboratorId.generate(),
@@ -110,6 +113,13 @@ describe('collaboratorsToCsv — header e vazio', () => {
     const out = collaboratorsToCsv([makeActive(), makeInactive()]);
     assert.equal(out.endsWith(LINE_TERMINATOR), true);
   });
+
+  it('#1072 CA6: genderIdentityDescription é a ÚLTIMA coluna e as anteriores não se deslocam', () => {
+    const header = collaboratorsToCsv([]).slice(BOM.length).split(LINE_TERMINATOR)[0]?.split(',');
+    assert.deepEqual(header?.slice(0, HEADER_BEFORE_1068.length), [...HEADER_BEFORE_1068]);
+    assert.equal(header?.at(-1), 'genderIdentityDescription');
+    assert.equal(header?.length, HEADER_BEFORE_1068.length + 1);
+  });
 });
 
 describe('collaboratorsToCsv — Active + PreRegistration', () => {
@@ -120,10 +130,10 @@ describe('collaboratorsToCsv — Active + PreRegistration', () => {
     assert.equal(cells[9], 'Active'); // status
     assert.equal(cells[10], ''); // rg
     assert.equal(cells[12], ''); // genderIdentity
-    assert.equal(cells[13], ''); // genderIdentityDescription
-    assert.equal(cells[24], ''); // experienceInThePublicSector
-    assert.equal(cells[25], ''); // disableBy
-    assert.equal(cells[26], ''); // deactivatedAt
+    assert.equal(cells[23], ''); // experienceInThePublicSector
+    assert.equal(cells[24], ''); // disableBy
+    assert.equal(cells[25], ''); // deactivatedAt
+    assert.equal(cells[26], ''); // genderIdentityDescription (última coluna — #1072)
   });
 
   it('startOfContract em ISO 8601', () => {
@@ -137,11 +147,11 @@ describe('collaboratorsToCsv — Active + Complete', () => {
     const cells = dataLines(collaboratorsToCsv([makeComplete()]))[0]?.split(',') ?? [];
     assert.equal(cells[8], 'Complete'); // registrationStatus
     assert.equal(cells[12], 'MULHER_CIS'); // genderIdentity
-    assert.equal(cells[13], ''); // genderIdentityDescription (null → vazio quando não é OUTRO)
-    assert.equal(cells[14], 'PARDO'); // race
-    assert.equal(cells[15], 'ENSINO_SUPERIOR'); // education
-    assert.equal(cells[16], 'ONIVORO'); // foodCategory
-    assert.equal(cells[24], 'true'); // experienceInThePublicSector
+    assert.equal(cells[13], 'PARDO'); // race
+    assert.equal(cells[14], 'ENSINO_SUPERIOR'); // education
+    assert.equal(cells[15], 'ONIVORO'); // foodCategory
+    assert.equal(cells[23], 'true'); // experienceInThePublicSector
+    assert.equal(cells[26], ''); // genderIdentityDescription (null → vazio quando não é OUTRO)
   });
 
   it('genderIdentity=OUTRO expõe o complemento na coluna genderIdentityDescription (#1054)', () => {
@@ -154,7 +164,7 @@ describe('collaboratorsToCsv — Active + Complete', () => {
     assert.ok(done.ok, `fixture inválido: ${done.ok ? '' : done.error}`);
     const cells = dataLines(collaboratorsToCsv([done.value.collaborator]))[0]?.split(',') ?? [];
     assert.equal(cells[12], 'OUTRO'); // genderIdentity
-    assert.equal(cells[13], 'Agênero'); // genderIdentityDescription
+    assert.equal(cells[26], 'Agênero'); // genderIdentityDescription (última coluna — #1072)
   });
 });
 
@@ -162,8 +172,9 @@ describe('collaboratorsToCsv — Inactive', () => {
   it('status=Inactive, disableBy preenchido, deactivatedAt em ISO 8601', () => {
     const cells = dataLines(collaboratorsToCsv([makeInactive()]))[0]?.split(',') ?? [];
     assert.equal(cells[9], 'Inactive');
-    assert.equal(cells[25], 'TEMPO_CONTRATO_FINALIZADO');
-    assert.equal(cells[26], DEACTIVATED_AT.toISOString());
+    assert.equal(cells[24], 'TEMPO_CONTRATO_FINALIZADO');
+    assert.equal(cells[25], DEACTIVATED_AT.toISOString());
+    assert.equal(cells[26], ''); // genderIdentityDescription
   });
 });
 

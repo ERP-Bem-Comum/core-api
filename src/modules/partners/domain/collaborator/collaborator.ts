@@ -14,7 +14,7 @@ import * as Cpf from '#src/shared/kernel/cpf.ts';
 import * as OccupationArea from './occupation-area.ts';
 import * as EmploymentRelationship from './employment-relationship.ts';
 import * as GenderIdentity from './gender-identity.ts';
-import * as Race from './race.ts';
+import * as PersonalData from './personal-data.ts';
 import * as FoodCategory from './food-category.ts';
 import * as Education from './education.ts';
 import * as DisableReason from './disable-reason.ts';
@@ -91,27 +91,9 @@ const resolveTerritoryEdit = (
   return Territory.createTerritory(input);
 };
 
-// RG, nascimento e raça (decisão da P.O., 19/10/2026) — dado gravado não muda, mas dado que FALTA
-// pode ser preenchido depois do cadastro completo:
-//   - ausente/`null`/branco (normalizado em `next = null`) → MANTÉM o gravado.
-//   - nada gravado                                           → GRAVA o valor recebido.
-//   - igual ao gravado                                       → mantém (o PUT é total e reenvia o que leu).
-//   - diferente do gravado                                   → RECUSA.
-const fillOnce = <V>(
-  current: V | null,
-  next: V | null,
-  same: (a: V, b: V) => boolean,
-): Result<V | null, CollaboratorError> => {
-  if (next === null) return ok(current);
-  if (current === null) return ok(next);
-  return same(current, next) ? ok(current) : err('collaborator-personal-data-immutable');
-};
-
-// Data de nascimento é dia civil: compara a data, não o instante (o banco guarda DATE).
-const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
-
-const blankToNull = (raw: string | null | undefined): string | null =>
-  raw === undefined || raw === null || isBlank(raw) ? null : raw.trim();
+// RG, nascimento e raça (decisão da P.O., 19/10/2026: o gravado não muda, o que falta pode ser
+// preenchido) e a normalização do dado pessoal vivem num ponto único — `personal-data.ts` (#1072).
+// Todo comando que escreve esses campos passa por `resolveImmutablePersonalData`.
 
 export const register = (
   input: RegisterCollaboratorInput,
@@ -197,8 +179,8 @@ export const register = (
  * caminho para preencher os migrados do legado, que vieram sem. Território (#1053): mesma semântica
  * de "preserva ou substitui", com a ressalva de que ESVAZIAR um território gravado é recusado (ver
  * `resolveTerritoryEdit`). RG, nascimento e raça: preenche o que falta, recusa trocar o gravado (ver
- * `fillOnce`). RBAC do campo vital (CPF) é decidido fora (use case/borda). Emite
- * `CollaboratorEdited`.
+ * `PersonalData.resolveImmutablePersonalData`). RBAC do campo vital (CPF) é decidido fora (use
+ * case/borda). Emite `CollaboratorEdited`.
  */
 export const edit = (
   collaborator: Collaborator,
@@ -232,21 +214,8 @@ export const edit = (
   const territory = resolveTerritoryEdit(collaborator.territory, input.territory);
   if (!territory.ok) return territory;
 
-  const rg = fillOnce(collaborator.rg, blankToNull(input.rg), (a, b) => a.trim() === b);
-  if (!rg.ok) return rg;
-
-  const dateOfBirth = fillOnce(
-    collaborator.dateOfBirth,
-    input.dateOfBirth ?? null,
-    (a, b) => isoDay(a) === isoDay(b),
-  );
-  if (!dateOfBirth.ok) return dateOfBirth;
-
-  const raceRaw = blankToNull(input.race);
-  const parsedRace = raceRaw === null ? ok(null) : Race.parse(raceRaw);
-  if (!parsedRace.ok) return parsedRace;
-  const race = fillOnce(collaborator.race, parsedRace.value, (a, b) => a === b);
-  if (!race.ok) return race;
+  const fixed = PersonalData.resolveImmutablePersonalData(collaborator, input, at);
+  if (!fixed.ok) return fixed;
 
   // Spread preserva os demais pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
   const edited: Collaborator = immutable({
@@ -261,9 +230,9 @@ export const edit = (
     bankAccount: bankAccount.value,
     pixKey: pixKey.value,
     territory: territory.value,
-    rg: rg.value,
-    dateOfBirth: dateOfBirth.value,
-    race: race.value,
+    rg: fixed.value.rg,
+    dateOfBirth: fixed.value.dateOfBirth,
+    race: fixed.value.race,
   });
 
   return ok({
@@ -286,16 +255,19 @@ export const completeRegistration = (
   // #1054: o texto livre de "Outra identidade de gênero" só é coerente com genderIdentity = OUTRO.
   // O foodCategory não guarda o caso análogo (grava sem validar); a issue decidiu RECUSAR aqui,
   // alinhado ao ethos fail-fast do repo. OUTRO SEM descrição continua válido (o texto é opcional).
-  if (
-    input.genderIdentityDescription !== null &&
-    !isBlank(input.genderIdentityDescription) &&
-    genderIdentity.value !== 'OUTRO'
-  ) {
+  // #1072: a guarda e a gravação enxergam o MESMO valor normalizado (trim, branco → null, limite).
+  const genderIdentityDescription = PersonalData.parseGenderIdentityDescription(
+    input.genderIdentityDescription,
+  );
+  if (!genderIdentityDescription.ok) return genderIdentityDescription;
+  if (genderIdentityDescription.value !== null && genderIdentity.value !== 'OUTRO') {
     return err('gender-identity-description-requires-other');
   }
 
-  const race = input.race === null ? ok(null) : Race.parse(input.race);
-  if (!race.ok) return race;
+  // #1072: RG, nascimento e raça passam pelo mesmo "preenche uma vez" do `edit` — o PUT pode tê-los
+  // gravado ainda em PreRegistration, e o autocadastro não pode apagá-los nem trocá-los.
+  const fixed = PersonalData.resolveImmutablePersonalData(collaborator, input, at);
+  if (!fixed.ok) return fixed;
 
   const education = input.education === null ? ok(null) : Education.parse(input.education);
   if (!education.ok) return education;
@@ -322,11 +294,11 @@ export const completeRegistration = (
   const completed: Collaborator = immutable({
     ...collaborator,
     registrationStatus: 'Complete',
-    rg: input.rg,
-    dateOfBirth: input.dateOfBirth,
+    rg: fixed.value.rg,
+    dateOfBirth: fixed.value.dateOfBirth,
     genderIdentity: genderIdentity.value,
-    genderIdentityDescription: input.genderIdentityDescription,
-    race: race.value,
+    genderIdentityDescription: genderIdentityDescription.value,
+    race: fixed.value.race,
     education: education.value,
     foodCategory: foodCategory.value,
     foodCategoryDescription: input.foodCategoryDescription,
