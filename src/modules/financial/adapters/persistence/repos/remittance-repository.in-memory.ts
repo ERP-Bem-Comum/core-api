@@ -10,6 +10,8 @@ import type {
   RemittanceSaveError,
   RemittanceSaveEvent,
 } from '../../../application/ports/remittance-repository.ts';
+import type { FinancialTimelineEntry } from '../../../domain/timeline/types.ts';
+import type { TimelineStore } from './timeline-repository.in-memory.ts';
 
 // Adapter in-memory do RemittanceRepository (testes / boot sem DB).
 //
@@ -28,7 +30,12 @@ import type {
 // `remittance-payable-not-approved`. Título que o `seed` não declarou conta como recusado — no banco
 // ele afetaria zero linhas, que é o mesmo conflito.
 export const createInMemoryRemittanceRepository = (
-  seed: Readonly<{ payableStatuses?: Readonly<Record<string, DocumentStatus>> }> = {},
+  seed: Readonly<{
+    payableStatuses?: Readonly<Record<string, DocumentStatus>>;
+    // #823: trilha compartilhada com o timeline-repository in-memory — a transmissão grava nela, na
+    // mesma "transação" da transição, como o adapter real.
+    timeline?: TimelineStore;
+  }> = {},
 ): RemittanceRepository &
   Readonly<{
     published: () => readonly RemittanceSaveEvent[];
@@ -75,6 +82,7 @@ export const createInMemoryRemittanceRepository = (
     saveAll: async (
       toSave: readonly Remittance[],
       events: readonly RemittanceSaveEvent[] = [],
+      timeline: readonly FinancialTimelineEntry[] = [],
     ): Promise<Result<void, RemittanceSaveError>> => {
       const creating = toSave.filter((r) => !remittances.has(r.id));
       const updating = toSave.filter((r) => remittances.has(r.id));
@@ -154,13 +162,20 @@ export const createInMemoryRemittanceRepository = (
         remittances.set(remittance.id, remittance);
       }
       published.push(...events);
+      // #823: só depois do veredito — no adapter real a trilha desfaz junto com a transição.
+      if (seed.timeline !== undefined) {
+        for (const entry of timeline) {
+          const key = String(entry.documentId);
+          seed.timeline.set(key, [...(seed.timeline.get(key) ?? []), entry]);
+        }
+      }
       return Promise.resolve(ok(undefined));
     },
 
     save: async (
       remittance: Remittance,
       events: readonly RemittanceSaveEvent[] = [],
-    ): Promise<Result<void, RemittanceSaveError>> => repo.saveAll([remittance], events),
+    ): Promise<Result<void, RemittanceSaveError>> => repo.saveAll([remittance], events, []),
 
     published: () => [...published],
 

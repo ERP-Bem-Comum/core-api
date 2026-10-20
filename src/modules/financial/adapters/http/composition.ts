@@ -729,7 +729,8 @@ const buildMemoryPools = (
       seams.remittancePreviewReader ?? createInMemoryRemittancePreviewReader(),
     remittancePaymentReader:
       seams.remittancePaymentReader ?? createInMemoryRemittancePaymentReader(),
-    remittanceRepo: seams.remittanceRepo ?? createInMemoryRemittanceRepository(),
+    remittanceRepo:
+      seams.remittanceRepo ?? createInMemoryRemittanceRepository({ timeline: timelineStore }),
     vanReturnQuarantine: seams.vanReturnQuarantine ?? createInMemoryVanReturnQuarantine(),
     // In-memory: gravar aqui NÃO enfileira pagamento nenhum. É o que permite exercitar a rota de
     // geração em teste sem a menor chance de tocar no bucket real.

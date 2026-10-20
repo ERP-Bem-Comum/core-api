@@ -6,6 +6,7 @@ import type {
   PayableTransmissionDiscarded,
 } from '../../domain/document/events.ts';
 import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
+import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 
 export type RemittanceRepositoryError = 'remittance-repository-unavailable';
 
@@ -106,6 +107,9 @@ export type RemittanceRepository = Readonly<{
   saveAll: (
     remittances: readonly Remittance[],
     events?: readonly RemittanceSaveEvent[],
+    // #823: trilha da transmissão (uma entry por título), gravada na MESMA transação da transição
+    // `Approved → Transmitted` — existe se e somente se a transição foi persistida.
+    timeline?: readonly FinancialTimelineEntry[],
   ) => Promise<Result<void, RemittanceSaveError>>;
   findById: (id: RemittanceId) => Promise<Result<Remittance | null, RemittanceRepositoryError>>;
   findByFileName: (

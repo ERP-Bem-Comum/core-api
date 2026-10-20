@@ -46,6 +46,7 @@ import { writeErrorStatus, toPublicCode, toPublicMessage } from './error-mapping
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import type { SourceFileRef, SourceFileRefInput } from '../../domain/document/source-file-ref.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import type { CedenteAccount } from '../../domain/cedente/types.ts';
 import { allMetadata } from '../../domain/document/document-type-metadata.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
@@ -1232,10 +1233,14 @@ const financialRoutes =
       handler: async (req, reply) => {
         const cedenteAccountId = CedenteAccountId.rehydrate(req.body.cedenteAccountId);
         if (!cedenteAccountId.ok) return sendDomainError(reply, 'financial-ref-invalid');
+        // #823: o autor do marco "Transmitido" na trilha de cada título.
+        const generatedBy = UserRef.rehydrate(req.userId);
+        if (!generatedBy.ok) return sendDomainError(reply, generatedBy.error);
 
         const result = await deps.generateRemittance({
           cedenteAccountId: cedenteAccountId.value,
           payableIds: req.body.payableIds,
+          generatedBy: generatedBy.value,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
 

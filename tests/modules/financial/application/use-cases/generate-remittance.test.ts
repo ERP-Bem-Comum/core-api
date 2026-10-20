@@ -2,6 +2,9 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk, ok, err } from '#src/shared/index.ts';
+import type { UserRef } from '#src/shared/kernel/user-ref.ts';
+import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
+import type { TimelineStore } from '#src/modules/financial/adapters/persistence/repos/timeline-repository.in-memory.ts';
 import {
   generateRemittance,
   type GeneratedRemittanceFile,
@@ -108,12 +111,16 @@ const setup = async (
   };
 };
 
+// #823: quem gera a remessa — autor do marco "Transmitido" na trilha.
+const GENERATED_BY = '7c2d9a51-3f4e-4b8a-9c1d-2e5f6a7b8c9d' as UserRef;
+
 const input = (
   cedenteAccountId: ReturnType<typeof CedenteAccountId.generate>,
   docs: readonly string[],
 ) => ({
   cedenteAccountId,
   payableIds: docs,
+  generatedBy: GENERATED_BY,
 });
 
 // O ÚNICO arquivo de uma geração que só produz um — e assere que é um só, em vez de pegar o
@@ -723,5 +730,67 @@ describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
     await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
 
     assert.equal(uploads, 0, 'gravar em saida/ é enfileirar pagamento — não pode acontecer aqui');
+  });
+});
+
+/**
+ * #823 — a geração deixa o marco "Transmitido" na trilha de CADA título: com o autor, o NSA da
+ * remessa e o `your_number` do título nela. É o que responde "em qual remessa este título saiu?"
+ * sem o operador anotar nada à mão.
+ */
+describe('generateRemittance — trilha da transmissão (#823)', () => {
+  const withTimeline = async () => {
+    const s = await setup();
+    const timeline: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
+    const remittances = createInMemoryRemittanceRepository({
+      payableStatuses: approved(s.docs),
+      timeline,
+    });
+    return { ...s, timeline, deps: { ...s.deps, remittances } };
+  };
+
+  it('uma entry por título, alvo o título, com autor, NSA e your_number', async () => {
+    const s = await withTimeline();
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+    const file = onlyFile(r.value);
+
+    const saved = await s.deps.remittances.findById(file.remittanceId);
+    assert.ok(isOk(saved) && saved.value !== null);
+    const yourNumberOf = new Map(saved.value.payables.map((p) => [p.payableId, p.yourNumber]));
+
+    for (const payableId of s.docs) {
+      const entries = s.timeline.get(`doc-of-${payableId}`) ?? [];
+      assert.equal(entries.length, 1, `título ${payableId}: esperava um marco`);
+      const entry = entries[0];
+      assert.ok(entry !== undefined);
+      assert.equal(entry.eventType, 'PayableTransmitted');
+      assert.deepEqual(entry.target, { kind: 'Payable', id: payableId });
+      assert.equal(entry.actor, GENERATED_BY);
+      assert.equal(entry.reason, null);
+      assert.equal(entry.occurredAt.getTime(), NOW.getTime());
+      assert.deepEqual(entry.changes, [
+        { field: 'status', before: 'Approved', after: 'Transmitted' },
+        { field: 'remittanceNsa', before: null, after: String(file.nsa) },
+        { field: 'remittanceYourNumber', before: null, after: yourNumberOf.get(payableId) },
+      ]);
+    }
+  });
+
+  it('remessa recusada pelo CAS não deixa marco nenhum', async () => {
+    const s = await setup();
+    const timeline: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
+    const deps = {
+      ...s.deps,
+      // Só `doc-1` aprovado: o CAS recusa a remessa inteira.
+      remittances: createInMemoryRemittanceRepository({
+        payableStatuses: approved(['doc-1']),
+        timeline,
+      }),
+    };
+
+    const r = await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
+    assert.equal(isErr(r) ? r.error : null, 'document-not-approved');
+    assert.equal(timeline.size, 0, 'a trilha não pode narrar uma transmissão que não houve');
   });
 });

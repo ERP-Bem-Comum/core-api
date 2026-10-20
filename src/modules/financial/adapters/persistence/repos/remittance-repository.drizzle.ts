@@ -23,6 +23,8 @@ import type {
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finRemittances, finRemittancePayables, finPayables } from '../schemas/mysql.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
+import { appendTimelineInTx } from './timeline-helpers.ts';
+import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
 import { withDeadlockRetry } from '#src/shared/persistence/retry-on-deadlock.ts';
 import type { FinRemittanceRow } from '../schemas/mysql.ts';
 
@@ -191,6 +193,7 @@ export const createDrizzleRemittanceRepository = (
     saveAll: async (
       remittances: readonly Remittance[],
       events: readonly RemittanceSaveEvent[] = [],
+      timeline: readonly FinancialTimelineEntry[] = [],
     ): Promise<Result<void, RemittanceSaveError>> => {
       try {
         // ⚠️ `withDeadlockRetry` envolve a transação INTEIRA, e é a alternativa B que a inquiry-0031
@@ -433,6 +436,11 @@ export const createDrizzleRemittanceRepository = (
                     .values({ remittanceId: remittance.id, payableId, documentId, yourNumber });
                 }
               }
+
+              // #823: a trilha da transmissão, depois do CAS — só chega aqui quem transicionou
+              // TODOS os títulos, então a entry nunca narra uma transição que não houve. Insert
+              // puro: não é leitura, e não mexe no snapshot que a releitura do `heldNow` fixou.
+              await appendTimelineInTx(tx, timeline);
             }
 
             // Atualizações de desfecho. Deixou de ser o `else` da criação porque as duas deixaram de
@@ -515,7 +523,7 @@ export const createDrizzleRemittanceRepository = (
     save: async (
       remittance: Remittance,
       events: readonly RemittanceSaveEvent[] = [],
-    ): Promise<Result<void, RemittanceSaveError>> => repo.saveAll([remittance], events),
+    ): Promise<Result<void, RemittanceSaveError>> => repo.saveAll([remittance], events, []),
 
     findById: async (id): Promise<Result<Remittance | null, RemittanceRepositoryError>> => {
       try {
