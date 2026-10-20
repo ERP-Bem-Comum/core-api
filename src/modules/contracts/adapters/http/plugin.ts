@@ -109,6 +109,9 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
 ]);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'contract-repo-unavailable',
+  // #1071: número GERADO colidiu com digitados concorrentes em todas as tentativas — contenção
+  // transitória, não erro do cliente (que não digitou número nenhum); tentar de novo resolve.
+  'contract-sequential-number-generation-exhausted',
   'amendment-repo-unavailable',
   'document-repository-unavailable',
   'storage-unavailable',

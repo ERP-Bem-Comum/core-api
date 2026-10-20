@@ -16,6 +16,7 @@ import { InMemoryContractRepository } from '#src/modules/contracts/adapters/pers
 import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
 import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
 import { createPendingContract } from '#src/modules/contracts/application/use-cases/create-pending-contract.ts';
+import { MAX_GENERATED_NUMBER_ATTEMPTS } from '#src/modules/contracts/application/use-cases/sequential-number-input.ts';
 import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';
 import {
   normalizeSequentialNumber,
@@ -170,5 +171,88 @@ describe('#1024 — corrida: dois POSTs com o mesmo número', () => {
     await createPendingContract(raced)({ ...pending, sequentialNumber: '0778/2026' });
     const loser = await createPendingContract(raced)({ ...pending, sequentialNumber: '0778/2026' });
     assert.deepEqual(loser, err('contract-sequential-number-duplicated'));
+  });
+});
+
+describe('#1071 (CA3) — número GERADO que colide é gerado de novo', () => {
+  // A corrida do issue: o gerador entrega N; entre essa entrega e o `save`, outra criação com N
+  // DIGITADO commita primeiro. Quem deixou o campo vazio não digitou nada — não pode levar 409.
+  const racedByTypedNumber = (deps: ReturnType<typeof setup>['deps'], steals: number) => {
+    let calls = 0;
+    const contractRepo: ContractRepository = {
+      ...deps.contractRepo,
+      nextSequentialNumber: async (year) => {
+        calls += 1;
+        const r = await deps.contractRepo.nextSequentialNumber(year);
+        if (r.ok && calls <= steals) {
+          const thief = await createContract(deps)({ ...active, sequentialNumber: r.value });
+          assert.equal(numberOf(thief), r.value, 'fixture: o concorrente deveria gravar N');
+        }
+        return r;
+      },
+    };
+    return { deps: { ...deps, contractRepo }, calls: () => calls };
+  };
+
+  it('Pending: o 0001 gerado é tomado por um digitado → grava com 0002/2026', async () => {
+    const { deps } = setup();
+    const raced = racedByTypedNumber(deps, 1);
+    const r = await createPendingContract(raced.deps)(pending);
+    assert.equal(numberOf(r), '0002/2026');
+    assert.equal(raced.calls(), 2);
+  });
+
+  it('Active: o 0001 gerado é tomado por um digitado → grava com 0002/2026', async () => {
+    const { deps } = setup();
+    const raced = racedByTypedNumber(deps, 1);
+    const r = await createContract(raced.deps)(active);
+    assert.equal(numberOf(r), '0002/2026');
+  });
+
+  it('tentativas esgotadas → erro nomeado de geração, não o 409 de número digitado', async () => {
+    const { deps } = setup();
+    const raced = racedByTypedNumber(deps, Number.POSITIVE_INFINITY);
+    const r = await createPendingContract(raced.deps)(pending);
+    assert.deepEqual(r, err('contract-sequential-number-generation-exhausted'));
+    assert.equal(raced.calls(), MAX_GENERATED_NUMBER_ATTEMPTS);
+    const exhaustedActive = racedByTypedNumber(setup().deps, Number.POSITIVE_INFINITY);
+    const active2 = await createContract(exhaustedActive.deps)(active);
+    assert.deepEqual(active2, err('contract-sequential-number-generation-exhausted'));
+  });
+
+  it('falha de repositório no save não é colisão: devolve o erro sem gerar de novo', async () => {
+    const { deps } = setup();
+    let calls = 0;
+    const contractRepo: ContractRepository = {
+      ...deps.contractRepo,
+      nextSequentialNumber: (year) => {
+        calls += 1;
+        return deps.contractRepo.nextSequentialNumber(year);
+      },
+      save: () => Promise.resolve(err('contract-repo-unavailable')),
+    };
+    const r = await createPendingContract({ ...deps, contractRepo })(pending);
+    assert.deepEqual(r, err('contract-repo-unavailable'));
+    assert.equal(calls, 1);
+  });
+
+  it('número DIGITADO que colide no save continua 409, sem chamar o gerador', async () => {
+    const { deps } = setup();
+    let calls = 0;
+    const contractRepo: ContractRepository = {
+      ...deps.contractRepo,
+      findBySequentialNumber: () => Promise.resolve(ok(null)),
+      nextSequentialNumber: (year) => {
+        calls += 1;
+        return deps.contractRepo.nextSequentialNumber(year);
+      },
+      save: () => Promise.resolve(err('contract-repo-conflict')),
+    };
+    const r = await createContract({ ...deps, contractRepo })({
+      ...active,
+      sequentialNumber: '0042/2026',
+    });
+    assert.deepEqual(r, err('contract-sequential-number-duplicated'));
+    assert.equal(calls, 0);
   });
 });

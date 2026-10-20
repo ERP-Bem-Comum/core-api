@@ -29,6 +29,13 @@ import {
   buildContractsHttpDeps,
 } from '#src/modules/contracts/public-api/http.ts';
 
+import type { ContractsHttpDeps } from '#src/modules/contracts/adapters/http/composition.ts';
+import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
+import { createPendingContract } from '#src/modules/contracts/application/use-cases/create-pending-contract.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import { err } from '#src/shared/primitives/result.ts';
 import * as Document from '#src/modules/contracts/domain/document/document.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
@@ -114,7 +121,8 @@ const signedTerminationDoc = (contractId: string) =>
     'document',
   ).document;
 
-const makeApp = async () => {
+// `withDeps` deixa um teste trocar use cases já compostos (ex.: repo duplo) sem tocar o seed.
+const makeApp = async (withDeps: (deps: ContractsHttpDeps) => ContractsHttpDeps = (d) => d) => {
   const authDeps = await buildAuthHttpDeps({
     driver: 'memory',
     seed: {
@@ -145,7 +153,7 @@ const makeApp = async () => {
   const app = await buildApp({
     routes: [
       authHttpPlugin(authDeps),
-      contractsHttpPlugin(contractsDeps, {
+      contractsHttpPlugin(withDeps(contractsDeps), {
         requireAuth: makeRequireAuth(authDeps.verifyAccessToken),
         authorize: authDeps.authorize,
       }),
@@ -403,6 +411,65 @@ describe('#1024 — POST /contracts com sequentialNumber informado', () => {
       await teardown();
     });
   }
+
+  // #1071 (CA5): o que não cabe em `varchar(16)` para na borda (400), antes do use case — senão o
+  // INSERT estoura no banco. Até 16 o formato segue sendo do domínio (422).
+  it('mais de 16 caracteres → 400 antes do use case; 16 de formato inválido → 422', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const tooLong = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: '1'.repeat(17) }),
+    );
+    assert.equal(tooLong.statusCode, 400);
+    assert.doesNotMatch(tooLong.body, /ContractSequentialNumberInvalidFormat/);
+    const pendingTooLong = await postContract(
+      app,
+      token,
+      pendingBody({ sequentialNumber: `0001/2026${'x'.repeat(8)}` }),
+    );
+    assert.equal(pendingTooLong.statusCode, 400);
+    const atLimit = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: '1'.repeat(16) }),
+    );
+    assert.equal(atLimit.statusCode, 422);
+    assert.match(atLimit.body, /ContractSequentialNumberInvalidFormat/);
+    // Espaço em volta não conta para o limite: o trim vem antes do max.
+    const padded = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: `   0042/2020${' '.repeat(10)}` }),
+    );
+    assert.equal(padded.statusCode, 201);
+    await teardown();
+  });
+
+  // #1071: número GERADO que colide em todas as tentativas é contenção, não erro de quem não digitou
+  // número nenhum — 503 `contract-sequential-number-generation-exhausted`, nunca o 409 de duplicata.
+  it('número gerado que colide em todas as tentativas → 503 generation-exhausted (Active e Pending)', async () => {
+    const inner = InMemoryContractRepository().repo;
+    const alwaysConflict: ContractRepository = {
+      ...inner,
+      save: () => Promise.resolve(err('contract-repo-conflict')),
+    };
+    const deps = { contractRepo: alwaysConflict, clock: ClockFixed(new Date('2026-03-15')) };
+    const { app, teardown } = await makeApp((d) => ({
+      ...d,
+      createContract: createContract(deps),
+      createPendingContract: createPendingContract(deps),
+    }));
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    for (const body of [activeBody(), pendingBody({ sequentialNumber: '' })]) {
+      const res = await postContract(app, token, body);
+      assert.equal(res.statusCode, 503);
+      assert.match(res.body, /contract-sequential-number-generation-exhausted/);
+      assert.doesNotMatch(res.body, /contract-sequential-number-duplicated/);
+    }
+    await teardown();
+  });
 
   it('PATCH com sequentialNumber continua recusado (imutável) → 400', async () => {
     const { app, teardown } = await makeApp();

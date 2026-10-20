@@ -12,23 +12,43 @@ import type { PlainDate as PlainDateType } from '../../../../../shared/kernel/pl
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { contractFromRow, contractToInsert, type ContractRow } from '../mappers/contract.mapper.ts';
-import { appendOutboxInTx, isDupEntry } from './outbox-repository.drizzle.ts';
+import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
+import { contracts as contractsTable } from '../schemas/mysql.ts';
 import {
+  firstFreeSequence,
   formatSequentialNumber,
-  sequentialNumberSpellings,
 } from '../../../domain/contract/sequential-number.ts';
 import process from 'node:process';
 
-// #1024: a violação é do `UNIQUE(sequential_number)` — e não de outra chave (PK, outbox) — quando o
-// nome do índice aparece na mensagem do MySQL (`Duplicate entry '…' for key '…sequential_number…'`).
-// Drizzle pode encadear o erro original em `cause`; as duas camadas são lidas.
-const isSequentialNumberDup = (cause: unknown): boolean => {
-  if (!isDupEntry(cause)) return false;
-  const layers: unknown[] = [cause];
-  if (cause instanceof Error && cause.cause !== undefined) layers.push(cause.cause);
-  return layers.some((c) =>
-    String(c instanceof Error ? c.message : c).includes('sequential_number'),
-  );
+// #1071: o nome do índice vem do schema que gera a migration — `.unique()` sem nome vira
+// `ctr_contracts_sequential_number_unique` (migration 0000). Escrito à mão aqui, um rename no schema
+// passaria no gate e o 409 viraria 503 em silêncio.
+const SEQUENTIAL_NUMBER_UNIQUE = contractsTable.sequentialNumber.uniqueName;
+
+// A chave violada é o último trecho da `sqlMessage`: `Duplicate entry '<valor>' for key '<chave>'`. Ler
+// só esse trecho impede que o VALOR digitado se passe por nome de índice.
+const DUP_KEY_RE = / for key '([^']+)'$/;
+
+/**
+ * #1024/#1071: a violação é do `UNIQUE(sequential_number)` — e não da PK do contrato, da outbox ou de
+ * outra chave da transação — quando o erro do mysql2 é `errno` 1062 e a CHAVE da `sqlMessage` é esse
+ * índice. O Drizzle encadeia o erro do mysql2 em `cause`; a camada de cima é um `DrizzleQueryError`
+ * cuja mensagem é o SQL do INSERT, que cita `sequential_number` em toda criação — por isso a mensagem
+ * de topo não decide nada.
+ */
+export const isSequentialNumberDup = (cause: unknown): boolean => {
+  if (SEQUENTIAL_NUMBER_UNIQUE === undefined) return false;
+  const candidates: unknown[] = [cause];
+  if (cause instanceof Error && cause.cause !== undefined) candidates.push(cause.cause);
+  return candidates.some((c) => {
+    if (typeof c !== 'object' || c === null) return false;
+    const obj = c as Record<string, unknown>;
+    const sqlMessage = obj['sqlMessage'];
+    if (obj['errno'] !== 1062 || typeof sqlMessage !== 'string') return false;
+    const key = DUP_KEY_RE.exec(sqlMessage)?.[1];
+    // MySQL ≥ 8.0.19 qualifica a chave com a tabela (`ctr_contracts.<índice>`); antes, só o índice.
+    return key === SEQUENTIAL_NUMBER_UNIQUE || key === `ctr_contracts.${SEQUENTIAL_NUMBER_UNIQUE}`;
+  });
 };
 
 // Boundary: try/catch que converte para Result. mysql2/Drizzle lança em erros
@@ -226,20 +246,27 @@ export const createDrizzleContractRepository = (
           // nada. Pula as grafias ocupadas, como o `reassign()` do job de renumeração. NÃO leva
           // o contador ao maior informado (`GREATEST`): um `0300/2027` digitado faria 2027
           // começar em `0301`, e a regra da P.O. é começar em `0001`.
-          const isTaken = async (seq: number): Promise<boolean> => {
-            const hit = await tx
-              .select({ id: schema.contracts.id })
-              .from(schema.contracts)
-              .where(
-                inArray(schema.contracts.sequentialNumber, [
-                  ...sequentialNumberSpellings(seq, year),
-                ]),
-              )
-              .limit(1);
-            return hit.length > 0;
-          };
-          let nextSeq = (rows[0]?.lastSeq ?? 0) + 1;
-          while (await isTaken(nextSeq)) nextSeq += 1;
+          //
+          // #1071: os números do ano saem de UM `SELECT`, e a lacuna é decidida em memória — antes
+          // era um `SELECT` por candidato, todos segurando o lock do contador do ano. O `LIKE` com
+          // curinga à esquerda varre o índice UNIQUE inteiro (só a coluna dele, sem tocar a linha),
+          // custo proporcional ao total de contratos, não aos ocupados do ano.
+          //
+          // Leitura CONSISTENTE, sem `FOR UPDATE`, de propósito: travar aqui seria next-key lock
+          // sobre o índice inteiro, bloqueando toda criação com número digitado enquanto o gerador
+          // roda. A leitura não trava ninguém (Refman 8.4 §17.7.2.3) e, sendo a primeira consistente
+          // da transação, tira o snapshot DEPOIS de o lock do contador ser obtido. O que ela não vê —
+          // um digitado que commita entre esta leitura e o `save` — o `UNIQUE` pega, e o use case
+          // gera o próximo (`sequential-number-input.ts`).
+          const occupied = await tx
+            .select({ sequentialNumber: schema.contracts.sequentialNumber })
+            .from(schema.contracts)
+            .where(like(schema.contracts.sequentialNumber, `%/${String(year)}`));
+          const nextSeq = firstFreeSequence(
+            (rows[0]?.lastSeq ?? 0) + 1,
+            year,
+            occupied.map((r) => r.sequentialNumber),
+          );
           await tx
             .update(schema.ctrContractSeq)
             .set({ lastSeq: nextSeq })
@@ -353,10 +380,12 @@ export const createDrizzleContractRepository = (
     // appendOutboxInTx é chamado dentro do mesmo callback — rollback automático se qualquer
     // operação falhar (Drizzle garante rollback quando o callback lança).
     //
-    // #1024: duas criações com o mesmo número passam juntas pela checagem prévia do use case; a
-    // perdedora bate no `UNIQUE(sequential_number)`. Isso é conflito (`contract-repo-conflict` → 409
-    // `contract-sequential-number-duplicated` no use case), não indisponibilidade — o `safe()`
-    // genérico o transformaria em 503.
+    // #1024/#1071: a criação que perde a corrida pelo mesmo número bate no `UNIQUE(sequential_number)`.
+    // Isso é conflito (`contract-repo-conflict`), não indisponibilidade — o `safe()` genérico o
+    // transformaria em 503 —, e só essa violação o é (`isSequentialNumberDup`). O use case decide o
+    // desfecho pela origem do número: DIGITADO → 409 `contract-sequential-number-duplicated`; GERADO →
+    // nova tentativa com o próximo número (`sequential-number-input.ts`), e 503
+    // `contract-sequential-number-generation-exhausted` se as tentativas acabarem.
     save: async (contract: Contract, events: readonly ContractsModuleEvent[]) => {
       try {
         await db.transaction(async (tx) => {
