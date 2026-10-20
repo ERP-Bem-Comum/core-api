@@ -5,6 +5,7 @@ import {
   formatSequentialNumber,
   parseSequentialNumber,
   deriveNumberYear,
+  firstFreeSequence,
   resolveSequentialNumber,
 } from '#src/modules/contracts/domain/contract/sequential-number.ts';
 
@@ -74,5 +75,29 @@ describe('resolveSequentialNumber — preserva-ou-reatribui (issue #425, decisã
     const taken = new Set<string>();
     const r = resolveSequentialNumber(7, 2023, (c) => taken.has(c));
     assert.deepEqual(r, { kind: 'preserve', sequentialNumber: '0007/2023' });
+  });
+});
+
+// #1071 (CA4): a lacuna é decidida sobre UMA leitura dos números do ano, não um SELECT por candidato.
+describe('firstFreeSequence — primeira lacuna a partir do contador (#1071)', () => {
+  it('nada ocupado → o próprio início', () => {
+    assert.equal(firstFreeSequence(5, 2026, []), 5);
+  });
+
+  it('pula as duas grafias ocupadas (0005 e 006) e para na primeira livre', () => {
+    assert.equal(firstFreeSequence(5, 2026, ['0005/2026', '006/2026', '0008/2026']), 7);
+  });
+
+  it('números de outro ano e formatos inesperados não ocupam nada', () => {
+    assert.equal(firstFreeSequence(1, 2026, ['0001/2025', '0001/20261', 'ABC', '01/2026']), 1);
+  });
+
+  it('ocupados ABAIXO do início não importam (o contador não volta)', () => {
+    assert.equal(firstFreeSequence(3, 2026, ['0001/2026', '0002/2026']), 3);
+  });
+
+  it('400 legados digitados à frente do contador → acha o 401 numa passada', () => {
+    const occupied = Array.from({ length: 400 }, (_, i) => formatSequentialNumber(i + 1, 2026));
+    assert.equal(firstFreeSequence(1, 2026, occupied), 401);
   });
 });

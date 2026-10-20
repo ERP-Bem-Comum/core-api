@@ -56,6 +56,27 @@ export const sequentialNumberSpellings = (seq: number, year: number): readonly s
     : [formatSequentialNumber(seq, year)];
 
 /**
+ * Primeira sequência livre do ano a partir de `start` (#1071). `occupied` são os números gravados
+ * (em qualquer grafia); os de outro ano e os de formato inesperado não ocupam nada. Decidir sobre a
+ * lista inteira, lida de uma vez, é o que tira do lock do contador o laço de um `SELECT` por
+ * candidato: com 400 legados digitados à frente, era 400 idas ao banco.
+ */
+export const firstFreeSequence = (
+  start: number,
+  year: number,
+  occupied: readonly string[],
+): number => {
+  const taken = new Set<number>();
+  for (const n of occupied) {
+    const parsed = parseSequentialNumber(n);
+    if (parsed?.year === year) taken.add(parsed.seq);
+  }
+  let seq = start;
+  while (taken.has(seq)) seq += 1;
+  return seq;
+};
+
+/**
  * Deriva o ano da numeração a partir da vigência inicial (issue #425, decisão 1):
  * criação = vigência inicial. `original_period_start` é uma data-calendário
  * persistida como `date` (UTC meia-noite, `timezone:'Z'` no driver), então o ano

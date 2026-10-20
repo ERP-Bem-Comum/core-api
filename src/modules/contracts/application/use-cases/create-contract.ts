@@ -10,11 +10,11 @@ import { Contract } from '../../domain/contract/contract.ts';
 import type { ActiveContract, ContractClassification } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
 import type { ContractError } from '../../domain/contract/errors.ts';
-import type {
-  ContractRepository,
-  ContractRepositoryError,
-} from '../../domain/contract/repository.ts';
-import { pickSequentialNumber, fromSaveError } from './sequential-number-input.ts';
+import type { ContractRepository } from '../../domain/contract/repository.ts';
+import {
+  createWithSequentialNumber,
+  type SequentialNumberError,
+} from './sequential-number-input.ts';
 
 // CA-5+CA-6 (CTR-OUTBOX-INTEGRATION-IN-REPOS):
 //   - eventBus removido de Deps — use case NÃO conhece mais EventBus.
@@ -61,10 +61,7 @@ export type BuildContractError =
   | PeriodError
   | ContractError;
 
-export type CreateContractError =
-  | BuildContractError
-  | 'contract-sequential-number-duplicated'
-  | ContractRepositoryError;
+export type CreateContractError = BuildContractError | SequentialNumberError;
 
 export type CreateContractOutput = Readonly<{
   contract: ActiveContract;
@@ -129,18 +126,11 @@ export const createContract =
   async (
     cmd: CreateContractCommand,
   ): Promise<Result<CreateContractOutput, CreateContractError>> => {
-    // CTR-CONTRACT-SEQUENTIAL-NUMBER (#1024): gerado por ano quando ausente/vazio (transacional
-    // no adapter, FOR UPDATE, pulando ocupados); informado é normalizado e recusado se já existir
-    // (Defeito #5 / R4 — antes do save; o UNIQUE INDEX é a rede).
-    const picked = await pickSequentialNumber(deps, cmd.sequentialNumber);
-    if (!picked.ok) return picked;
-
-    const built = buildContract({ ...cmd, sequentialNumber: picked.value });
-    if (!built.ok) return built;
-
-    // CA-5: evento passado diretamente no save — persiste state + outbox atomicamente.
-    const saveResult = await deps.contractRepo.save(built.value.contract, [built.value.event]);
-    if (!saveResult.ok) return err(fromSaveError(saveResult.error));
-
-    return ok(built.value);
+    // CTR-CONTRACT-SEQUENTIAL-NUMBER (#1024, #1071): gerado por ano quando ausente/vazio
+    // (transacional no adapter, FOR UPDATE, pulando ocupados; colisão no save gera o próximo);
+    // informado é normalizado e recusado se já existir (Defeito #5 / R4 — antes do save; o UNIQUE
+    // INDEX é a rede). CA-5: o save recebe o evento — state + outbox atomicamente.
+    return createWithSequentialNumber(deps, cmd.sequentialNumber, (sequentialNumber) =>
+      buildContract({ ...cmd, sequentialNumber }),
+    );
   };
