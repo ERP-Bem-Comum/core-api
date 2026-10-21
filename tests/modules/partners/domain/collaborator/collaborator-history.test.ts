@@ -110,4 +110,19 @@ describe('diffCollaborator (US4)', () => {
     assert.equal(bank.valueBefore, '237/1234/56789-0');
     assert.equal(bank.valueAfter, '237/1234/56789-1');
   });
+
+  // RG, nascimento e raça passam a ser preenchíveis pelo PUT → entram no audit trail.
+  it('preencher RG, nascimento e raça → uma change por campo; nascimento como dia civil', () => {
+    const before = make('Analista');
+    const after: CollaboratorEntity = {
+      ...before,
+      rg: '12.345.678-9',
+      dateOfBirth: new Date('1990-05-20T00:00:00.000Z'),
+      race: 'PARDO',
+    };
+    const changes = diffCollaborator(before, after);
+    assert.deepEqual(changes.map((c) => c.fieldName).sort(), ['dateOfBirth', 'race', 'rg']);
+    assert.equal(changes.find((c) => c.fieldName === 'dateOfBirth')?.valueAfter, '1990-05-20');
+    assert.equal(changes.find((c) => c.fieldName === 'rg')?.valueBefore, null);
+  });
 });

@@ -4,10 +4,11 @@
  * Enums literais (ADR-0031 §D2 — quarentena se fora do Set); `status` legado
  * PRE_CADASTRO/CADASTRO_COMPLETO → registrationStatus PreRegistration/Complete.
  * D10: inativo sem `disableBy` → backfill `LEGACY_MIGRATION` (+ deactivatedAt=updatedAt).
- * D13: `biography`>2000 / `telephone`>30 → Overflow (nunca trunca).
+ * D13: `biography`>2000 / `telephone`>30 / `rg`>20 → Overflow (nunca trunca). O `rg` passa antes
+ * pela normalização do domínio (#1072): trim, branco → null.
  */
 
-import { type Result, ok, err, combine } from '#src/shared/primitives/result.ts';
+import { type Result, ok, err, combine, mapErr } from '#src/shared/primitives/result.ts';
 import type { Cpf } from '#src/shared/kernel/cpf.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import * as OccupationArea from '#src/modules/partners/domain/collaborator/occupation-area.ts';
@@ -18,6 +19,7 @@ import * as Education from '#src/modules/partners/domain/collaborator/education.
 import * as FoodCategory from '#src/modules/partners/domain/collaborator/food-category.ts';
 import * as DisableReason from '#src/modules/partners/domain/collaborator/disable-reason.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
+import * as PersonalData from '#src/modules/partners/domain/collaborator/personal-data.ts';
 import type {
   Collaborator as CollaboratorEntity,
   RegistrationStatus,
@@ -43,6 +45,24 @@ const mapRegistrationStatus = (raw: string): Result<RegistrationStatus, Quaranti
 
 const requireRole = (raw: string | null): Result<string, QuarantineReason> =>
   raw === null ? err({ tag: 'RequiredFieldMissing', field: 'role' }) : requireField(raw, 'role');
+
+// #1072: o RG segue a MESMA normalização do domínio (`PersonalData.parseRg`): trim, branco → null.
+// Gravado como `''`, ele travava o "preenche uma vez" do PUT (409 eterno). Acima da coluna
+// varchar(20) vira `Overflow` (D13: nunca trunca). O agregado entra por `rehydrate`, que não
+// revalida — por isso a normalização mora aqui.
+// `null` é tratado antes: só um RG presente pode estourar, e o `attempted` é ele mesmo.
+const normalizeRg = (raw: string | null): Result<string | null, QuarantineReason> =>
+  raw === null
+    ? ok(null)
+    : mapErr(
+        PersonalData.parseRg(raw),
+        (): QuarantineReason => ({
+          tag: 'Overflow',
+          field: 'rg',
+          attempted: raw,
+          maxLength: PersonalData.RG_MAX_LENGTH,
+        }),
+      );
 
 // D10: active=1 → null. active=0 → motivo legado válido OU backfill LEGACY_MIGRATION.
 const resolveDisableBy = (
@@ -93,6 +113,7 @@ export const mapLegacyCollaboratorRow = (
       FoodCategory.FoodCategory | null,
       string | null,
       string | null,
+      string | null,
     ],
     QuarantineReason
   >([
@@ -102,6 +123,7 @@ export const mapLegacyCollaboratorRow = (
     parseNullableEnumField(FoodCategory.parse, row.foodCategory, 'food_category'),
     checkOverflowNullable(row.biography, 'biography', 2000),
     checkOverflowNullable(row.telephone, 'telephone', 30),
+    normalizeRg(row.rg),
   ]);
 
   if (!required.ok || !optionals.ok) {
@@ -110,7 +132,7 @@ export const mapLegacyCollaboratorRow = (
 
   const [name, email, cpf, occupationArea, role, employmentRelationship, registrationStatus] =
     required.value;
-  const [genderIdentity, race, education, foodCategory, biography, telephone] = optionals.value;
+  const [genderIdentity, race, education, foodCategory, biography, telephone, rg] = optionals.value;
 
   const status = statusFromActive(row.active);
   const disableBy = resolveDisableBy(row.active, row.disableBy);
@@ -141,9 +163,11 @@ export const mapLegacyCollaboratorRow = (
     leaveRenewable: null,
     leaveRenewalDuration: null,
     publicSectorExperienceDuration: null,
-    rg: row.rg,
+    rg,
     dateOfBirth: row.dateOfBirth,
     genderIdentity,
+    // #1054: o legado não tem coluna de "Outra identidade de gênero"; nasce null no core.
+    genderIdentityDescription: null,
     race,
     education,
     foodCategory,

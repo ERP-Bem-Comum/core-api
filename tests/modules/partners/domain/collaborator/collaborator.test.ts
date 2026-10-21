@@ -32,6 +32,7 @@ const personal = () => ({
   rg: '12.345.678-9',
   dateOfBirth: new Date('1990-05-20T00:00:00.000Z'),
   genderIdentity: 'MULHER_CIS',
+  genderIdentityDescription: null,
   race: 'PARDO',
   education: 'ENSINO_SUPERIOR',
   foodCategory: 'VEGETARIANO',
@@ -275,5 +276,194 @@ describe('Collaborator.edit — banco/PIX (#1029)', () => {
       LATER,
     );
     assert.equal(pix.ok ? null : pix.error, 'invalid-pix-key');
+  });
+});
+
+// #1053 — território editável depois do cadastro: SUBSTITUI, nunca APAGA (decisão da P.O.).
+describe('Collaborator.edit — território (#1053)', () => {
+  const CE = { uf: 'CE', municipality: 'Fortaleza' };
+
+  const editInput = (over: Record<string, unknown> = {}) => {
+    const { id: _id, registeredAt: _at, ...cadastrais } = baseRegister();
+    return { ...cadastrais, ...over };
+  };
+  const withTerritory = () => {
+    const r = Collaborator.register({ ...baseRegister(), territory: CE });
+    assert.ok(r.ok, `fixture register: ${r.ok ? '' : r.error}`);
+    return r.value.collaborator;
+  };
+
+  it('ausente mantém o território gravado', () => {
+    const r = Collaborator.edit(withTerritory(), editInput({ role: 'Coordenadora' }), LATER);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(r.value.collaborator.territory, CE);
+  });
+
+  it('null mantém o território gravado (é o que o front envia em todo PUT)', () => {
+    const r = Collaborator.edit(withTerritory(), editInput({ territory: null }), LATER);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(r.value.collaborator.territory, CE);
+  });
+
+  it('objeto com UF válida SUBSTITUI (preenche quem não tinha)', () => {
+    const r = Collaborator.edit(
+      registerActive(),
+      editInput({ territory: { uf: 'SP', municipality: 'Campinas' } }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(r.value.collaborator.territory, { uf: 'SP', municipality: 'Campinas' });
+  });
+
+  it('substituição parcial: troca UF e zera município (branco → null)', () => {
+    const r = Collaborator.edit(
+      withTerritory(),
+      editInput({ territory: { uf: 'SP', municipality: '  ' } }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.deepEqual(r.value.collaborator.territory, { uf: 'SP', municipality: null });
+  });
+
+  it('UF que não é sigla BR → territory-uf-invalid', () => {
+    const r = Collaborator.edit(
+      registerActive(),
+      editInput({ territory: { uf: 'XX', municipality: 'x' } }),
+      LATER,
+    );
+    assert.equal(r.ok ? null : r.error, 'territory-uf-invalid');
+  });
+
+  it('zerar os dois com território gravado → collaborator-territory-removal-forbidden', () => {
+    const r = Collaborator.edit(
+      withTerritory(),
+      editInput({ territory: { uf: '', municipality: '' } }),
+      LATER,
+    );
+    assert.equal(r.ok ? null : r.error, 'collaborator-territory-removal-forbidden');
+  });
+
+  it('zerar os dois SEM território gravado → mantém null (200, não recusa)', () => {
+    const r = Collaborator.edit(
+      registerActive(),
+      editInput({ territory: { uf: null, municipality: null } }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.equal(r.value.collaborator.territory, null);
+  });
+});
+
+describe('Collaborator.edit — RG, nascimento e raça preenchidos uma vez (P.O. 19/10)', () => {
+  const editInput = (over: Record<string, unknown> = {}) => {
+    const { id: _id, registeredAt: _at, ...cadastrais } = baseRegister();
+    return { ...cadastrais, ...over };
+  };
+  // Cadastro completado SEM os três — o caso real: a operadora completou e deixou em branco.
+  const completeWithout = () => {
+    const r = Collaborator.completeRegistration(
+      registerActive(),
+      { ...personal(), rg: null, dateOfBirth: null, race: null },
+      NOW,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    return r.value.collaborator;
+  };
+  const completeWith = () => {
+    const r = Collaborator.completeRegistration(registerActive(), personal(), NOW);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    return r.value.collaborator;
+  };
+
+  it('ausente mantém os três gravados', () => {
+    const r = Collaborator.edit(completeWith(), editInput({ role: 'Coordenadora' }), LATER);
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.equal(r.value.collaborator.rg, '12.345.678-9');
+    assert.equal(r.value.collaborator.dateOfBirth?.toISOString(), '1990-05-20T00:00:00.000Z');
+    assert.equal(r.value.collaborator.race, 'PARDO');
+  });
+
+  it('null e branco mantêm os gravados (não apagam)', () => {
+    const r = Collaborator.edit(
+      completeWith(),
+      editInput({ rg: '  ', dateOfBirth: null, race: '' }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.equal(r.value.collaborator.rg, '12.345.678-9');
+    assert.notEqual(r.value.collaborator.dateOfBirth, null);
+    assert.equal(r.value.collaborator.race, 'PARDO');
+  });
+
+  it('campos vazios no cadastro completo → o PUT preenche os três', () => {
+    const r = Collaborator.edit(
+      completeWithout(),
+      editInput({
+        rg: ' 99.888.777-6 ',
+        dateOfBirth: new Date('1985-03-02T00:00:00.000Z'),
+        race: 'PRETO',
+      }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    assert.equal(r.value.collaborator.rg, '99.888.777-6');
+    assert.equal(r.value.collaborator.dateOfBirth?.toISOString(), '1985-03-02T00:00:00.000Z');
+    assert.equal(r.value.collaborator.race, 'PRETO');
+    assert.equal(r.value.collaborator.registrationStatus, 'Complete');
+  });
+
+  it('reenviar o MESMO valor gravado não é troca (o PUT é total)', () => {
+    const r = Collaborator.edit(
+      completeWith(),
+      editInput({
+        rg: '12.345.678-9',
+        // Mesmo dia civil, instante diferente — não pode virar recusa.
+        dateOfBirth: new Date('1990-05-20T15:30:00.000Z'),
+        race: 'PARDO',
+      }),
+      LATER,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+  });
+
+  it('trocar o RG gravado → collaborator-personal-data-immutable', () => {
+    const r = Collaborator.edit(completeWith(), editInput({ rg: '00.000.000-0' }), LATER);
+    assert.equal(r.ok ? null : r.error, 'collaborator-personal-data-immutable');
+  });
+
+  it('trocar a data gravada → collaborator-personal-data-immutable', () => {
+    const r = Collaborator.edit(
+      completeWith(),
+      editInput({ dateOfBirth: new Date('1991-05-20T00:00:00.000Z') }),
+      LATER,
+    );
+    assert.equal(r.ok ? null : r.error, 'collaborator-personal-data-immutable');
+  });
+
+  it('trocar a raça gravada → collaborator-personal-data-immutable', () => {
+    const r = Collaborator.edit(completeWith(), editInput({ race: 'BRANCO' }), LATER);
+    assert.equal(r.ok ? null : r.error, 'collaborator-personal-data-immutable');
+  });
+
+  it('raça fora do enum → invalid-race (valida antes de gravar)', () => {
+    const r = Collaborator.edit(completeWithout(), editInput({ race: 'XYZ' }), LATER);
+    assert.equal(r.ok ? null : r.error, 'invalid-race');
+  });
+
+  it('preenche um campo vazio mesmo com os outros dois já gravados', () => {
+    const r = Collaborator.completeRegistration(
+      registerActive(),
+      { ...personal(), race: null },
+      NOW,
+    );
+    assert.ok(r.ok, r.ok ? '' : r.error);
+    const edited = Collaborator.edit(
+      r.value.collaborator,
+      editInput({ rg: '12.345.678-9', race: 'INDIGENA' }),
+      LATER,
+    );
+    assert.ok(edited.ok, edited.ok ? '' : edited.error);
+    assert.equal(edited.value.collaborator.race, 'INDIGENA');
+    assert.equal(edited.value.collaborator.rg, '12.345.678-9');
   });
 });

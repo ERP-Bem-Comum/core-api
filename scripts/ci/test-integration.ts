@@ -65,6 +65,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #425 — backfill de renumeração pelo ano de vigência inicial: renumera afetados, resolve
     // colisão sem duplicar, reconcilia ctr_contract_seq e idempotência (2ª execução = 0 afetados).
     'tests/modules/contracts/adapters/persistence/renumber-by-vigencia.drizzle-mysql.test.ts',
+    // #1024/#1071 — número informável: gerador pula ocupados, UNIQUE → conflict pelo NOME do índice,
+    // número gerado que colide é gerado de novo, e a lacuna sai de um SELECT só. Estava fora do
+    // manifesto desde o #1024: com MYSQL_INTEGRATION definido ele roda, mas nenhuma suíte o chamava.
+    'tests/modules/contracts/adapters/persistence/contract-sequential-number-informed.drizzle-mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/contract-repository-paged.integration.test.ts',
     'tests/modules/contracts/adapters/persistence/outbox-schema.test.ts',
     'tests/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.test.ts',
@@ -90,6 +94,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/partners/adapters/persistence/outbox-repository.drizzle-mysql.test.ts',
     'tests/modules/partners/adapters/persistence/repos/collaborator-repository.drizzle.test.ts',
     'tests/modules/partners/adapters/persistence/repos/collaborator-invite-token-repository.drizzle.test.ts',
+    // #1072 CA7: rg = '' e DATETIME(3) do nascimento — os dois casos que o fake não reproduz.
+    'tests/modules/partners/adapters/persistence/collaborator-personal-data.drizzle-mysql.test.ts',
     'tests/modules/partners/adapters/persistence/repos/contract-count-store.drizzle.test.ts',
     // Backfill e2e ctr_contracts (read via public-api) → par_contract_count_view (#110). Aplica as
     // migrations de ambos os módulos no mesmo MySQL de teste; cobre a query GROUP BY + idempotência.

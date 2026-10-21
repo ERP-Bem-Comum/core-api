@@ -30,6 +30,7 @@ export const collaboratorToDetailDto = (
     dateOfBirth: isoOrNull(c.dateOfBirth),
     employmentRelationship: c.employmentRelationship,
     genderIdentity: c.genderIdentity,
+    genderIdentityDescription: c.genderIdentityDescription,
     race: c.race,
     education: c.education,
     foodCategory: c.foodCategory,

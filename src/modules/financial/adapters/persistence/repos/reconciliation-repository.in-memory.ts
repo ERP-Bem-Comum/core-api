@@ -19,6 +19,12 @@ import type {
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { BankStatementStore } from './bank-statement-repository.in-memory.ts';
 import type { PayableStore } from './payable-reconciliation-view.in-memory.ts';
+import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
+import type { DocumentId } from '#src/modules/financial/domain/shared/document-id.ts';
+import type { PayableId } from '#src/modules/financial/domain/shared/payable-id.ts';
+import { projectReconciliationStatus } from '#src/modules/financial/domain/timeline/projection.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
+import { newUuid } from '#src/shared/utils/id.ts';
 
 export type ReconciliationStore = Map<string, Reconciliation>;
 
@@ -77,6 +83,13 @@ const sumActiveReconciledFor = (
   return sum;
 };
 
+// #406 — paridade com o `actorOf` do adapter Drizzle: autor que não reidrata vira `null`.
+const actorOf = (raw: string | null): UserRef.UserRef | null => {
+  if (raw === null) return null;
+  const r = UserRef.rehydrate(raw);
+  return r.ok ? r.value : null;
+};
+
 // Unit-of-work in-memory: espelha a atomicidade do adapter Drizzle sobre stores compartilhados.
 export const createInMemoryReconciliationRepository = (
   stores: InMemoryReconciliationStores,
@@ -89,6 +102,15 @@ export const createInMemoryReconciliationRepository = (
   const expectedCounterparts =
     stores.expectedCounterparts ?? new Map<string, ExpectedCounterpart>();
   const { documents, timeline } = stores;
+
+  // #406: acumula a trilha no store compartilhado — paridade com o `appendTimelineInTx` do Drizzle.
+  const appendTrail = (entries: readonly FinancialTimelineEntry[]): void => {
+    if (timeline === undefined) return;
+    for (const e of entries) {
+      const key = String(e.documentId);
+      timeline.set(key, [...(timeline.get(key) ?? []), e]);
+    }
+  };
 
   // M2/RN-M2-03/04/06: espelha o bloco de reclassificação do adapter Drizzle — reescreve os 5 refs
   // do documento e acumula a trilha. Roda ANTES de mutar títulos e transação, pela mesma razão que o
@@ -175,15 +197,29 @@ export const createInMemoryReconciliationRepository = (
       // >= valor → Reconciled; > 0 e < valor → PartiallyReconciled (saldo aberto). Persiste a conciliação
       // ANTES de somar para incluir os itens novos no acumulado.
       reconciliations.set(String(reconciliation.id), reconciliation);
+      const eventId = newUuid();
+      const trail: FinancialTimelineEntry[] = [];
       for (const item of reconciliation.items) {
         const rec = payables.get(String(item.payableId));
         if (rec === undefined) continue;
         const reconciledSum = sumActiveReconciledFor(reconciliations, String(item.payableId));
-        payables.set(String(item.payableId), {
-          ...rec,
-          status: deriveReconciledStatus(rec.valueCents, reconciledSum),
-        });
+        const nextStatus = deriveReconciledStatus(rec.valueCents, reconciledSum);
+        payables.set(String(item.payableId), { ...rec, status: nextStatus });
+        trail.push(
+          projectReconciliationStatus({
+            eventType: 'PayableReconciled',
+            eventId,
+            documentId: rec.documentId as unknown as DocumentId,
+            payableId: item.payableId as unknown as PayableId,
+            statusBefore: rec.status,
+            statusAfter: nextStatus,
+            actor: actorOf(reconciliation.audit.reconciledBy),
+            reason: null,
+            occurredAt: reconciliation.audit.reconciledAt,
+          }),
+        );
       }
+      appendTrail(trail);
       return ok(undefined);
     },
 
@@ -245,17 +281,31 @@ export const createInMemoryReconciliationRepository = (
       reconciliations.set(String(reconciliation.id), reconciliation);
       // #141/#247: re-deriva o status do título pelas conciliações ativas restantes. Sem nenhuma
       // ativa (soma 0) → volta a Paid; senão → Reconciled/PartiallyReconciled conforme a nova soma.
+      const eventId = newUuid();
+      const trail: FinancialTimelineEntry[] = [];
       for (const item of reconciliation.items) {
         const rec = payables.get(String(item.payableId));
         if (rec === undefined) continue;
         if (rec.status !== 'Reconciled' && rec.status !== 'PartiallyReconciled') continue;
         const reconciledSum = sumActiveReconciledFor(reconciliations, String(item.payableId));
-        payables.set(String(item.payableId), {
-          ...rec,
-          status:
-            reconciledSum <= 0 ? 'Paid' : deriveReconciledStatus(rec.valueCents, reconciledSum),
-        });
+        const nextStatus =
+          reconciledSum <= 0 ? 'Paid' : deriveReconciledStatus(rec.valueCents, reconciledSum);
+        payables.set(String(item.payableId), { ...rec, status: nextStatus });
+        trail.push(
+          projectReconciliationStatus({
+            eventType: 'ReconciliationUndone',
+            eventId,
+            documentId: rec.documentId as unknown as DocumentId,
+            payableId: item.payableId as unknown as PayableId,
+            statusBefore: rec.status,
+            statusAfter: nextStatus,
+            actor: actorOf(reconciliation.audit.undoneBy),
+            reason: reconciliation.audit.undoReason,
+            occurredAt: reconciliation.audit.undoneAt ?? new Date(),
+          }),
+        );
       }
+      appendTrail(trail);
       flipTransaction(statements, String(reconciliation.transactionId), 'Reconciled', 'Pending');
       return ok(undefined);
     },

@@ -29,6 +29,13 @@ import {
   buildContractsHttpDeps,
 } from '#src/modules/contracts/public-api/http.ts';
 
+import type { ContractsHttpDeps } from '#src/modules/contracts/adapters/http/composition.ts';
+import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
+import { createPendingContract } from '#src/modules/contracts/application/use-cases/create-pending-contract.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import { err } from '#src/shared/primitives/result.ts';
 import * as Document from '#src/modules/contracts/domain/document/document.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
@@ -114,7 +121,8 @@ const signedTerminationDoc = (contractId: string) =>
     'document',
   ).document;
 
-const makeApp = async () => {
+// `withDeps` deixa um teste trocar use cases já compostos (ex.: repo duplo) sem tocar o seed.
+const makeApp = async (withDeps: (deps: ContractsHttpDeps) => ContractsHttpDeps = (d) => d) => {
   const authDeps = await buildAuthHttpDeps({
     driver: 'memory',
     seed: {
@@ -145,7 +153,7 @@ const makeApp = async () => {
   const app = await buildApp({
     routes: [
       authHttpPlugin(authDeps),
-      contractsHttpPlugin(contractsDeps, {
+      contractsHttpPlugin(withDeps(contractsDeps), {
         requireAuth: makeRequireAuth(authDeps.verifyAccessToken),
         authorize: authDeps.authorize,
       }),
@@ -186,7 +194,8 @@ const CONTRACTOR_BODY = {
   id: '55555555-5555-4555-8555-555555555555',
 };
 
-// CTR-CONTRACT-SEQUENTIAL-NUMBER: o body NÃO carrega sequentialNumber — o backend gera.
+// CTR-CONTRACT-SEQUENTIAL-NUMBER: por padrão o body NÃO carrega sequentialNumber — o backend
+// gera. O número informado (#1024) é coberto no bloco próprio, abaixo.
 const activeBody = (overrides: Record<string, unknown> = {}) => ({
   mode: 'Active',
   title: 'Novo contrato',
@@ -310,10 +319,6 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     await teardown();
   });
 
-  // CTR-CONTRACT-SEQUENTIAL-NUMBER: o cenário "sequentialNumber duplicado -> 409" via POST
-  // deixou de existir — o cliente não fornece o número (o backend gera, sempre único por ano).
-  // O check de unicidade segue como rede de segurança (import legado + UNIQUE no schema).
-
   it('CA2: período inválido (end < start) -> 422 (invariante de domínio, passa no Zod)', async () => {
     const { app, teardown } = await makeApp();
     const token = await loginSeeded(app, WRITER_EMAIL);
@@ -324,6 +329,158 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
       payload: activeBody({ periodStart: '2026-12-31', periodEnd: '2026-01-01' }),
     });
     assert.equal(res.statusCode, 422);
+    await teardown();
+  });
+});
+
+// ─── #1024: número do contrato informável na criação ─────────────────────────
+//
+// O seed já ocupa `001/2026`…`004/2026` (grafia legada de 3 dígitos) e `900/2026`/`901/2026`.
+
+const postContract = async (app: App, token: string, payload: Record<string, unknown>) =>
+  app.inject({ method: 'POST', url: '/api/v2/contracts', headers: bearer(token), payload });
+
+const numberOf = (res: { json: () => unknown }): string =>
+  (res.json() as { sequentialNumber: string }).sequentialNumber;
+
+describe('#1024 — POST /contracts com sequentialNumber informado', () => {
+  it('Active com "0123/2024" → 201 com esse número (qualquer ano)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await postContract(app, token, activeBody({ sequentialNumber: '0123/2024' }));
+    assert.equal(res.statusCode, 201);
+    assert.equal(numberOf(res), '0123/2024');
+    await teardown();
+  });
+
+  it('Pending com "123/2024" → 201 gravado como "0123/2024" (normaliza para 4 dígitos)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await postContract(app, token, pendingBody({ sequentialNumber: '123/2024' }));
+    assert.equal(res.statusCode, 201);
+    assert.equal(numberOf(res), '0123/2024');
+    await teardown();
+  });
+
+  it('sem o campo ou com "" → gera o próximo do ano corrente, pulando os ocupados', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const year = String(new Date().getFullYear());
+    const r1 = await postContract(app, token, activeBody());
+    const r2 = await postContract(app, token, pendingBody({ sequentialNumber: '' }));
+    assert.equal(r1.statusCode, 201);
+    assert.equal(r2.statusCode, 201);
+    assert.match(numberOf(r1), new RegExp(`^\\d{4}/${year}$`));
+    assert.match(numberOf(r2), new RegExp(`^\\d{4}/${year}$`));
+    assert.notEqual(numberOf(r1), numberOf(r2));
+    await teardown();
+  });
+
+  it('número já existente → 409 contract-sequential-number-duplicated (inclusive 123 × 0123)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const first = await postContract(app, token, activeBody({ sequentialNumber: '0123/2024' }));
+    assert.equal(first.statusCode, 201);
+    const same = await postContract(app, token, activeBody({ sequentialNumber: '0123/2024' }));
+    assert.equal(same.statusCode, 409);
+    assert.match(same.body, /contract-sequential-number-duplicated/);
+    const shortSpelling = await postContract(
+      app,
+      token,
+      pendingBody({ sequentialNumber: '123/2024' }),
+    );
+    assert.equal(shortSpelling.statusCode, 409);
+    await teardown();
+  });
+
+  it('colide também com a grafia legada de 3 dígitos do banco ("0001/2026" × "001/2026")', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await postContract(app, token, activeBody({ sequentialNumber: '0001/2026' }));
+    assert.equal(res.statusCode, 409);
+    await teardown();
+  });
+
+  for (const invalid of ['12/2024', 'ABC', '12345/2026']) {
+    it(`formato inválido "${invalid}" → 422 ContractSequentialNumberInvalidFormat`, async () => {
+      const { app, teardown } = await makeApp();
+      const token = await loginSeeded(app, WRITER_EMAIL);
+      const res = await postContract(app, token, activeBody({ sequentialNumber: invalid }));
+      assert.equal(res.statusCode, 422);
+      assert.match(res.body, /ContractSequentialNumberInvalidFormat/);
+      await teardown();
+    });
+  }
+
+  // #1071 (CA5): o que não cabe em `varchar(16)` para na borda (400), antes do use case — senão o
+  // INSERT estoura no banco. Até 16 o formato segue sendo do domínio (422).
+  it('mais de 16 caracteres → 400 antes do use case; 16 de formato inválido → 422', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const tooLong = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: '1'.repeat(17) }),
+    );
+    assert.equal(tooLong.statusCode, 400);
+    assert.doesNotMatch(tooLong.body, /ContractSequentialNumberInvalidFormat/);
+    const pendingTooLong = await postContract(
+      app,
+      token,
+      pendingBody({ sequentialNumber: `0001/2026${'x'.repeat(8)}` }),
+    );
+    assert.equal(pendingTooLong.statusCode, 400);
+    const atLimit = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: '1'.repeat(16) }),
+    );
+    assert.equal(atLimit.statusCode, 422);
+    assert.match(atLimit.body, /ContractSequentialNumberInvalidFormat/);
+    // Espaço em volta não conta para o limite: o trim vem antes do max.
+    const padded = await postContract(
+      app,
+      token,
+      activeBody({ sequentialNumber: `   0042/2020${' '.repeat(10)}` }),
+    );
+    assert.equal(padded.statusCode, 201);
+    await teardown();
+  });
+
+  // #1071: número GERADO que colide em todas as tentativas é contenção, não erro de quem não digitou
+  // número nenhum — 503 `contract-sequential-number-generation-exhausted`, nunca o 409 de duplicata.
+  it('número gerado que colide em todas as tentativas → 503 generation-exhausted (Active e Pending)', async () => {
+    const inner = InMemoryContractRepository().repo;
+    const alwaysConflict: ContractRepository = {
+      ...inner,
+      save: () => Promise.resolve(err('contract-repo-conflict')),
+    };
+    const deps = { contractRepo: alwaysConflict, clock: ClockFixed(new Date('2026-03-15')) };
+    const { app, teardown } = await makeApp((d) => ({
+      ...d,
+      createContract: createContract(deps),
+      createPendingContract: createPendingContract(deps),
+    }));
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    for (const body of [activeBody(), pendingBody({ sequentialNumber: '' })]) {
+      const res = await postContract(app, token, body);
+      assert.equal(res.statusCode, 503);
+      assert.match(res.body, /contract-sequential-number-generation-exhausted/);
+      assert.doesNotMatch(res.body, /contract-sequential-number-duplicated/);
+    }
+    await teardown();
+  });
+
+  it('PATCH com sequentialNumber continua recusado (imutável) → 400', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v2/contracts/${ACTIVE_ID}`,
+      headers: bearer(token),
+      payload: { sequentialNumber: '0999/2026' },
+    });
+    assert.equal(res.statusCode, 400);
     await teardown();
   });
 });

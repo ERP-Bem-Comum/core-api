@@ -26,5 +26,8 @@ export type FinancialTimelineEntry = Readonly<{
   eventType: TimelineEventType;
   occurredAt: Date;
   actor: UserRef | null;
+  // #61: o PORQUÊ do marco, quando o evento o carrega (desfazer baixa exige; a baixa manual e o
+  // desfazer conciliação aceitam opcional). `null` nos marcos sem motivo — a maioria.
+  reason: string | null;
   changes: readonly FieldChange[];
 }>;

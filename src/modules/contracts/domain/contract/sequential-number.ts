@@ -35,6 +35,48 @@ export const parseSequentialNumber = (
 };
 
 /**
+ * Forma canônica de um número INFORMADO na criação (#1024): `NNN/AAAA` vira `0NNN/AAAA`, para que
+ * `050/2026` e `0050/2026` sejam o mesmo número diante do `UNIQUE(sequential_number)`, que compara a
+ * string inteira. Formato inesperado volta INTACTO — quem o recusa é o `Contract.create*` (422), com a
+ * entrada original na mensagem.
+ */
+export const normalizeSequentialNumber = (n: string): string => {
+  const parsed = parseSequentialNumber(n);
+  return parsed === null ? n : formatSequentialNumber(parsed.seq, parsed.year);
+};
+
+/**
+ * As grafias com que um mesmo número pode estar gravado (#1024). O formato do domínio aceita 3 ou 4
+ * dígitos, então `0050/2026` pode ter um irmão legado `050/2026` na tabela; a checagem de duplicata e o
+ * gerador olham as duas. Acima de 999 só existe a grafia de 4 dígitos.
+ */
+export const sequentialNumberSpellings = (seq: number, year: number): readonly string[] =>
+  seq <= 999
+    ? [formatSequentialNumber(seq, year), `${String(seq).padStart(3, '0')}/${String(year)}`]
+    : [formatSequentialNumber(seq, year)];
+
+/**
+ * Primeira sequência livre do ano a partir de `start` (#1071). `occupied` são os números gravados
+ * (em qualquer grafia); os de outro ano e os de formato inesperado não ocupam nada. Decidir sobre a
+ * lista inteira, lida de uma vez, é o que tira do lock do contador o laço de um `SELECT` por
+ * candidato: com 400 legados digitados à frente, era 400 idas ao banco.
+ */
+export const firstFreeSequence = (
+  start: number,
+  year: number,
+  occupied: readonly string[],
+): number => {
+  const taken = new Set<number>();
+  for (const n of occupied) {
+    const parsed = parseSequentialNumber(n);
+    if (parsed?.year === year) taken.add(parsed.seq);
+  }
+  let seq = start;
+  while (taken.has(seq)) seq += 1;
+  return seq;
+};
+
+/**
  * Deriva o ano da numeração a partir da vigência inicial (issue #425, decisão 1):
  * criação = vigência inicial. `original_period_start` é uma data-calendário
  * persistida como `date` (UTC meia-noite, `timezone:'Z'` no driver), então o ano

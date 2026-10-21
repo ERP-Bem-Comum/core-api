@@ -38,6 +38,13 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   // "baixa" para quem tentou reagendar.
   'payable-payment-conflict',
   'payable-reschedule-conflict',
+  // #61 — desfazimentos. Todos conflito de ESTADO: o pedido está bem-formado; o que não serve é o
+  // estado do título (ou da remessa dele). `undo-requires-reason` segue o `remittance-discard-
+  // requires-reason`: o Zod já exigiu a string, o que falta é conteúdo de decisão.
+  'payable-payment-undo-conflict',
+  'payable-not-paid',
+  'undo-requires-reason',
+  'document-has-progressed-payable',
   // #785 — o bucket contradiz o contrato de prefixos. É 409 e não 404 de propósito: 404 significa
   // "não existe, nada a fazer", e aqui há o que fazer. E não é 5xx porque o envelope esconde o
   // código em 5xx, e este é justamente o código que precisa chegar a quem pediu.
@@ -309,6 +316,15 @@ const SLUG_MESSAGES: Record<string, string> = {
     'Este título já não estava aprovado quando a baixa foi gravada — outra operação o alterou antes. Atualize e confira se a baixa já foi registrada.',
   'payable-reschedule-conflict':
     'O vencimento deste título foi alterado por outra operação depois que esta tela foi carregada. Atualize e confira o vencimento atual antes de reagendar.',
+  // #61 — desfazimentos. Cada frase termina na ação que destrava, porque em todos há o que fazer.
+  'payable-payment-undo-conflict':
+    'Este título já não estava pago quando o desfazimento foi gravado — outra operação o alterou antes. Atualize e confira o status atual.',
+  'payable-not-paid':
+    'Só é possível desfazer a baixa de título com status Pago. Se ele está conciliado, desfaça a conciliação antes.',
+  'undo-requires-reason':
+    'Informe o motivo. Ele fica registrado no Histórico do documento e é o que permite auditar depois por que a etapa foi desfeita.',
+  'document-has-progressed-payable':
+    'Só é possível voltar para edição com todos os títulos do documento em Aprovado. Se algum está pago ou conciliado, desfaça antes a conciliação e a baixa, nesta ordem.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',

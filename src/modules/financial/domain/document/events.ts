@@ -1,6 +1,7 @@
 import type { DocumentId } from '../shared/document-id.ts';
 import type { PayableId } from '../shared/payable-id.ts';
 import type { RemittanceId } from '../remittance/remittance-id.ts';
+import type { ReconciliationEvent } from '../reconciliation/events.ts';
 import type { DocumentStatus } from './types.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import { exhaustiveStringUnion } from '../../../../shared/primitives/exhaustive.ts';
@@ -78,6 +79,25 @@ export type PayableManuallyPaid = Readonly<{
   reason?: string;
 }>;
 
+// #61 (decisões da P.O., 02/10 e 19/10): desfazer a baixa manual de UM título. `Paid` volta ao
+// status DIRETAMENTE anterior à baixa — `Approved` ou `Transmitted`, nunca sempre `Approved`: um
+// título que saiu pela remessa e voltasse a `Approved` ficaria elegível a nova remessa.
+//
+// `restoredStatus` viaja no evento porque quem o consome (a projeção do `fin_payable_view`) não tem
+// como deduzi-lo — a origem da baixa está na trilha, não no read-model. `reason` é obrigatório: é a
+// resposta que a auditoria procura quando um pagamento "some" dos relatórios.
+export type ManualPaymentUndone = Readonly<{
+  type: 'ManualPaymentUndone';
+  documentId: DocumentId;
+  payableId: PayableId;
+  restoredStatus: PaymentOrigin;
+  undoneBy: UserRef;
+  reason: string;
+}>;
+
+// As duas origens de uma baixa manual (ADR-0065 §6) — o destino possível de `ManualPaymentUndone`.
+export type PaymentOrigin = 'Approved' | 'Transmitted';
+
 // #792 / ADR-0065 §2: o título saiu da alçada do core-api. Emitido POR TÍTULO na mesma transação em
 // que a remessa é registrada e os títulos reservados — o evento existe se e somente se a transição
 // `Approved → Transmitted` foi persistida.
@@ -142,6 +162,7 @@ export type DocumentEvent =
   | DocumentDraftSaved
   | DocumentCancelled
   | PayableManuallyPaid
+  | ManualPaymentUndone
   | PayableTransmitted
   | PayableTransmissionDiscarded
   | ApproverEscalated;
@@ -164,6 +185,7 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
   'DocumentDraftSaved',
   'DocumentCancelled',
   'PayableManuallyPaid',
+  'ManualPaymentUndone',
   'PayableTransmitted',
   'PayableTransmissionDiscarded',
   'ApproverEscalated',
@@ -177,18 +199,24 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
  * schema (`z.enum`) e pelo CHECK da tabela de trilha. `Exclude<...>` preserva a exaustividade:
  * adicionar um evento novo à union sem listá-lo aqui QUEBRA `pnpm run typecheck`.
  *
- * ⚠️ `PayableTransmitted` está FORA por ora, e a exclusão é dívida declarada, não desenho: o
- * ADR-0065 §2 diz que ele é projetado na trilha, e a #823 é quem o exibe no drawer ("em qual remessa
- * o título foi"). Entrar aqui custa mais que uma linha — a trilha é gravada SÍNCRONA, na transação
- * de quem escreve (`timeline-recording.ts` → `payable-repository.drizzle.ts`), e o repositório da
- * remessa hoje não escreve trilha nenhuma; além disso o CHECK `ck_fin_tl_event_type` teria de ganhar
- * o literal por migration. O evento JÁ vai ao outbox nesta fatia, que é o que o ADR exige como marco
- * durável; a projeção na trilha é consumo, e é da #823.
+ * #823 (ADR-0065 §2): `PayableTransmitted` entra — "em qual remessa o título foi", com NSA e o
+ * `your_number`. Não passa pelo `projectEntry`: quem o grava é o `saveAll` da remessa, na transação
+ * da transição (`projectTransmission`).
+ *
+ * #406: `PayableReconciled` e `ReconciliationUndone` vêm do domínio da CONCILIAÇÃO, não do documento
+ * — por isso entram por `Extract` em vez de pela union de `DocumentEvent`. Quem os grava é o
+ * repositório da conciliação, que é onde o status anterior e o seguinte do título são conhecidos
+ * (`projectReconciliationStatus`).
+ *
+ * `PayableTransmissionDiscarded` segue FORA: o descarte de remessa (ADR-0065 §4) está pendente de
+ * decisão da P.O. sobre existir no produto.
  */
-export type TimelineEventType = Exclude<
-  DocumentEvent['type'],
-  'DocumentCancelled' | 'ApproverEscalated' | 'PayableTransmitted' | 'PayableTransmissionDiscarded'
->;
+export type TimelineEventType =
+  | Exclude<
+      DocumentEvent['type'],
+      'DocumentCancelled' | 'ApproverEscalated' | 'PayableTransmissionDiscarded'
+    >
+  | Extract<ReconciliationEvent['type'], 'PayableReconciled' | 'ReconciliationUndone'>;
 
 export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
   'DocumentSaved',
@@ -196,4 +224,10 @@ export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
   'ApprovalUndone',
   'DocumentDraftSaved',
   'PayableManuallyPaid',
+  // #61: o desfazimento da baixa aparece na trilha, com autor e motivo (migration 0059).
+  'ManualPaymentUndone',
+  // #823 / #406: geração de remessa, conciliação e desfazimento da conciliação (migration 0060).
+  'PayableTransmitted',
+  'PayableReconciled',
+  'ReconciliationUndone',
 ] as const);

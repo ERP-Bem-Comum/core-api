@@ -137,6 +137,21 @@ export const createDrizzlePayableViewStore = (
       }
     },
 
+    // #61: inverso do `markPaid` — status anterior à baixa e `paid_at` NULL.
+    unmarkPaid: async (payableIds, status): Promise<Result<void, PayableViewStoreError>> => {
+      if (payableIds.length === 0) return ok(undefined);
+      try {
+        await db
+          .update(finPayableView)
+          .set({ status, paidAt: null, updatedAt: clock.now() })
+          .where(inArray(finPayableView.payableId, [...payableIds]));
+        return ok(undefined);
+      } catch (cause) {
+        logStore('unmarkPaid', cause);
+        return err('payable-view-store-unavailable');
+      }
+    },
+
     list: async (): Promise<Result<readonly PayableView[], PayableViewStoreError>> => {
       try {
         const dbRows = await db.select().from(finPayableView);

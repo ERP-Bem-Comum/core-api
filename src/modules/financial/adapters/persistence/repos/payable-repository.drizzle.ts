@@ -30,6 +30,7 @@ import type {
   PayableRepositoryError,
   MarkPaidInput,
   RescheduleInput,
+  UndoPaidInput,
 } from '../../../domain/payable/repository.ts';
 import type { FinancialTimelineEntry } from '../../../domain/timeline/types.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
@@ -66,7 +67,9 @@ const makeCasConflict = (error: CasConflictError, payableId: string): CasConflic
 const readCasConflict = (cause: unknown): CasConflictError | null => {
   if (!(cause instanceof Error)) return null;
   const slug = (cause as unknown as Record<symbol, unknown>)[CAS_CONFLICT_SYMBOL];
-  return slug === 'payable-payment-conflict' || slug === 'payable-reschedule-conflict'
+  return slug === 'payable-payment-conflict' ||
+    slug === 'payable-reschedule-conflict' ||
+    slug === 'payable-payment-undo-conflict'
     ? slug
     : null;
 };
@@ -223,5 +226,29 @@ export const createDrizzlePayableRepository = (
     });
   };
 
-  return { markPaid, reschedule };
+  // #61: desfazer a baixa. TRANSIÇÃO de estado único — `WHERE status = 'Paid'` —, e `paid_at` volta a
+  // NULL: o CHECK `fin_payables_paid_at_chk` só exige data quando `Paid`, então limpá-la é decisão
+  // nossa, e é a certa — relatório que filtra só por `paid_at` contaria como realizado o que não é.
+  const undoPaid = async (input: UndoPaidInput): Promise<Result<void, PayableRepositoryError>> => {
+    const payableId = input.payableId as unknown as string;
+
+    return writeWithCas({
+      ctx: 'undoPaid',
+      payableId,
+      conflictError: 'payable-payment-undo-conflict',
+      applyUpdate: async (tx) =>
+        rowsAffected(
+          await tx
+            .update(schema.finPayables)
+            .set({ status: input.restoreTo, paidAt: null })
+            .where(
+              and(eq(schema.finPayables.id, payableId), eq(schema.finPayables.status, 'Paid')),
+            ),
+        ),
+      timelineEntries: input.timelineEntries,
+      events: input.events,
+    });
+  };
+
+  return { markPaid, reschedule, undoPaid };
 };

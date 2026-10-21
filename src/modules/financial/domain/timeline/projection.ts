@@ -93,6 +93,7 @@ export const projectReclassification = (
   const base = {
     eventId: input.eventId,
     documentId: input.documentId,
+    reason: null,
     // `DocumentSaved` é o marco honesto: a reclassificação É um save do documento, e é o literal que
     // o CHECK `ck_fin_tl_event_type` já aceita. Um tipo novo custaria migration e não diria mais.
     eventType: 'DocumentSaved' as const,
@@ -106,6 +107,81 @@ export const projectReclassification = (
     ...input.payableIds.map((id) => ({ ...base, target: { kind: 'Payable' as const, id } })),
   ];
 };
+
+// ─── #823: trilha da geração de remessa ──────────────────────────────────────
+
+export type ProjectTransmissionInput = Readonly<{
+  eventId: string;
+  documentId: DocumentId;
+  payableId: PayableId;
+  // Atributo da REMESSA (P.O. na #823) — viaja na entry do título porque é por ele que o operador
+  // procura o pagamento no banco.
+  nsa: number;
+  // Por TÍTULO naquela remessa: a chave que casa o retorno do banco com o título (#752).
+  yourNumber: string;
+  actor: UserRef | null;
+  occurredAt: Date;
+}>;
+
+// Uma entry por título, sem entry de Documento: a remessa sai por título — uma nota pode ter saído
+// em parte (o pai no arquivo, a retenção ainda aberta), e uma entry no documento diria que ela saiu
+// inteira.
+//
+// `before` do status é `Approved` por CONSTRUÇÃO, não por suposição: a transição é um CAS
+// `WHERE status = 'Approved'` com veredito por contagem, e qualquer título fora disso desfaz a
+// transação inteira — esta entry nunca é gravada sobre outro estado anterior.
+//
+// Título em duas remessas (a primeira descartada) ganha duas entries, cada uma com o NSA e o
+// `your_number` da sua — é trilha, não campo (#823).
+export const projectTransmission = (input: ProjectTransmissionInput): FinancialTimelineEntry => ({
+  eventId: input.eventId,
+  documentId: input.documentId,
+  target: { kind: 'Payable', id: input.payableId },
+  eventType: 'PayableTransmitted',
+  occurredAt: input.occurredAt,
+  actor: input.actor,
+  reason: null,
+  changes: [
+    { field: 'status', before: 'Approved', after: 'Transmitted' },
+    { field: 'remittanceNsa', before: null, after: String(input.nsa) },
+    { field: 'remittanceYourNumber', before: null, after: input.yourNumber },
+  ],
+});
+
+// ─── #406: trilha da conciliação ─────────────────────────────────────────────
+
+export type ProjectReconciliationStatusInput = Readonly<{
+  eventType: 'PayableReconciled' | 'ReconciliationUndone';
+  eventId: string;
+  documentId: DocumentId;
+  payableId: PayableId;
+  // Lidos NA transação que muda o status — o anterior não é presumido: um segundo parcial parte de
+  // `PartiallyReconciled`, e desfazer uma de duas conciliações pode manter o título conciliado.
+  statusBefore: string;
+  statusAfter: string;
+  actor: UserRef | null;
+  reason: string | null;
+  occurredAt: Date;
+}>;
+
+// Uma entry por título. O marco é gravado mesmo quando o status não muda (2º parcial que não fecha,
+// desfazer uma de duas conciliações): o ato aconteceu e a auditoria o procura — só a mudança de
+// campo é que fica de fora, porque não houve.
+export const projectReconciliationStatus = (
+  input: ProjectReconciliationStatusInput,
+): FinancialTimelineEntry => ({
+  eventId: input.eventId,
+  documentId: input.documentId,
+  target: { kind: 'Payable', id: input.payableId },
+  eventType: input.eventType,
+  occurredAt: input.occurredAt,
+  actor: input.actor,
+  reason: input.reason,
+  changes:
+    input.statusBefore === input.statusAfter
+      ? []
+      : [{ field: 'status', before: input.statusBefore, after: input.statusAfter }],
+});
 
 export type ProjectEntryInput = Readonly<{
   eventId: string;
@@ -126,10 +202,9 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
   // subconjunto `TimelineEventType` (sem cancelamento nem escalonamento).
   //
   // `PayableTransmitted` e `PayableTransmissionDiscarded` (ADR-0065 §§2,4) saem por um motivo
-  // DIFERENTE dos outros dois, e a diferença importa: os dois são marcos de estado do título e vão à
-  // trilha um dia — a #823 os quer no drawer, com o NSA e o nome do arquivo. Não passam por aqui
-  // hoje porque não CHEGAM aqui: quem os emite é o `save` da remessa, que não monta `Payables` nem
-  // chama esta projeção. Quando a #823 os trouxer, o caminho a construir é esse, não este `if`.
+  // DIFERENTE dos outros dois: não CHEGAM aqui, porque quem os emite é o `save` da remessa, que não
+  // monta `Payables`. A transmissão vai à trilha por `projectTransmission` (#823), gravada pelo
+  // próprio repositório da remessa; o descarte segue fora (decisão pendente da P.O.).
   const eventType = input.event.type;
   if (
     eventType === 'DocumentCancelled' ||
@@ -141,6 +216,8 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
   }
 
   const documentId = input.after.id;
+  // #61: o motivo vem do PAYLOAD do evento — é o único dado da trilha que não sai do diff de estado.
+  const reason = 'reason' in input.event ? (input.event.reason ?? null) : null;
   const entries: FinancialTimelineEntry[] = [
     {
       eventId: input.eventId,
@@ -149,6 +226,7 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
       eventType,
       occurredAt: input.occurredAt,
       actor: input.actor,
+      reason,
       changes: diffDocument(input.before, input.after),
     },
   ];
@@ -170,6 +248,7 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
       eventType,
       occurredAt: input.occurredAt,
       actor: input.actor,
+      reason,
       changes,
     });
   }

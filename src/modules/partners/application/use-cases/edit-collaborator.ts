@@ -25,6 +25,7 @@ import type {
   BankAccountInput,
   PixKeyInput,
 } from '#src/modules/partners/domain/shared/payment-target.ts';
+import type { TerritoryInput } from '#src/modules/partners/domain/collaborator/territory.ts';
 
 export type EditCollaboratorCommand = Readonly<{
   collaboratorId: string;
@@ -41,6 +42,12 @@ export type EditCollaboratorCommand = Readonly<{
   /** #1029: ausente ou `null` mantém o gravado; objeto valida e substitui. */
   bankAccount?: BankAccountInput | null | undefined;
   pixKey?: PixKeyInput | null | undefined;
+  /** #1053: ausente ou `null` mantém o gravado; objeto substitui; esvaziar território gravado recusa. */
+  territory?: TerritoryInput | null | undefined;
+  /** RG, nascimento e raça: ausente/`null` mantém; preenche o que está vazio; trocar o gravado recusa. */
+  rg?: string | null | undefined;
+  dateOfBirth?: Date | null | undefined;
+  race?: string | null | undefined;
 }>;
 
 export type EditCollaboratorError =
@@ -91,6 +98,10 @@ export const editCollaborator =
         employmentRelationship: cmd.employmentRelationship,
         bankAccount: cmd.bankAccount,
         pixKey: cmd.pixKey,
+        territory: cmd.territory,
+        rg: cmd.rg,
+        dateOfBirth: cmd.dateOfBirth,
+        race: cmd.race,
       },
       now,
     );

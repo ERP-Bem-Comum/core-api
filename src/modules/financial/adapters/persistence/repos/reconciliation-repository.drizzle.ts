@@ -39,6 +39,13 @@ import {
 } from '../mappers/reconciliation.mapper.ts';
 import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
+import { appendTimelineInTx } from './timeline-helpers.ts';
+import { newUuid } from '#src/shared/utils/id.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
+import { projectReconciliationStatus } from '#src/modules/financial/domain/timeline/projection.ts';
+import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
+import type { DocumentId } from '#src/modules/financial/domain/shared/document-id.ts';
+import type { PayableId } from '#src/modules/financial/domain/shared/payable-id.ts';
 import { makeVersionConflict, isVersionConflict } from './version-conflict.ts';
 
 const logStore = (op: string, cause: unknown): void => {
@@ -48,6 +55,15 @@ const logStore = (op: string, cause: unknown): void => {
 // mysql2 expõe affectedRows no ResultSetHeader (índice 0 do retorno). Espelha document-repository.drizzle.ts.
 const affectedRowsOf = (result: unknown): number =>
   (result as unknown as [{ affectedRows: number }])[0].affectedRows;
+
+// #406: o autor do marco na trilha. `reconciled_by`/`undone_by` são string livre no agregado (o seed
+// e o ETL já gravaram valores que não são UUID); a leitura da trilha recusa `actor_ref` fora de
+// UUID v4, então o que não reidrata vira `null` — marco sem autor, nunca trilha ilegível.
+const actorOf = (raw: string | null): UserRef.UserRef | null => {
+  if (raw === null) return null;
+  const r = UserRef.rehydrate(raw);
+  return r.ok ? r.value : null;
+};
 
 export const createDrizzleReconciliationRepository = (
   handle: FinancialMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
@@ -77,12 +93,23 @@ export const createDrizzleReconciliationRepository = (
           // #141/#247: status do título DERIVADO da soma das conciliações ATIVAS (incl. esta, já inserida).
           // Soma >= valor → Reconciled; > 0 e < valor → PartiallyReconciled. Transição válida só a partir
           // de Paid ou PartiallyReconciled (CA6: 2º parcial fecha um título já PartiallyReconciled).
+          // #406: um marco por conciliação — todos os títulos dela compartilham o `eventId`.
+          const confirmEventId = newUuid();
+          const confirmTrail: FinancialTimelineEntry[] = [];
           for (const item of reconciliation.items) {
+            // #406: `status` e `documentId` lidos JUNTO do valor, sob `FOR UPDATE` — o status anterior
+            // da trilha é o que o CAS abaixo vai encontrar, não uma suposição (2º parcial parte de
+            // `PartiallyReconciled`).
             const valueRows = await tx
-              .select({ value: finPayables.value })
+              .select({
+                value: finPayables.value,
+                status: finPayables.status,
+                documentId: finPayables.documentId,
+              })
               .from(finPayables)
               .where(eq(finPayables.id, String(item.payableId)))
-              .limit(1);
+              .limit(1)
+              .for('update');
             const value = valueRows[0]?.value;
             if (value === undefined) throw new Error('payable-not-found');
 
@@ -114,7 +141,25 @@ export const createDrizzleReconciliationRepository = (
                 ),
               );
             if (affectedRowsOf(res) !== 1) throw new Error('payable-not-paid');
+
+            const read = valueRows[0];
+            if (read !== undefined) {
+              confirmTrail.push(
+                projectReconciliationStatus({
+                  eventType: 'PayableReconciled',
+                  eventId: confirmEventId,
+                  documentId: read.documentId as unknown as DocumentId,
+                  payableId: item.payableId as unknown as PayableId,
+                  statusBefore: read.status,
+                  statusAfter: nextStatus,
+                  actor: actorOf(reconciliation.audit.reconciledBy),
+                  reason: null,
+                  occurredAt: reconciliation.audit.reconciledAt,
+                }),
+              );
+            }
           }
+          await appendTimelineInTx(tx, confirmTrail);
 
           const txRes = await tx
             .update(finStatementTransactions)
@@ -373,12 +418,21 @@ export const createDrizzleReconciliationRepository = (
 
           // #141/#247: re-deriva o status do título pelas conciliações ATIVAS restantes (a desta já foi
           // marcada Undone acima). Sem ativa (soma 0) → Paid; senão → Reconciled/PartiallyReconciled.
+          // #406: um marco por desfazimento, com o motivo e o autor do agregado.
+          const undoEventId = newUuid();
+          const undoTrail: FinancialTimelineEntry[] = [];
           for (const item of reconciliation.items) {
+            // #406: status e documento lidos sob `FOR UPDATE`, pela mesma razão do `confirm`.
             const valueRows = await tx
-              .select({ value: finPayables.value })
+              .select({
+                value: finPayables.value,
+                status: finPayables.status,
+                documentId: finPayables.documentId,
+              })
               .from(finPayables)
               .where(eq(finPayables.id, String(item.payableId)))
-              .limit(1);
+              .limit(1)
+              .for('update');
             const value = valueRows[0]?.value;
             if (value === undefined) continue;
 
@@ -410,7 +464,30 @@ export const createDrizzleReconciliationRepository = (
                   inArray(finPayables.status, ['Reconciled', 'PartiallyReconciled']),
                 ),
               );
+
+            // Só narra o que o CAS de fato alcançou: título fora de Conciliado/Parcial (lido sob o
+            // mesmo lock) não muda, e um marco sobre ele diria um desfazimento que não houve.
+            const read = valueRows[0];
+            if (
+              read !== undefined &&
+              (read.status === 'Reconciled' || read.status === 'PartiallyReconciled')
+            ) {
+              undoTrail.push(
+                projectReconciliationStatus({
+                  eventType: 'ReconciliationUndone',
+                  eventId: undoEventId,
+                  documentId: read.documentId as unknown as DocumentId,
+                  payableId: item.payableId as unknown as PayableId,
+                  statusBefore: read.status,
+                  statusAfter: nextStatus,
+                  actor: actorOf(reconciliation.audit.undoneBy),
+                  reason: reconciliation.audit.undoReason,
+                  occurredAt: reconciliation.audit.undoneAt ?? new Date(),
+                }),
+              );
+            }
           }
+          await appendTimelineInTx(tx, undoTrail);
 
           await tx
             .update(finStatementTransactions)

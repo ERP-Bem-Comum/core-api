@@ -29,6 +29,13 @@ export type PayableViewStore = Readonly<{
     payableIds: readonly string[],
     paidAt: string,
   ) => Promise<Result<void, PayableViewStoreError>>;
+  // #61: baixa desfeita — o status volta ao anterior à baixa e `paid_at` SOME. Não basta o
+  // `updateStatus`: ele não toca `paid_at`, e relatório que filtra só pela data seguiria contando
+  // como realizado um título que não está mais pago.
+  unmarkPaid: (
+    payableIds: readonly string[],
+    status: PayableViewStatus,
+  ) => Promise<Result<void, PayableViewStoreError>>;
   list: () => Promise<Result<readonly PayableView[], PayableViewStoreError>>;
   // #239: widget "Últimos pagamentos" — Top-N pagos por `paidAt` desc.
   listRecentPaid: (limit: number) => Promise<Result<readonly PayableView[], PayableViewStoreError>>;

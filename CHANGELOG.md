@@ -6,6 +6,42 @@ a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é reg
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·
 versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
+## [1.0.0-rc.5] — 2026-10-20
+
+### Adicionado
+
+- **financial:** remessa, conciliação e desfazer conciliação na trilha do título (#823, #406) ([#1074](https://github.com/ERP-Bem-Comum/core-api/pull/1074))
+- **financial:** desfazer baixa e trava do voltar para edição ([#1073](https://github.com/ERP-Bem-Comum/core-api/pull/1073))
+- **partners:** RG, nascimento e raça preenchidos depois do cadastro completo ([#1070](https://github.com/ERP-Bem-Comum/core-api/pull/1070))
+- **partners:** leva o genderIdentityDescription (#1067) para a dev — ficou órfão na branch empilhada ([#1068](https://github.com/ERP-Bem-Comum/core-api/pull/1068))
+- **contracts:** número do contrato informável na criação ([#1069](https://github.com/ERP-Bem-Comum/core-api/pull/1069))
+- **reports:** expõe generation por pessoa no GET /reports/team ([#1066](https://github.com/ERP-Bem-Comum/core-api/pull/1066))
+- **partners:** aceita territory no PUT /collaborators/:id ([#1065](https://github.com/ERP-Bem-Comum/core-api/pull/1065))
+- **ci:** issue fecha ao entrar na dev, e deixa de depender da branch default ([#1064](https://github.com/ERP-Bem-Comum/core-api/pull/1064))
+- **deploy:** o template de env e a doc de variáveis passam a ser GERADOS do manifesto ([#1060](https://github.com/ERP-Bem-Comum/core-api/pull/1060))
+- **deploy:** manifesto declara as unidades executáveis e o que exigem ([#1051](https://github.com/ERP-Bem-Comum/core-api/pull/1051))
+- **partners:** editar dados bancários e PIX do colaborador, com autor no histórico ([#1041](https://github.com/ERP-Bem-Comum/core-api/pull/1041))
+
+### Corrigido
+
+- **partners:** normaliza o dado pessoal do colaborador e aplica o "preenche uma vez" em todo comando ([#1080](https://github.com/ERP-Bem-Comum/core-api/pull/1080))
+- **contracts:** número duplicado só pelo índice de sequential_number, e número gerado que colide é gerado de novo ([#1079](https://github.com/ERP-Bem-Comum/core-api/pull/1079))
+
+### Alterado
+
+- **doc:** o registro deixa de mentir — o que a VAN faz e como o repositório roda ([#1058](https://github.com/ERP-Bem-Comum/core-api/pull/1058))
+
+### Interno
+
+- **harness:** a rule que faltava para `src/deploy/`, e a da suíte deixa de afirmar 82/241 ([#1061](https://github.com/ERP-Bem-Comum/core-api/pull/1061))
+
+### Não classificado
+
+1 merge(s) do range sem linha de mensagem convencional no corpo —
+listados aqui para que a ausência seja visível, e não deduzida:
+
+- `55a126fa` — Merge branch 'main' into dev
+
 ## [1.0.0-rc.4] — 2026-10-06
 
 ### ⚠️ Mudanças incompatíveis

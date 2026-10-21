@@ -109,6 +109,9 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
 ]);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'contract-repo-unavailable',
+  // #1071: número GERADO colidiu com digitados concorrentes em todas as tentativas — contenção
+  // transitória, não erro do cliente (que não digitou número nenhum); tentar de novo resolve.
+  'contract-sequential-number-generation-exhausted',
   'amendment-repo-unavailable',
   'document-repository-unavailable',
   'storage-unavailable',
@@ -391,6 +394,10 @@ const contractsRoutes =
         const body = req.body;
         if (body.mode === 'Pending') {
           const result = await deps.createPendingContract({
+            // #1024: número informado é repassado; ausente/vazio → o use case gera.
+            ...(body.sequentialNumber !== undefined
+              ? { sequentialNumber: body.sequentialNumber }
+              : {}),
             title: body.title,
             objective: body.objective,
             originalValueCents: body.originalValueCents,
@@ -421,6 +428,10 @@ const contractsRoutes =
         // O body usa `periodStart`/`periodEnd` (API uniforme entre Pending|Active); o
         // `CreateContractCommand` os nomeia `originalPeriodStart`/`originalPeriodEnd`.
         const result = await deps.createContract({
+          // #1024: número informado é repassado; ausente/vazio → o use case gera.
+          ...(body.sequentialNumber !== undefined
+            ? { sequentialNumber: body.sequentialNumber }
+            : {}),
           title: body.title,
           objective: body.objective,
           signedAt: body.signedAt,

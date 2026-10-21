@@ -1,9 +1,10 @@
 /**
  * TEAM-REPORT-READ — Port de LEITURA (read-only) da projeção "Equipe ABC" (REP-1 · #238).
  *
- * 13 colunas. As 10 do REPORTS-TEAM-ABC (#238) + genderIdentity/race/age, acrescentadas pelo
+ * 14 colunas. As 10 do REPORTS-TEAM-ABC (#238) + genderIdentity/race/age, acrescentadas pelo
  * REPORTS-TEAM-DEMOGRAPHIC-COLUMNS (decisao da P.O. 2026-07-20: replicar o legado, que exibia esses
- * campos por pessoa nesta tela). `dateOfBirth` segue barrado — so a idade derivada atravessa.
+ * campos por pessoa nesta tela), + `generation` pelo REPORTS-TEAM-GENERATION (#1055). `dateOfBirth`
+ * segue barrado — so a idade e a geracao derivadas atravessam.
  * `program` não existe no core-api (agregado `Collaborator` do partners não modela programa
  * de atuação) — sempre `null`. Consumido pela borda HTTP (`GET /reports/team`).
  */
@@ -26,6 +27,10 @@ export type TeamMember = Readonly<{
   genderIdentity: string | null;
   race: string | null;
   age: number | null;
+  // REPORTS-TEAM-GENERATION (#1055): geração derivada do ANO de nascimento (recorte Pew),
+  // derivada no `partners`. Código, NUNCA `null` (sem data de nascimento → `'NA'`); nem a data
+  // nem o ano atravessam — só o código, igual a `age`.
+  generation: string;
 }>;
 
 export type TeamReportReadError = 'team-report-read-unavailable';

@@ -9,6 +9,10 @@
 import * as z from 'zod/v4';
 
 import { uuidV4 } from '#src/shared/http/uuid-schema.ts';
+import {
+  RG_MAX_LENGTH,
+  GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH,
+} from '../../domain/collaborator/personal-data.ts';
 
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5; // default do legado (PaginatedEnvelope.Limit).
@@ -156,6 +160,7 @@ export const collaboratorDetailSchema = z.object({
   dateOfBirth: z.string().nullable(),
   employmentRelationship: z.string(),
   genderIdentity: z.string().nullable(),
+  genderIdentityDescription: z.string().nullable(),
   race: z.string().nullable(),
   education: z.string().nullable(),
   foodCategory: z.string().nullable(),
@@ -215,6 +220,35 @@ export type CollaboratorPaginatedDto = z.infer<typeof collaboratorPaginatedSchem
 
 // ─── P2 — escrita ────────────────────────────────────────────────────────────
 
+// #1072: os limites de RG e da descrição de gênero vêm do domínio — fonte única. A validação nas duas
+// camadas é deliberada (ADR-0027): a borda dá o 400 cedo, o domínio cobre quem não passa por aqui
+// (ETL). O NÚMERO é um só, para que as duas nunca discordem.
+
+/**
+ * Nascimento como DIA CIVIL (#1072). Aceita `YYYY-MM-DD` ou data-hora ISO (com `Z`, offset ou sem
+ * fuso) e guarda o dia ESCRITO — `1990-05-10T22:00:00-03:00` é 10/05, não 11/05 em UTC. Sai como
+ * `Date` à meia-noite UTC desse dia. Branco vira `null` (= mantém, contrato do #1070).
+ *
+ * Substitui o `z.coerce.date()`, que convertia o instante para UTC (trocando o dia), aceitava
+ * `0` (1970-01-01), texto livre e calendário impossível (`2026-02-30` virava 02/03). Uma data errada
+ * gravada fica TRAVADA pelo "preenche uma vez", por isso a borda é mais estrita aqui. Data futura e
+ * ano fora da faixa do DATETIME são invariantes do domínio (422).
+ */
+const civilDateSchema = z
+  .union([z.iso.date(), z.iso.datetime({ offset: true, local: true }), z.literal('')])
+  .transform((raw): Date | null => {
+    if (raw === '') return null;
+    // `setUTCFullYear`, não `Date.UTC`: este mapeia os anos 0–99 para 1900–1999 (`0050` viraria
+    // 1950 e passaria como data válida). O domínio recusa o ano abaixo do piso do DATETIME.
+    const midnight = new Date(0);
+    midnight.setUTCFullYear(
+      Number(raw.slice(0, 4)),
+      Number(raw.slice(5, 7)) - 1,
+      Number(raw.slice(8, 10)),
+    );
+    return midnight;
+  });
+
 /**
  * Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado + payment
  * target (US1). `bankAccount`/`pixKey` OPCIONAIS (omitidos → null); `agency` validada no domínio.
@@ -235,14 +269,24 @@ export const createCollaboratorBodySchema = z.object({
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
 
 /**
- * Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais e território não
- * entram aqui. Banco/PIX (#1029) entram com semântica PRÓPRIA: ausente ou `null` MANTÉM o gravado;
- * objeto valida e substitui.
+ * Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais não entram aqui,
+ * exceto RG/nascimento/raça (preenche-uma-vez, abaixo).
+ * Banco/PIX (#1029) e território (#1053) entram com semântica PRÓPRIA: ausente ou `null` MANTÉM o
+ * gravado; objeto valida e substitui.
  *
  * ⚠️ Sem `.default(null)` e sem `null` = remover, ao contrário do create e do PUT do Fornecedor. O
  * front em produção envia `bankAccount: null, pixKey: null` em TODO PUT de colaborador (antes eram
  * descartados pelo `omit`); dar a esse `null` o sentido de "remover" apagaria os dados bancários a
  * cada edição cadastral. Não "alinhar" com o Fornecedor sem antes mudar todos os clientes.
+ *
+ * #1053: território pode ser SUBSTITUÍDO, nunca APAGADO. Ausente ou `null` mantém; objeto com ao
+ * menos um campo preenchido valida (UF por sigla IBGE no domínio) e substitui — substituição parcial
+ * permitida; zerar UF e município de quem já tem território é recusado no domínio com
+ * `collaborator-territory-removal-forbidden` (422).
+ *
+ * RG, nascimento e raça são preenchidos UMA vez (decisão da P.O., 19/10/2026): ausente ou `null`
+ * mantém; com o campo vazio no gravado, grava; igual ao gravado mantém; diferente do gravado é
+ * recusado com `collaborator-personal-data-immutable` (409).
  */
 export const updateCollaboratorBodySchema = createCollaboratorBodySchema
   .omit({ bankAccount: true, pixKey: true, territory: true })
@@ -255,6 +299,22 @@ export const updateCollaboratorBodySchema = createCollaboratorBodySchema
       .nullable()
       .optional()
       .meta({ description: 'Ausente ou null mantém a chave gravada; objeto substitui' }),
+    territory: territorySchema.nullable().optional().meta({
+      description:
+        'Ausente ou null mantém o território gravado; objeto com ao menos um campo preenchido substitui (parcial permitido); zerar os dois de quem já tem território é recusado (422)',
+    }),
+    rg: z.string().trim().max(RG_MAX_LENGTH).nullable().optional().meta({
+      description:
+        'Até 20 caracteres. Ausente, null ou branco mantém; preenche se vazio; trocar o RG gravado é recusado (409)',
+    }),
+    dateOfBirth: civilDateSchema.nullable().optional().meta({
+      description:
+        'Dia civil: YYYY-MM-DD ou data-hora ISO (vale o dia escrito, não o UTC). Ausente, null ou "" mantém; preenche se vazio; trocar a data gravada é recusado (409); data futura → 422',
+    }),
+    race: z.string().nullable().optional().meta({
+      description:
+        'Ausente ou null mantém; preenche se vazio (enum validado no domínio); trocar a raça gravada é recusado (409)',
+    }),
   });
 
 export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
@@ -265,9 +325,20 @@ export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema
  * `CompleteRegistrationCollaborator` legado.
  */
 export const completeRegistrationBodySchema = z.object({
-  rg: z.string().nullable().default(null),
-  dateOfBirth: z.coerce.date().nullable().default(null),
+  // #1072: RG, nascimento e raça seguem o "preenche uma vez" também aqui — `null` (inclusive o
+  // default de campo ausente) MANTÉM o que o PUT já gravou; valor diferente do gravado → 409.
+  rg: z.string().trim().max(RG_MAX_LENGTH).nullable().default(null),
+  dateOfBirth: civilDateSchema.nullable().default(null),
   genderIdentity: z.string().nullable().default(null),
+  // #1054: texto livre de "Outra identidade de gênero". O teto (120) é contrato de produto, abaixo da
+  // coluna (255); a coerência com genderIdentity = OUTRO é invariante de domínio (422). autocadastro
+  // herda via extend.
+  genderIdentityDescription: z
+    .string()
+    .trim()
+    .max(GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .default(null),
   race: z.string().nullable().default(null),
   education: z.string().nullable().default(null),
   foodCategory: z.string().nullable().default(null),

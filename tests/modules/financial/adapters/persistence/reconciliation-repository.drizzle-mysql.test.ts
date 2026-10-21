@@ -9,7 +9,7 @@
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
@@ -25,7 +25,9 @@ import { createDrizzleExpectedCounterpartStore } from '#src/modules/financial/ad
 import { createDrizzleReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.drizzle.ts';
 import {
   finCedenteAccounts,
+  finDocumentTimeline,
   finPayables,
+  finTimelineFieldChanges,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
@@ -239,6 +241,62 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.equal(snap.ok && snap.value[0]?.status === 'Paid', true);
       const tx = await d.statements.findTransaction(txId);
       assert.equal(tx.ok && tx.value?.transaction.reconciliationStatus === 'Pending', true);
+    });
+
+    // #406 — conciliar e desfazer deixam marco na trilha do TÍTULO, na mesma transação. Contra o
+    // banco prova-se o que o fake não prova: o CHECK aceita os literais (migration 0060) e o status
+    // anterior vem da leitura sob lock, não de suposição.
+    it('#406: conciliar e desfazer gravam PayableReconciled e ReconciliationUndone na trilha', async () => {
+      const RECONCILER = '99999999-9999-4999-8999-999999999999';
+      const UNDOER = '88888888-8888-4888-8888-888888888888';
+      const cedenteId = await seedActiveAccount();
+      const payableId = await seedPaidPayable(3000);
+      const txId = await seedTransaction(cedenteId, 3000);
+
+      const d = deps();
+      const confirmed = await confirmReconciliation(d)({
+        transactionId: txId,
+        payableIds: [payableId],
+        reconciledBy: RECONCILER,
+      });
+      assert.equal(confirmed.ok, true, JSON.stringify(confirmed));
+      if (!confirmed.ok) return;
+      const undone = await undoReconciliation(d)({
+        reconciliationId: String(confirmed.value.reconciliationId),
+        undoneBy: UNDOER,
+        reason: 'conciliado no título errado',
+      });
+      assert.equal(undone.ok, true, JSON.stringify(undone));
+
+      const entries = await handle.db
+        .select()
+        .from(finDocumentTimeline)
+        .where(
+          and(
+            eq(finDocumentTimeline.targetId, payableId),
+            inArray(finDocumentTimeline.eventType, ['PayableReconciled', 'ReconciliationUndone']),
+          ),
+        );
+      const reconciled = entries.find((e) => e.eventType === 'PayableReconciled');
+      const undoneEntry = entries.find((e) => e.eventType === 'ReconciliationUndone');
+      assert.ok(reconciled !== undefined, 'falta o marco da conciliação');
+      assert.ok(undoneEntry !== undefined, 'falta o marco do desfazimento');
+      assert.equal(reconciled.targetKind, 'Payable');
+      assert.equal(reconciled.actorRef, RECONCILER);
+      assert.equal(reconciled.reason, null);
+      assert.equal(undoneEntry.actorRef, UNDOER);
+      assert.equal(undoneEntry.reason, 'conciliado no título errado');
+
+      const statusChangeOf = async (entryId: string) => {
+        const rows = await handle.db
+          .select()
+          .from(finTimelineFieldChanges)
+          .where(eq(finTimelineFieldChanges.timelineEntryId, entryId));
+        const status = rows.find((r) => r.field === 'status');
+        return [status?.beforeValue, status?.afterValue];
+      };
+      assert.deepEqual(await statusChangeOf(reconciled.id), ['Paid', 'Reconciled']);
+      assert.deepEqual(await statusChangeOf(undoneEntry.id), ['Reconciled', 'Paid']);
     });
   });
 }

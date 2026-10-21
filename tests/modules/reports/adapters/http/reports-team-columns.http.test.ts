@@ -94,6 +94,8 @@ const member = (over: Partial<TeamMemberWithDemographics> = {}): TeamMemberWithD
   genderIdentity: 'MULHER_CIS',
   race: 'PARDO',
   age: 41,
+  // #1055: geração no contrato de `TeamMember` (idade 41 → Millennial).
+  generation: 'MILLENNIAL',
   ...over,
 });
 
@@ -108,6 +110,8 @@ const memberWithoutDemographics = (): TeamMemberWithDemographics =>
     genderIdentity: null,
     race: null,
     age: null,
+    // Sem data de nascimento → geração 'NA' (NUNCA null — #1055).
+    generation: 'NA',
   });
 
 interface AppHandle {
@@ -254,7 +258,7 @@ describe('reports/http — GET /reports/team: colunas demográficas (REPORTS-TEA
     assert.equal(first['experienceInPublicSector'], true);
   });
 
-  it('CA6: o payload tem EXATAMENTE 13 campos (10 atuais + 3 novos)', async () => {
+  it('CA6: o payload tem EXATAMENTE 14 campos (10 atuais + 4 novos)', async () => {
     // Arrange
     const team = await rows();
 
@@ -262,6 +266,9 @@ describe('reports/http — GET /reports/team: colunas demográficas (REPORTS-TEA
     const keys = [...Object.keys(team[0]!)].sort();
 
     // Assert
-    assert.deepEqual(keys, [...CURRENT_TEN_KEYS, 'genderIdentity', 'race', 'age'].sort());
+    assert.deepEqual(
+      keys,
+      [...CURRENT_TEN_KEYS, 'genderIdentity', 'race', 'age', 'generation'].sort(),
+    );
   });
 });

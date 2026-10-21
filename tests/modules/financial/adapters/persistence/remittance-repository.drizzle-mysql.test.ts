@@ -36,7 +36,13 @@ import {
   finPayables,
   finRemittances,
   finRemittancePayables,
+  finDocumentTimeline,
+  finTimelineFieldChanges,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import type { UserRef } from '#src/shared/kernel/user-ref.ts';
+import type { DocumentId } from '#src/modules/financial/domain/shared/document-id.ts';
+import type { PayableId } from '#src/modules/financial/domain/shared/payable-id.ts';
+import { projectTransmission } from '#src/modules/financial/domain/timeline/projection.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const account = CedenteAccountId.generate();
@@ -858,6 +864,115 @@ if (!process.env['MYSQL_INTEGRATION']) {
           'o outbox não cresce a cada tentativa',
         );
         assert.equal(await statusDoTitulo(titulo.payableId), 'Approved');
+      });
+    });
+
+    // #823 — a trilha da transmissão, gravada na MESMA transação da transição. O que se prova contra
+    // o banco é o que o fake não pode provar: o CHECK `ck_fin_tl_event_type` aceita o literal
+    // (migration 0060), as field changes vão à tabela 1FN, e a recusa do CAS desfaz a trilha junto.
+    describe('trilha da transmissão (#823)', () => {
+      const ACTOR = '7c2d9a51-3f4e-4b8a-9c1d-2e5f6a7b8c9d' as UserRef;
+
+      const trailOf = (rem: ReturnType<typeof build>) => {
+        const eventId = newUuid();
+        return rem.payables.map((p) =>
+          projectTransmission({
+            eventId,
+            documentId: p.documentId as unknown as DocumentId,
+            payableId: p.payableId as unknown as PayableId,
+            nsa: rem.nsa,
+            yourNumber: p.yourNumber,
+            actor: ACTOR,
+            occurredAt: new Date('2026-08-11T14:00:00.000Z'),
+          }),
+        );
+      };
+
+      const trailRowsOf = async (documentId: string) => {
+        const entries = await handle.db
+          .select()
+          .from(finDocumentTimeline)
+          .where(eq(finDocumentTimeline.documentId, documentId));
+        const ids = entries.map((e) => e.id);
+        const changes =
+          ids.length === 0
+            ? []
+            : await handle.db
+                .select()
+                .from(finTimelineFieldChanges)
+                .where(inArray(finTimelineFieldChanges.timelineEntryId, ids));
+        return { entries, changes };
+      };
+
+      it('grava PayableTransmitted no título, com autor, status, NSA e your_number', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const titulo = await seedPayable();
+        const rem = build([titulo]);
+
+        const saved = await repo.saveAll([rem], [], trailOf(rem));
+        assert.equal(saved.ok, true, `esperava aceitar, veio ${isErr(saved) ? saved.error : '?'}`);
+
+        const { entries, changes } = await trailRowsOf(titulo.documentId);
+        assert.equal(entries.length, 1);
+        const entry = entries[0];
+        assert.ok(entry !== undefined);
+        assert.equal(entry.eventType, 'PayableTransmitted');
+        assert.equal(entry.targetKind, 'Payable');
+        assert.equal(entry.targetId, titulo.payableId);
+        assert.equal(entry.actorRef, ACTOR);
+        assert.equal(entry.reason, null);
+
+        const byField = new Map(changes.map((c) => [c.field, c]));
+        assert.equal(byField.get('status')?.beforeValue, 'Approved');
+        assert.equal(byField.get('status')?.afterValue, 'Transmitted');
+        assert.equal(byField.get('remittanceNsa')?.afterValue, String(rem.nsa));
+        assert.equal(byField.get('remittanceYourNumber')?.afterValue, rem.payables[0]?.yourNumber);
+      });
+
+      it('CAS recusado (título não aprovado) não deixa trilha — desfaz junto', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const titulo = await seedPayable('Open');
+        const rem = build([titulo]);
+
+        const saved = await repo.saveAll([rem], [], trailOf(rem));
+        assert.equal(isErr(saved) ? saved.error : null, 'remittance-payable-not-approved');
+        assert.equal((await trailRowsOf(titulo.documentId)).entries.length, 0);
+      });
+
+      // CA2 da #823: título em DUAS remessas (a primeira descartada) mostra as duas, cada uma com o
+      // seu NSA — é trilha, não campo.
+      it('título em duas remessas ganha dois marcos, cada um com o NSA da sua', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const titulo = await seedPayable();
+
+        const primeira = build([titulo]);
+        assert.equal((await repo.saveAll([primeira], [], trailOf(primeira))).ok, true);
+        const failed = markFailed(primeira, '2026-08-11 15:00:00.000', 'sem confirmacao');
+        assert.ok(isOk(failed));
+        assert.equal((await repo.save(failed.value.remittance, failed.value.events)).ok, true);
+        const discarded = discard({
+          remittance: failed.value.remittance,
+          at: '2026-08-11 16:00:00.000',
+          reason: 'operador conferiu no banco: nao saiu',
+          fileInBucket: true,
+        });
+        assert.ok(isOk(discarded));
+        assert.equal(
+          (await repo.save(discarded.value.remittance, discarded.value.events)).ok,
+          true,
+        );
+
+        const segunda = build([titulo]);
+        assert.equal((await repo.saveAll([segunda], [], trailOf(segunda))).ok, true);
+
+        const { entries, changes } = await trailRowsOf(titulo.documentId);
+        assert.equal(entries.length, 2);
+        // NSAs numéricos e em ordem de emissão: `primeira` saiu antes de `segunda`.
+        const nsas = changes
+          .filter((c) => c.field === 'remittanceNsa')
+          .map((c) => Number(c.afterValue))
+          .sort((a, b) => a - b);
+        assert.deepEqual(nsas, [primeira.nsa, segunda.nsa]);
       });
     });
   });

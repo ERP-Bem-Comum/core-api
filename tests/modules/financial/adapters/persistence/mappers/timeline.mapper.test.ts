@@ -21,6 +21,7 @@ const baseRow: TimelineEntryRow = {
   eventType: 'DocumentSaved',
   occurredAt: new Date('2026-06-16T12:00:00.000Z'),
   actorRef: null,
+  reason: null,
 };
 
 describe('mapRowToTimelineEntry — defesa de event_type da trilha (#56b)', () => {

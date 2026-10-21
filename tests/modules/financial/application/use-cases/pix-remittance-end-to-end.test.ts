@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk, ok } from '#src/shared/index.ts';
+import type { UserRef } from '#src/shared/kernel/user-ref.ts';
 import { previewRemittance } from '#src/modules/financial/application/use-cases/preview-remittance.ts';
 import { generateRemittance } from '#src/modules/financial/application/use-cases/generate-remittance.ts';
 import type {
@@ -174,6 +175,7 @@ describe('#948 CA6 — o Pix vai do pré-voo ao objeto no armazenamento', () => 
     const generated = await s.generate({
       cedenteAccountId: CEDENTE_ACCOUNT_ID,
       payableIds: [PAYABLE_ID],
+      generatedBy: '7c2d9a51-3f4e-4b8a-9c1d-2e5f6a7b8c9d' as UserRef,
     });
     assert.ok(isOk(generated), `geração falhou: ${isErr(generated) ? generated.error : '?'}`);
 

@@ -8,7 +8,10 @@ import type {
 import type { OutboxPort } from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import { InMemoryOutbox } from '../../outbox/outbox.in-memory.ts';
-import { formatSequentialNumber } from '../../../domain/contract/sequential-number.ts';
+import {
+  formatSequentialNumber,
+  sequentialNumberSpellings,
+} from '../../../domain/contract/sequential-number.ts';
 import { Contract as ContractAgg } from '../../../domain/contract/contract.ts';
 import * as PlainDate from '../../../../../shared/kernel/plain-date.ts';
 import type { PlainDate as PlainDateType } from '../../../../../shared/kernel/plain-date.ts';
@@ -59,8 +62,12 @@ export const InMemoryContractRepository = (
     findById: async (id) => ok(map.get(id) ?? null),
     findBySequentialNumber: async (sequentialNumber) =>
       ok([...map.values()].find((c) => c.sequentialNumber === sequentialNumber) ?? null),
+    // #1024: espelha o Drizzle — pula as grafias já ocupadas (número informado à mão não move
+    // o contador, e o gerado não pode colidir com ele).
     nextSequentialNumber: async (year) => {
-      const next = (seqByYear.get(year) ?? 0) + 1;
+      const taken = new Set([...map.values()].map((c) => c.sequentialNumber));
+      let next = (seqByYear.get(year) ?? 0) + 1;
+      while (sequentialNumberSpellings(next, year).some((s) => taken.has(s))) next += 1;
       seqByYear.set(year, next);
       return ok(formatSequentialNumber(next, year));
     },
@@ -80,6 +87,12 @@ export const InMemoryContractRepository = (
     // CA-4: save persiste o agregado na map E appenda eventos no outbox.
     // Se o outbox retornar erro, propagamos como ContractRepositoryError.
     save: async (contract: Contract, events: readonly ContractsModuleEvent[]) => {
+      // #1024: espelha o `UNIQUE(sequential_number)` do MySQL — outro contrato com o mesmo número
+      // é conflito, não sobrescrita silenciosa.
+      const clash = [...map.values()].some(
+        (c) => c.id !== contract.id && c.sequentialNumber === contract.sequentialNumber,
+      );
+      if (clash) return err('contract-repo-conflict');
       map.set(contract.id, contract);
       if (events.length > 0) {
         const r = await outbox.append(events);

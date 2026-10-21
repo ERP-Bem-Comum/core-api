@@ -3,6 +3,7 @@
 // mudança por campo rastreado. Domínio EN-puro: produz `fieldName` (EN) + valores como
 // texto neutro; o label PT e a formatação do CSV legado ficam no adapter/export.
 
+import { blankToNull, civilDayIso } from './personal-data.ts';
 import type { Collaborator } from './types.ts';
 
 /** Mudança de um campo: nome interno (EN) + valor antes/depois serializado (texto). */
@@ -40,6 +41,16 @@ const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>>
   territory: territoryText(c),
   bankAccount: bankText(c),
   pixKey: pixText(c),
+  // RG, nascimento e raça podem ser preenchidos pelo PUT depois do cadastro completo — entram no
+  // audit trail. Os dois passam pela MESMA normalização do "preenche uma vez" (#1072): sem ela, a
+  // limpeza de um `''` legado ou de espaços nas pontas virava linha "RG: '' → null" atribuída a quem
+  // fez o PUT. Nascimento é dia civil, pelo mesmo helper da comparação.
+  rg: blankToNull(c.rg),
+  dateOfBirth:
+    c.dateOfBirth === null || Number.isNaN(c.dateOfBirth.getTime())
+      ? null
+      : civilDayIso(c.dateOfBirth),
+  race: c.race,
 });
 
 /**
