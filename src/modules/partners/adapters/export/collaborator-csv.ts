@@ -23,7 +23,6 @@ const HEADER: readonly string[] = [
   'rg',
   'dateOfBirth',
   'genderIdentity',
-  'genderIdentityDescription',
   'race',
   'education',
   'foodCategory',
@@ -37,13 +36,18 @@ const HEADER: readonly string[] = [
   'experienceInThePublicSector',
   'disableBy',
   'deactivatedAt',
+  // #1054/#1072: coluna nova entra SEMPRE no fim — quem lê o CSV por posição (planilha, macro) não
+  // pode ver as colunas anteriores deslocadas. No meio, ela empurrava `race`…`deactivatedAt` uma
+  // posição, sem erro nenhum para o leitor.
+  'genderIdentityDescription',
 ];
 
 const isoOrEmpty = (d: Date | null): string => (d === null ? '' : d.toISOString());
 const boolOrEmpty = (b: boolean | null): string => (b === null ? '' : String(b));
 
 // Achata o agregado em 27 células (ordem do HEADER). Campos pessoais nullable viram '' quando null.
-// `disableBy`/`deactivatedAt` discriminados por `status` (só nos Inactive).
+// `disableBy`/`deactivatedAt` discriminados por `status` (só nos Inactive); a descrição de gênero
+// fecha a linha (última coluna).
 const collaboratorToCells = (c: Collaborator): readonly string[] => {
   const core = [
     c.id,
@@ -61,7 +65,6 @@ const collaboratorToCells = (c: Collaborator): readonly string[] => {
     c.rg ?? '',
     isoOrEmpty(c.dateOfBirth),
     c.genderIdentity ?? '',
-    c.genderIdentityDescription ?? '',
     c.race ?? '',
     c.education ?? '',
     c.foodCategory ?? '',
@@ -74,11 +77,12 @@ const collaboratorToCells = (c: Collaborator): readonly string[] => {
     c.biography ?? '',
     boolOrEmpty(c.experienceInThePublicSector),
   ];
+  const trailing = c.genderIdentityDescription ?? '';
   switch (c.status) {
     case 'Active':
-      return [...core, ...personal, '', ''];
+      return [...core, ...personal, '', '', trailing];
     case 'Inactive':
-      return [...core, ...personal, c.disableBy, c.deactivatedAt.toISOString()];
+      return [...core, ...personal, c.disableBy, c.deactivatedAt.toISOString(), trailing];
   }
 };
 

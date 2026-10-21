@@ -175,12 +175,24 @@ describe('Collaborator.completeRegistration — "Outra identidade de gênero" (#
     assert.equal(r.error, 'gender-identity-description-requires-other');
   });
 
-  it('descrição em branco com genderIdentity ≠ OUTRO é ignorada (não recusa)', () => {
+  it('descrição em branco com genderIdentity ≠ OUTRO é ignorada (não recusa e grava null)', () => {
     const r = Collaborator.completeRegistration(
       preRegistered(),
       { ...baseComplete, genderIdentity: 'MULHER_CIS', genderIdentityDescription: '   ' },
       NOW,
     );
     assert.ok(r.ok, `esperado ok: ${r.ok ? '' : r.error}`);
+    // #1072 CA3: "ignorada" é afirmação sobre o valor GRAVADO, não só sobre o `ok`.
+    assert.equal(r.value.collaborator.genderIdentityDescription, null);
+  });
+
+  it('#1072: descrição com espaços nas pontas é gravada sem eles', () => {
+    const r = Collaborator.completeRegistration(
+      preRegistered(),
+      { ...baseComplete, genderIdentity: 'OUTRO', genderIdentityDescription: '  Agênero  ' },
+      NOW,
+    );
+    assert.ok(r.ok, `esperado ok: ${r.ok ? '' : r.error}`);
+    assert.equal(r.value.collaborator.genderIdentityDescription, 'Agênero');
   });
 });

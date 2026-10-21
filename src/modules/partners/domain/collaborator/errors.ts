@@ -33,6 +33,12 @@ export type CollaboratorError =
   // RG, nascimento e raça: o PUT preenche o que está vazio, mas não troca o que já foi gravado
   // (decisão da P.O., 19/10/2026).
   | 'collaborator-personal-data-immutable'
+  // #1072: limites e nascimento validados no domínio (não só na borda) — sem eles o MySQL recusa
+  // (1406/1292) e o repositório devolve `collaborator-repo-unavailable`, um 503 falso.
+  | 'collaborator-rg-too-long'
+  | 'collaborator-gender-identity-description-too-long'
+  | 'collaborator-date-of-birth-invalid'
+  | 'collaborator-date-of-birth-in-future'
   | PaymentTargetError
   | SexError
   | MaritalStatusError
