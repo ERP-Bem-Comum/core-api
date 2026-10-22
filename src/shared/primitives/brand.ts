@@ -1,34 +1,50 @@
 /**
- * Marcação nominal de tipos (Brand types / nominal typing).
- *
- * Origem: handbook/interviews/0001-functional-ddd-domain-refresh.md §Bloco B
- *   - DO B§11: shared/brand.ts modernizado: unique symbol global + literal K.
- *   - DON'T B§12: declare const brand espalhado em cada arquivo de VO — centraliza aqui.
- *   - CONSIDER B§3: BrandOf<T> útil em testes/diagnóstico.
- *
- * USO RESTRITO: apenas VOs folha (Money, Period, ContractId, etc).
- * NUNCA em agregados — vide Bloco A DON'T §1 do master doc.
+ * Chave da marca nominal de {@link Brand}. Uma propriedade de chave textual `"__brand"` não a
+ * reproduz: `string & { readonly __brand: 'ContractId' }` não satisfaz
+ * `Brand<string, 'ContractId'>`.
  */
-// Nome canônico `__brand` é prescrito literalmente pela entrevista 0001 §6 (followup
-// L261-294) como pattern idiomático TS para brand symbols. O `naming-convention` aceita
-// 1 leading underscore (`leadingUnderscore: 'allow'`), não 2 — a exceção cirúrgica vive na
-// allowlist de `tests/cleanup/lint-gaps.test.ts`, mais conservadora que ampliar a regra.
 declare const __brand: unique symbol;
 
 /**
- * Brand<T, K> — marca um tipo T com uma identidade nominal K.
- * O símbolo `__brand` é único globalmente (declare const com unique symbol),
- * impossibilitando colisão estrutural acidental entre dois Brand de K iguais.
+ * Tipo `T` marcado com a identidade nominal `K`, sem efeito em runtime: o valor marcado é o
+ * próprio valor de origem, e um objeto marcado não ganha chave nem símbolo adicional.
+ *
+ * `Brand<T, K>` é atribuível a `T` sem cast e preserva os membros de `T`; `T` puro não é
+ * atribuível a `Brand<T, K>`. Dois Brand com o mesmo `T` e literais `K` disjuntos não são
+ * atribuíveis entre si em nenhuma direção, assim como dois Brand com o mesmo `K` e tipos `T` sem
+ * relação de subtipo (`number` e `string`). Com o mesmo `K`, `Brand<T1, K>` é atribuível a
+ * `Brand<T2, K>` quando `T1` é atribuível a `T2`. Dois Brand declarados separadamente com o mesmo
+ * `T` e o mesmo `K` são o mesmo tipo e se atribuem livremente.
+ *
+ * `Brand<T, K>` é atribuível a `Brand<T, K | Outro>`, mas não o inverso, e `Brand<T, string>`
+ * aceita qualquer Brand do mesmo `T`. Marcar um `Brand<T, K>` com um segundo `K` disjunto do
+ * primeiro reduz o tipo a `never`; marcá-lo de novo com o mesmo `K`, ou com uma união que contém
+ * `K`, resolve para o próprio `Brand<T, K>`.
+ *
+ * @typeParam T - Tipo de origem que recebe a marca.
+ * @typeParam K - Identidade nominal: qualquer subtipo de `string` (literal, união de literais,
+ * template literal) ou o próprio `string`.
+ * @example
+ * ```ts
+ * type ContractIdLike = Brand<string, 'ContractId'>;
+ * const id = 'CTR-001' as ContractIdLike;
+ * const plain: string = id;
+ * ```
  */
 export type Brand<T, K extends string> = T & { readonly [__brand]: K };
 
 /**
- * BrandOf<B> — recupera o literal K de um tipo brandado.
- * Útil em testes e mensagens de diagnóstico.
+ * Identidade `K` de um tipo marcado com {@link Brand}. Resolve para `never` quando o tipo é
+ * `string`, `number`, objeto plano, `never` ou `unknown`, ou quando a marca é uma propriedade de
+ * chave textual `"__brand"`.
  *
+ * Distribui sobre uniões: uma união de Brand resolve para a união das identidades, um `K` união
+ * resolve para a mesma união e os membros não marcados da união são descartados.
+ *
+ * @typeParam B - Tipo do qual a identidade da marca é extraída.
  * @example
- *   type X = BrandOf<Money>;        // 'Money'
- *   type Y = BrandOf<ContractId>;   // 'ContractId'
- *   type Z = BrandOf<string>;       // never (tipo não-brandado)
+ * ```ts
+ * const kind: BrandOf<Money> = 'Money';
+ * ```
  */
 export type BrandOf<B> = B extends { readonly [__brand]: infer K } ? K : never;
