@@ -352,6 +352,63 @@ describe('Contract.applyHomologatedAdjustment — ValueIncrease', () => {
   });
 });
 
+describe('Contract.applyHomologatedAdjustment — ValueIncrease no limite seguro', () => {
+  const MAX = Number.MAX_SAFE_INTEGER;
+  const activeWith = (cents: number) => {
+    const r = Contract.create(validInput({ originalValue: money(cents) }));
+    if (!r.ok) throw new Error('test setup: contract');
+    return r.value.contract;
+  };
+  const increase = (cents: number): ContractAdjustment => ({
+    kind: 'ValueIncrease',
+    amount: money(cents),
+    amendmentId: AmendmentId.generate(),
+  });
+
+  const REJECTED: readonly (readonly [number, number])[] = [
+    [MAX, 1],
+    [MAX - 5, 6],
+    [MAX, MAX],
+    [1, MAX],
+  ];
+  for (const [current, amount] of REJECTED) {
+    it(`acima do teto: ${current} + ${amount} → ContractValueWouldExceedSafeInteger e contrato inalterado`, () => {
+      const contract = activeWith(current);
+      const snapshot = JSON.stringify(contract);
+      const r = Contract.applyHomologatedAdjustment(contract, increase(amount), D('2026-03-01'));
+      assert.equal(isErr(r), true);
+      if (r.ok) return;
+      assert.deepEqual(r.error, {
+        tag: 'ContractValueWouldExceedSafeInteger',
+        currentValue: { cents: current },
+        attemptedIncrease: { cents: amount },
+      });
+      assert.equal(JSON.stringify(contract), snapshot, 'o contrato de entrada não muda');
+      assert.equal(contract.homologatedAmendmentIds.length, 0);
+    });
+  }
+
+  const ACCEPTED: readonly (readonly [number, number])[] = [
+    [MAX - 1, 1],
+    [MAX - 6, 6],
+    [10_000_000, 500_000],
+  ];
+  for (const [current, amount] of ACCEPTED) {
+    it(`vizinha válida: ${current} + ${amount} = ${current + amount}, contrato segue Active`, () => {
+      const r = Contract.applyHomologatedAdjustment(
+        activeWith(current),
+        increase(amount),
+        D('2026-03-01'),
+      );
+      assert.equal(isOk(r), true);
+      if (!r.ok) return;
+      assert.equal(r.value.contract.currentValue.cents, current + amount);
+      assert.equal(r.value.contract.status, 'Active');
+      assert.equal(r.value.contract.homologatedAmendmentIds.length, 1);
+    });
+  }
+});
+
 describe('Contract.applyHomologatedAdjustment — ValueDecrease', () => {
   it('decreases currentValue when result is non-negative', () => {
     const contract = createActive();

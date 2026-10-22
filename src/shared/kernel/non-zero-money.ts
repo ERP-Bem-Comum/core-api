@@ -1,47 +1,54 @@
 import { type Result, ok, err } from '../primitives/result.ts';
-import type { Money } from './money.ts';
+import { type Money, type MoneyError, fromCents } from './money.ts';
 
 /**
- * Refinamento de `Money` que garante estática e atemporal: `m.cents !== 0`.
+ * `Money` refinado que, quando produzido por {@link from}, tem `cents` inteiro de 1 a
+ * `Number.MAX_SAFE_INTEGER`, inclusive.
  *
- * Rota α (DO D§25): codifica invariante reusável em qualquer contexto que
- * exija "valor monetário não-zero" — Contratos, Faturamento, Orçamento, etc.
+ * É subtipo de `Money`: é atribuível a `Money` e é aceito sem cast por `Money.add`,
+ * `Money.subtract`, `Money.equals` e `Money.greaterThan`. `Money.add` entre dois
+ * `NonZeroMoney` devolve `Result<Money, 'money-exceeds-safe-integer'>`, não `NonZeroMoney`.
+ * `Money.subtract` entre dois `NonZeroMoney` devolve `Result<Money, 'money-negative-result'>`, e
+ * entre dois iguais devolve `ok` com zero centavos. Mantém a marca de `Money`
+ * (`BrandOf<NonZeroMoney>` é `'Money'`).
  *
- * Shared Kernel (§3.H.4 DO H§36): cross-BC por extensão de Money.
+ * `Money` não é atribuível a `NonZeroMoney`.
  *
- * ## Polimorfismo (widening automático)
- *
- * `NonZeroMoney` é definida como `Money & { readonly __nonZeroMoney: true }`.
- * Isso garante `NonZeroMoney extends Money` (subtipo estrutural), portanto
- * operações que aceitam `Money` (`add`, `subtract`, `equals`) aceitam
- * `NonZeroMoney` sem cast.
- *
- * ## Por que não `Brand<Money, 'NonZeroMoney'>`?
- *
- * `Brand<T, K>` é `T & { [__brand]: K }` onde `__brand` é `unique symbol`.
- * `Brand<Money, 'NonZeroMoney'>` = `Money & { [__brand]: 'NonZeroMoney' }` =
- * `{ cents } & { [__brand]: 'Money' } & { [__brand]: 'NonZeroMoney' }`.
- * Como `__brand` é `unique symbol`, a propriedade teria dois tipos literais
- * incompatíveis → `never`. O campo auxiliar `__nonZeroMoney` tem nome distinto,
- * evitando o conflito. Essa é a abordagem canônica para refinamento de brand
- * sobre brand no padrão do projeto (DO B§11 — unique symbol global).
- *
- * ## Produção
- *
- * Somente via smart constructor `from(m)`. O cast `as NonZeroMoney` é
- * deliberado — única forma de produzir o campo auxiliar após o predicate
- * (padrão canônico, DO B§9 + ref ts-branded-types.md).
- *
- * Referência: `handbook/interviews/0001-functional-ddd-domain-refresh.md`,
- * Bloco D D5 (Invariantes contextuais) — DO D§25.
- *
- * O duplo underscore de `__nonZeroMoney` é exceção declarada do `naming-convention`, na allowlist
- * de `tests/cleanup/lint-gaps.test.ts`.
+ * O membro `__nonZeroMoney` existe só no tipo: é `readonly`, tem o tipo `true` e não está
+ * presente no valor em runtime.
  */
 export type NonZeroMoney = Money & { readonly __nonZeroMoney: true };
 
-export type NonZeroMoneyError = 'money-must-be-non-zero';
+/**
+ * Erro devolvido por {@link from}: `'money-must-be-non-zero'`, `'money-non-integer-value'`,
+ * `'money-negative-value'` ou `'money-exceeds-safe-integer'`. Não inclui
+ * `'money-negative-result'`.
+ */
+export type NonZeroMoneyError =
+  | 'money-must-be-non-zero'
+  | Exclude<MoneyError, 'money-negative-result'>;
 
-/** Smart constructor — refina um Money pré-validado para NonZeroMoney. */
-export const from = (m: Money): Result<NonZeroMoney, NonZeroMoneyError> =>
-  m.cents === 0 ? err('money-must-be-non-zero') : ok(m as NonZeroMoney);
+/**
+ * Refina um `Money` em `NonZeroMoney`. Lê `m.cents` uma única vez e revalida essa leitura com
+ * `Money.fromCents` antes de verificar se é zero.
+ *
+ * @param m - o `Money` a refinar.
+ * @returns `ok` com o `Money` novo e congelado que `Money.fromCents` constrói a partir da leitura,
+ * igual por valor a `m` mas sem ser a mesma referência e sem a propriedade `__nonZeroMoney`,
+ * quando essa leitura é inteiro de 1 a `Number.MAX_SAFE_INTEGER`; alterar `m` depois não altera o
+ * valor devolvido, e reatribuir `cents` nele lança `TypeError`;
+ * `err('money-non-integer-value')` para `cents` fracionário, `NaN`, `Infinity` ou `-Infinity`;
+ * `err('money-negative-value')` para `cents` inteiro negativo; `err('money-exceeds-safe-integer')`
+ * para `cents` inteiro acima de `Number.MAX_SAFE_INTEGER`; `err('money-must-be-non-zero')` quando
+ * `m.cents` é `0` ou `-0`.
+ * @example
+ * ```ts
+ * const r = from(Money.ZERO);
+ * // r: { ok: false, error: 'money-must-be-non-zero' }
+ * ```
+ */
+export const from = (m: Money): Result<NonZeroMoney, NonZeroMoneyError> => {
+  const valid = fromCents(m.cents);
+  if (!valid.ok) return valid;
+  return valid.value.cents === 0 ? err('money-must-be-non-zero') : ok(valid.value as NonZeroMoney);
+};

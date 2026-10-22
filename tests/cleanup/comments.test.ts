@@ -14,10 +14,22 @@ const SANITIZED_ROOTS: readonly string[] = [
   'tests/cleanup/comments.test.ts',
   'scripts/ci/check-comments.ts',
   'src/shared/primitives/',
+  'src/shared/kernel/',
   'tests/shared/result.test.ts',
   'tests/shared/brand.test.ts',
   'tests/shared/exhaustive.test.ts',
   'tests/shared/immutable.test.ts',
+  'tests/shared/kernel/cnpj.test.ts',
+  'tests/shared/kernel/cpf.test.ts',
+  'tests/shared/kernel/money.test.ts',
+  'tests/shared/kernel/non-zero-money.test.ts',
+  'tests/shared/kernel/period.test.ts',
+  'tests/shared/kernel/plain-date.test.ts',
+  'tests/shared/kernel/user-ref.test.ts',
+  'tests/shared/kernel/index.test.ts',
+  'src/jobs/contracts/sweeper/clock-sao-paulo.ts',
+  'tests/jobs/contracts/sweeper/clock-sao-paulo.test.ts',
+  'tests/cleanup/brand-cast-ownership.test.ts',
 ];
 
 type Fixture = Readonly<{

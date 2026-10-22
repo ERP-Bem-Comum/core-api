@@ -90,6 +90,12 @@ export type ContractValueWouldGoNegative = Readonly<{
   attemptedDecrease: Money;
 }>;
 
+export type ContractValueWouldExceedSafeInteger = Readonly<{
+  tag: 'ContractValueWouldExceedSafeInteger';
+  currentValue: Money;
+  attemptedIncrease: Money;
+}>;
+
 export type ContractPeriodExtensionNotAfterCurrentEnd = Readonly<{
   tag: 'ContractPeriodExtensionNotAfterCurrentEnd';
   currentEnd: PlainDate;
@@ -118,6 +124,7 @@ export type ContractError =
   | ContractCannotExpireIndefinitePeriod
   | ContractCannotExtendIndefinitePeriod
   | ContractValueWouldGoNegative
+  | ContractValueWouldExceedSafeInteger
   | ContractPeriodExtensionNotAfterCurrentEnd
   | ContractAmendmentAlreadyApplied;
 
@@ -200,6 +207,15 @@ export const contractValueWouldGoNegative = (
   tag: 'ContractValueWouldGoNegative',
   currentValue,
   attemptedDecrease,
+});
+
+export const contractValueWouldExceedSafeInteger = (
+  currentValue: Money,
+  attemptedIncrease: Money,
+): ContractValueWouldExceedSafeInteger => ({
+  tag: 'ContractValueWouldExceedSafeInteger',
+  currentValue,
+  attemptedIncrease,
 });
 
 export const contractPeriodExtensionNotAfterCurrentEnd = (

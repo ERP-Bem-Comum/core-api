@@ -371,6 +371,110 @@ describe('GET /budget-plans/budget-results/by-budget/:budgetId', () => {
     await teardown();
   });
 
+  const logisticsAirfare = (month: number, people: number, trips: number, airfare: number) => ({
+    budgetId: BUDGET_ID,
+    subcategoryId: SUB_LOG,
+    month,
+    numberOfPeople: people,
+    totalTrips: trips,
+    airfareInCents: airfare,
+    dailyAccommodation: 0,
+    accommodationInCents: 0,
+    dailyFood: 0,
+    foodInCents: 0,
+    dailyTransport: 0,
+    transportInCents: 0,
+    dailyCarAndFuel: 0,
+    carAndFuelInCents: 0,
+  });
+
+  it('regressão: leitura realista devolve exatamente o mesmo 200 e corpo de antes da mudança', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const ids: string[] = [];
+    for (const month of [1, 2]) {
+      const post = await app.inject({
+        method: 'POST',
+        url: LOG_URL,
+        headers: { authorization: `Bearer ${token}` },
+        payload: logisticsAirfare(month, 2, 3, 50000),
+      });
+      assert.equal(post.statusCode, 201, post.body);
+      ids.push((post.json() as { id: string }).id);
+    }
+    const res = await app.inject({
+      method: 'GET',
+      url: byBudgetUrl(BUDGET_ID),
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(res.json(), {
+      items: [1, 2].map((month, i) => ({
+        id: ids[i],
+        budgetId: BUDGET_ID,
+        subcategoryId: SUB_LOG,
+        month,
+        model: 'DESPESAS_LOGISTICAS',
+        valueInCents: 300000,
+      })),
+      totalInCents: 600000,
+    });
+    await teardown();
+  });
+
+  it('dois lançamentos cuja soma passa de MAX_SAFE -> 422 com mensagem PT-BR (antes: 500)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    for (const month of [1, 2]) {
+      const post = await app.inject({
+        method: 'POST',
+        url: LOG_URL,
+        headers: { authorization: `Bearer ${token}` },
+        payload: logisticsAirfare(month, 100_000, 5, 10_000_000_000),
+      });
+      assert.equal(post.statusCode, 201, post.body);
+      assert.equal((post.json() as { valueInCents: number }).valueInCents, 5_000_000_000_000_000);
+    }
+    const res = await app.inject({
+      method: 'GET',
+      url: byBudgetUrl(BUDGET_ID),
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.statusCode, 422, res.body);
+    const body = res.json() as { error: { code: string; message: string; requestId: string } };
+    assert.equal(body.error.code, 'budget-results-total-exceeds-safe-integer');
+    assert.equal(
+      body.error.message,
+      'A soma dos lançamentos deste orçamento excede o limite monetário permitido.',
+    );
+    assert.equal(typeof body.error.requestId, 'string');
+
+    const oneMonth = await app.inject({
+      method: 'GET',
+      url: `${byBudgetUrl(BUDGET_ID)}?month=1`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(oneMonth.statusCode, 200, 'o recorte de um mês continua dentro do limite');
+    assert.equal((oneMonth.json() as { totalInCents: number }).totalInCents, 5_000_000_000_000_000);
+    await teardown();
+  });
+
+  it('regressão: o 422 de lançamento individual acima do limite mantém código e mensagem de antes', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: LOG_URL,
+      headers: { authorization: `Bearer ${token}` },
+      payload: logisticsAirfare(1, 100_000, 100_000, 10_000_000_000),
+    });
+    assert.equal(res.statusCode, 422, res.body);
+    const body = res.json() as { error: { code: string; message: string } };
+    assert.equal(body.error.code, 'money-exceeds-safe-integer');
+    assert.equal(body.error.message, 'money-exceeds-safe-integer');
+    await teardown();
+  });
+
   it('orçamento sem lançamentos -> 200 + lista vazia', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);

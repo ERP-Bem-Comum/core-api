@@ -7,12 +7,13 @@ import type {
   BudgetPlanRepository,
   BudgetPlanRepositoryError,
 } from '../../domain/budget-plan/repository.ts';
+import * as Money from '../../../../shared/kernel/money.ts';
 import type {
   BudgetResultRepository,
-  BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
 import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-catalog.ts';
-import { planTotalCents } from '../read-models/plan-total.ts';
+import { planTotal, type PlanTotalError } from '../read-models/plan-total.ts';
 
 export type BudgetDetailItem = Readonly<{
   id: string;
@@ -39,7 +40,8 @@ export type GetBudgetPlanError =
   | 'budget-plan-not-found'
   | ProgramCatalogError
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError;
+  | BudgetResultSumError
+  | PlanTotalError;
 
 export type GetBudgetPlanDeps = Readonly<{
   planRepo: BudgetPlanRepository;
@@ -47,17 +49,20 @@ export type GetBudgetPlanDeps = Readonly<{
   programCatalog: ProgramCatalogPort;
 }>;
 
-// #458 — o valueInCents por Rede vem da soma dos lançamentos daquele orçamento (0 se não houver).
-const toBudgetItem = (budget: Budget, sums: ReadonlyMap<string, number>): BudgetDetailItem => ({
+const toBudgetItem = (
+  budget: Budget,
+  sums: ReadonlyMap<string, Money.Money>,
+): BudgetDetailItem => ({
   id: String(budget.id),
   partner: { kind: budget.partner.kind, ref: String(budget.partner.ref) },
-  valueInCents: sums.get(String(budget.id)) ?? 0,
+  valueInCents: (sums.get(String(budget.id)) ?? Money.ZERO).cents,
 });
 
 const toDetail = (
   plan: BudgetPlanEntity,
   programName: string,
-  sums: ReadonlyMap<string, number>,
+  sums: ReadonlyMap<string, Money.Money>,
+  total: Money.Money,
 ): BudgetPlanDetail => ({
   id: String(plan.id),
   year: plan.year,
@@ -66,7 +71,7 @@ const toDetail = (
   programRef: String(plan.programRef),
   programName,
   budgets: plan.budgets.map((b) => toBudgetItem(b, sums)),
-  totalInCents: planTotalCents(plan, sums),
+  totalInCents: total.cents,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
   updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
@@ -88,5 +93,8 @@ export const getBudgetPlan =
     const sums = await deps.budgetResultRepo.sumByBudgetIds(found.value.budgets.map((b) => b.id));
     if (!sums.ok) return sums;
 
-    return ok(toDetail(found.value, program.value?.name ?? '', sums.value));
+    const total = planTotal(found.value, sums.value);
+    if (!total.ok) return total;
+
+    return ok(toDetail(found.value, program.value?.name ?? '', sums.value, total.value));
   };

@@ -6,13 +6,13 @@ import type {
 } from '../../domain/budget-plan/repository.ts';
 import type {
   BudgetResultRepository,
-  BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
 import type {
   RealizedByPlanReader,
   RealizedByPlanReadError,
 } from '../ports/realized-by-plan-reader.ts';
-import { planTotalCents, budgetIdsOf } from '../read-models/plan-total.ts';
+import { planTotal, budgetIdsOf, type PlanTotalError } from '../read-models/plan-total.ts';
 
 // Planejado (`totalInCents`) + Realizado (`realizedInCents` — Σ conciliado do plano, via reader do
 // financial; 0 quando o plano não tem conciliados). Aditivo: o Planejado permanece inalterado.
@@ -35,7 +35,8 @@ export type GetBudgetPlanInsightsError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-not-found'
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError
+  | BudgetResultSumError
+  | PlanTotalError
   | RealizedByPlanReadError;
 
 export type GetBudgetPlanInsightsDeps = Readonly<{
@@ -80,16 +81,24 @@ export const getBudgetPlanInsights =
     const sums = await deps.budgetResultRepo.sumByBudgetIds(budgetIdsOf([plan, ...previousPlans]));
     if (!sums.ok) return sums;
 
-    const previousYears = previousPlans.map((p) => ({
-      year: p.year,
-      totalInCents: planTotalCents(p, sums.value),
-      realizedInCents: realizedByRef.get(String(p.id)) ?? 0,
-    }));
+    const previousYears: YearTotal[] = [];
+    for (const p of previousPlans) {
+      const total = planTotal(p, sums.value);
+      if (!total.ok) return total;
+      previousYears.push({
+        year: p.year,
+        totalInCents: total.value.cents,
+        realizedInCents: realizedByRef.get(String(p.id)) ?? 0,
+      });
+    }
+
+    const currentTotal = planTotal(plan, sums.value);
+    if (!currentTotal.ok) return currentTotal;
 
     return ok({
       current: {
         year: plan.year,
-        totalInCents: planTotalCents(plan, sums.value),
+        totalInCents: currentTotal.value.cents,
         realizedInCents: realizedByRef.get(String(plan.id)) ?? 0,
       },
       previousYears,

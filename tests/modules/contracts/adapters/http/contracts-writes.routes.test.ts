@@ -32,7 +32,9 @@ import {
 import type { ContractsHttpDeps } from '#src/modules/contracts/adapters/http/composition.ts';
 import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
 import { createPendingContract } from '#src/modules/contracts/application/use-cases/create-pending-contract.ts';
+import { createAmendment } from '#src/modules/contracts/application/use-cases/create-amendment.ts';
 import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/persistence/repos/amendment-repository.in-memory.ts';
 import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { err } from '#src/shared/primitives/result.ts';
@@ -741,6 +743,108 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts/:id/amendments', (
     await teardown();
   });
 
+  const REALISTIC_AMENDMENT_CASES = [
+    { kind: 'Addition', impactValueCents: 500_000 },
+    { kind: 'Suppression', impactValueCents: 1 },
+    { kind: 'Addition', impactValueCents: Number.MAX_SAFE_INTEGER },
+  ] as const;
+
+  const FIXED_NOW = '2026-03-15T12:00:00.000Z';
+  const createAmendmentWithFixedClock = async () => {
+    const contractRepo = InMemoryContractRepository().repo;
+    const seeded = await contractRepo.save(
+      buildContract({ id: ACTIVE_ID, sequentialNumber: '001/2026' }),
+      [],
+    );
+    assert.equal(seeded.ok, true);
+    return createAmendment({
+      contractRepo,
+      amendmentRepo: InMemoryAmendmentRepository().repo,
+      clock: ClockFixed(new Date(FIXED_NOW)),
+    });
+  };
+
+  for (const c of REALISTIC_AMENDMENT_CASES) {
+    it(`regressão NonZeroMoney.from: ${c.kind} de ${String(c.impactValueCents)} centavos devolve 201 com o corpo de antes, campo a campo, salvo o id UUID v4 gerado`, async () => {
+      const fixed = await createAmendmentWithFixedClock();
+      const { app, teardown } = await makeApp((d) => ({ ...d, createAmendment: fixed }));
+      const token = await loginSeeded(app, WRITER_EMAIL);
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v2/contracts/${ACTIVE_ID}/amendments`,
+        headers: bearer(token),
+        payload: additionBody(c),
+      });
+      assert.equal(res.statusCode, 201, res.body);
+      const body = res.json() as Record<string, unknown>;
+      assert.match(
+        String(body['id']),
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      assert.deepEqual(
+        { ...body, id: '<uuid-v4>' },
+        {
+          id: '<uuid-v4>',
+          contractId: ACTIVE_ID,
+          amendmentNumber: '01/2026',
+          description: 'Acréscimo de valor',
+          status: 'Pending',
+          signedAt: null,
+          createdAt: FIXED_NOW,
+          kind: c.kind,
+          impactValueCents: c.impactValueCents,
+        },
+      );
+      await teardown();
+    });
+  }
+
+  const REJECTED_IMPACT_CASES = [
+    {
+      impactValueCents: 0,
+      status: 422,
+      code: 'AmendmentImpactValueZero',
+      message: 'AmendmentImpactValueZero',
+    },
+    {
+      impactValueCents: -5,
+      status: 422,
+      code: 'money-negative-value',
+      message: 'money-negative-value',
+    },
+    {
+      impactValueCents: 1.5,
+      status: 400,
+      code: 'validation',
+      message: 'Request validation failed',
+    },
+    {
+      impactValueCents: Number.MAX_SAFE_INTEGER + 1,
+      status: 400,
+      code: 'validation',
+      message: 'Request validation failed',
+    },
+  ] as const;
+
+  for (const c of REJECTED_IMPACT_CASES) {
+    it(`regressão NonZeroMoney.from: impacto ${String(c.impactValueCents)} mantém o ${String(c.status)} e o envelope de antes`, async () => {
+      const { app, teardown } = await makeApp();
+      const token = await loginSeeded(app, WRITER_EMAIL);
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v2/contracts/${ACTIVE_ID}/amendments`,
+        headers: bearer(token),
+        payload: additionBody({ impactValueCents: c.impactValueCents }),
+      });
+      const body = res.json() as { error: { code: string; message: string } };
+      assert.deepEqual(
+        { status: res.statusCode, code: body.error.code, message: body.error.message },
+        { status: c.status, code: c.code, message: c.message },
+      );
+      await teardown();
+    });
+  }
+
   it('CA4: contrato inexistente -> 404', async () => {
     const { app, teardown } = await makeApp();
     const token = await loginSeeded(app, WRITER_EMAIL);
@@ -835,6 +939,151 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /:id/amendments/:amendmentId/
     });
     assert.equal(res.statusCode, 200);
     assert.equal((res.json() as { status: string }).status, 'Active');
+    await teardown();
+  });
+
+  it('regressão: homologação realista devolve exatamente o mesmo 200 e corpo de antes da mudança', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: homologateUrl(ACTIVE_ID, AMEND_HOMOLOG_ID),
+      headers: bearer(token),
+      payload: { homologatedBy: HOMOLOGATED_BY },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(res.json(), {
+      id: ACTIVE_ID,
+      sequentialNumber: '001/2026',
+      title: 'Contrato Fixture',
+      objective: 'Validar round-trip de persistência',
+      originalValue: { cents: 10000000 },
+      originalPeriod: { kind: 'Fixed', start: '2026-02-01', end: '2026-12-31' },
+      classification: 'CT',
+      programId: null,
+      budgetPlanId: null,
+      categorizacao: null,
+      centroDeCusto: null,
+      costCenterRef: null,
+      categoryRef: null,
+      subcategoryRef: null,
+      program: null,
+      contractorId: '55555555-5555-4555-8555-555555555555',
+      contractorType: 'supplier',
+      signedAt: '2026-01-15T00:00:00.000Z',
+      currentValue: { cents: 10500000 },
+      currentPeriod: { kind: 'Fixed', start: '2026-02-01', end: '2026-12-31' },
+      status: 'Active',
+    });
+    await teardown();
+  });
+
+  it('regressão: erro existente (aditivo de outro contrato) mantém o envelope com o slug como mensagem', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: homologateUrl(ACTIVE_ID, AMEND_MISMATCH_ID),
+      headers: bearer(token),
+      payload: { homologatedBy: HOMOLOGATED_BY },
+    });
+    assert.equal(res.statusCode, 409);
+    const body = res.json() as { error: { code: string; message: string } };
+    assert.equal(body.error.code, 'amendment-contract-mismatch');
+    assert.equal(body.error.message, 'amendment-contract-mismatch');
+    await teardown();
+  });
+
+  const OVERFLOW_ID = '15151515-1515-4151-8151-151515151515';
+  const OVERFLOW_AMEND_ID = '25252525-2525-4252-8252-252525252525';
+  const makeOverflowApp = async (originalValueCents: number) => {
+    const authDeps = await buildAuthHttpDeps({
+      driver: 'memory',
+      seed: {
+        users: [
+          {
+            email: WRITER_EMAIL,
+            password: STRONG,
+            permissions: ['contract:write', 'contract:read'],
+          },
+        ],
+      },
+    });
+    const contractsDeps = await buildContractsHttpDeps({
+      driver: 'memory',
+      seed: {
+        contracts: [
+          buildContract({ id: OVERFLOW_ID, sequentialNumber: '005/2026', originalValueCents }),
+        ],
+        amendments: [
+          buildPendingAmendmentWithDoc({
+            id: OVERFLOW_AMEND_ID,
+            contractId: OVERFLOW_ID,
+            impactValueCents: 1,
+          }),
+        ],
+        documents: [],
+      },
+    });
+    const app = await buildApp({
+      routes: [
+        authHttpPlugin(authDeps),
+        contractsHttpPlugin(contractsDeps, {
+          requireAuth: makeRequireAuth(authDeps.verifyAccessToken),
+          authorize: authDeps.authorize,
+        }),
+      ],
+    });
+    const teardown = async (): Promise<void> => {
+      await app.close();
+      await contractsDeps.shutdown();
+      await authDeps.shutdown();
+    };
+    return { app, teardown };
+  };
+
+  it('aditivo que leva o valor vigente acima de MAX_SAFE -> 422 com mensagem PT-BR e contrato inalterado', async () => {
+    const { app, teardown } = await makeOverflowApp(Number.MAX_SAFE_INTEGER);
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: homologateUrl(OVERFLOW_ID, OVERFLOW_AMEND_ID),
+      headers: bearer(token),
+      payload: { homologatedBy: HOMOLOGATED_BY },
+    });
+    assert.equal(res.statusCode, 422, res.body);
+    const body = res.json() as { error: { code: string; message: string; requestId: string } };
+    assert.equal(body.error.code, 'ContractValueWouldExceedSafeInteger');
+    assert.equal(
+      body.error.message,
+      'O aditivo elevaria o valor vigente do contrato acima do limite monetário permitido.',
+    );
+    assert.equal(typeof body.error.requestId, 'string');
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v2/contracts/${OVERFLOW_ID}`,
+      headers: bearer(token),
+    });
+    assert.equal(detail.statusCode, 200, detail.body);
+    const contract = detail.json() as { currentValue: { cents: number } };
+    assert.equal(contract.currentValue.cents, Number.MAX_SAFE_INTEGER);
+    await teardown();
+  });
+
+  it('vizinha válida: MAX_SAFE − 1 + 1 -> 200 com valor vigente MAX_SAFE', async () => {
+    const { app, teardown } = await makeOverflowApp(Number.MAX_SAFE_INTEGER - 1);
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: homologateUrl(OVERFLOW_ID, OVERFLOW_AMEND_ID),
+      headers: bearer(token),
+      payload: { homologatedBy: HOMOLOGATED_BY },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(
+      (res.json() as { currentValue: { cents: number } }).currentValue.cents,
+      Number.MAX_SAFE_INTEGER,
+    );
     await teardown();
   });
 

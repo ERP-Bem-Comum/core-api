@@ -2,6 +2,7 @@
 // Cresce conforme as stories (aprovação, cancelamento, etc.).
 export type DocumentError =
   | 'net-value-not-positive'
+  | 'money-exceeds-safe-integer'
   | 'retention-not-allowed-for-type'
   | 'document-incomplete'
   | 'invalid-state-transition'

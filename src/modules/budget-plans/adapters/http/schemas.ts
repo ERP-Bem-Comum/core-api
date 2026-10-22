@@ -326,7 +326,10 @@ export type CostStructureTreeDto = z.infer<typeof costStructureTreeSchema>;
 // ⚠️ Bounds são de SANIDADE DE NEGÓCIO por campo — NÃO garantem, sozinhos, ausência de overflow: os
 // campos alimentam PRODUTOS (logística multiplica 4 fatores), e nenhum teto por-campo único cabe em
 // todas as aridades (revisão zod-expert, 004-code-review). O overflow real (resultado > MAX_SAFE_INTEGER)
-// é barrado no domínio por `Money.fromCents` (`money-exceeds-safe-integer`), mapeado a 422 no plugin.
+// é barrado no domínio por `Money.fromCents` (`money-exceeds-safe-integer`). Os totais de leitura também
+// recusam soma > MAX_SAFE_INTEGER: by-budget (`budget-results-total-exceeds-safe-integer`), soma por
+// Rede (`budget-result-sum-exceeds-safe-integer`), total do plano (`budget-plan-total-exceeds-safe-integer`)
+// e consolidado (`consolidated-total-exceeds-safe-integer`). Todos são mapeados a 422 no plugin.
 const MAX_CENTS = 10_000_000_000; // R$ 100 mi (valor unitário)
 const MAX_COUNT = 100_000;
 const MAX_PERCENT = 1_000;

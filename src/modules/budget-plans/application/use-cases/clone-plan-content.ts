@@ -8,8 +8,9 @@ import * as BudgetResultId from '../../domain/budget-result/budget-result-id.ts'
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
+import * as Money from '../../../../shared/kernel/money.ts';
 import type { BudgetPlansModuleEvent } from '../../public-api/events.ts';
-import { planTotalCents } from '../read-models/plan-total.ts';
+import { planTotal, type PlanTotalError } from '../read-models/plan-total.ts';
 import * as CostStructure from '../../domain/cost-structure/cost-structure.ts';
 import type {
   CostStructureRepository,
@@ -19,6 +20,7 @@ import * as BudgetResult from '../../domain/budget-result/budget-result.ts';
 import type {
   BudgetResultRepository,
   BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
 import type { PlanCloneWriter, PlanCloneWriteError } from '../ports/plan-clone-writer.ts';
 
@@ -31,7 +33,11 @@ export type ClonePlanContentError =
   // entre as duas tabelas, e só uma chamada direta à API com ids de planos diferentes produz esse
   // estado (medido: 0 de 4.679 no legado; a tela tira os dois ids do mesmo plano). Antes, o
   // lançamento era pulado em silêncio e o total da cópia saía menor que o da origem.
-  | 'budget-result-orphan-subcategory';
+  | 'budget-result-orphan-subcategory'
+  // A soma de uma rede ou o total do plano passa de Number.MAX_SAFE_INTEGER. Verificado ANTES da
+  // gravação: o plano estourado não chega a ser escrito.
+  | BudgetResultSumError
+  | PlanTotalError;
 
 // #458 — o filho clonado tem total (os lançamentos vieram junto). Devolvido para a response 201 não
 // mentir. Compartilhado com createBudgetPlan (importação), startCalibration e createScenery.
@@ -117,7 +123,7 @@ export const clonePlanContent =
 
     // lançamentos remapeados (budgetId + subcategoryId)
     const results: BudgetResult.BudgetResult[] = [];
-    const sums = new Map<string, number>();
+    const sums = new Map<string, Money.Money>();
     for (const { sourceId, newId } of budgetPairs) {
       for (const result of resultsBySourceBudget.get(sourceId) ?? []) {
         const newSubcategoryId = cloned.subcategoryIdMap.get(String(result.subcategoryId));
@@ -130,9 +136,18 @@ export const clonePlanContent =
           }),
         );
         const key = String(newId);
-        sums.set(key, (sums.get(key) ?? 0) + result.value.cents);
+        // Money.add recusa estouro: a soma de uma rede é verificada aqui, antes de gravar.
+        const summed = Money.add(sums.get(key) ?? Money.ZERO, result.value);
+        if (!summed.ok) return err('budget-result-sum-exceeds-safe-integer');
+        sums.set(key, summed.value);
       }
     }
+
+    // #458 — o total da response é a soma dos lançamentos copiados, não 0: lista e detalhe mostram
+    // a mesma soma, derivada de bgp_budget_results. Calculado ANTES da gravação, para que um total
+    // que passa de Number.MAX_SAFE_INTEGER recuse a cópia sem deixar plano gravado.
+    const total = planTotal(plan, sums);
+    if (!total.ok) return total;
 
     const written = await deps.planCloneWriter.write({
       plan,
@@ -142,7 +157,5 @@ export const clonePlanContent =
     });
     if (!written.ok) return written;
 
-    // #458 — o total da response é a soma dos lançamentos copiados, não 0: lista e detalhe mostram
-    // a mesma soma, derivada de bgp_budget_results.
-    return ok({ plan, totalInCents: planTotalCents(plan, sums) });
+    return ok({ plan, totalInCents: total.value.cents });
   };

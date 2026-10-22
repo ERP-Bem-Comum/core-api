@@ -113,6 +113,10 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'budget-id-invalid': 422,
   'subcategory-id-invalid': 422,
   'budget-plan-invalid-money': 422,
+  'budget-results-total-exceeds-safe-integer': 422,
+  'budget-result-sum-exceeds-safe-integer': 422,
+  'budget-plan-total-exceeds-safe-integer': 422,
+  'consolidated-total-exceeds-safe-integer': 422,
   'budget-result-repo-unavailable': 503,
   'budget-result-corrupt': 503,
   'subcategory-reader-unavailable': 503,
@@ -146,11 +150,24 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
 
+const PUBLIC_MESSAGES: Readonly<Record<string, string>> = {
+  'budget-results-total-exceeds-safe-integer':
+    'A soma dos lançamentos deste orçamento excede o limite monetário permitido.',
+  'budget-result-sum-exceeds-safe-integer':
+    'A soma dos lançamentos de um orçamento excede o limite monetário permitido.',
+  'budget-plan-total-exceeds-safe-integer':
+    'A soma dos lançamentos de um plano excede o limite monetário permitido.',
+  'consolidated-total-exceeds-safe-integer':
+    'A soma dos planos consolidados excede o limite monetário permitido.',
+};
+
+const publicMessage = (code: string): string => PUBLIC_MESSAGES[code] ?? code;
+
 const sendWriteError = (reply: FastifyReply, code: string): Promise<void> => {
   const requestId = currentCorrelationId() ?? reply.request.id;
   return reply
     .code(writeErrorStatus(code))
-    .send(toErrorEnvelope(code, code, requestId)) as unknown as Promise<void>;
+    .send(toErrorEnvelope(code, publicMessage(code), requestId)) as unknown as Promise<void>;
 };
 
 // CSV inline (US5): download síncrono na própria response (sem e-mail/FS, ≠ legado). A string já

@@ -94,7 +94,11 @@ describe('NonZeroMoney — polimorfismo com Money (CA5)', () => {
     const sum = Money.add(nonZero, other);
 
     // Assert
-    assert.equal(sum.cents, 500_000, 'Money.add(nonZero, money) deve somar os cents');
+    assert.equal(
+      sum.ok && sum.value.cents,
+      500_000,
+      'Money.add(nonZero, money) deve somar os cents',
+    );
   });
 
   it('NonZeroMoney + NonZeroMoney via Money.add produz Money válido', () => {
@@ -109,7 +113,7 @@ describe('NonZeroMoney — polimorfismo com Money (CA5)', () => {
     const sum = Money.add(r1.value, r2.value);
 
     // Assert
-    assert.equal(sum.cents, 350_000);
+    assert.equal(sum.ok && sum.value.cents, 350_000);
   });
 
   it('Money.equals aceita NonZeroMoney sem cast (widening automático)', () => {

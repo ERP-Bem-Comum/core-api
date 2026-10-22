@@ -251,7 +251,12 @@ export const fromCents = (cents: number): Result<Money, MoneyError> => {
   return ok(immutable({ cents }) as Money);
 };
 
-export const add = (a: Money, b: Money): Money => immutable({ cents: a.cents + b.cents }) as Money;
+// A soma também pode passar de MAX_SAFE_INTEGER — por isso devolve Result, nunca Money cru.
+export const add = (a: Money, b: Money): Result<Money, 'money-exceeds-safe-integer'> => {
+  const sum = a.cents + b.cents;
+  if (sum > Number.MAX_SAFE_INTEGER) return err('money-exceeds-safe-integer');
+  return ok(immutable({ cents: sum }) as Money);
+};
 
 export const subtract = (a: Money, b: Money): Result<Money, 'money-negative-result'> => {
   const diff = a.cents - b.cents;
@@ -270,7 +275,8 @@ import * as Money from './money.ts';
 
 const amount = Money.fromCents(10_000); // Result<Money, MoneyError>
 if (!amount.ok) return amount;
-const doubled = Money.add(amount.value, amount.value);
+const doubled = Money.add(amount.value, amount.value); // Result<Money, 'money-exceeds-safe-integer'>
+if (!doubled.ok) return doubled;
 ```
 
 Mais templates em [`references/`](./references/) (Amendment discriminated, Contract com state machine, evento de domínio).
@@ -514,12 +520,12 @@ A escolha é guiada pelo **potencial de extensão**, não pela complexidade atua
 ```ts
 // ✅ Padrão D — free functions no módulo
 export const fromCents = (cents: number): Result<Money, MoneyError> => { /* ... */ };
-export const add = (a: Money, b: Money): Money => { /* ... */ };
+export const add = (a: Money, b: Money): Result<Money, 'money-exceeds-safe-integer'> => { /* ... */ };
 
 // Consumo
 import * as Money from './money.ts';
 Money.fromCents(100);   // Result<Money, MoneyError>
-Money.add(a, b);        // Money
+Money.add(a, b);        // Result<Money, 'money-exceeds-safe-integer'>
 ```
 
 **DON'T B§7 — Namespace-objeto:**
@@ -638,7 +644,11 @@ export const fromCents = (cents: number): Result<Money, MoneyError> => {
   return ok(immutable({ cents }) as Money);
 };
 
-export const add = (a: Money, b: Money): Money => immutable({ cents: a.cents + b.cents }) as Money;
+export const add = (a: Money, b: Money): Result<Money, 'money-exceeds-safe-integer'> => {
+  const sum = a.cents + b.cents;
+  if (sum > Number.MAX_SAFE_INTEGER) return err('money-exceeds-safe-integer');
+  return ok(immutable({ cents: sum }) as Money);
+};
 
 export const subtract = (a: Money, b: Money): Result<Money, 'money-negative-result'> => {
   const diff = a.cents - b.cents;
@@ -658,7 +668,8 @@ import * as Money from './money.ts';
 const amount = Money.fromCents(10_000); // Result<Money, MoneyError>
 if (!amount.ok) return amount;
 const doubled = Money.add(amount.value, amount.value);
-const total = Money.add(doubled, Money.ZERO);
+if (!doubled.ok) return doubled;
+const total = Money.add(doubled.value, Money.ZERO);
 ```
 
 ---
@@ -1051,15 +1062,21 @@ type Amendment = PendingWithoutDocumentAmendment | PendingWithDocumentAmendment 
 **Rota α — VO como Prova** (`NonZeroMoney`):
 
 ```ts
-// src/modules/contracts/domain/shared/non-zero-money.ts
+// src/shared/kernel/non-zero-money.ts
 // Rota α (DO D§25): invariante atemporal codificada como subtipo de Money.
 // NonZeroMoney extends Money — widening automático, sem cast nos callers.
+// `from` revalida por `fromCents` (um Money forjado não vira NonZeroMoney) e devolve objeto novo.
 
 export type NonZeroMoney = Money & { readonly __nonZeroMoney: true };
-export type NonZeroMoneyError = 'money-must-be-non-zero';
+export type NonZeroMoneyError =
+  | 'money-must-be-non-zero'
+  | Exclude<MoneyError, 'money-negative-result'>;
 
-export const from = (m: Money): Result<NonZeroMoney, NonZeroMoneyError> =>
-  m.cents === 0 ? err('money-must-be-non-zero') : ok(m as NonZeroMoney);
+export const from = (m: Money): Result<NonZeroMoney, NonZeroMoneyError> => {
+  const valid = fromCents(m.cents);
+  if (!valid.ok) return valid;
+  return valid.value.cents === 0 ? err('money-must-be-non-zero') : ok(valid.value as NonZeroMoney);
+};
 ```
 
 **Rota γ — Caso de Uso como Orquestrador** (`createAmendment`):
