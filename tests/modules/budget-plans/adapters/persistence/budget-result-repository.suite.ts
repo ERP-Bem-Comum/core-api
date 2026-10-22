@@ -24,6 +24,45 @@ export interface BudgetResultRepoFactory {
 
 const IPCA_INPUT: CalcModelInput = { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 }; // -> 104500
 
+type LogisticsInput = Extract<CalcModelInput, { kind: 'DESPESAS_LOGISTICAS' }>;
+
+const logistics = (over: Partial<Omit<LogisticsInput, 'kind'>>): LogisticsInput => ({
+  kind: 'DESPESAS_LOGISTICAS',
+  numberOfPeople: 1,
+  totalTrips: 1,
+  airfareInCents: 0,
+  dailyAccommodation: 0,
+  accommodationInCents: 0,
+  dailyFood: 0,
+  foodInCents: 0,
+  dailyTransport: 0,
+  transportInCents: 0,
+  dailyCarAndFuel: 0,
+  carAndFuelInCents: 0,
+  ...over,
+});
+
+const LOG_5E15 = logistics({
+  numberOfPeople: 100_000,
+  totalTrips: 5,
+  airfareInCents: 10_000_000_000,
+});
+const LOG_4E15 = logistics({
+  dailyAccommodation: 100_000,
+  accommodationInCents: 10_000_000_000,
+  dailyFood: 100_000,
+  foodInCents: 10_000_000_000,
+  dailyTransport: 100_000,
+  transportInCents: 10_000_000_000,
+  dailyCarAndFuel: 100_000,
+  carAndFuelInCents: 10_000_000_000,
+});
+const LOG_MAX_MINUS_9E15 = logistics({
+  dailyFood: 100_000,
+  foodInCents: 71_992_547,
+  airfareInCents: 40_991,
+});
+
 // Fixture: o VO tem suíte própria; aqui um mês inválido é erro de teste, não de domínio.
 const month = (raw: number) => {
   const m = ExerciseMonth.parse(raw);
@@ -276,7 +315,35 @@ export const runBudgetResultRepositoryContract = (
 
         const sums = await repo.sumByBudgetIds([b1]);
         assert.ok(isOk(sums));
-        assert.equal(sums.value.get(String(b1)), 209000);
+        assert.equal(sums.value.get(String(b1))?.cents, 209000);
+      });
+
+      it('soma de um orçamento igual a MAX_SAFE_INTEGER é aceita', async () => {
+        const b1 = BudgetIdMod.generate();
+        assert.ok(isOk(await repo.save(makeResult(b1, 'DESPESAS_LOGISTICAS', LOG_5E15, 1))));
+        assert.ok(isOk(await repo.save(makeResult(b1, 'DESPESAS_LOGISTICAS', LOG_4E15, 2))));
+        assert.ok(
+          isOk(await repo.save(makeResult(b1, 'DESPESAS_LOGISTICAS', LOG_MAX_MINUS_9E15, 3))),
+        );
+
+        const sums = await repo.sumByBudgetIds([b1]);
+        assert.ok(isOk(sums));
+        assert.equal(sums.value.get(String(b1))?.cents, Number.MAX_SAFE_INTEGER);
+      });
+
+      it('soma de um orçamento acima de MAX_SAFE_INTEGER → budget-result-sum-exceeds-safe-integer', async () => {
+        const b1 = BudgetIdMod.generate();
+        const b2 = BudgetIdMod.generate();
+        assert.ok(isOk(await repo.save(makeResult(b1, 'DESPESAS_LOGISTICAS', LOG_5E15, 1))));
+        assert.ok(isOk(await repo.save(makeResult(b1, 'DESPESAS_LOGISTICAS', LOG_5E15, 2))));
+        assert.ok(isOk(await repo.save(makeResult(b2, 'IPCA', IPCA_INPUT, 1))));
+
+        const sums = await repo.sumByBudgetIds([b1, b2]);
+        assert.deepEqual(sums, { ok: false, error: 'budget-result-sum-exceeds-safe-integer' });
+
+        const other = await repo.sumByBudgetIds([b2]);
+        assert.ok(isOk(other));
+        assert.equal(other.value.get(String(b2))?.cents, 104500);
       });
 
       it('agrupa por orçamento e não vaza entre eles', async () => {
@@ -288,8 +355,8 @@ export const runBudgetResultRepositoryContract = (
 
         const sums = await repo.sumByBudgetIds([b1, b2]);
         assert.ok(isOk(sums));
-        assert.equal(sums.value.get(String(b1)), 104500);
-        assert.equal(sums.value.get(String(b2)), 209000);
+        assert.equal(sums.value.get(String(b1))?.cents, 104500);
+        assert.equal(sums.value.get(String(b2))?.cents, 209000);
       });
 
       it('orçamento sem lançamento não aparece no mapa (o caller trata como 0)', async () => {
@@ -299,7 +366,7 @@ export const runBudgetResultRepositoryContract = (
 
         const sums = await repo.sumByBudgetIds([b1, semLancamento]);
         assert.ok(isOk(sums));
-        assert.equal(sums.value.get(String(b1)), 104500);
+        assert.equal(sums.value.get(String(b1))?.cents, 104500);
         assert.equal(sums.value.has(String(semLancamento)), false);
       });
 

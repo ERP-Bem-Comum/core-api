@@ -10,10 +10,10 @@ import type {
 } from '../../domain/budget-plan/repository.ts';
 import type {
   BudgetResultRepository,
-  BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
 import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-catalog.ts';
-import { planTotalCents, budgetIdsOf } from '../read-models/plan-total.ts';
+import { planTotal, budgetIdsOf, type PlanTotalError } from '../read-models/plan-total.ts';
 
 export type ListBudgetPlansInput = Readonly<{
   page: number;
@@ -44,7 +44,8 @@ export type ListBudgetPlansError =
   | BudgetPlanRefError
   | ProgramCatalogError
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError;
+  | BudgetResultSumError
+  | PlanTotalError;
 
 export type ListBudgetPlansDeps = Readonly<{
   planRepo: BudgetPlanRepository;
@@ -74,7 +75,7 @@ const deriveNetworkKind = (
 const toItem = (
   plan: BudgetPlanEntity,
   programName: string,
-  sums: ReadonlyMap<string, number>,
+  totalInCents: number,
 ): BudgetPlanListItem => ({
   id: String(plan.id),
   year: plan.year,
@@ -82,7 +83,7 @@ const toItem = (
   version: PlanVersion.format(plan.version),
   programRef: String(plan.programRef),
   programName,
-  totalInCents: planTotalCents(plan, sums),
+  totalInCents,
   updatedAt: plan.updatedAt,
   updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
   partnersCount: plan.budgets.length,
@@ -131,7 +132,9 @@ export const listBudgetPlans =
         name = program.value?.name ?? '';
         names.set(key, name);
       }
-      items.push(toItem(plan, name, sums.value));
+      const total = planTotal(plan, sums.value);
+      if (!total.ok) return total;
+      items.push(toItem(plan, name, total.value.cents));
     }
 
     return ok({ items, total: page.value.total });

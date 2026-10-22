@@ -333,3 +333,147 @@ describe('FIN-DOCUMENTO-TITULOS — /api/v2/financial/documents', () => {
     assert.equal(res.statusCode, 400, res.body);
   });
 });
+
+describe('FIN-DOCUMENTO-TITULOS — líquido acima do limite monetário seguro', () => {
+  const ID_PLACEHOLDER = '<id>';
+  const withoutIds = (body: unknown): unknown =>
+    JSON.parse(JSON.stringify(body), (key: string, value: unknown) =>
+      key === 'id' ? ID_PLACEHOLDER : value,
+    );
+  const listTotal = async (): Promise<number> => {
+    const res = await handle.app.inject({
+      method: 'GET',
+      url: '/api/v2/financial/documents',
+      headers: bearer(WRITER),
+    });
+    return (res.json() as { total: number }).total;
+  };
+  const probeBody = (overrides: Record<string, unknown>) =>
+    nfseBody({
+      documentNumber: 'NFS-PROBE',
+      supplierRef: 'f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1',
+      retentions: [],
+      ...overrides,
+    });
+
+  it('regressão: entrada realista devolve exatamente o mesmo 201 e corpo de antes da mudança', async () => {
+    const res = await postDocument(
+      WRITER,
+      probeBody({
+        grossValueCents: '100000',
+        penaltyCents: '250',
+        interestCents: '100',
+        discountsCents: '50',
+      }),
+    );
+    assert.equal(res.statusCode, 201, res.body);
+    assert.deepEqual(withoutIds(res.json()), {
+      id: ID_PLACEHOLDER,
+      status: 'Open',
+      documentNumber: 'NFS-PROBE',
+      series: null,
+      type: 'NFS-e',
+      supplierRef: 'f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1',
+      payeeKind: 'supplier',
+      approverRef: null,
+      contractRef: null,
+      budgetPlanRef: null,
+      categoryRef: null,
+      subcategoryRef: null,
+      costCenterRef: null,
+      programRef: null,
+      paymentMethod: 'PIX',
+      grossValueCents: '100000',
+      netValueCents: '100300',
+      dueDate: '2026-12-31',
+      issueDate: null,
+      description: null,
+      accessKey: null,
+      competencia: null,
+      contaDebitoRef: null,
+      paymentDetail: null,
+      payables: [
+        {
+          id: ID_PLACEHOLDER,
+          kind: 'Parent',
+          retentionType: null,
+          valueCents: '100300',
+          status: 'Open',
+        },
+      ],
+      version: 0,
+      payeeBank: null,
+      attachment: null,
+    });
+  });
+
+  const OVERFLOWS: readonly Readonly<Record<string, string>>[] = [
+    { grossValueCents: '9007199254740991', penaltyCents: '1' },
+    { grossValueCents: '9007199254740991', interestCents: '1' },
+    { grossValueCents: '9007199254740991', penaltyCents: '9007199254740991' },
+  ];
+  for (const overrides of OVERFLOWS) {
+    it(`bruto + multa + juros acima de MAX_SAFE (${JSON.stringify(overrides)}) → 422 com mensagem PT-BR, sem gravar`, async () => {
+      const totalBefore = await listTotal();
+      const res = await postDocument(WRITER, probeBody(overrides));
+      assert.equal(res.statusCode, 422, res.body);
+      const body = res.json() as { error: { code: string; message: string; requestId: string } };
+      assert.equal(body.error.code, 'unprocessable');
+      assert.equal(body.error.message, 'Valor monetário excede o limite permitido.');
+      assert.equal(typeof body.error.requestId, 'string');
+      assert.equal(await listTotal(), totalBefore, 'nenhum documento é gravado');
+    });
+  }
+
+  it('vizinha válida: bruto = MAX_SAFE − 1 e multa = 1 → 201 com líquido MAX_SAFE', async () => {
+    const res = await postDocument(
+      WRITER,
+      probeBody({ grossValueCents: '9007199254740990', penaltyCents: '1' }),
+    );
+    assert.equal(res.statusCode, 201, res.body);
+    assert.equal((res.json() as { netValueCents: string }).netValueCents, '9007199254740991');
+  });
+
+  const EXACT_NET_ABOVE_INTERMEDIATE: readonly (readonly [
+    Readonly<Record<string, string>>,
+    string,
+  ])[] = [
+    [
+      { grossValueCents: '9007199254740991', penaltyCents: '1', discountsCents: '10' },
+      '9007199254740982',
+    ],
+    [
+      {
+        grossValueCents: '9007199254740991',
+        penaltyCents: '1',
+        discountsCents: '9007199254740991',
+      },
+      '1',
+    ],
+    [
+      { grossValueCents: '9007199254740991', penaltyCents: '2', discountsCents: '10' },
+      '9007199254740983',
+    ],
+  ];
+  for (const [overrides, expectedNet] of EXACT_NET_ABOVE_INTERMEDIATE) {
+    it(`soma intermediária acima de MAX_SAFE com líquido final dentro do limite (${JSON.stringify(overrides)}) → 201 com líquido exato ${expectedNet}`, async () => {
+      const res = await postDocument(WRITER, probeBody(overrides));
+      assert.equal(res.statusCode, 201, res.body);
+      const body = res.json() as { netValueCents: string; payables: { valueCents: string }[] };
+      assert.equal(body.netValueCents, expectedNet);
+      assert.equal(body.payables[0]?.valueCents, expectedNet);
+    });
+  }
+
+  it('regressão: deduções acima de MAX_SAFE com bruto realista seguem 422 net-value-not-positive', async () => {
+    const res = await postDocument(
+      WRITER,
+      probeBody({ sourceDiscountsCents: '9007199254740991', discountsCents: '1' }),
+    );
+    assert.equal(res.statusCode, 422, res.body);
+    assert.equal(
+      (res.json() as { error: { message: string } }).error.message,
+      'O valor líquido do documento deve ser positivo.',
+    );
+  });
+});

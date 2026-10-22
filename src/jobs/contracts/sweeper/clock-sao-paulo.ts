@@ -1,68 +1,59 @@
-// Clock adapter para o job de auto-expire — cutoff do NEGÓCIO em America/Sao_Paulo.
-//
-// Por que não usar `ClockReal` (UTC)?
-//   `ClockReal.today()` devolve o dia-calendário UTC (`getUTCFullYear/Month/Date`). No
-//   fuso America/Sao_Paulo (UTC-3), à meia-noite de Brasília o UTC ainda marca o dia
-//   anterior. Um contrato com fim = 2026-06-15 que deveria expirar na virada de
-//   2026-06-15 00:00 BRT seria pulado até as 03:00 UTC — comportamento errado.
-//
-// Solução: `Intl.DateTimeFormat` com `timeZone: 'America/Sao_Paulo'` extrai os campos
-//   year/month/day no fuso do negócio do instante `Date.now()`. Nenhuma lib externa.
-//   `now()` continua devolvendo `Date` (instante absoluto — sem timezone).
-//
-// Referência: ECMAScript Internationalization API (ECMA-402), disponível globalmente
-//   em Node 24 (ICU full build — `node:v8.cachedData` inclui CLDR). `Intl.DateTimeFormat`
-//   é Stable e não requer flag experimental. Citação da doc Node 24
-//   `Globals.md` §"Intl": "Node.js has full-ICU enabled by default since v13.0.0."
-
 import type { Clock } from '#src/shared/ports/clock.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import type { PlainDate as PlainDateType } from '#src/shared/kernel/plain-date.ts';
 
-const TZ = 'America/Sao_Paulo';
+/** Formatador cujas partes numéricas `year`, `month` e `day` dão a data no fuso `America/Sao_Paulo`. */
+const SAO_PAULO_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
-/**
- * Extrai o dia-calendário do instante `d` no fuso `America/Sao_Paulo`.
- *
- * `Intl.DateTimeFormat('en-CA', { timeZone, year:'numeric', month:'2-digit', day:'2-digit' })`
- * formata o instante como `"YYYY-MM-DD"` — parse determinístico por índice de
- * `formatToParts`. Sem string split, sem dependência de locale do SO host.
- */
-const todayInSaoPaulo = (): PlainDateType => {
-  const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  // `en-CA` produz "YYYY-MM-DD" — parse seguro por índice.
-  const parts = fmt.formatToParts(new Date());
-  let year = 0;
-  let month = 0;
-  let day = 0;
-  for (const p of parts) {
-    if (p.type === 'year') year = Number(p.value);
-    else if (p.type === 'month') month = Number(p.value);
-    else if (p.type === 'day') day = Number(p.value);
-  }
-  // Campos extraídos do ICU já são válidos — `fromParts` encapsula a construção do VO
-  // (o cast `as PlainDate` vive no kernel, não aqui). Entrada não-confiável usaria `PlainDate.from`.
-  return PlainDate.fromParts(year, month, day);
+const numericPart = (
+  parts: readonly Readonly<Intl.DateTimeFormatPart>[],
+  type: 'year' | 'month' | 'day',
+): number => Number(parts.find((p) => p.type === type)?.value);
+
+const utcMidnightOf = (year: number, month: number, day: number): Date => {
+  const utc = new Date(0);
+  utc.setUTCFullYear(year, month - 1, day);
+  return utc;
 };
 
 /**
- * Clock com cutoff de negócio em `America/Sao_Paulo`.
+ * Extrai a data de calendário que o instante tem no fuso `America/Sao_Paulo`, não em UTC, com o
+ * mesmo resultado qualquer que seja o fuso do processo. O ano sai sem reinterpretação: o ano 50
+ * continua 50, não vira 1950.
  *
- * `today()` → dia-calendário AGORA em BRT (cutoff do auto-expire D+1).
- * `now()`   → `Date` (instante absoluto, sem timezone — igual a `ClockReal`).
- *
- * Use em produção somente para o job `contracts-sweeper`. Testes unitários
- * do sweeper injetam um Clock stub com data fixa.
+ * @param instant - Instante de origem.
+ * @returns O `PlainDate` do dia em São Paulo: `2026-06-15T02:59:59Z` dá `2026-06-14` e
+ * `2026-06-15T03:00:00Z` dá `2026-06-15`.
+ * @throws {RangeError} Quando `instant` é um `Date` inválido.
  */
-export const ClockSaoPaulo = (): Clock => ({
-  now: () => new Date(),
-  today: todayInSaoPaulo,
+export const todayInSaoPauloAt = (instant: Date): PlainDateType => {
+  const parts = SAO_PAULO_DATE_FORMAT.formatToParts(instant);
+  return PlainDate.fromDate(
+    utcMidnightOf(
+      numericPart(parts, 'year'),
+      numericPart(parts, 'month'),
+      numericPart(parts, 'day'),
+    ),
+  );
+};
+
+const todayInSaoPaulo = (): PlainDateType => todayInSaoPauloAt(new Date());
+
+/**
+ * Relógio do job `contracts-sweeper` cujo `today` é a data de calendário em `America/Sao_Paulo`.
+ *
+ * @param readNow - Fonte do instante.
+ * @returns O `Clock` em que `now()` devolve `readNow()` e `today()` devolve
+ * `todayInSaoPauloAt(readNow())`.
+ */
+export const ClockSaoPaulo = (readNow: () => Date = () => new Date()): Clock => ({
+  now: readNow,
+  today: () => todayInSaoPauloAt(readNow()),
 });
 
-// Exportação auxiliar para testes que queiram inspecionar a extração de partes.
 export { todayInSaoPaulo as _todayInSaoPauloForTest };

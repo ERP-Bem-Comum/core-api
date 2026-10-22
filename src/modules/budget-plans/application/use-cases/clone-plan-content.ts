@@ -8,7 +8,7 @@ import * as BudgetResultId from '../../domain/budget-result/budget-result-id.ts'
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
-import { planTotalCents } from '../read-models/plan-total.ts';
+import { planTotal, type PlanTotalError } from '../read-models/plan-total.ts';
 import type {
   BudgetPlanRepository,
   BudgetPlanRepositoryError,
@@ -21,13 +21,14 @@ import type {
 import * as BudgetResult from '../../domain/budget-result/budget-result.ts';
 import type {
   BudgetResultRepository,
-  BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
 
 export type ClonePlanContentError =
   | BudgetPlanError
   | CostStructureRepositoryError
-  | BudgetResultRepositoryError
+  | BudgetResultSumError
+  | PlanTotalError
   | BudgetPlanRepositoryError;
 
 // #458 — o filho clonado tem total (os lançamentos vieram junto). Devolvido para a response 201 de
@@ -53,6 +54,11 @@ export const clonePlanContent =
     now: Date,
     actor: UserRef,
   ): Promise<Result<ClonePlanContentOutcome, ClonePlanContentError>> => {
+    const parentSums = await deps.budgetResultRepo.sumByBudgetIds(parent.budgets.map((b) => b.id));
+    if (!parentSums.ok) return parentSums;
+    const parentTotal = planTotal(parent, parentSums.value);
+    if (!parentTotal.ok) return parentTotal;
+
     // budgets (novos ids) → budgetIdMap
     const budgetIdMap = new Map<string, BudgetId.BudgetId>();
     let child = childHeader;
@@ -107,6 +113,8 @@ export const clonePlanContent =
     // resposta 201 (lista/detalhe mostrariam números diferentes do que o create devolveu).
     const sums = await deps.budgetResultRepo.sumByBudgetIds(child.budgets.map((b) => b.id));
     if (!sums.ok) return sums;
+    const total = planTotal(child, sums.value);
+    if (!total.ok) return total;
 
-    return ok({ plan: child, totalInCents: planTotalCents(child, sums.value) });
+    return ok({ plan: child, totalInCents: total.value.cents });
   };

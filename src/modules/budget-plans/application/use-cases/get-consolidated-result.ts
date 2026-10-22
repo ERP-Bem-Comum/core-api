@@ -1,4 +1,5 @@
-import { type Result, ok } from '../../../../shared/primitives/result.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type * as Money from '../../../../shared/kernel/money.ts';
 import { selectCurrentApprovedByFamily } from '../../domain/budget-plan/current-approved.ts';
 import { ProgramRef } from '../../domain/shared/refs.ts';
 import type { BudgetPlanRefError } from '../../domain/shared/refs.ts';
@@ -8,10 +9,15 @@ import type {
 } from '../../domain/budget-plan/repository.ts';
 import type {
   BudgetResultRepository,
-  BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
 import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-catalog.ts';
-import { planTotalCents, budgetIdsOf } from '../read-models/plan-total.ts';
+import {
+  planTotal,
+  budgetIdsOf,
+  sumMoney,
+  type PlanTotalError,
+} from '../read-models/plan-total.ts';
 
 // CA1 — Consolidado ABC (JSON): agrega as raízes aprovadas por Ano × Programa, em centavos. Resumo
 // (total + por-plano); o detalhe (breakdown por centro de custo) vive no CSV. `totalCents` = Σ dos
@@ -35,7 +41,9 @@ export type GetConsolidatedResultQuery = Readonly<{ year: number; programRef?: s
 export type GetConsolidatedResultError =
   | BudgetPlanRefError
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError
+  | BudgetResultSumError
+  | PlanTotalError
+  | 'consolidated-total-exceeds-safe-integer'
   | ProgramCatalogError;
 
 export type GetConsolidatedResultDeps = Readonly<{
@@ -68,20 +76,24 @@ export const getConsolidatedResult =
     if (!sums.ok) return sums;
 
     const plans: ConsolidatedPlanSummary[] = [];
-    let totalCents = 0;
+    const planTotals: Money.Money[] = [];
     for (const plan of current) {
       const program = await deps.programCatalog.getByRef(plan.programRef);
       if (!program.ok) return program;
-      const planCents = planTotalCents(plan, sums.value);
-      totalCents += planCents;
+      const total = planTotal(plan, sums.value);
+      if (!total.ok) return total;
+      planTotals.push(total.value);
       plans.push({
         id: String(plan.id),
         programName: program.value?.name ?? String(plan.programRef),
         programAbbreviation: program.value?.abbreviation ?? String(plan.programRef),
         version: plan.version.major,
-        totalCents: planCents,
+        totalCents: total.value.cents,
       });
     }
 
-    return ok({ year: query.year, totalCents, plans });
+    const totalCents = sumMoney(planTotals);
+    if (!totalCents.ok) return err('consolidated-total-exceeds-safe-integer');
+
+    return ok({ year: query.year, totalCents: totalCents.value.cents, plans });
   };
