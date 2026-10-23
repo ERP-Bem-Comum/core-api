@@ -32,19 +32,18 @@ Funcionalidade: Ajuste em Aberto e desfazimento de aprovação
     Quando o Operador tenta trocar a forma de novo, inclusive de volta para Boleto
     Então a operação é rejeitada
 
-  # CT-017c — código de barras não se edita (#1057)
-  Cenário: Alterar o código de barras de um Boleto aprovado é rejeitado
-    Dado um documento "Aprovado" cujo título pai está em Boleto com código de barras
-    Quando o Operador tenta trocar o código de barras mantendo a forma Boleto
+  # CT-017c — código de barras gravado não se edita (#1057)
+  Cenário: Alterar o código de barras já gravado é rejeitado
+    Dado um documento "Aprovado" cujo título pai está em Boleto ou Guia com código de barras
+    Quando o Operador tenta trocar o código de barras mantendo a forma
     Então a operação é rejeitada
     Mas uma Guia de recolhimento lançada sem código pode receber o código no título pai
 
-  # CT-017d — título transmitido não troca a forma (#1057)
-  Cenário: Trocar a forma de um título transmitido é rejeitado
-    Dado um documento "Aprovado" cujo título pai está "Transmitido" ou preso em remessa
-    Quando o Operador tenta trocar a forma de pagamento
+  # CT-017d — só título Aprovado se edita (#1057, P.O. 23/10)
+  Cenário: Editar um título transmitido ou pago é rejeitado
+    Dado um documento cujo título pai está "Transmitido" ou "Pago"
+    Quando o Operador tenta alterar a descrição, a forma de pagamento ou a categorização
     Então a operação é rejeitada
-    Mas a descrição e a categorização continuam editáveis
 
   # CT-018 — desfazer aprovação (P2, US-005)
   Cenário: Desfazer a aprovação retorna o documento para Aberto

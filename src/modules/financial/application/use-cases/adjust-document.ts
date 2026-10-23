@@ -201,8 +201,8 @@ const ownPayableIds = (payables: Payables): readonly string[] => [
 
 // #1057: edição do documento Aprovado (decisões da P.O., 14/10) — continua Aprovado.
 //
-// A remessa só é consultada quando forma ou complemento vêm no pedido: descrição, categorização e
-// vencimento não mudam o que o banco recebeu, e não há por que travá-los por um título em trânsito.
+// Sem consulta à remessa: o título preso nela já é Transmitido (ADR-0065 §2), e é pelo status que o
+// domínio recusa.
 const editApprovedDocument = async (
   deps: AdjustDocumentDeps,
   cmd: AdjustDocumentCommand,
@@ -217,12 +217,6 @@ const editApprovedDocument = async (
   const taxonomy =
     cmd.taxonomy === undefined ? null : await resolveTaxonomyPath(deps.taxonomyPaths, cmd.taxonomy);
   if (taxonomy !== null && !taxonomy.ok) return err(plain(taxonomy.error));
-
-  const touchesPayment = cmd.paymentMethod !== undefined || cmd.paymentDetail !== undefined;
-  const held = touchesPayment
-    ? await deps.remittances.findHeldPayables(ownPayableIds(payables))
-    : null;
-  if (held !== null && !held.ok) return err(plain(held.error));
 
   // Vencimento primeiro, pelo caminho de sempre (`editMetadata` leva o dueDate a todos os títulos);
   // a edição do Aprovado parte do resultado. Sem vencimento, parte do estado lido.
@@ -241,17 +235,9 @@ const editApprovedDocument = async (
     ...(cmd.paymentMethod !== undefined ? { paymentMethod: cmd.paymentMethod } : {}),
     ...(cmd.paymentDetail !== undefined ? { paymentDetail: cmd.paymentDetail } : {}),
     ...(taxonomy !== null ? { taxonomy: taxonomy.value } : {}),
-    heldPayableIds: held === null ? [] : [...new Set(held.value.map((h) => h.payableId))],
     at: deps.clock.now(),
   });
-  if (!edited.ok) {
-    // Mesma evidência do caminho de valor: QUAL título travou e em QUE remessa.
-    return err(
-      edited.error === 'document-has-held-payable' && held !== null
-        ? { kind: 'held-payables', error: 'document-has-held-payable', held: held.value }
-        : plain(edited.error),
-    );
-  }
+  if (!edited.ok) return err(plain(edited.error));
 
   const event = edited.value.events[0];
   if (event === undefined) return err(plain('document-repository-failure'));

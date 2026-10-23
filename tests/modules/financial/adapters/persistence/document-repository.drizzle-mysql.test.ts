@@ -266,9 +266,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
     });
 
-    // #1057 — a troca de forma num Aprovado grava NO TÍTULO por UPDATE, sem apagá-lo. O caso que
-    // importa é o título que já passou por uma remessa (aqui, descartada): o vínculo em
-    // `fin_remittance_payables` tem FK RESTRICT, e o hard replace antigo morria nela.
+    // #1057 — a troca de forma num Aprovado grava NO TÍTULO por UPDATE, sem apagá-lo: o id do título
+    // não muda. O vínculo com remessa aqui é o único que um título Aprovado pode ter — remessa
+    // descartada porque o arquivo nunca chegou ao banco (ADR-0065 §4); `fin_remittance_payables`
+    // guarda esse rastro com FK RESTRICT, e o hard replace antigo morria nela.
     describe('#1057 — troca de forma no Aprovado preserva o vínculo com a remessa', () => {
       const PM_SUP = '5a000000-0000-4000-8000-0000000000f2';
       const APPROVER = '5a000000-0000-4000-8000-0000000000f3';
@@ -327,7 +328,6 @@ if (!process.env['MYSQL_INTEGRATION']) {
             document,
             payables,
             paymentMethod: 'PIX',
-            heldPayableIds: [],
             at: new Date('2026-10-23T12:00:00Z'),
           });
           if (!edited.ok) throw new Error('test setup: editApproved');

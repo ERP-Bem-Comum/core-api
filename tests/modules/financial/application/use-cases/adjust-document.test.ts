@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { isErr, isOk, ok } from '#src/shared/index.ts';
+import { isErr, isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
@@ -15,7 +15,10 @@ import { createInMemoryRemittanceRepository } from '#src/modules/financial/adapt
 import { createInMemoryTaxonomyPathRead } from '#src/modules/financial/adapters/persistence/repos/taxonomy-path-read.in-memory.ts';
 import type { TimelineStore } from '#src/modules/financial/adapters/persistence/repos/timeline-repository.in-memory.ts';
 import type { DocumentRepository } from '#src/modules/financial/domain/document/repository.ts';
-import type { PaymentMethod } from '#src/modules/financial/domain/document/types.ts';
+import type {
+  DocumentStatus,
+  PaymentMethod,
+} from '#src/modules/financial/domain/document/types.ts';
 import {
   adjustDocument,
   type AdjustDocumentDeps,
@@ -27,7 +30,6 @@ const noRemittances = () => createInMemoryRemittanceRepository();
 const CLOCK = ClockFixed(new Date('2026-06-15T12:00:00Z'));
 const SUP = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
-const REMITTANCE = '33333333-3333-4333-8333-333333333333';
 const BOLETO_BARCODE = '3'.repeat(44);
 
 // #1057: um caminho existente e ativo da árvore do plano, para a categorização do Aprovado.
@@ -93,6 +95,7 @@ const seedApproved = async (
   repo: DocumentRepository,
   paymentMethod: PaymentMethod = 'TED',
   paymentDetail: string | null = null,
+  parentStatus: DocumentStatus = 'Approved',
 ) => {
   const c = createdNfse(paymentMethod, paymentDetail);
   const by = UserRef.rehydrate(USER);
@@ -104,7 +107,11 @@ const seedApproved = async (
     at: new Date('2026-07-10'),
   });
   if (!a.ok) throw new Error('setup approve');
-  await repo.save({ document: a.value.document, payables: a.value.payables }, []);
+  const payables = {
+    parent: { ...a.value.payables.parent, status: parentStatus },
+    children: a.value.payables.children,
+  };
+  await repo.save({ document: a.value.document, payables }, []);
   return a.value.document.id;
 };
 
@@ -250,37 +257,22 @@ describe('financial/application — adjustDocument no Aprovado (#1057)', () => {
     if (!r.ok) assert.equal(r.error.error, 'taxonomy-path-invalid');
   });
 
-  it('título pai preso em remessa: recusa com a evidência (held-payables)', async () => {
+  it('título pai Transmitido: recusa a edição sem consultar a remessa e sem gravar', async () => {
     const repo = createInMemoryDocumentRepository();
-    const id = await seedApproved(repo, 'Boleto', BOLETO_BARCODE);
-    const r = await adjustDocument({
-      ...deps(repo),
-      remittances: {
-        findHeldPayables: (ids) =>
-          Promise.resolve(
-            ok(
-              ids.slice(0, 1).map((payableId) => ({ payableId, remittanceId: REMITTANCE, nsa: 7 })),
-            ),
-          ),
-      },
-    })({ documentId: id, actor: USER, expectedVersion: 0, paymentMethod: 'PIX' });
-    assert.equal(r.ok, false);
-    if (!r.ok) {
-      assert.equal(r.error.kind, 'held-payables');
-      assert.equal(r.error.error, 'document-has-held-payable');
-    }
-  });
-
-  it('só descrição num Aprovado com título preso: não consulta a remessa e grava', async () => {
-    const repo = createInMemoryDocumentRepository();
-    const id = await seedApproved(repo, 'Boleto', BOLETO_BARCODE);
+    const id = await seedApproved(repo, 'Boleto', BOLETO_BARCODE, 'Transmitted');
     const r = await adjustDocument({
       ...deps(repo),
       remittances: {
         findHeldPayables: () => Promise.reject(new Error('não deveria consultar a remessa')),
       },
     })({ documentId: id, actor: USER, expectedVersion: 0, description: 'só o texto' });
-    assert.equal(r.ok, true);
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.equal(r.error.kind, 'plain');
+      assert.equal(r.error.error, 'document-edit-requires-approved-payables');
+    }
+    const found = await repo.findById(id);
+    if (found.ok) assert.equal(found.value.document.description, null);
   });
 
   it('vencimento no Aprovado (lote #162) segue aceito e propaga aos títulos', async () => {

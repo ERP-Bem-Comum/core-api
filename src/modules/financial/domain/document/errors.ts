@@ -44,6 +44,6 @@ export type DocumentError =
   // Boleto/Guia que continua na mesma forma: o código de barras não se edita. Única exceção: Guia pai
   // lançada sem código, que pode recebê-lo.
   | 'payment-barcode-not-editable'
-  // forma/complemento recusados porque o título pai já saiu do Aprovado (Transmitido, Pago,
-  // Conciliado). Descrição e categorização seguem editáveis.
-  | 'payable-payment-locked';
+  // a edição do Aprovado é só de título Aprovado (P.O., 23/10): transmitido — o preso em remessa
+  // inclusive — ou pago não tem descrição, forma nem categorização alteradas.
+  | 'document-edit-requires-approved-payables';

@@ -849,8 +849,6 @@ export type EditApprovedInput = Readonly<{
   paymentDetail?: string | null;
   // Caminho INTEIRO, já validado contra a árvore do plano pela aplicação (ver `DocumentTaxonomy`).
   taxonomy?: DocumentTaxonomy;
-  // Títulos presos numa remessa viva — mesmo contrato de `AdjustDocumentInput.heldPayableIds`.
-  heldPayableIds: readonly string[];
   at: Date;
 }>;
 
@@ -870,9 +868,13 @@ const isBlankDetail = (s: string | null): boolean => s === null || s.trim().leng
 // Regras da forma de pagamento (só o título pai):
 //   · muda UMA vez depois de aprovado (`paymentMethodChangedAt` marca a troca);
 //   · não vai PARA Boleto/Guia — pediria um código de barras novo;
-//   · na mesma forma de código de barras, o código não se edita, salvo a Guia lançada sem código;
-//   · título fora de `Approved` (Transmitido, Pago…) ou preso em remessa viva não troca nada.
+//   · depois de gravado, o código de barras não se edita; só a Guia lançada sem código o recebe.
 // O código antigo não se perde: fica na trilha como "antes".
+//
+// Tudo isto é só de título Aprovado (P.O., 23/10). Transmitido não se edita — e o título preso em
+// remessa É transmitido, desde a geração (ADR-0065 §2), por isso não há consulta à remessa aqui.
+// Forma e complemento tocam só o pai; descrição e categorização são do documento e chegam a todos os
+// títulos, por isso pedem todos em Aprovado.
 //
 // A categorização cascateia aos impostos pelo snapshot do `DocumentSaved`, exatamente como em
 // `reclassifyTaxonomy` — a taxonomia é do documento, e o read-model reescreve todos os títulos dele.
@@ -882,9 +884,19 @@ type ApprovedPayment = Readonly<{
   paymentDetail: string | null;
 }>;
 
+const isApprovedPayable = (p: Payable): boolean => p.status === 'Approved';
+
+const editableAfterApproval = (input: EditApprovedInput): boolean => {
+  const { parent, children } = input.payables;
+  const touchesPayment = input.paymentMethod !== undefined || input.paymentDetail !== undefined;
+  const touchesDocument = input.description !== undefined || input.taxonomy !== undefined;
+  if (touchesPayment && !isApprovedPayable(parent)) return false;
+  if (touchesDocument && ![parent, ...children].every(isApprovedPayable)) return false;
+  return true;
+};
+
 // A troca de forma/complemento do pai, isolada para `editApproved` ler como composição. Sem pedido de
-// troca, ou pedido igual ao gravado, devolve o estado atual — e nenhuma trava é consultada: editar só a
-// descrição de um título transmitido não pode ser recusado por uma regra da forma.
+// troca, ou pedido igual ao gravado, devolve o estado atual.
 const changeApprovedPayment = (
   input: EditApprovedInput,
 ): Result<ApprovedPayment, DocumentError> => {
@@ -902,9 +914,6 @@ const changeApprovedPayment = (
   const fallbackDetail = methodChanges ? null : parent.paymentDetail;
   const detail = input.paymentDetail !== undefined ? input.paymentDetail : fallbackDetail;
   if (!methodChanges && detail === parent.paymentDetail) return ok(current);
-
-  if (parent.status !== 'Approved') return err('payable-payment-locked');
-  if (input.heldPayableIds.includes(parent.id)) return err('document-has-held-payable');
 
   if (methodChanges) {
     if (parent.paymentMethodChangedAt !== null) return err('payment-method-already-changed');
@@ -942,6 +951,7 @@ export const editApproved = (
   input: EditApprovedInput,
 ): Result<EditApprovedOutput, DocumentError> => {
   const d = input.document;
+  if (!editableAfterApproval(input)) return err('document-edit-requires-approved-payables');
   const payment = changeApprovedPayment(input);
   if (!payment.ok) return err(payment.error);
   const { payables } = payment.value;

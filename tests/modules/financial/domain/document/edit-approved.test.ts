@@ -86,7 +86,7 @@ const taxonomy = (): Document.DocumentTaxonomy => {
 describe('Document.editApproved (#1057)', () => {
   it('Boleto → PIX: troca a forma do PAI, limpa o código, marca a troca e mantém Aprovado', () => {
     const a = approved('Boleto', BOLETO_BARCODE);
-    const r = Document.editApproved({ ...a, paymentMethod: 'PIX', heldPayableIds: [], at: AT });
+    const r = Document.editApproved({ ...a, paymentMethod: 'PIX', at: AT });
     assert.equal(r.ok, true);
     if (!r.ok) return;
     const { document, payables } = r.value;
@@ -109,7 +109,6 @@ describe('Document.editApproved (#1057)', () => {
       ...a,
       paymentMethod: 'Outro',
       paymentDetail: 'pago no caixa',
-      heldPayableIds: [],
       at: AT,
     });
     assert.equal(r.ok, true);
@@ -118,12 +117,11 @@ describe('Document.editApproved (#1057)', () => {
 
   it('segunda troca depois da aprovação → payment-method-already-changed', () => {
     const a = approved('Boleto', BOLETO_BARCODE);
-    const first = Document.editApproved({ ...a, paymentMethod: 'PIX', heldPayableIds: [], at: AT });
+    const first = Document.editApproved({ ...a, paymentMethod: 'PIX', at: AT });
     if (!first.ok) throw new Error('setup first change');
     const r = Document.editApproved({
       ...first.value,
       paymentMethod: 'TED',
-      heldPayableIds: [],
       at: AT,
     });
     assert.deepEqual(r, { ok: false, error: 'payment-method-already-changed' });
@@ -136,7 +134,6 @@ describe('Document.editApproved (#1057)', () => {
         ...a,
         paymentMethod: target,
         paymentDetail: target === 'Boleto' ? BOLETO_BARCODE : GUIA_BARCODE,
-        heldPayableIds: [],
         at: AT,
       });
       assert.deepEqual(r, { ok: false, error: 'payment-method-not-allowed-after-approval' });
@@ -148,7 +145,6 @@ describe('Document.editApproved (#1057)', () => {
     const r = Document.editApproved({
       ...a,
       paymentDetail: '4'.repeat(44),
-      heldPayableIds: [],
       at: AT,
     });
     assert.deepEqual(r, { ok: false, error: 'payment-barcode-not-editable' });
@@ -159,7 +155,6 @@ describe('Document.editApproved (#1057)', () => {
     const r = Document.editApproved({
       ...a,
       paymentDetail: GUIA_BARCODE,
-      heldPayableIds: [],
       at: AT,
     });
     assert.equal(r.ok, true);
@@ -176,56 +171,62 @@ describe('Document.editApproved (#1057)', () => {
     const r = Document.editApproved({
       ...a,
       paymentDetail: '8'.repeat(43) + '7',
-      heldPayableIds: [],
       at: AT,
     });
     assert.deepEqual(r, { ok: false, error: 'payment-barcode-not-editable' });
   });
 
-  it('título pai Transmitido: forma recusada (payable-payment-locked), descrição segue editável', () => {
-    const a = approved('Boleto', BOLETO_BARCODE);
-    const transmitted = withParent(a.payables, { status: 'Transmitted' });
-    const refused = Document.editApproved({
-      document: a.document,
-      payables: transmitted,
-      paymentMethod: 'PIX',
-      heldPayableIds: [],
-      at: AT,
+  // P.O., 23/10: a edição é só de título Aprovado. Preso em remessa = Transmitido (ADR-0065 §2).
+  for (const status of ['Transmitted', 'Paid'] as const) {
+    it(`título pai ${status}: descrição, forma e categorização recusadas`, () => {
+      const a = approved('Boleto', BOLETO_BARCODE);
+      const progressed = withParent(a.payables, { status });
+      for (const change of [
+        { description: 'nova descrição' },
+        { paymentMethod: 'PIX' as const },
+        { taxonomy: taxonomy() },
+      ]) {
+        const r = Document.editApproved({
+          document: a.document,
+          payables: progressed,
+          ...change,
+          at: AT,
+        });
+        assert.deepEqual(r, { ok: false, error: 'document-edit-requires-approved-payables' });
+      }
     });
-    assert.deepEqual(refused, { ok: false, error: 'payable-payment-locked' });
+  }
 
-    const described = Document.editApproved({
+  it('imposto (filho) fora do Aprovado: descrição e categorização recusadas; forma do pai segue', () => {
+    const a = approved('Boleto', BOLETO_BARCODE);
+    const paidChild = {
+      parent: a.payables.parent,
+      children: a.payables.children.map((c) => ({ ...c, status: 'Paid' as const })),
+    };
+    for (const change of [{ description: 'x' }, { taxonomy: taxonomy() }]) {
+      const r = Document.editApproved({
+        document: a.document,
+        payables: paidChild,
+        ...change,
+        at: AT,
+      });
+      assert.deepEqual(r, { ok: false, error: 'document-edit-requires-approved-payables' });
+    }
+    const repaid = Document.editApproved({
       document: a.document,
-      payables: transmitted,
-      description: 'nova descrição',
-      taxonomy: taxonomy(),
-      heldPayableIds: [],
+      payables: paidChild,
+      paymentMethod: 'PIX',
       at: AT,
     });
-    assert.equal(described.ok, true);
-    if (described.ok) assert.equal(described.value.document.description, 'nova descrição');
+    assert.equal(repaid.ok, true, 'a forma é só do pai, que segue Aprovado');
   });
 
-  it('título pai preso em remessa viva: forma recusada com document-has-held-payable', () => {
+  it('pedir a mesma forma e o mesmo complemento não é troca', () => {
     const a = approved('Boleto', BOLETO_BARCODE);
     const r = Document.editApproved({
       ...a,
-      paymentMethod: 'PIX',
-      heldPayableIds: [a.payables.parent.id],
-      at: AT,
-    });
-    assert.deepEqual(r, { ok: false, error: 'document-has-held-payable' });
-  });
-
-  it('pedir a mesma forma e o mesmo complemento não é troca — nenhuma trava é consultada', () => {
-    const a = approved('Boleto', BOLETO_BARCODE);
-    const transmitted = withParent(a.payables, { status: 'Transmitted' });
-    const r = Document.editApproved({
-      document: a.document,
-      payables: transmitted,
       paymentMethod: 'Boleto',
       paymentDetail: BOLETO_BARCODE,
-      heldPayableIds: [transmitted.parent.id],
       at: AT,
     });
     assert.equal(r.ok, true);
@@ -235,7 +236,7 @@ describe('Document.editApproved (#1057)', () => {
   it('categorização: grava os 5 níveis no documento e o DocumentSaved leva a todos os títulos', () => {
     const a = approved('PIX', null);
     const t = taxonomy();
-    const r = Document.editApproved({ ...a, taxonomy: t, heldPayableIds: [], at: AT });
+    const r = Document.editApproved({ ...a, taxonomy: t, at: AT });
     assert.equal(r.ok, true);
     if (!r.ok) return;
     assert.deepEqual(Document.taxonomyOf(r.value.document), t);
@@ -252,7 +253,6 @@ describe('Document.editApproved (#1057)', () => {
     const changed = Document.editApproved({
       ...a,
       paymentMethod: 'PIX',
-      heldPayableIds: [],
       at: AT,
     });
     if (!changed.ok) throw new Error('setup change');

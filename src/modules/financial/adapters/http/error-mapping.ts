@@ -105,7 +105,7 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'payment-method-already-changed',
   'payment-method-not-allowed-after-approval',
   'payment-barcode-not-editable',
-  'payable-payment-locked',
+  'document-edit-requires-approved-payables',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -338,8 +338,8 @@ const SLUG_MESSAGES: Record<string, string> = {
     'Depois da aprovação, a forma de pagamento não pode passar para Boleto nem Guia de recolhimento. Escolha Pix, TED, Transferência ou outra forma sem código de barras.',
   'payment-barcode-not-editable':
     'O código de barras não pode ser alterado depois da aprovação. Para pagar de outro jeito, troque a forma de pagamento.',
-  'payable-payment-locked':
-    'A forma de pagamento não pode mais ser alterada: o título já foi transmitido ao banco ou pago. Descrição e categorização continuam editáveis.',
+  'document-edit-requires-approved-payables':
+    'Só título com status Aprovado pode ser editado. Título transmitido ou pago não tem descrição, forma de pagamento nem categorização alteradas.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',
