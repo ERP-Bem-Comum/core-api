@@ -26,6 +26,19 @@ const bankText = (c: Collaborator): string | null =>
     : `${c.bankAccount.bank}/${c.bankAccount.agency}/${c.bankAccount.accountNumber}-${c.bankAccount.checkDigit}`;
 const pixText = (c: Collaborator): string | null =>
   c.pixKey === null ? null : `${c.pixKey.keyType}:${c.pixKey.key}`;
+// PcD (spec 131): JSON dos códigos — estruturado para o adapter traduzir em PT sem adivinhar onde
+// termina um código e começa o texto livre de "Outra". Tipos já vêm na ordem canônica, então a
+// comparação por texto é estável.
+const pwdText = (c: Collaborator): string | null => {
+  if (c.pwd === null) return null;
+  // Chaves em ordem fixa: a igualdade do diff é por texto, e a ordem do objeto não é contrato.
+  if (c.pwd.answer !== 'SIM') return JSON.stringify({ answer: c.pwd.answer });
+  return JSON.stringify({
+    answer: c.pwd.answer,
+    types: c.pwd.types,
+    otherDescription: c.pwd.otherDescription,
+  });
+};
 
 const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>> => ({
   name: c.name,
@@ -51,6 +64,8 @@ const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>>
       ? null
       : civilDayIso(c.dateOfBirth),
   race: c.race,
+  // Preenchido pelo PUT até completar (P.O., 23/10/2026).
+  pwd: pwdText(c),
 });
 
 /**

@@ -385,6 +385,8 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
     }),
     completeCollaboratorRegistration: completeCollaboratorRegistration({
       collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistory,
+      userNameReader: pools.userNameReader,
       clock,
     }),
     issueCollaboratorInvite: issueCollaboratorInvite({
@@ -404,6 +406,7 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
       inviteRepo: pools.inviteRepo,
       minter: inviteMinter,
       collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistory,
       clock,
     }),
     deactivateCollaborator: deactivateCollaborator({

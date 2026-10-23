@@ -53,6 +53,13 @@ export type CollaboratorTeamProjection = Readonly<{
    * nascimento -> `'NA'`. Nem a data nem o ano cruzam a borda, so o codigo (LGPD, igual a `age`).
    */
   generation: string;
+  /**
+   * Pessoa com Deficiência (spec 131 do web-app): resposta (`SIM`/`NAO`/`PREFIRO_NAO_RESPONDER`, ou
+   * `null` = não respondeu) e os tipos marcados, como CÓDIGOS. O texto livre de "Outra" não cruza a
+   * borda — o relatório filtra e conta por tipo, não lê o relato.
+   */
+  pwdAnswer: string | null;
+  pwdTypes: readonly string[];
 }>;
 
 export type CollaboratorProjectionReader = Readonly<{
@@ -83,6 +90,8 @@ export const toTeamProjection = (
   age: c.dateOfBirth === null ? null : completedYears(PlainDate.fromDate(c.dateOfBirth), today),
   // Geracao independe do `today`: so do ano de nascimento (ver `generation.ts`).
   generation: generationIdOf(c.dateOfBirth),
+  pwdAnswer: c.pwd?.answer ?? null,
+  pwdTypes: c.pwd?.answer === 'SIM' ? [...c.pwd.types] : [],
 });
 
 export const openCollaboratorProjectionReader = async (

@@ -21,6 +21,7 @@ import * as DisableReason from '#src/modules/partners/domain/collaborator/disabl
 import * as Sex from '#src/modules/partners/domain/collaborator/sex.ts';
 import * as MaritalStatus from '#src/modules/partners/domain/collaborator/civil-status.ts';
 import * as Territory from '#src/modules/partners/domain/collaborator/territory.ts';
+import * as Pwd from '#src/modules/partners/domain/collaborator/pwd.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
 import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
@@ -84,8 +85,7 @@ export const collaboratorToInsert = (c: CollaboratorEntity, now: Date): NewColla
   hasChildren: c.hasChildren,
   childrenCount: c.childrenCount,
   childrenAges: c.childrenAges === null ? null : c.childrenAges.join(','),
-  isPwd: c.isPwd,
-  pwdDescription: c.pwdDescription,
+  ...Pwd.toColumns(c.pwd),
   isOnLeave: c.isOnLeave,
   leaveDuration: c.leaveDuration,
   leaveRenewable: c.leaveRenewable,
@@ -193,6 +193,13 @@ export const collaboratorFromRow = (
         });
   if (!territory.ok) return err('collaborator-mapper-invalid-enum');
 
+  const pwd = Pwd.fromColumns({
+    pwdAnswer: row.pwdAnswer,
+    pwdTypes: row.pwdTypes,
+    pwdDescription: row.pwdDescription,
+  });
+  if (!pwd.ok) return err('collaborator-mapper-invalid-enum');
+
   const rehydrated = Collaborator.rehydrate({
     id: id.value,
     name: row.name,
@@ -226,8 +233,7 @@ export const collaboratorFromRow = (
     hasChildren: row.hasChildren,
     childrenCount: row.childrenCount,
     childrenAges: parseChildrenAges(row.childrenAges),
-    isPwd: row.isPwd,
-    pwdDescription: row.pwdDescription,
+    pwd: pwd.value,
     isOnLeave: row.isOnLeave,
     leaveDuration: row.leaveDuration,
     leaveRenewable: row.leaveRenewable,
