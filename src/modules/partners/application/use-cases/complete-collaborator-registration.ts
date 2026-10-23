@@ -20,22 +20,37 @@ import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
 } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type {
+  CollaboratorHistoryError,
+  CollaboratorHistoryRepository,
+} from '#src/modules/partners/application/ports/collaborator-history.ts';
+import type { UserNameReader } from '#src/modules/partners/application/ports/user-name-reader.ts';
 
-export type CompleteCollaboratorRegistrationCommand = Readonly<{ collaboratorId: string }> &
+export type CompleteCollaboratorRegistrationCommand = Readonly<{
+  collaboratorId: string;
+  /** Usuário do RH que completa — autor da linha de PcD no histórico (spec 131). */
+  changedByUserId: string;
+}> &
   CompleteRegistrationInput;
 
 export type CompleteCollaboratorRegistrationError =
   | 'complete-collaborator-registration-invalid-id'
   | 'complete-collaborator-registration-not-found'
   | CollaboratorError
-  | CollaboratorRepositoryError;
+  | CollaboratorRepositoryError
+  | CollaboratorHistoryError;
 
 export type CompleteCollaboratorRegistrationOutput = Readonly<{
   collaborator: CollaboratorAggregate;
   event: CollaboratorEvent;
 }>;
 
-type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository; clock: Clock }>;
+type Deps = Readonly<{
+  collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
+  userNameReader: UserNameReader;
+  clock: Clock;
+}>;
 
 export const completeCollaboratorRegistration =
   (deps: Deps) =>
@@ -44,7 +59,7 @@ export const completeCollaboratorRegistration =
   ): Promise<
     Result<CompleteCollaboratorRegistrationOutput, CompleteCollaboratorRegistrationError>
   > => {
-    const { collaboratorId, ...input } = cmd;
+    const { collaboratorId, changedByUserId, ...input } = cmd;
 
     const id = CollaboratorId.rehydrate(collaboratorId);
     if (!id.ok) return err('complete-collaborator-registration-invalid-id');
@@ -53,11 +68,25 @@ export const completeCollaboratorRegistration =
     if (!fetched.ok) return fetched;
     if (fetched.value === null) return err('complete-collaborator-registration-not-found');
 
-    const transition = Collaborator.completeRegistration(fetched.value, input, deps.clock.now());
+    const now = deps.clock.now();
+    const transition = Collaborator.completeRegistration(fetched.value, input, now);
     if (!transition.ok) return transition;
 
     const saved = await deps.collaboratorRepo.save(transition.value.collaborator);
     if (!saved.ok) return saved;
+
+    // Spec 131 (P.O., 23/10/2026): a primeira resposta de PcD entra no histórico — só ela.
+    const userName = await deps.userNameReader.getUserName(changedByUserId);
+    const recorded = await deps.historyRepo.record({
+      collaboratorId,
+      eventType: 'CollaboratorRegistrationCompleted',
+      before: fetched.value,
+      after: transition.value.collaborator,
+      occurredAt: now,
+      changedBy: { userId: changedByUserId, userName },
+      fields: ['pwd'],
+    });
+    if (!recorded.ok) return recorded;
 
     return ok({ collaborator: transition.value.collaborator, event: transition.value.event });
   };

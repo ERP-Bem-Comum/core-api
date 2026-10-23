@@ -13,6 +13,7 @@ import {
   RG_MAX_LENGTH,
   GENDER_IDENTITY_DESCRIPTION_MAX_LENGTH,
 } from '../../domain/collaborator/personal-data.ts';
+import { PWD_OTHER_DESCRIPTION_MAX_LENGTH } from '../../domain/collaborator/pwd.ts';
 
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5; // default do legado (PaginatedEnvelope.Limit).
@@ -148,6 +149,40 @@ const territorySchema = z.object({
   municipality: z.string().nullable(),
 });
 
+// Pessoa com Deficiência (spec 131). Códigos do domínio; o rótulo PT é do front.
+const PWD_ANSWERS = ['SIM', 'NAO', 'PREFIRO_NAO_RESPONDER'] as const;
+const PWD_TYPE_CODES = [
+  'FISICA',
+  'VISUAL',
+  'AUDITIVA',
+  'INTELECTUAL_MENTAL',
+  'TEA',
+  'MULTIPLA',
+  'OUTRA',
+] as const;
+
+/** Resposta gravada. `types` vazio fora do "Sim"; "Sim" sem tipo = dado anterior, incompleto. */
+const pwdDetailSchema = z.object({
+  answer: z.enum(PWD_ANSWERS),
+  types: z.array(z.enum(PWD_TYPE_CODES)),
+  otherDescription: z.string().nullable(),
+});
+
+/**
+ * Resposta enviada. Chega COMPLETA (domínio, 422): "Sim" pede ao menos um tipo, "Outra" pede o texto,
+ * e tipos/texto só existem com "Sim". O teto do texto é o do domínio (fonte única, ADR-0027).
+ */
+const pwdInputSchema = z.object({
+  answer: z.enum(PWD_ANSWERS),
+  types: z.array(z.enum(PWD_TYPE_CODES)).max(PWD_TYPE_CODES.length).default([]),
+  otherDescription: z
+    .string()
+    .trim()
+    .max(PWD_OTHER_DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .default(null),
+});
+
 export const collaboratorDetailSchema = z.object({
   id: uuidV4(),
   legacyId: z.number().int().nullable(),
@@ -180,8 +215,7 @@ export const collaboratorDetailSchema = z.object({
   hasChildren: z.boolean().nullable(),
   childrenCount: z.number().int().nullable(),
   childrenAges: z.array(z.number().int()).nullable(),
-  isPwd: z.boolean().nullable(),
-  pwdDescription: z.string().nullable(),
+  pwd: pwdDetailSchema.nullable(),
   isOnLeave: z.boolean().nullable(),
   leaveDuration: z.string().nullable(),
   leaveRenewable: z.boolean().nullable(),
@@ -316,6 +350,10 @@ export const updateCollaboratorBodySchema = createCollaboratorBodySchema
       description:
         'Ausente ou null mantém; preenche se vazio (enum validado no domínio); trocar a raça gravada é recusado (409)',
     }),
+    pwd: pwdInputSchema.nullable().optional().meta({
+      description:
+        'Pessoa com Deficiência. Ausente ou null mantém; com o gravado vazio ou incompleto, grava a resposta (que precisa vir completa, 422); trocar uma resposta completa é recusado (409)',
+    }),
   });
 
 export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
@@ -357,8 +395,8 @@ export const completeRegistrationBodySchema = z.object({
   hasChildren: z.boolean().nullable().default(null),
   childrenCount: z.number().int().nonnegative().nullable().default(null),
   childrenAges: z.array(z.number().int().nonnegative()).nullable().default(null),
-  isPwd: z.boolean().nullable().default(null),
-  pwdDescription: z.string().nullable().default(null),
+  // Spec 131: `null` (inclusive o default de campo ausente) mantém o que o PUT já gravou.
+  pwd: pwdInputSchema.nullable().default(null),
   isOnLeave: z.boolean().nullable().default(null),
   leaveDuration: z.string().nullable().default(null),
   leaveRenewable: z.boolean().nullable().default(null),
@@ -378,6 +416,9 @@ export const autocadastroQuerySchema = z.object({
 });
 
 export const autocadastroBodySchema = completeRegistrationBodySchema.extend({
+  // Spec 131 (P.O., 23/10/2026): no autocadastro a pergunta "Você é PcD?" é OBRIGATÓRIA. Só aqui —
+  // o RH completa o cadastro sem ela.
+  pwd: pwdInputSchema,
   token: z.string().min(1),
   // bound de input (W2/m2): o domínio exige 3 dígitos; o máximo absorve máscara legível.
   cpfPrefix: z.string().min(1).max(14),

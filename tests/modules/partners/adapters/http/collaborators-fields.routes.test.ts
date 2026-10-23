@@ -74,7 +74,7 @@ const seedComplete = (): { id: string; record: CollaboratorReadRecord } => {
       hasChildren: true,
       childrenCount: 2,
       childrenAges: [5, 8],
-      isPwd: false,
+      pwd: { answer: 'NAO' },
       isOnLeave: null,
       leaveDuration: null,
       leaveRenewable: null,

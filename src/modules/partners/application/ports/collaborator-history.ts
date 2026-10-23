@@ -18,14 +18,17 @@ export type CollaboratorHistoryError = 'collaborator-repo-unavailable';
 export type CollaboratorHistoryEventType =
   | 'CollaboratorEdited'
   | 'CollaboratorDeactivated'
-  | 'CollaboratorReactivated';
+  | 'CollaboratorReactivated'
+  // Spec 131: a PRIMEIRA resposta de PcD, dada ao completar o cadastro, também vai ao histórico.
+  | 'CollaboratorRegistrationCompleted';
 
 /**
  * Autor da alteração (#1029). `userName` é o nome NO MOMENTO da ação, desnormalizado na linha
  * (imutabilidade histórica, como o `fieldLabel`); `null` quando o auth não respondeu — o `userId`
- * continua sendo a referência autoritativa.
+ * continua sendo a referência autoritativa. `userId` é `null` só no autocadastro (spec 131): quem
+ * responde é o próprio colaborador, que não é usuário do sistema — o nome registra a origem.
  */
-export type HistoryAuthor = Readonly<{ userId: string; userName: string | null }>;
+export type HistoryAuthor = Readonly<{ userId: string | null; userName: string | null }>;
 
 /** Entrada de histórico já materializada (uma por campo alterado). */
 export type CollaboratorHistoryEntry = Readonly<{
@@ -49,6 +52,11 @@ export type RecordHistoryInput = Readonly<{
   after: Collaborator;
   occurredAt: Date;
   changedBy: HistoryAuthor | null;
+  /**
+   * Restringe o diff a estes campos. Ausente = todos os rastreados. Usado ao completar o cadastro
+   * (spec 131), em que só o PcD entra — os demais campos pessoais seguem fora do histórico ali.
+   */
+  fields?: readonly string[];
 }>;
 
 export type CollaboratorHistoryRepository = Readonly<{

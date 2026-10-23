@@ -36,7 +36,18 @@ const baseCmd = () => ({
 
 const validCmd = (over: Partial<ReturnType<typeof baseCmd>> = {}) => ({ ...baseCmd(), ...over });
 
+const RH_USER = '9b1f0c2e-4a3d-4e5f-8a7b-6c5d4e3f2a1b';
+const userNameReader = { getUserName: () => Promise.resolve('RH Bem Comum') };
+const complete = () =>
+  completeCollaboratorRegistration({
+    collaboratorRepo: repo,
+    historyRepo: history,
+    userNameReader,
+    clock,
+  });
+
 const completeInput = () => ({
+  changedByUserId: RH_USER,
   rg: '12.345.678-9',
   dateOfBirth: new Date('1990-05-10T00:00:00.000Z'),
   genderIdentity: 'MULHER_CIS',
@@ -129,7 +140,7 @@ describe('completeCollaboratorRegistration', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    const r = await complete()({
       collaboratorId: id,
       ...completeInput(),
     });
@@ -141,7 +152,7 @@ describe('completeCollaboratorRegistration', () => {
   });
 
   it('id inexistente → not-found', async () => {
-    const r = await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    const r = await complete()({
       collaboratorId: '7f3a1234-5678-4abc-9def-fedcba987654',
       ...completeInput(),
     });
@@ -153,12 +164,12 @@ describe('completeCollaboratorRegistration', () => {
     const reg = await registerCollaborator({ collaboratorRepo: repo, clock })(validCmd());
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
-    await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    await complete()({
       collaboratorId: id,
       ...completeInput(),
     });
 
-    const again = await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    const again = await complete()({
       collaboratorId: id,
       ...completeInput(),
     });

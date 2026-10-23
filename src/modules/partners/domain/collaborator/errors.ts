@@ -9,6 +9,7 @@ import type { PaymentTargetError } from '../shared/payment-target.ts';
 import type { SexError } from './sex.ts';
 import type { MaritalStatusError } from './civil-status.ts';
 import type { TerritoryError } from './territory.ts';
+import type { PwdError } from './pwd.ts';
 
 // Erros do agregado `Collaborator` — string union kebab EN. Compõe os erros dos
 // enums (validados em register/completeRegistration/deactivate).
@@ -43,6 +44,8 @@ export type CollaboratorError =
   | SexError
   | MaritalStatusError
   | TerritoryError
+  // Spec 131: Pessoa com Deficiência (resposta, tipos, texto de "Outra").
+  | PwdError
   | OccupationAreaError
   | EmploymentRelationshipError
   | GenderIdentityError

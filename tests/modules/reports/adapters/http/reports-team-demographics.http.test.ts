@@ -104,6 +104,9 @@ const member = (over: Partial<TeamMember> = {}): TeamMember => ({
   age: 41,
   // #1055: geração no contrato de `TeamMember` (idade 41 → Millennial).
   generation: 'MILLENNIAL',
+  // Spec 131: PcD como códigos.
+  pwdAnswer: 'NAO',
+  pwdTypes: [],
   ...over,
 });
 
@@ -248,6 +251,8 @@ describe('reports/http - CA9 regressao zero em GET /reports/team (#238)', () => 
       'id',
       'name',
       'program',
+      'pwdAnswer',
+      'pwdTypes',
       'race',
       'registrationStatus',
       'role',

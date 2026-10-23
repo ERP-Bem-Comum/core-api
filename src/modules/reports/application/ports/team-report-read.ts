@@ -31,6 +31,10 @@ export type TeamMember = Readonly<{
   // derivada no `partners`. Código, NUNCA `null` (sem data de nascimento → `'NA'`); nem a data
   // nem o ano atravessam — só o código, igual a `age`.
   generation: string;
+  // Spec 131 do web-app: Pessoa com Deficiência — resposta e tipos como CÓDIGOS (rótulo PT no front).
+  // `null` = não respondeu. O texto livre de "Outra" não atravessa.
+  pwdAnswer: string | null;
+  pwdTypes: readonly string[];
 }>;
 
 export type TeamReportReadError = 'team-report-read-unavailable';

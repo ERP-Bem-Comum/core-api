@@ -23,7 +23,7 @@ import type {
 } from './schemas.ts';
 
 export const teamToDto = (members: readonly TeamMember[]): TeamReportResponseDto => ({
-  team: members.map((m) => ({ ...m })),
+  team: members.map((m) => ({ ...m, pwdTypes: [...m.pwdTypes] })),
 });
 
 // REP-1 demográficos: cópia rasa dos 3 vetores de contagem. Nenhum campo por pessoa entra aqui.
