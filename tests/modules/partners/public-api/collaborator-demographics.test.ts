@@ -62,7 +62,7 @@ const sumOf = (buckets: readonly CategoryCount[]): number =>
 const bornForAge = (age: number): Date => new Date(`${String(2026 - age)}-01-01T00:00:00.000Z`);
 
 describe('partners/demographics - listas canonicas (CA4)', () => {
-  it('CA4: genero tem as 8 categorias canonicas + N/A, nessa ordem', () => {
+  it('CA4: genero tem as 9 categorias canonicas + N/A, nessa ordem (QUEER antes de OUTRO)', () => {
     assert.deepEqual(idsOf(GENDER_CATEGORIES), [
       'PREFIRO_NAO_RESPONDER',
       'HOMEM_CIS',
@@ -71,6 +71,7 @@ describe('partners/demographics - listas canonicas (CA4)', () => {
       'MULHER_TRANS',
       'TRAVESTI',
       'NAO_BINARIO',
+      'QUEER',
       'OUTRO',
       NOT_AVAILABLE_ID,
     ]);

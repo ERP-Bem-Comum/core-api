@@ -50,6 +50,7 @@ export const collaboratorListQuerySchema = z.object({
           'MULHER_TRANS',
           'TRAVESTI',
           'NAO_BINARIO',
+          'QUEER',
           'OUTRO',
         ]),
       )
