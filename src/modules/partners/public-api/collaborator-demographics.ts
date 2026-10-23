@@ -62,15 +62,16 @@ export const notAvailable: CategoryCount = {
 // As listas canonicas sao o TEMPLATE zerado da distribuicao: todo bucket aparece na resposta
 // mesmo com count 0 (CA4), entao o grafico do front nao muda de forma conforme a amostra.
 
-/** 8 identidades de genero do formulario de cadastro + N/A. Campo-fonte: `gender_identity`. */
+/** 9 identidades de genero do enum + N/A. Campo-fonte: `gender_identity`. */
 export const GENDER_CATEGORIES: readonly CategoryCount[] = [
   { id: 'PREFIRO_NAO_RESPONDER', label: 'Prefiro não responder', count: 0 },
   { id: 'HOMEM_CIS', label: 'Homem cis', count: 0 },
   { id: 'HOMEM_TRANS', label: 'Homem trans', count: 0 },
   { id: 'MULHER_CIS', label: 'Mulher cis', count: 0 },
-  { id: 'MULHER_TRANS', label: 'Mulher trans', count: 0 },
+  { id: 'MULHER_TRANS', label: 'Mulher trans / Travesti', count: 0 },
   { id: 'TRAVESTI', label: 'Travesti', count: 0 },
   { id: 'NAO_BINARIO', label: 'Não binário', count: 0 },
+  { id: 'QUEER', label: 'Queer', count: 0 },
   { id: 'OUTRO', label: 'Outro', count: 0 },
   notAvailable,
 ];
