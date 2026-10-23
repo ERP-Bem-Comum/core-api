@@ -17,6 +17,35 @@ Funcionalidade: Ajuste em Aberto e desfazimento de aprovação
     Quando o Operador tenta ajustar o valor bruto
     Então a operação é rejeitada
 
+  # CT-017a — edição do Aprovado sem desfazer a aprovação (#1057, revisão da FR-008)
+  Cenário: Corrigir descrição, forma de pagamento e categorização de um documento aprovado
+    Dado um documento em status "Aprovado" cujo título pai está em Boleto
+    Quando o Operador troca a forma para PIX, a categorização e a descrição
+    Então o documento continua em status "Aprovado"
+    E o título pai passa a PIX, sem o código de barras
+    E os títulos de imposto passam a ter a nova categorização e mantêm a forma deles
+    E o Histórico registra o autor e o antes → depois de cada campo
+
+  # CT-017b — a forma muda uma vez só depois de aprovado (#1057)
+  Cenário: Segunda troca de forma depois da aprovação é rejeitada
+    Dado um documento "Aprovado" cuja forma do título pai já foi trocada depois da aprovação
+    Quando o Operador tenta trocar a forma de novo, inclusive de volta para Boleto
+    Então a operação é rejeitada
+
+  # CT-017c — código de barras não se edita (#1057)
+  Cenário: Alterar o código de barras de um Boleto aprovado é rejeitado
+    Dado um documento "Aprovado" cujo título pai está em Boleto com código de barras
+    Quando o Operador tenta trocar o código de barras mantendo a forma Boleto
+    Então a operação é rejeitada
+    Mas uma Guia de recolhimento lançada sem código pode receber o código no título pai
+
+  # CT-017d — título transmitido não troca a forma (#1057)
+  Cenário: Trocar a forma de um título transmitido é rejeitado
+    Dado um documento "Aprovado" cujo título pai está "Transmitido" ou preso em remessa
+    Quando o Operador tenta trocar a forma de pagamento
+    Então a operação é rejeitada
+    Mas a descrição e a categorização continuam editáveis
+
   # CT-018 — desfazer aprovação (P2, US-005)
   Cenário: Desfazer a aprovação retorna o documento para Aberto
     Dado um documento em status "Aprovado" e não transmitido

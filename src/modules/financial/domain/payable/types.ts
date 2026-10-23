@@ -23,6 +23,10 @@ export type Payable = Readonly<{
   // partir daí, como já acontece com `dueDate` (#270).
   paymentDetail: string | null;
   paidAt: Date | null; // #231: data de pagamento (preenchida na baixa); null enquanto não pago
+  // #1057: quando a forma foi trocada DEPOIS da aprovação. A P.O. permite UMA troca (14/10): a troca
+  // serve à remessa, e mudar de novo é pagamento por fora, com baixa manual. `null` = ainda pode trocar.
+  // Volta a `null` no "voltar para edição" — uma nova aprovação é um novo ciclo.
+  paymentMethodChangedAt: Date | null;
 }>;
 
 export type Payables = Readonly<{

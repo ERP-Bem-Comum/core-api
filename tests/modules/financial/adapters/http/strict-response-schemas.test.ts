@@ -70,6 +70,7 @@ describe('documentResponseSchema — .strict() (#384)', () => {
     retentionType: null,
     valueCents: '1000',
     status: 'Open',
+    paymentMethodChangedAt: null, // #1057
   };
 
   const bankAccountFixture = {

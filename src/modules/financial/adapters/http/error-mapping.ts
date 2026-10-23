@@ -100,6 +100,12 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   // M2 (RN-M2-11): a reclassificação entrou por um título de retenção. Mesmo conflito, um nível
   // abaixo — o domínio recusa quando o id de origem não é o do pai.
   'reclassification-source-not-parent',
+  // #1057 — edição do documento Aprovado. Conflitos de ESTADO: o pedido está bem-formado; o que não
+  // serve é o estado do título (forma já trocada, código de barras gravado, título já transmitido).
+  'payment-method-already-changed',
+  'payment-method-not-allowed-after-approval',
+  'payment-barcode-not-editable',
+  'payable-payment-locked',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -325,6 +331,15 @@ const SLUG_MESSAGES: Record<string, string> = {
     'Informe o motivo. Ele fica registrado no Histórico do documento e é o que permite auditar depois por que a etapa foi desfeita.',
   'document-has-progressed-payable':
     'Só é possível voltar para edição com todos os títulos do documento em Aprovado. Se algum está pago ou conciliado, desfaça antes a conciliação e a baixa, nesta ordem.',
+  // #1057 — edição do Aprovado. Cada frase diz o que fazer em vez do que não se pode.
+  'payment-method-already-changed':
+    'A forma de pagamento deste título já foi alterada depois da aprovação. Para pagar de outra forma, faça o pagamento por fora e registre a baixa manual.',
+  'payment-method-not-allowed-after-approval':
+    'Depois da aprovação, a forma de pagamento não pode passar para Boleto nem Guia de recolhimento. Escolha Pix, TED, Transferência ou outra forma sem código de barras.',
+  'payment-barcode-not-editable':
+    'O código de barras não pode ser alterado depois da aprovação. Para pagar de outro jeito, troque a forma de pagamento.',
+  'payable-payment-locked':
+    'A forma de pagamento não pode mais ser alterada: o título já foi transmitido ao banco ou pago. Descrição e categorização continuam editáveis.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',

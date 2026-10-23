@@ -620,6 +620,7 @@ export const mapPayableRows = (
       paymentMethod: row.paymentMethod,
       paymentDetail: row.paymentDetail,
       paidAt: row.paidAt,
+      paymentMethodChangedAt: row.paymentMethodChangedAt,
     };
     return ok(payable);
   };
@@ -760,6 +761,7 @@ export const mapPayablesToRows = (
     paymentMethod: p.paymentMethod,
     paymentDetail: p.paymentDetail,
     paidAt: p.paidAt,
+    paymentMethodChangedAt: p.paymentMethodChangedAt,
     createdAt: now,
   });
 

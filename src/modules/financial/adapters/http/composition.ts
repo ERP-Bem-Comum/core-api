@@ -1062,10 +1062,19 @@ const makeDeps = (
     }),
     // O ajuste de VALOR consulta a remessa antes de decidir: título preso é dinheiro em trânsito, e
     // mudar o valor faria o arquivo já enviado divergir do título.
-    adjustDocument: adjustDocument({ ...deps, remittances: pools.remittanceRepo }),
+    adjustDocument: adjustDocument({
+      ...deps,
+      remittances: pools.remittanceRepo,
+      // #1057: a categorização do Aprovado é validada contra a árvore do plano, como na conciliação.
+      taxonomyPaths: pools.taxonomyPathRead,
+    }),
     // #162: delega ao próprio `adjustDocument`, então carrega as mesmas deps — inclusive a remessa.
     // Na prática só percorre o caminho leve (dueDate), que não consulta hold.
-    bulkUpdateDueDate: bulkUpdateDueDate({ ...deps, remittances: pools.remittanceRepo }),
+    bulkUpdateDueDate: bulkUpdateDueDate({
+      ...deps,
+      remittances: pools.remittanceRepo,
+      taxonomyPaths: pools.taxonomyPathRead,
+    }),
     approveDocument: approveDocument(depsForApprove),
     registerManualPayment: registerManualPayment(deps),
     updatePayableDueDate: updatePayableDueDate(deps), // #270: mesmas deps (repo + clock)
