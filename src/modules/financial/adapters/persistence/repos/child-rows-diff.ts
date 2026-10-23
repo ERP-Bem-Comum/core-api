@@ -75,6 +75,7 @@ export const payableKey = (row: {
   readonly paymentMethod?: string | null | undefined;
   readonly paymentDetail?: string | null | undefined;
   readonly paidAt?: Date | null | undefined;
+  readonly paymentMethodChangedAt?: Date | null | undefined;
 }): string =>
   joinKey([
     row.id,
@@ -86,6 +87,7 @@ export const payableKey = (row: {
     row.paymentMethod ?? null,
     row.paymentDetail ?? null,
     row.paidAt ?? null,
+    row.paymentMethodChangedAt ?? null,
   ]);
 
 /**
@@ -115,4 +117,22 @@ export const sameRowSet = <A, B>(
     counts.set(k, n - 1);
   }
   return true;
+};
+
+/**
+ * Os dois lotes têm exatamente os mesmos ids (#1057)?
+ *
+ * É o segundo passo depois de `sameRowSet`: o conteúdo mudou, mas os TÍTULOS são os mesmos — troca
+ * de forma, de complemento ou de vencimento num Aprovado. Aí a escrita é UPDATE por id, e não hard
+ * replace. O DELETE seria recusado pela FK `RESTRICT` de `fin_remittance_payables` assim que o título
+ * tivesse passado por qualquer remessa, inclusive uma descartada, que é exatamente o caso de quem
+ * troca Boleto por Pix depois de a remessa não ter ido ao banco.
+ */
+export const sameIdSet = (
+  existing: readonly { readonly id: string }[],
+  incoming: readonly { readonly id: string }[],
+): boolean => {
+  if (existing.length !== incoming.length) return false;
+  const ids = new Set(existing.map((r) => r.id));
+  return ids.size === existing.length && incoming.every((r) => ids.has(r.id));
 };

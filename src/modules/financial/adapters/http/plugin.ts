@@ -773,6 +773,7 @@ const financialRoutes =
         const result = await deps.bulkUpdateDueDate({
           items: body.items.map((i) => ({ documentId: i.id, expectedVersion: i.version })),
           dueDate: new Date(body.dueDate),
+          actor: req.userId,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok({ results: result.value }), { ok: 200 });
@@ -793,6 +794,8 @@ const financialRoutes =
         const body = req.body;
         const result = await deps.adjustDocument({
           documentId: req.params.id,
+          // #1057: autor do ajuste na trilha.
+          actor: req.userId,
           // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
           expectedVersion: body.version,
           ...(body.grossValueCents !== undefined
@@ -815,6 +818,9 @@ const financialRoutes =
           ...(body.description !== undefined ? { description: body.description } : {}),
           // #273 US2: null apaga; undefined preserva (exactOptionalPropertyTypes).
           ...(body.paymentDetail !== undefined ? { paymentDetail: body.paymentDetail } : {}),
+          // #1057: edição do Aprovado — forma do título pai e categorização (5 níveis).
+          ...(body.paymentMethod !== undefined ? { paymentMethod: body.paymentMethod } : {}),
+          ...(body.taxonomy !== undefined ? { taxonomy: body.taxonomy } : {}),
         });
         // `.error.error` é o preço do envelope discriminado (`AdjustDocumentFailure`): ambos os
         // `kind` carregam o slug, então o mapeamento atual segue valendo sem ramificar. Quando a

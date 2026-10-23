@@ -16,6 +16,8 @@ export type BulkDueDateItem = Readonly<{ documentId: string; expectedVersion: nu
 export type BulkUpdateDueDateCommand = Readonly<{
   items: readonly BulkDueDateItem[];
   dueDate: Date;
+  // #1057: quem altera — vai à trilha de cada documento.
+  actor: string;
 }>;
 
 export type BulkDueDateOutcome =
@@ -56,6 +58,7 @@ export const bulkUpdateDueDate =
     for (const item of cmd.items) {
       const r = await adjust({
         documentId: item.documentId,
+        actor: cmd.actor,
         expectedVersion: item.expectedVersion,
         dueDate: cmd.dueDate,
       });
