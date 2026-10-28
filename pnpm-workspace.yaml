@@ -52,6 +52,11 @@ allowBuilds:
 #   3.1.6, e `@fastify/ajv-compiler@4.0.6` continuou resolvendo para ela mesmo com o fastify em
 #   5.12.5. Corrigido em 06/10/2026: piso para **>=3.1.7** (resolve 3.1.8, publicada 15/09 e
 #   fora da quarentena). Advisory vigente corrige em >=3.1.7.
+#
+#   ⚠️ 6ª rodada (28/10/2026): novas advisories (2 moderate + 2 low) em `>=3.0.0 <3.1.9` e
+#   `>=3.1.3 <3.1.9`. Mesmo mecanismo — o piso `>=3.1.7` seguia satisfeito pela 3.1.8 resolvida.
+#   Piso para **>=3.1.9** (publicada 19/10, com provenance, fora da quarentena). Pegue a advisory
+#   VIGENTE do `pnpm audit --prod` antes de mexer de novo; esta linha vira histórico na próxima.
 # - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial (1ª/2ª rodada)
 # - GHSA-rgw5-rvv9-x895: brace-expansion <5.0.9 — DoS por arrays intermediários sem limite,
 #   contorna a mitigação do CVE-2026-14257. CVSS 7.5 (3ª)
@@ -78,7 +83,7 @@ allowBuilds:
 #   entre 9 e 10, validado por boot + fastify.inject do /docs (ver ticket #573).
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
-  fast-uri: '>=3.1.7 <4'
+  fast-uri: '>=3.1.9 <4'
   brace-expansion: '>=5.0.11 <6'
   find-my-way: '^9.7.0'
   '@fastify/static': '^10.1.2'
