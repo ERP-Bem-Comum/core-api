@@ -1,0 +1,43 @@
+# Atualizações de VERSÃO do Dependabot.
+#
+# Alvo `dev`: toda atualização passa pela homologação. As atualizações de SEGURANÇA do Dependabot sempre
+# miram a branch default (`main`, mantida assim para o Dependabot medir produção — ver
+# close-issues-on-dev-merge.yml) e o GitHub não deixa mudar isso; o `homologação (origem do PR)` do
+# promotion-gate.yml as barra lá de propósito. Nesse caso, refaça a atualização num PR para a `dev` e
+# feche o do Dependabot (foi o caso do #1088 → #1090).
+#
+# `cooldown` espelha a quarentena do pnpm (`minimumReleaseAge`). Agrupado e semanal.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: America/Sao_Paulo
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    labels: [dependencias]
+    groups:
+      runtime:
+        dependency-type: production
+      tooling:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: America/Sao_Paulo
+    cooldown:
+      default-days: 3
+    labels: [dependencias]
+    groups:
+      actions:
+        patterns: ['*']

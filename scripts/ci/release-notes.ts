@@ -1,6 +1,6 @@
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // Gera o CHANGELOG.md a partir do HISTÓRICO, nunca de redação à mão.
@@ -256,7 +256,8 @@ export function renderChangelog(
     '# Changelog',
     '',
     'Gerado por `pnpm release:notes` a partir de `git log --first-parent`. **Não editar à mão** —',
-    'a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é registro que mente.',
+    'cada geração acrescenta a versão nova no topo e preserva as anteriores; um CHANGELOG divergente',
+    'do histórico é registro que mente.',
     '',
     'Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·',
     'versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).',
@@ -297,6 +298,33 @@ export function renderChangelog(
   }
 
   return lines.join('\n');
+}
+
+/** Seções de versão (`## [x] …` até o próximo `## [`) de um CHANGELOG, na ordem do arquivo. */
+function versionSections(doc: string): readonly { version: string; text: string }[] {
+  const starts = [...doc.matchAll(/^## \[([^\]]+)\]/gm)];
+  return starts.map((match, i) => {
+    const start = match.index;
+    const end = starts[i + 1]?.index ?? doc.length;
+    return { version: match[1] ?? '', text: doc.slice(start, end).trimEnd() };
+  });
+}
+
+/**
+ * #940 — junta a geração nova ao CHANGELOG que já existe, em vez de sobrescrevê-lo.
+ *
+ * O gerador renderiza só a versão do range. Gravar isso por cima apagava rc.1…rc.5, e cada release
+ * "recompunha" o histórico à mão — exatamente a edição manual que o cabeçalho do arquivo proíbe.
+ * Regras: o cabeçalho e a seção da versão vêm de `rendered`; as seções de `existing` seguem abaixo, na
+ * ordem em que estavam; uma seção de `existing` com a MESMA versão é substituída (regenerar a versão
+ * corrente é idempotente, não duplica).
+ */
+export function mergeChangelog(existing: string, rendered: string): string {
+  const fresh = versionSections(rendered);
+  const freshVersions = new Set(fresh.map((section) => section.version));
+  const older = versionSections(existing).filter((section) => !freshVersions.has(section.version));
+  if (older.length === 0) return rendered;
+  return `${rendered.trimEnd()}\n\n${older.map((section) => section.text).join('\n\n')}\n`;
 }
 
 const FIELD_SEP = String.fromCharCode(0x1f);
@@ -365,9 +393,11 @@ function main(): void {
     .slice(0, 10);
 
   const { entries, skipped } = readEntries(range);
+  const changelogPath = `${root}/CHANGELOG.md`;
+  const existing = existsSync(changelogPath) ? readFileSync(changelogPath, 'utf8') : '';
   writeFileSync(
-    `${root}/CHANGELOG.md`,
-    renderChangelog(version, date, entries, { skipped, repoUrl }),
+    changelogPath,
+    mergeChangelog(existing, renderChangelog(version, date, entries, { skipped, repoUrl })),
     'utf8',
   );
   for (const merge of skipped) {
