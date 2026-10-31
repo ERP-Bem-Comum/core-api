@@ -58,8 +58,8 @@ importers:
         specifier: 3.23.1
         version: 3.23.1(@types/node@24.13.3)
       nodemailer:
-        specifier: 10.0.15
-        version: 10.0.15
+        specifier: 10.1.4
+        version: 10.1.4
       resend:
         specifier: 6.12.4
         version: 6.12.4
@@ -600,6 +600,7 @@ packages:
   '@smithy/core@3.24.6':
     resolution: {integrity: sha512-wBXDRup6UU97VKyaiRo8AssnfStPtG0oAAfpq/bC0a1YYau8pM86YB4kM6ccoVi1mS8l/UHbn9oDM+7uozr/ug==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.3.7':
     resolution: {integrity: sha512-xj8gq/bjFABAh6qWPSDCYcY3kzQIm4b561C+YnHH4zGq8rOgzQ3Shk+JGlpUxSd41UGiO6FkLdUCtNX1FAeHgg==}
@@ -1224,8 +1225,8 @@ packages:
     version: 24.21.0
     hasBin: true
 
-  nodemailer@10.0.15:
-    resolution: {integrity: sha512-EUqp5PhtcsYXs9Fq/lS7s/8zlTrnBqmzZWzFFROrNikMiz+om/YRKMwqN907t+0A1KKyT8jd39CBUbFZmaZmcA==}
+  nodemailer@10.1.4:
+    resolution: {integrity: sha512-EsMnOR2oRv4LGnWvHgcVYkkQ4O2j8KO4WTw6l+PHR4sOXo8SAgIraxtEnGDmotjbhv0hDsu3IuDIFZm8iXwO4A==}
     engines: {node: '>=20.0.0'}
 
   on-exit-leak-free@2.1.2:
@@ -2354,7 +2355,7 @@ snapshots:
 
   node@runtime:24.21.0: {}
 
-  nodemailer@10.0.15: {}
+  nodemailer@10.1.4: {}
 
   on-exit-leak-free@2.1.2: {}
 
