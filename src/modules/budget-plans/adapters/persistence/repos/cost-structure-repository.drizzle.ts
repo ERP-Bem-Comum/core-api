@@ -79,9 +79,10 @@ const selectTree = async (exec: ReadExec, id: BudgetPlanId): Promise<CostStructu
 
 // Replace-all DENTRO de uma tx: apaga a raiz do plano (FK ON DELETE CASCADE derruba
 // categorias/subcategorias) e reinsere top-down (FK exige pai antes do filho). Spread p/
-// array mutável (drizzle `.values()` não aceita `readonly[]`). Compartilhado por save e mutate.
+// array mutável (drizzle `.values()` não aceita `readonly[]`). Compartilhado por save, mutate e pelo
+// `plan-clone-writer.drizzle.ts` (#1092).
 // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-const writeTree = async (tx: Tx, structure: CostStructure): Promise<void> => {
+export const writeTree = async (tx: Tx, structure: CostStructure): Promise<void> => {
   const rows = costStructureToRows(structure);
   const planId = structure.budgetPlanId as unknown as string;
 

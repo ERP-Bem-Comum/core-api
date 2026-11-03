@@ -123,6 +123,14 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'scenario-name-required': 400,
   // Exclusão do plano (#453): filhos saem antes do pai -> 409 (precondição de estado, não input).
   'budget-plan-has-children': 409,
+  // Criar a partir de outro ano (#1092). Mesmo ano -> 422 (pedido sem sentido, não estado);
+  // sem plano aprovado na origem -> 409 (precondição de estado, como `budget-plan-not-approved`).
+  'budget-plan-import-same-year': 422,
+  'budget-plan-import-source-not-approved': 409,
+  // Cópia (importação/calibração/cenário): lançamento da origem fora da árvore do próprio plano ->
+  // 409 (estado da origem, não input); falha da gravação atômica -> 503, sem plano parcial.
+  'budget-result-orphan-subcategory': 409,
+  'plan-clone-write-unavailable': 503,
   // Editar/desativar nó (#454 gap 3). Nó ausente -> 404 (o recurso do PATCH não existe);
   // PATCH sem campo -> 400 (pedido malformado, não no-op de sucesso).
   'cost-node-not-found': 404,
@@ -153,7 +161,8 @@ const sendCsv = (reply: FastifyReply, csv: string, fileName: string): Promise<vo
 const budgetPlansRoutes =
   (deps: BudgetPlansHttpDeps, hooks: BudgetPlansHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
-    // POST /budget-plans — criar. 201 + corpo (cabeçalho do plano; budgets nascem vazios).
+    // POST /budget-plans — criar. 201 + corpo (cabeçalho do plano). Sem `importFromYear` os budgets
+    // nascem vazios; com ele, o plano nasce com a cópia da última versão aprovada daquele ano (#1092).
     scope.route({
       method: 'POST',
       url: '/budget-plans',

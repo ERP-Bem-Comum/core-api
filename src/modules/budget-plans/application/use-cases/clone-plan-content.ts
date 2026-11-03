@@ -1,4 +1,4 @@
-import { type Result, ok } from '../../../../shared/primitives/result.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetId from '../../domain/shared/budget-id.ts';
 import * as CostCenterId from '../../domain/cost-structure/cost-center-id.ts';
@@ -8,11 +8,8 @@ import * as BudgetResultId from '../../domain/budget-result/budget-result-id.ts'
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
+import type { BudgetPlansModuleEvent } from '../../public-api/events.ts';
 import { planTotalCents } from '../read-models/plan-total.ts';
-import type {
-  BudgetPlanRepository,
-  BudgetPlanRepositoryError,
-} from '../../domain/budget-plan/repository.ts';
 import * as CostStructure from '../../domain/cost-structure/cost-structure.ts';
 import type {
   CostStructureRepository,
@@ -23,90 +20,112 @@ import type {
   BudgetResultRepository,
   BudgetResultRepositoryError,
 } from '../../domain/budget-result/repository.ts';
+import type { PlanCloneWriter, PlanCloneWriteError } from '../ports/plan-clone-writer.ts';
 
 export type ClonePlanContentError =
   | BudgetPlanError
   | CostStructureRepositoryError
   | BudgetResultRepositoryError
-  | BudgetPlanRepositoryError;
+  | PlanCloneWriteError
+  // #1092 — lançamento da origem cuja subcategoria não está na árvore do mesmo plano. Não há FK
+  // entre as duas tabelas, e só uma chamada direta à API com ids de planos diferentes produz esse
+  // estado (medido: 0 de 4.679 no legado; a tela tira os dois ids do mesmo plano). Antes, o
+  // lançamento era pulado em silêncio e o total da cópia saía menor que o da origem.
+  | 'budget-result-orphan-subcategory';
 
-// #458 — o filho clonado tem total (os lançamentos vieram junto). Devolvido para a response 201 de
-// calibração/cenário não mentir (bug do ticket). Compartilhado com startCalibration/createScenery.
+// #458 — o filho clonado tem total (os lançamentos vieram junto). Devolvido para a response 201 não
+// mentir. Compartilhado com createBudgetPlan (importação), startCalibration e createScenery.
 export type ClonePlanContentOutcome = Readonly<{ plan: BudgetPlanEntity; totalInCents: number }>;
 
 export type ClonePlanContentDeps = Readonly<{
-  planRepo: BudgetPlanRepository;
   costStructureRepo: CostStructureRepository;
   budgetResultRepo: BudgetResultRepository;
+  planCloneWriter: PlanCloneWriter;
 }>;
 
-// US4 — clona o conteúdo inteiro pai→filho (compartilhado por startCalibration e createScenery): budgets
-// (novos ids), árvore de custos (CostStructure.clone) e budget_results (remapeados via os mapas; copia
-// valor, não recalcula). Persiste tudo. Não transacional cross-repo (molde do legado — filho descartável
-// até a aprovação). `childHeader` é o filho JÁ derivado pelo domínio, nascido sem budgets. `actor` é o
-// derivador (BGP-UPDATED-BY-AUDIT/#373) — mesmo ator que originou a derivação (D5).
+// Copia o conteúdo inteiro origem→destino: budgets (novos ids), árvore de custos (CostStructure.clone,
+// ativo/inativo incluído) e lançamentos remapeados pelos dois mapas (copia valor, não recalcula).
+//
+// #1092 — monta TUDO em memória e grava numa operação só (`planCloneWriter`, uma transação no MySQL).
+// Gravar repositório a repositório deixava plano parcial quando um passo falhava.
+//
+// `target` é o plano novo já decidido pelo domínio, nascido sem budgets. `events` vão no mesmo commit
+// (a importação leva o BudgetPlanCreated; calibração e cenário não emitem). `actor` é quem originou a
+// cópia (BGP-UPDATED-BY-AUDIT/#373).
+export type ClonePlanContentInput = Readonly<{
+  source: BudgetPlanEntity;
+  target: BudgetPlanEntity;
+  now: Date;
+  actor: UserRef;
+  events?: readonly BudgetPlansModuleEvent[];
+}>;
+
 export const clonePlanContent =
   (deps: ClonePlanContentDeps) =>
-  async (
-    parent: BudgetPlanEntity,
-    childHeader: BudgetPlanEntity,
-    now: Date,
-    actor: UserRef,
-  ): Promise<Result<ClonePlanContentOutcome, ClonePlanContentError>> => {
+  async ({
+    source,
+    target,
+    now,
+    actor,
+    events = [],
+  }: ClonePlanContentInput): Promise<Result<ClonePlanContentOutcome, ClonePlanContentError>> => {
     // budgets (novos ids) → budgetIdMap
     const budgetIdMap = new Map<string, BudgetId.BudgetId>();
-    let child = childHeader;
-    for (const budget of parent.budgets) {
+    let plan = target;
+    for (const budget of source.budgets) {
       const newBudgetId = BudgetId.generate();
       budgetIdMap.set(String(budget.id), newBudgetId);
       const added = BudgetPlan.addBudget(
-        child,
+        plan,
         { id: newBudgetId, partner: budget.partner },
         now,
         actor,
       );
       if (!added.ok) return added;
-      child = added.value.plan;
+      plan = added.value.plan;
     }
-    const savedPlan = await deps.planRepo.save(child, []);
-    if (!savedPlan.ok) return savedPlan;
 
-    // árvore de custos (novos ids) → subcatMap
-    const parentStructure = await deps.costStructureRepo.findByBudgetPlanId(parent.id);
-    if (!parentStructure.ok) return parentStructure;
-    const clonedStructure = CostStructure.clone(parentStructure.value, childHeader.id, {
+    // árvore de custos (novos ids) → subcategoryIdMap
+    const sourceStructure = await deps.costStructureRepo.findByBudgetPlanId(source.id);
+    if (!sourceStructure.ok) return sourceStructure;
+    const cloned = CostStructure.clone(sourceStructure.value, target.id, {
       costCenter: () => CostCenterId.generate(),
       category: () => CategoryId.generate(),
       subcategory: () => SubcategoryId.generate(),
     });
-    const savedStructure = await deps.costStructureRepo.save(clonedStructure.structure);
-    if (!savedStructure.ok) return savedStructure;
 
-    // budget_results (remapeia budgetId + subcategoryId). Result de subcategoria não clonada é ignorado.
-    for (const budget of parent.budgets) {
+    // lançamentos remapeados (budgetId + subcategoryId)
+    const results: BudgetResult.BudgetResult[] = [];
+    const sums = new Map<string, number>();
+    for (const budget of source.budgets) {
       const newBudgetId = budgetIdMap.get(String(budget.id));
-      if (newBudgetId === undefined) continue;
-      const results = await deps.budgetResultRepo.listByBudgetId(budget.id);
-      if (!results.ok) return results;
-      for (const result of results.value) {
-        const newSubcatId = clonedStructure.subcategoryIdMap.get(String(result.subcategoryId));
-        if (newSubcatId === undefined) continue;
-        const addedResult = await deps.budgetResultRepo.save(
+      if (newBudgetId === undefined) continue; // inalcançável: o mapa foi montado deste mesmo laço
+      const sourceResults = await deps.budgetResultRepo.listByBudgetId(budget.id);
+      if (!sourceResults.ok) return sourceResults;
+      for (const result of sourceResults.value) {
+        const newSubcategoryId = cloned.subcategoryIdMap.get(String(result.subcategoryId));
+        if (newSubcategoryId === undefined) return err('budget-result-orphan-subcategory');
+        results.push(
           BudgetResult.clone(result, {
             id: BudgetResultId.generate(),
             budgetId: newBudgetId,
-            subcategoryId: newSubcatId,
+            subcategoryId: newSubcategoryId,
           }),
         );
-        if (!addedResult.ok) return addedResult;
+        const key = String(newBudgetId);
+        sums.set(key, (sums.get(key) ?? 0) + result.value.cents);
       }
     }
 
-    // #458 — o filho volta POPULADO (budgets + lançamentos clonados acima). O total da response é a
-    // soma derivada desses lançamentos — NÃO 0. Fixar 0 aqui reintroduziria o bug do ticket na
-    // resposta 201 (lista/detalhe mostrariam números diferentes do que o create devolveu).
-    const sums = await deps.budgetResultRepo.sumByBudgetIds(child.budgets.map((b) => b.id));
-    if (!sums.ok) return sums;
+    const written = await deps.planCloneWriter.write({
+      plan,
+      events,
+      structure: cloned.structure,
+      results,
+    });
+    if (!written.ok) return written;
 
-    return ok({ plan: child, totalInCents: planTotalCents(child, sums.value) });
+    // #458 — o total da response é a soma dos lançamentos copiados, não 0: lista e detalhe mostram
+    // a mesma soma, derivada de bgp_budget_results.
+    return ok({ plan, totalInCents: planTotalCents(plan, sums) });
   };

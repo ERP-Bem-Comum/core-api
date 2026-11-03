@@ -4,6 +4,10 @@ import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
+import type {
+  BudgetPlanRepository,
+  BudgetPlanRepositoryError,
+} from '../../domain/budget-plan/repository.ts';
 import {
   clonePlanContent,
   type ClonePlanContentDeps,
@@ -21,9 +25,11 @@ export type StartCalibrationError =
   | 'budget-plan-not-found'
   | BudgetPlanError
   | ClonePlanContentError
+  | BudgetPlanRepositoryError
   | UserRef.UserRefError;
 
-export type StartCalibrationDeps = ClonePlanContentDeps & Readonly<{ clock: Clock }>;
+export type StartCalibrationDeps = ClonePlanContentDeps &
+  Readonly<{ planRepo: BudgetPlanRepository; clock: Clock }>;
 
 // US4/CA1 — deriva uma calibração (filho EM_CALIBRACAO) de um plano APROVADO e clona o conteúdo inteiro.
 export const startCalibration =
@@ -53,5 +59,10 @@ export const startCalibration =
     );
     if (!derived.ok) return derived;
 
-    return clonePlanContent(deps)(found.value, derived.value.plan, now, actor.value);
+    return clonePlanContent(deps)({
+      source: found.value,
+      target: derived.value.plan,
+      now,
+      actor: actor.value,
+    });
   };

@@ -96,8 +96,9 @@ type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 // Upsert do plano DENTRO de uma tx: trava o cabeçalho (`SELECT id ... FOR UPDATE`), UPDATE-ou-INSERT
 // do plano, replace-all dos budgets (coleção pequena, molde do legado) e append no outbox — tudo no
-// MESMO commit. Compartilhado por `save` e `removeBudget` (que soma o delete dos results na mesma tx).
-const upsertPlanInTx = async (
+// MESMO commit. Compartilhado por `save`, `removeBudget` (que soma o delete dos results na mesma tx)
+// e pelo `plan-clone-writer.drizzle.ts` (#1092, que soma árvore e lançamentos).
+export const upsertPlanInTx = async (
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   tx: Tx,
   plan: BudgetPlan,

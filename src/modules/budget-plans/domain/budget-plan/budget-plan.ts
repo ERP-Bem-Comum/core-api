@@ -7,6 +7,7 @@ import type { BudgetPlan as BudgetPlanEntity, Budget, BudgetPartner } from './ty
 import type { BudgetPlanError } from './errors.ts';
 import type { BudgetPlanEvent } from './events.ts';
 import * as PlanVersion from './version.ts';
+import { selectCurrentApprovedByFamily } from './current-approved.ts';
 
 // Faixa plausível de ano de planejamento (legado não valida; fail-closed aqui).
 const YEAR_MIN = 2000;
@@ -198,6 +199,31 @@ const approve = (
   return ok({ plan: { ...plan, status: 'APROVADO', updatedAt: now, updatedByRef: actor } });
 };
 
+// #1092 — escolhe de qual plano o plano novo copia o conteúdo ("Criar a partir do ano de").
+//
+// Decisão da P.O. (28/10/2026), divergente do legado de propósito: a origem é a ÚLTIMA VERSÃO
+// APROVADA da família (ano de origem × programa do plano novo), com as calibrações já incorporadas.
+// O legado copiava a versão 1.0 sem olhar o status. A vigência é a mesma do Consolidado ABC
+// (`selectCurrentApprovedByFamily`): o aprovado de maior versão.
+//
+// `candidates` são os planos do ano de origem, em qualquer status e de qualquer programa: o filtro é
+// regra, então mora aqui e não na consulta.
+const selectImportSource = (
+  target: BudgetPlanEntity,
+  sourceYear: number,
+  candidates: readonly BudgetPlanEntity[],
+): Result<BudgetPlanEntity, BudgetPlanError> => {
+  if (sourceYear === target.year) return err('budget-plan-import-same-year');
+  const family = candidates.filter(
+    (p) =>
+      p.status === 'APROVADO' &&
+      p.year === sourceYear &&
+      String(p.programRef) === String(target.programRef),
+  );
+  const current = selectCurrentApprovedByFamily(family)[0];
+  return current === undefined ? err('budget-plan-import-source-not-approved') : ok(current);
+};
+
 // #458 — `total` saiu do agregado: era `Σ budgets[].value` (o informado, que a P.O. decidiu não
 // existir). O total agora é a soma dos lançamentos (bgp_budget_results), que vivem em outro
 // repositório — logo é composição do application (`read-models/plan-total.ts`), não do agregado.
@@ -209,4 +235,5 @@ export const BudgetPlan = {
   startCalibration,
   createScenery,
   approve,
+  selectImportSource,
 } as const;

@@ -268,8 +268,9 @@ describe('total derivado — CA7: insights usam o Planejado derivado', () => {
 // com os lançamentos clonados do pai — mostrava R$ 0,00 enquanto o detalhe do mesmo plano mostrava o
 // total real. Era o bug-mãe do #458 reintroduzido numa resposta HTTP.
 //
-// Estes casos montam a ÁRVORE de custos e lançam numa subcategoria dela — só assim o clone copia os
-// results para o filho (ele remapeia por subcategoria clonada; lançamento fora da árvore é ignorado).
+// Estes casos montam a ÁRVORE de custos e lançam numa subcategoria dela — o clone remapeia cada
+// lançamento pela subcategoria clonada. Desde a #1092, lançamento fora da árvore do plano não é mais
+// ignorado: a cópia inteira é recusada com `budget-result-orphan-subcategory` (409).
 describe('total derivado — lifecycle-create devolve o total do filho clonado (#458, W2)', () => {
   // Monta 1 centro → 1 categoria → 1 subcategoria(IPCA) e devolve o subId real da árvore.
   const seedTreeSub = async (app: App, token: string, planId: string): Promise<string> => {
