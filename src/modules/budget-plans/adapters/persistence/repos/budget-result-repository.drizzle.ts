@@ -10,6 +10,7 @@ import type {
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
 import { budgetResultToInsert, budgetResultFromRow } from '../mappers/budget-result.mapper.ts';
+import { describeDbError } from './plan-writes-in-tx.drizzle.ts';
 
 const safe = async <T>(
   ctx: string,
@@ -18,7 +19,7 @@ const safe = async <T>(
   try {
     return ok(await op());
   } catch (cause) {
-    process.stderr.write(`[budget-result-repo:${ctx}] ${String(cause)}\n`);
+    process.stderr.write(`[budget-result-repo:${ctx}] ${describeDbError(cause)}\n`);
     return err('budget-result-repo-unavailable');
   }
 };
@@ -92,7 +93,7 @@ export const createDrizzleBudgetResultRepository = (
         }
         return ok(results);
       } catch (cause) {
-        process.stderr.write(`[budget-result-repo:listByBudgetId] ${String(cause)}\n`);
+        process.stderr.write(`[budget-result-repo:listByBudgetId] ${describeDbError(cause)}\n`);
         return err('budget-result-repo-unavailable');
       }
     },
@@ -119,7 +120,7 @@ export const createDrizzleBudgetResultRepository = (
         }
         return ok(results);
       } catch (cause) {
-        process.stderr.write(`[budget-result-repo:listByBudgetIds] ${String(cause)}\n`);
+        process.stderr.write(`[budget-result-repo:listByBudgetIds] ${describeDbError(cause)}\n`);
         return err('budget-result-repo-unavailable');
       }
     },

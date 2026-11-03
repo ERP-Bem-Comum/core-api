@@ -29,9 +29,20 @@ export const InMemoryPlanCloneWriter = (
     const keys = new Set(results.map(resultKey));
     if (keys.size !== results.length) return err('plan-clone-write-unavailable');
 
-    // Desfaz na ordem inversa: lançamentos e plano (o `remove` leva os lançamentos dos budgets do
-    // plano) e a árvore.
+    // Desfaz na ordem inversa (R4 da segunda revisão):
+    //   1. os lançamentos de cada rede do plano, pelo MESMO repositório em que foram gravados — o
+    //      `remove` do plano só os leva quando o repositório de planos foi montado junto com o de
+    //      lançamentos, e nem toda composição faz isso (o `_support.ts` dos testes não faz);
+    //   2. o plano;
+    //   3. a árvore: o store em memória não tem remoção, e a árvore vazia é indistinguível de
+    //      "sem árvore" para toda leitura (`findByBudgetPlanId` devolve `empty` nos dois casos, e
+    //      os leitores de subcategoria não acham nada nela).
+    // Todos os passos rodam, mesmo que um falhe: desfazer o máximo possível é melhor que parar no
+    // meio. Os stores em memória não falham; a falha que importa é a da gravação, já devolvida.
     const undo = async (): Promise<void> => {
+      for (const budget of plan.budgets) {
+        await repos.budgetResultRepo.deleteByBudgetId(budget.id);
+      }
       await repos.planRepo.remove(plan.id);
       await repos.costStructureRepo.save(empty(plan.id));
     };

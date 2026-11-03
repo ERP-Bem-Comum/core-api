@@ -7,6 +7,7 @@ import { isLaunchType } from '#src/modules/budget-plans/domain/cost-structure/la
 import type { SubcategoryLaunchTypeReader } from '#src/modules/budget-plans/application/ports/subcategory-launch-type-reader.ts';
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
+import { describeDbError } from './plan-writes-in-tx.drizzle.ts';
 
 // #1092 (F1) — numa consulta só: o launchType da subcategoria, o plano dono da árvore dela
 // (subcategoria → categoria → centro de custo) e o plano do orçamento (LEFT JOIN: o orçamento
@@ -41,7 +42,7 @@ export const createDrizzleSubcategoryLaunchTypeReader = (
         }
         return ok(row.launchType);
       } catch (cause) {
-        process.stderr.write(`[subcategory-launch-type-reader] ${String(cause)}\n`);
+        process.stderr.write(`[subcategory-launch-type-reader] ${describeDbError(cause)}\n`);
         return err('subcategory-reader-unavailable');
       }
     },

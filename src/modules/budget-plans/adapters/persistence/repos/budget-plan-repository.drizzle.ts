@@ -17,6 +17,7 @@ import {
   retryOnceOnDeadlock,
   isPlanVersionDuplicate,
   describeDbError,
+  mysqlErrorOf,
 } from './plan-writes-in-tx.drizzle.ts';
 
 const safe = async <T>(
@@ -34,18 +35,10 @@ const safe = async <T>(
 };
 
 // ER_ROW_IS_REFERENCED_2 (1451) na FK auto-referente `parent_id` — o banco recusando apagar um plano
-// que ainda tem filho. O errno real vem em `cause` (o Drizzle envolve o erro do mysql2).
+// que ainda tem filho. Só a FK de parent_id é RESTRICT nas tabelas do plano; as demais são CASCADE.
 const isParentRestrictViolation = (e: unknown): boolean => {
-  for (const c of [e, e instanceof Error ? e.cause : undefined]) {
-    if (typeof c !== 'object' || c === null) continue;
-    const obj = c as Record<string, unknown>;
-    if (obj['errno'] === 1451) {
-      const msg = typeof obj['sqlMessage'] === 'string' ? obj['sqlMessage'] : '';
-      // Só a FK de parent_id é RESTRICT nas tabelas do plano; as demais são CASCADE.
-      return msg.includes('bgp_budget_plans_parent_id_fk');
-    }
-  }
-  return false;
+  const info = mysqlErrorOf(e);
+  return info.errno === 1451 && info.key === 'bgp_budget_plans_parent_id_fk';
 };
 
 // #453 — `remove` precisa distinguir dois vermelhos que o `safe` genérico achataria em 503:

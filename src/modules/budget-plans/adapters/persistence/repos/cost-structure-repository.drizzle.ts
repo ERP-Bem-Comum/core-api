@@ -14,7 +14,7 @@ import type {
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
 import { costStructureFromRows } from '../mappers/cost-structure.mapper.ts';
-import { writeTreeInTx } from './plan-writes-in-tx.drizzle.ts';
+import { writeTreeInTx, describeDbError, type PlanTx } from './plan-writes-in-tx.drizzle.ts';
 
 const safe = async <T>(
   ctx: string,
@@ -23,15 +23,14 @@ const safe = async <T>(
   try {
     return ok(await op());
   } catch (cause) {
-    process.stderr.write(`[cost-structure-repo:${ctx}] ${String(cause)}\n`);
+    process.stderr.write(`[cost-structure-repo:${ctx}] ${describeDbError(cause)}\n`);
     return err('cost-structure-repo-unavailable');
   }
 };
 
 type Db = BudgetPlansMysqlHandle['db'];
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 // Executor de leitura: `db` (fora de tx) OU `tx` (dentro de mutate) — mesma API de query.
-type ReadExec = Db | Tx;
+type ReadExec = Db | PlanTx;
 
 // Reconstrói a árvore por 3 SELECTs (adjacency) + montagem em app — WITH RECURSIVE dispensável
 // (árvore FIXA em 3 níveis). ORDER BY (name, id) determinístico: sem ele o MySQL não garante
@@ -78,9 +77,6 @@ const selectTree = async (exec: ReadExec, id: BudgetPlanId): Promise<CostStructu
   return mapped.value;
 };
 
-// O replace-all da árvore dentro de uma tx vive em `plan-writes-in-tx.drizzle.ts` (#1092, F10).
-const writeTree = writeTreeInTx;
-
 export const createDrizzleCostStructureRepository = (
   handle: BudgetPlansMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
 ): CostStructureRepository => {
@@ -121,11 +117,11 @@ export const createDrizzleCostStructureRepository = (
           const applied = apply(structure, statusRaw);
           if (!applied.ok) return applied; // erro de domínio -> não escreve
 
-          await writeTree(tx, applied.value);
+          await writeTreeInTx(tx, applied.value);
           return ok(applied.value);
         });
       } catch (cause) {
-        process.stderr.write(`[cost-structure-repo:mutate] ${String(cause)}\n`);
+        process.stderr.write(`[cost-structure-repo:mutate] ${describeDbError(cause)}\n`);
         return err('cost-structure-repo-unavailable');
       }
     },
@@ -134,7 +130,7 @@ export const createDrizzleCostStructureRepository = (
     save: async (structure: CostStructure) =>
       safe('save', async () => {
         await db.transaction(async (tx) => {
-          await writeTree(tx, structure);
+          await writeTreeInTx(tx, structure);
         });
       }),
   };

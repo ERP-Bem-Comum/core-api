@@ -122,15 +122,20 @@ export type MysqlErrorInfo = Readonly<{
   key: string | null;
 }>;
 
-// O Drizzle envolve o erro do mysql2 em `cause`; procura nos dois níveis. `key` é o nome da
-// constraint/índice citado na mensagem do MySQL (`... for key 'tabela.indice'`).
+// Nome da constraint/índice citado na mensagem do MySQL: `... for key 'tabela.indice'` (duplicate
+// key) ou `... CONSTRAINT \`nome\` FOREIGN KEY ...` (FK, 1451/1452). Nunca o valor da linha.
+const constraintNameOf = (sqlMessage: string): string | null =>
+  /for key '([^']+)'/.exec(sqlMessage)?.[1] ?? /CONSTRAINT `([^`]+)`/.exec(sqlMessage)?.[1] ?? null;
+
+// O Drizzle envolve o erro do mysql2 em `cause`; procura nos dois níveis. Fonte única da extração —
+// `isParentRestrictViolation`, `isPlanVersionDuplicate`, o retry e o log passam todos por aqui.
 export const mysqlErrorOf = (e: unknown): MysqlErrorInfo => {
   for (const c of [e, e instanceof Error ? e.cause : undefined]) {
     if (typeof c !== 'object' || c === null) continue;
     const obj = c as Record<string, unknown>;
     if (typeof obj['errno'] !== 'number') continue;
     const message = typeof obj['sqlMessage'] === 'string' ? obj['sqlMessage'] : '';
-    const key = /for key '([^']+)'/.exec(message)?.[1] ?? null;
+    const key = constraintNameOf(message);
     return {
       errno: obj['errno'],
       code: typeof obj['code'] === 'string' ? obj['code'] : null,
@@ -165,11 +170,26 @@ export const retryOnceOnDeadlock = async <T>(op: () => Promise<T>): Promise<T> =
   }
 };
 
+// O Drizzle embrulha a falha de query num erro cuja mensagem é `Failed query: <sql>\nparams: <valores>`.
+const DRIZZLE_QUERY_PREFIX = 'Failed query';
+
 // F5 da revisão — linha de log de falha SEM os parâmetros da query. `String(cause)` do Drizzle traz o
 // SQL com todos os valores (até 500 lançamentos: ~75 KB por falha, com ids e centavos), e a
-// `sqlMessage` do duplicate key cita o valor da chave. Fica só o que identifica o erro.
+// `sqlMessage` do duplicate key cita o valor da chave.
+//   • Erro do MySQL (tem errno): só errno, code e o nome da constraint.
+//   • Qualquer outro erro: `nome: mensagem` — um TypeError de mapper ou "Pool is closed" não carregam
+//     SQL, e sem a mensagem o 503 fica impossível de diagnosticar (R2 da segunda revisão). Se for o
+//     embrulho do Drizzle sem errno na causa, usa a mensagem da CAUSA, nunca a do embrulho (que tem
+//     os parâmetros).
 export const describeDbError = (e: unknown): string => {
   const info = mysqlErrorOf(e);
-  if (info.errno === null) return e instanceof Error ? e.name : 'erro desconhecido';
-  return `errno=${String(info.errno)} code=${info.code ?? '-'} key=${info.key ?? '-'}`;
+  if (info.errno !== null) {
+    return `errno=${String(info.errno)} code=${info.code ?? '-'} key=${info.key ?? '-'}`;
+  }
+  if (!(e instanceof Error)) return 'erro desconhecido';
+  if (!e.message.startsWith(DRIZZLE_QUERY_PREFIX)) return `${e.name}: ${e.message}`;
+  const cause = e.cause;
+  return cause instanceof Error
+    ? `${cause.name}: ${cause.message}`
+    : `${e.name}: falha de query sem causa do driver`;
 };

@@ -69,12 +69,12 @@ export const clonePlanContent =
     actor,
     events = [],
   }: ClonePlanContentInput): Promise<Result<ClonePlanContentOutcome, ClonePlanContentError>> => {
-    // budgets (novos ids) → budgetIdMap
-    const budgetIdMap = new Map<string, BudgetId.BudgetId>();
+    // budgets (novos ids): pares (rede da origem, id novo), na ordem da origem
+    const budgetPairs: Readonly<{ sourceId: string; newId: BudgetId.BudgetId }>[] = [];
     let plan = target;
     for (const budget of source.budgets) {
       const newBudgetId = BudgetId.generate();
-      budgetIdMap.set(String(budget.id), newBudgetId);
+      budgetPairs.push({ sourceId: String(budget.id), newId: newBudgetId });
       const added = BudgetPlan.addBudget(
         plan,
         { id: newBudgetId, partner: budget.partner },
@@ -103,23 +103,35 @@ export const clonePlanContent =
       subcategory: () => SubcategoryId.generate(),
     });
 
+    // Lançamentos agrupados pela rede da origem. O laço abaixo percorre as REDES, não os lançamentos:
+    // assim não existe "lançamento de rede desconhecida" para descartar (R9 da segunda revisão — o
+    // antigo `continue` "inalcançável" descartaria em silêncio se um dia fosse alcançado). O port só
+    // devolve lançamentos dos ids pedidos.
+    const resultsBySourceBudget = new Map<string, BudgetResult.BudgetResult[]>();
+    for (const result of sourceResults.value) {
+      const key = String(result.budgetId);
+      const group = resultsBySourceBudget.get(key) ?? [];
+      group.push(result);
+      resultsBySourceBudget.set(key, group);
+    }
+
     // lançamentos remapeados (budgetId + subcategoryId)
     const results: BudgetResult.BudgetResult[] = [];
     const sums = new Map<string, number>();
-    for (const result of sourceResults.value) {
-      const newBudgetId = budgetIdMap.get(String(result.budgetId));
-      if (newBudgetId === undefined) continue; // inalcançável: a consulta foi pelos ids deste mapa
-      const newSubcategoryId = cloned.subcategoryIdMap.get(String(result.subcategoryId));
-      if (newSubcategoryId === undefined) return err('budget-result-orphan-subcategory');
-      results.push(
-        BudgetResult.clone(result, {
-          id: BudgetResultId.generate(),
-          budgetId: newBudgetId,
-          subcategoryId: newSubcategoryId,
-        }),
-      );
-      const key = String(newBudgetId);
-      sums.set(key, (sums.get(key) ?? 0) + result.value.cents);
+    for (const { sourceId, newId } of budgetPairs) {
+      for (const result of resultsBySourceBudget.get(sourceId) ?? []) {
+        const newSubcategoryId = cloned.subcategoryIdMap.get(String(result.subcategoryId));
+        if (newSubcategoryId === undefined) return err('budget-result-orphan-subcategory');
+        results.push(
+          BudgetResult.clone(result, {
+            id: BudgetResultId.generate(),
+            budgetId: newId,
+            subcategoryId: newSubcategoryId,
+          }),
+        );
+        const key = String(newId);
+        sums.set(key, (sums.get(key) ?? 0) + result.value.cents);
+      }
     }
 
     const written = await deps.planCloneWriter.write({
