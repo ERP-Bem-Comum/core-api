@@ -8,15 +8,16 @@ import type {
   ListBudgetPlansQuery,
   BudgetPlanPage,
 } from '#src/modules/budget-plans/domain/budget-plan/repository.ts';
-import type { BudgetPlansModuleEvent } from '#src/modules/budget-plans/public-api/events.ts';
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
+import { budgetPlanFromRow } from '../mappers/budget-plan.mapper.ts';
 import {
-  budgetPlanToInsert,
-  budgetToInsert,
-  budgetPlanFromRow,
-} from '../mappers/budget-plan.mapper.ts';
-import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
+  upsertPlanInTx,
+  insertNewPlanInTx,
+  retryOnceOnDeadlock,
+  isPlanVersionDuplicate,
+  describeDbError,
+} from './plan-writes-in-tx.drizzle.ts';
 
 const safe = async <T>(
   ctx: string,
@@ -25,7 +26,9 @@ const safe = async <T>(
   try {
     return ok(await op());
   } catch (cause) {
-    process.stderr.write(`[budget-plan-repo:${ctx}] ${String(cause)}\n`);
+    // F3 da revisão — corrida entre a checagem de existência e o INSERT: 409, não 503.
+    if (isPlanVersionDuplicate(cause)) return err('budget-plan-already-exists');
+    process.stderr.write(`[budget-plan-repo:${ctx}] ${describeDbError(cause)}\n`);
     return err('budget-plan-repo-unavailable');
   }
 };
@@ -59,7 +62,7 @@ const safeRemove = async (
     return ok(undefined);
   } catch (cause) {
     if (isParentRestrictViolation(cause)) return err('budget-plan-has-children');
-    process.stderr.write(`[budget-plan-repo:remove] ${String(cause)}\n`);
+    process.stderr.write(`[budget-plan-repo:remove] ${describeDbError(cause)}\n`);
     return err('budget-plan-repo-unavailable');
   }
 };
@@ -89,42 +92,6 @@ const hydrate = (
   const mapped = budgetPlanFromRow(row, budgetRows);
   if (!mapped.ok) throw new Error(`budget-plan-mapper: ${mapped.error}`);
   return mapped.value;
-};
-
-type Db = BudgetPlansMysqlHandle['db'];
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
-
-// Upsert do plano DENTRO de uma tx: trava o cabeçalho (`SELECT id ... FOR UPDATE`), UPDATE-ou-INSERT
-// do plano, replace-all dos budgets (coleção pequena, molde do legado) e append no outbox — tudo no
-// MESMO commit. Compartilhado por `save`, `removeBudget` (que soma o delete dos results na mesma tx)
-// e pelo `plan-clone-writer.drizzle.ts` (#1092, que soma árvore e lançamentos).
-export const upsertPlanInTx = async (
-  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-  tx: Tx,
-  plan: BudgetPlan,
-  events: readonly BudgetPlansModuleEvent[],
-): Promise<void> => {
-  const row = budgetPlanToInsert(plan);
-  const existing = await tx
-    .select({ id: schema.budgetPlans.id })
-    .from(schema.budgetPlans)
-    .where(eq(schema.budgetPlans.id, row.id))
-    .for('update');
-
-  if (existing.length > 0) {
-    await tx.update(schema.budgetPlans).set(row).where(eq(schema.budgetPlans.id, row.id));
-  } else {
-    await tx.insert(schema.budgetPlans).values(row);
-  }
-
-  // Entidade filha reescrita por inteiro (delete+insert) — coleção pequena, sem diff incremental.
-  await tx.delete(schema.budgets).where(eq(schema.budgets.budgetPlanId, row.id));
-  if (plan.budgets.length > 0) {
-    const budgetRows = plan.budgets.map((b) => budgetToInsert(b, plan.id));
-    await tx.insert(schema.budgets).values(budgetRows);
-  }
-
-  await appendOutboxInTx(tx, schema, events);
 };
 
 export const createDrizzleBudgetPlanRepository = (
@@ -257,6 +224,17 @@ export const createDrizzleBudgetPlanRepository = (
         await db.transaction(async (tx) => {
           await upsertPlanInTx(tx, plan, events);
         });
+      }),
+
+    // F8 — INSERT puro, sem a leitura com trava do upsert (ver o port). O 1062 da UNIQUE de versão
+    // sai como `budget-plan-already-exists` pelo `safe`.
+    create: async (plan, events) =>
+      safe('create', async () => {
+        await retryOnceOnDeadlock(async () =>
+          db.transaction(async (tx) => {
+            await insertNewPlanInTx(tx, plan, events);
+          }),
+        );
       }),
 
     // Remoção atômica: upsert do plano-sem-o-budget + delete dos resultados dependentes na MESMA tx.

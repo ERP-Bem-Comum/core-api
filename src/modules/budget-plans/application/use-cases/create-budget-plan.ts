@@ -64,6 +64,12 @@ export const createBudgetPlan =
     const actor = UserRef.rehydrate(cmd.updatedByRef);
     if (!actor.ok) return actor;
 
+    // F7 da revisão: decide com os dois anos do pedido, antes de qualquer consulta.
+    if (cmd.importFromYear !== undefined) {
+      const years = BudgetPlan.checkImportYear(cmd.year, cmd.importFromYear);
+      if (!years.ok) return years;
+    }
+
     const program = await deps.programCatalog.getByRef(programRef.value);
     if (!program.ok) return program;
     if (program.value === null) return err('program-not-found');
@@ -85,7 +91,8 @@ export const createBudgetPlan =
     if (existing.value !== null) return err('budget-plan-already-exists');
 
     if (cmd.importFromYear === undefined) {
-      const saved = await deps.planRepo.save(plan, [event]);
+      // Plano novo por construção: INSERT puro, sem a leitura com trava do upsert (F8 da revisão).
+      const saved = await deps.planRepo.create(plan, [event]);
       if (!saved.ok) return saved;
       return ok({ plan, event, totalInCents: 0 });
     }

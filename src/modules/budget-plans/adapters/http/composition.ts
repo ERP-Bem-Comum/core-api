@@ -182,7 +182,11 @@ const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pool
   // Store de results compartilhado com o planRepo: o removeBudget atômico apaga os results daquele
   // budget no MESMO store que o budgetResultRepo lê/escreve (espelha a tx única do adapter mysql).
   const budgetResultRepo = InMemoryBudgetResultRepository().repo;
-  const { repo: planRepo, hasBudget } = InMemoryBudgetPlanRepository(undefined, budgetResultRepo);
+  const {
+    repo: planRepo,
+    hasBudget,
+    planOfBudget,
+  } = InMemoryBudgetPlanRepository(undefined, budgetResultRepo);
   await seedPlans(planRepo, seed?.plans ?? []);
 
   // O writer atômico da árvore lê o status por FORA da árvore — aqui derivado do planRepo
@@ -201,6 +205,7 @@ const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pool
     subcategoryReader: InMemorySubcategoryLaunchTypeReader(
       seed?.subcategoryLaunchTypes ?? {},
       costStructureHandle.launchTypeOf,
+      { ofSubcategory: costStructureHandle.planOfSubcategory, ofBudget: planOfBudget },
     ),
     budgetReader: InMemoryBudgetExistsReader(seed?.budgetsExisting ?? [], hasBudget),
     programCatalog: InMemoryProgramCatalog(seed?.programs ?? []),

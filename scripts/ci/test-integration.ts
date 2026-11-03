@@ -133,6 +133,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #1092 — cópia de plano (importação/calibração/cenário) tudo ou nada: plano + árvore +
     // lançamentos numa tx; caminho feliz com mais de um lote + rollback por UNIQUE no último passo.
     'tests/modules/budget-plans/adapters/persistence/plan-clone-writer.drizzle-mysql.test.ts',
+    // #1092 — regressão dos achados da revisão que só o MySQL real reproduz (concorrência, lock e
+    // log de erro do driver). `REGRESSION_REPEAT` (default 1) repete cada cenário; a medição usou 1000.
+    'tests/regression/budget-plans-1092/f02-race-false-orphan.mysql.test.ts',
+    'tests/regression/budget-plans-1092/f03-concurrent-import-503.mysql.test.ts',
+    'tests/regression/budget-plans-1092/f05-log-leaks-params.mysql.test.ts',
+    'tests/regression/budget-plans-1092/f08-gap-lock-blocks-other-plans.mysql.test.ts',
     // BGP-ETL-LEGACY-ID (fatia 1/3 ETL) — legacy_id INT NULL + UNIQUE nas 6 tabelas bgp_*:
     // CA1 (information_schema) + CA2 (multiplos NULL) + CA3 (dup -> ER_DUP_ENTRY) + CA4 (regressao).
     'tests/modules/budget-plans/adapters/persistence/legacy-id.drizzle-mysql.test.ts',

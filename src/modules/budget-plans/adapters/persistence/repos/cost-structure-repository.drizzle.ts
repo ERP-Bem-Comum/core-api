@@ -13,7 +13,8 @@ import type {
 } from '#src/modules/budget-plans/domain/cost-structure/repository.ts';
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
-import { costStructureToRows, costStructureFromRows } from '../mappers/cost-structure.mapper.ts';
+import { costStructureFromRows } from '../mappers/cost-structure.mapper.ts';
+import { writeTreeInTx } from './plan-writes-in-tx.drizzle.ts';
 
 const safe = async <T>(
   ctx: string,
@@ -77,22 +78,8 @@ const selectTree = async (exec: ReadExec, id: BudgetPlanId): Promise<CostStructu
   return mapped.value;
 };
 
-// Replace-all DENTRO de uma tx: apaga a raiz do plano (FK ON DELETE CASCADE derruba
-// categorias/subcategorias) e reinsere top-down (FK exige pai antes do filho). Spread p/
-// array mutável (drizzle `.values()` não aceita `readonly[]`). Compartilhado por save, mutate e pelo
-// `plan-clone-writer.drizzle.ts` (#1092).
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-export const writeTree = async (tx: Tx, structure: CostStructure): Promise<void> => {
-  const rows = costStructureToRows(structure);
-  const planId = structure.budgetPlanId as unknown as string;
-
-  await tx.delete(schema.costCenters).where(eq(schema.costCenters.budgetPlanId, planId));
-  if (rows.costCenters.length > 0)
-    await tx.insert(schema.costCenters).values([...rows.costCenters]);
-  if (rows.categories.length > 0) await tx.insert(schema.categories).values([...rows.categories]);
-  if (rows.subcategories.length > 0)
-    await tx.insert(schema.subcategories).values([...rows.subcategories]);
-};
+// O replace-all da árvore dentro de uma tx vive em `plan-writes-in-tx.drizzle.ts` (#1092, F10).
+const writeTree = writeTreeInTx;
 
 export const createDrizzleCostStructureRepository = (
   handle: BudgetPlansMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types

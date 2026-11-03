@@ -107,6 +107,9 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'calc-model-mismatch': 400,
   'budget-not-found': 404,
   'subcategory-not-found': 404,
+  // #1092 (F1) — subcategoria de OUTRO plano que não o do orçamento: o recurso existe, o par é que
+  // é inválido -> 422 (pedido incoerente), não 404.
+  'subcategory-not-in-budget-plan': 422,
   'budget-id-invalid': 422,
   'subcategory-id-invalid': 422,
   'budget-plan-invalid-money': 422,

@@ -85,6 +85,15 @@ export const clonePlanContent =
       plan = added.value.plan;
     }
 
+    // Lançamentos ANTES da árvore (F2 da revisão). Nó de custo nunca é apagado (#454: só desativa), então
+    // a árvore só cresce: todo lançamento lido aqui tem a subcategoria na árvore lida depois. Na ordem
+    // inversa, uma subcategoria criada entre as duas leituras, com lançamento, virava órfão falso.
+    // Uma consulta só para todas as redes (F9: era uma por rede).
+    const sourceResults = await deps.budgetResultRepo.listByBudgetIds(
+      source.budgets.map((b) => b.id),
+    );
+    if (!sourceResults.ok) return sourceResults;
+
     // árvore de custos (novos ids) → subcategoryIdMap
     const sourceStructure = await deps.costStructureRepo.findByBudgetPlanId(source.id);
     if (!sourceStructure.ok) return sourceStructure;
@@ -97,24 +106,20 @@ export const clonePlanContent =
     // lançamentos remapeados (budgetId + subcategoryId)
     const results: BudgetResult.BudgetResult[] = [];
     const sums = new Map<string, number>();
-    for (const budget of source.budgets) {
-      const newBudgetId = budgetIdMap.get(String(budget.id));
-      if (newBudgetId === undefined) continue; // inalcançável: o mapa foi montado deste mesmo laço
-      const sourceResults = await deps.budgetResultRepo.listByBudgetId(budget.id);
-      if (!sourceResults.ok) return sourceResults;
-      for (const result of sourceResults.value) {
-        const newSubcategoryId = cloned.subcategoryIdMap.get(String(result.subcategoryId));
-        if (newSubcategoryId === undefined) return err('budget-result-orphan-subcategory');
-        results.push(
-          BudgetResult.clone(result, {
-            id: BudgetResultId.generate(),
-            budgetId: newBudgetId,
-            subcategoryId: newSubcategoryId,
-          }),
-        );
-        const key = String(newBudgetId);
-        sums.set(key, (sums.get(key) ?? 0) + result.value.cents);
-      }
+    for (const result of sourceResults.value) {
+      const newBudgetId = budgetIdMap.get(String(result.budgetId));
+      if (newBudgetId === undefined) continue; // inalcançável: a consulta foi pelos ids deste mapa
+      const newSubcategoryId = cloned.subcategoryIdMap.get(String(result.subcategoryId));
+      if (newSubcategoryId === undefined) return err('budget-result-orphan-subcategory');
+      results.push(
+        BudgetResult.clone(result, {
+          id: BudgetResultId.generate(),
+          budgetId: newBudgetId,
+          subcategoryId: newSubcategoryId,
+        }),
+      );
+      const key = String(newBudgetId);
+      sums.set(key, (sums.get(key) ?? 0) + result.value.cents);
     }
 
     const written = await deps.planCloneWriter.write({

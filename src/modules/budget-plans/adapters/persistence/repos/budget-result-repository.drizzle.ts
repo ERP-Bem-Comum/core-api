@@ -97,6 +97,33 @@ export const createDrizzleBudgetResultRepository = (
       }
     },
 
+    // #1092 (F9) — mesma blindagem do `listByBudgetId`, para N orçamentos num SELECT ... IN.
+    listByBudgetIds: async (budgetIds: readonly BudgetId[]) => {
+      if (budgetIds.length === 0) return ok([]);
+      try {
+        const rows = await db
+          .select()
+          .from(schema.budgetResults)
+          .where(
+            inArray(
+              schema.budgetResults.budgetId,
+              budgetIds.map((id) => id as unknown as string),
+            ),
+          )
+          .orderBy(schema.budgetResults.id);
+        const results: BudgetResult[] = [];
+        for (const row of rows) {
+          const mapped = budgetResultFromRow(row);
+          if (!mapped.ok) return err('budget-result-corrupt');
+          results.push(mapped.value);
+        }
+        return ok(results);
+      } catch (cause) {
+        process.stderr.write(`[budget-result-repo:listByBudgetIds] ${String(cause)}\n`);
+        return err('budget-result-repo-unavailable');
+      }
+    },
+
     // CA4/D2: delete explícito (sem FK cascade). O chamador roda na mesma tx do delete do orçamento.
     deleteByBudgetId: async (budgetId: BudgetId) =>
       safe('deleteByBudgetId', async () => {

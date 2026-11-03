@@ -4,7 +4,9 @@ import type { CostStructure } from '../../domain/cost-structure/types.ts';
 import type { BudgetResult } from '../../domain/budget-result/budget-result.ts';
 import type { BudgetPlansModuleEvent } from '../../public-api/events.ts';
 
-export type PlanCloneWriteError = 'plan-clone-write-unavailable';
+// `budget-plan-already-exists`: outro pedido gravou o mesmo (ano, programa, versão) entre a checagem
+// do caso de uso e a gravação (F3 da revisão do #1092).
+export type PlanCloneWriteError = 'plan-clone-write-unavailable' | 'budget-plan-already-exists';
 
 // O plano copiado inteiro, já montado em memória: cabeçalho com os orçamentos, árvore de custos e
 // lançamentos, todos com ids novos e apontando uns para os outros.

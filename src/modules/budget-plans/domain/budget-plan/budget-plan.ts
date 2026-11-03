@@ -199,6 +199,11 @@ const approve = (
   return ok({ plan: { ...plan, status: 'APROVADO', updatedAt: now, updatedByRef: actor } });
 };
 
+// #1092 — copiar um plano para o PRÓPRIO ano não faz sentido (o plano raiz é único por ano +
+// programa). Guard puro: decide só com os dois anos do pedido, antes de qualquer consulta.
+const checkImportYear = (year: number, importFromYear: number): Result<void, BudgetPlanError> =>
+  year === importFromYear ? err('budget-plan-import-same-year') : ok(undefined);
+
 // #1092 — escolhe de qual plano o plano novo copia o conteúdo ("Criar a partir do ano de").
 //
 // Decisão da P.O. (28/10/2026), divergente do legado de propósito: a origem é a ÚLTIMA VERSÃO
@@ -206,14 +211,17 @@ const approve = (
 // O legado copiava a versão 1.0 sem olhar o status. A vigência é a mesma do Consolidado ABC
 // (`selectCurrentApprovedByFamily`): o aprovado de maior versão.
 //
-// `candidates` são os planos do ano de origem, em qualquer status e de qualquer programa: o filtro é
-// regra, então mora aqui e não na consulta.
+// `candidates` chegam de `listApprovedByYear(ano, programa)`, que JÁ filtra por APROVADO, ano e
+// programa (medido: 1000 de 1000 populações sorteadas, nenhum candidato fora do filtro). O filtro
+// abaixo repete a regra de propósito: é a especificação da origem, e mantém a função correta para
+// qualquer coleção que receba — a consulta é a otimização, não a dona da regra.
+//
+// O ano igual é recusado antes, por `checkImportYear`, sem tocar o banco.
 const selectImportSource = (
   target: BudgetPlanEntity,
   sourceYear: number,
   candidates: readonly BudgetPlanEntity[],
 ): Result<BudgetPlanEntity, BudgetPlanError> => {
-  if (sourceYear === target.year) return err('budget-plan-import-same-year');
   const family = candidates.filter(
     (p) =>
       p.status === 'APROVADO' &&
@@ -235,5 +243,6 @@ export const BudgetPlan = {
   startCalibration,
   createScenery,
   approve,
+  checkImportYear,
   selectImportSource,
 } as const;

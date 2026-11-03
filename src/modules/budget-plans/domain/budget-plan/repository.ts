@@ -7,7 +7,12 @@ import type { BudgetPlanStatus } from './status.ts';
 import type { BudgetPlansModuleEvent } from '../../public-api/events.ts';
 import type { OutboxAppendError } from '../../application/ports/outbox.ts';
 
-export type BudgetPlanRepositoryError = 'budget-plan-repo-unavailable' | OutboxAppendError;
+// `budget-plan-already-exists` (#1092, F3 da revisão): outro pedido gravou o mesmo (ano, programa,
+// versão) entre a checagem do caso de uso e o INSERT — a UNIQUE do banco recusa, e é 409.
+export type BudgetPlanRepositoryError =
+  | 'budget-plan-repo-unavailable'
+  | 'budget-plan-already-exists'
+  | OutboxAppendError;
 
 export type ListBudgetPlansQuery = Readonly<{
   page: number; // 1-based (validado na borda)
@@ -54,6 +59,15 @@ export type BudgetPlanRepository = Readonly<{
   // Anos distintos com plano existente (alimenta o options).
   listYears: () => Promise<Result<readonly number[], BudgetPlanRepositoryError>>;
   save: (
+    plan: BudgetPlan,
+    events: readonly BudgetPlansModuleEvent[],
+  ) => Promise<Result<void, BudgetPlanRepositoryError>>;
+  // #1092 (F8 da revisão) — grava um plano NOVO por INSERT puro. O `save` é upsert e começa com
+  // `SELECT ... FOR UPDATE` para descobrir se o plano existe; num id que ainda não existe, sob o
+  // REPEATABLE READ default, isso é gap lock no PK, e duas criações concorrentes travavam uma à
+  // outra (deadlock medido). Quem cria já sabe que o plano é novo. Mesmo (ano, programa, versão) já
+  // gravado por outro pedido → `budget-plan-already-exists` (a UNIQUE do banco decide).
+  create: (
     plan: BudgetPlan,
     events: readonly BudgetPlansModuleEvent[],
   ) => Promise<Result<void, BudgetPlanRepositoryError>>;
