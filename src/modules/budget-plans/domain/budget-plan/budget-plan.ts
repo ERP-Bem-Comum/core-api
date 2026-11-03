@@ -7,6 +7,7 @@ import type { BudgetPlan as BudgetPlanEntity, Budget, BudgetPartner } from './ty
 import type { BudgetPlanError } from './errors.ts';
 import type { BudgetPlanEvent } from './events.ts';
 import * as PlanVersion from './version.ts';
+import { selectCurrentApprovedByFamily } from './current-approved.ts';
 
 // Faixa plausível de ano de planejamento (legado não valida; fail-closed aqui).
 const YEAR_MIN = 2000;
@@ -198,6 +199,39 @@ const approve = (
   return ok({ plan: { ...plan, status: 'APROVADO', updatedAt: now, updatedByRef: actor } });
 };
 
+// #1092 — copiar um plano para o PRÓPRIO ano não faz sentido (o plano raiz é único por ano +
+// programa). Guard puro: decide só com os dois anos do pedido, antes de qualquer consulta.
+const checkImportYear = (year: number, importFromYear: number): Result<void, BudgetPlanError> =>
+  year === importFromYear ? err('budget-plan-import-same-year') : ok(undefined);
+
+// #1092 — escolhe de qual plano o plano novo copia o conteúdo ("Criar a partir do ano de").
+//
+// Decisão da P.O. (28/10/2026), divergente do legado de propósito: a origem é a ÚLTIMA VERSÃO
+// APROVADA da família (ano de origem × programa do plano novo), com as calibrações já incorporadas.
+// O legado copiava a versão 1.0 sem olhar o status. A vigência é a mesma do Consolidado ABC
+// (`selectCurrentApprovedByFamily`): o aprovado de maior versão.
+//
+// `candidates` chegam de `listApprovedByYear(ano, programa)`, que JÁ filtra por APROVADO, ano e
+// programa (medido: 1000 de 1000 populações sorteadas, nenhum candidato fora do filtro). O filtro
+// abaixo repete a regra de propósito: é a especificação da origem, e mantém a função correta para
+// qualquer coleção que receba — a consulta é a otimização, não a dona da regra.
+//
+// O ano igual é recusado antes, por `checkImportYear`, sem tocar o banco.
+const selectImportSource = (
+  target: BudgetPlanEntity,
+  sourceYear: number,
+  candidates: readonly BudgetPlanEntity[],
+): Result<BudgetPlanEntity, BudgetPlanError> => {
+  const family = candidates.filter(
+    (p) =>
+      p.status === 'APROVADO' &&
+      p.year === sourceYear &&
+      String(p.programRef) === String(target.programRef),
+  );
+  const current = selectCurrentApprovedByFamily(family)[0];
+  return current === undefined ? err('budget-plan-import-source-not-approved') : ok(current);
+};
+
 // #458 — `total` saiu do agregado: era `Σ budgets[].value` (o informado, que a P.O. decidiu não
 // existir). O total agora é a soma dos lançamentos (bgp_budget_results), que vivem em outro
 // repositório — logo é composição do application (`read-models/plan-total.ts`), não do agregado.
@@ -209,4 +243,6 @@ export const BudgetPlan = {
   startCalibration,
   createScenery,
   approve,
+  checkImportYear,
+  selectImportSource,
 } as const;
