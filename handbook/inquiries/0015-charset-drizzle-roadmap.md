@@ -1,13 +1,21 @@
 ---
 inquiry: 0015
 title: "Charset/collate por tabela via API drizzle-orm — roadmap"
-state: blocked
+state: deferred
 opened: 2026-05-18
-last_reviewed: 2026-08-06
-open_outputs: 3  # migrar para issue — ver README §Saídas
+last_reviewed: 2026-11-04
 ---
 
 # Inquiry-0015: Charset/collate por tabela via API drizzle-orm — roadmap
+
+> ⏸️ **Adiada na revisão de 2026-11-04, com gatilho.** O bloqueio continua o mesmo e no mesmo terceiro:
+> o repositório está no `drizzle-orm` `0.45.2`, o `latest` upstream é `0.45.4` e a linha `1.0.0` está em
+> `rc.5`. A metade por coluna fechou pelo #636; a metade por tabela segue sem API. Inquiry presa a
+> upstream não anda por vontade nossa, e a revisão de 90 dias só gerava ruído.
+>
+> **Gatilho:** o mesmo gatilho (b) da [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md):
+> `drizzle-orm@1.0.0` **e** `drizzle-kit@1.x` em `latest`, cumprida a quarentena. Quando disparar,
+> medir se o `mysqlTable` aceita `charset`/`collate` de tabela e reabrir esta inquiry com o resultado.
 
 - **Opened by:** Gabriel Aderaldo (via `pipeline-maestro`, ticket `CTR-DB-SCHEMA-HARDENING`)
 - **Asked to:** drizzle-orm maintainers / observação de roadmap upstream

@@ -201,8 +201,8 @@ que o justificaria.
 ### O que FALTA medir — (b) Drizzle 1.0
 
 - [ ] **Collation ganhou suporte de primeira classe?** Único item de (b) ainda aberto — ver o bloco
-      de 2026-09-01 acima, e a [0015](./0015-charset-drizzle-roadmap.md), `blocked` em upstream pelo
-      mesmo assunto.
+      de 2026-09-01 acima, e a [0015](./0015-charset-drizzle-roadmap.md), `deferred` desde 2026-11-04
+      com **este mesmo gatilho (b)**: quem medir (b) aqui deve reabrir a 0015 com o resultado.
 
 ---
 
@@ -276,7 +276,7 @@ muda comportamento de geração — e merece ciclo próprio.
 - [Inquiry-0023](./0023-typescript-7-native-spike.md) — o precedente: mediu Node/Deno/Bun/tsgo em harness executável e **refutou** uma premissa de ADR aceito
 - `context/decisions/ADR-0014.yaml`, alegação `ADR-0014-C8` — a medição de collation e a correção do argumento errado
 - `.claude/rules/jobs-and-workers.md` — topologia de worker por grupo, e por que a fila segue diferida
-- [Inquiry-0015](./0015-charset-drizzle-roadmap.md) — `blocked` em upstream pelo mesmo assunto do único item de (b) ainda aberto (collation)
+- [Inquiry-0015](./0015-charset-drizzle-roadmap.md) — `deferred` (2026-11-04) com o gatilho (b) desta inquiry, pelo mesmo assunto do único item de (b) ainda aberto (collation)
 
 **Fonte primária consultada na medição de 2026-09-01** — doc do fornecedor e registry, não artefato interno:
 

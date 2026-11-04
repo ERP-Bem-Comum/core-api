@@ -1,13 +1,21 @@
 ---
 inquiry: 0019
 title: "`TentativaDeExclusaoDetectada` — tripwire sem superfície de ataque"
-state: blocked
+state: deferred
 opened: 2026-05-25
-last_reviewed: 2026-08-06
-open_outputs: 3  # migrar para issue — ver README §Saídas
+last_reviewed: 2026-11-04
 ---
 
 # Inquiry-0019: `TentativaDeExclusaoDetectada` — tripwire sem superfície de ataque
+
+> ⏸️ **Adiada na revisão de 2026-11-04, com gatilho.** Remedido: continua não existindo superfície de
+> exclusão física em `src/` (`git grep -niE "hardDelete|physical.?delete|purge" -- src` acha só um
+> comentário em `auth`, sem método destrutivo). Das três condições da §5, uma mudou: **o RBAC existe**.
+> Seguem ausentes a superfície de deleção física e o canal de Segurança/SIEM.
+>
+> **Gatilho:** surgir comando de exclusão física no produto **ou** existir canal de Segurança/SIEM. Até
+> lá, nada de código. A prevenção por privilégio no MySQL (alternativa B) segue candidata, e a decisão
+> é da Codebit, dona da infra.
 
 - **Opened by:** Gabriel Aderaldo (via orquestrador)
 - **Asked to:** P.O. + análise interna do handbook + inspeção de `src/`
