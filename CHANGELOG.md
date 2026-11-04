@@ -6,6 +6,14 @@ a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é reg
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·
 versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
+## [1.0.0-rc.6] — 2026-10-23
+
+### Adicionado
+
+- **partners:** Pessoa com Deficiência no formato do cliente (spec 131 do web-app) ([#1086](https://github.com/ERP-Bem-Comum/core-api/pull/1086))
+- **partners:** identidade de gênero "Queer" (spec 130 do web-app) ([#1085](https://github.com/ERP-Bem-Comum/core-api/pull/1085))
+- **financial:** editar documento Aprovado — forma de pagamento, categorização e descrição ([#1084](https://github.com/ERP-Bem-Comum/core-api/pull/1084))
+
 ## [1.0.0-rc.5] — 2026-10-20
 
 ### Adicionado
