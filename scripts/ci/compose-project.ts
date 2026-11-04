@@ -26,3 +26,40 @@ export const composeDownArgs = (): readonly string[] => [
   'down',
   '-v',
 ];
+
+// #1103 — diagnóstico quando o `up --wait` falha. Sem isto o CI só mostrava `is unhealthy` +
+// `exit code 1`, sem a saída das sondas nem o log do serviço, e a causa não tinha como ser medida.
+
+/** Ids de todos os containers do projeto isolado — `-a` inclui os que já saíram. */
+export const composePsIdsArgs = (): readonly string[] => [
+  'compose',
+  '-p',
+  TEST_COMPOSE_PROJECT,
+  'ps',
+  '-a',
+  '-q',
+];
+
+/** Nome + `State` em JSON: `State.Health.Log` guarda exit code e saída de cada sonda. */
+export const inspectStateArgs = (ids: readonly string[]): readonly string[] => [
+  'inspect',
+  '--format',
+  '{{.Name}} {{json .State}}',
+  ...ids,
+];
+
+/** Cauda do log de cada serviço do projeto isolado. */
+export const composeLogsArgs = (): readonly string[] => [
+  'compose',
+  '-p',
+  TEST_COMPOSE_PROJECT,
+  'logs',
+  '--no-color',
+  '--tail',
+  '200',
+];
+
+/** CA3 da #1103: separa "a infra não subiu" de "um teste falhou" no log do CI. */
+export const infraFailureMessage = (services: readonly string[], status: number): string =>
+  `\n✖ INFRA NÃO SUBIU: \`docker compose up --wait\` falhou (exit ${String(status)}) para ` +
+  `[${services.join(', ')}]. Nenhum teste foi executado — a falha é de infraestrutura, não da suíte.\n`;
