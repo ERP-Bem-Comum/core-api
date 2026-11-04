@@ -18,6 +18,8 @@ export type InMemoryCostStructureRepositoryHandle = Readonly<{
   // SubcategoryLaunchTypeReader lê `bgp_subcategories`; no in-memory precisa da MESMA fonte (as
   // árvores deste store), senão lançar numa subcategoria criada via HTTP dá subcategory-not-found.
   launchTypeOf: (subcategoryId: string) => string | null;
+  // #1092 (F1) — o plano dono da árvore em que a subcategoria está; null se em nenhuma.
+  planOfSubcategory: (subcategoryId: string) => string | null;
   clear: () => void;
 }>;
 
@@ -52,19 +54,27 @@ export const InMemoryCostStructureRepository = (
     },
   };
 
-  return {
-    repo,
-    launchTypeOf: (subcategoryId) => {
-      for (const structure of map.values()) {
-        for (const cc of structure.costCenters) {
-          for (const cat of cc.categories) {
-            const sub = cat.subcategories.find((s) => String(s.id) === subcategoryId);
-            if (sub !== undefined) return sub.launchType;
-          }
+  const find = (
+    subcategoryId: string,
+  ): Readonly<{
+    sub: CostStructure['costCenters'][number]['categories'][number]['subcategories'][number];
+    planId: string;
+  }> | null => {
+    for (const structure of map.values()) {
+      for (const cc of structure.costCenters) {
+        for (const cat of cc.categories) {
+          const sub = cat.subcategories.find((s) => String(s.id) === subcategoryId);
+          if (sub !== undefined) return { sub, planId: String(structure.budgetPlanId) };
         }
       }
-      return null;
-    },
+    }
+    return null;
+  };
+
+  return {
+    repo,
+    launchTypeOf: (subcategoryId) => find(subcategoryId)?.sub.launchType ?? null,
+    planOfSubcategory: (subcategoryId) => find(subcategoryId)?.planId ?? null,
     clear: () => {
       map.clear();
     },

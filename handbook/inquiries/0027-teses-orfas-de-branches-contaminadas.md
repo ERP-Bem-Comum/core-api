@@ -1,15 +1,35 @@
 ---
 inquiry: 0027
 title: "Teses órfãs — o que 7 branches contaminadas tentavam provar"
-state: open
+state: decided
 opened: 2026-08-06
-last_reviewed: 2026-08-06
-open_outputs: 6  # migrar para issue — ver README §Saídas
+decided: 2026-11-04
+last_reviewed: 2026-11-04
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
 
 # Inquiry-0027: Teses órfãs — o que 7 branches contaminadas tentavam provar
+
+> ✅ **Decidida na revisão de 2026-11-04.** O que restava em aberto virou issue, e uma tese estava errada:
+>
+> - **Correção: a T4a nunca foi lacuna.** O auto-expire de contratos existe desde 2026-06-15
+>   (`54dd8418`, `feat(contracts): auto-expiração de contratos por vigência`), em
+>   `src/jobs/contracts/sweeper/sweeper.ts`, com `findExpirable` no repositório de contratos. A busca de
+>   2026-08-06 procurou `expire-scheduler`, um nome que não existe, e leu o vazio como ausência.
+>   Veredito corrigido: **Absorvida**. O I5 cai.
+> - **T2\*: absorvida.** Os hooks `inject-ticket-context.sh` e `subagent-stop-validate.sh` não existem
+>   mais em `.claude/hooks/`. O I7 está feito.
+> - **Branches:** das 7, resta só `origin/chore/rules-and-specs-overhaul`, cuja tese (T2) foi absorvida.
+>   Pode ser apagada sem perda.
+> - **Resíduos, agora rastreados como issue:**
+>   T3 discriminador "exibe × consulta" → [#1097](https://github.com/ERP-Bem-Comum/core-api/issues/1097) ·
+>   T5a ADR da imagem glibc → [#1098](https://github.com/ERP-Bem-Comum/core-api/issues/1098) ·
+>   T6a/I1 nova medição de `fix:feat` → [#1099](https://github.com/ERP-Bem-Comum/core-api/issues/1099) ·
+>   T1 observabilidade do outbox de e-mail → [#131](https://github.com/ERP-Bem-Comum/core-api/issues/131),
+>   que segue aberta.
+>
+> O corpo abaixo é preservado com os vereditos de 2026-08-06; onde diverge deste quadro, vale este quadro.
 
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** investigação interna (método comparativo sobre o próprio repositório)

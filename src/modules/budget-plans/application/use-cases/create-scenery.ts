@@ -4,6 +4,10 @@ import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
+import type {
+  BudgetPlanRepository,
+  BudgetPlanRepositoryError,
+} from '../../domain/budget-plan/repository.ts';
 import {
   clonePlanContent,
   type ClonePlanContentDeps,
@@ -23,9 +27,11 @@ export type CreateSceneryError =
   | 'scenario-name-required'
   | BudgetPlanError
   | ClonePlanContentError
+  | BudgetPlanRepositoryError
   | UserRef.UserRefError;
 
-export type CreateSceneryDeps = ClonePlanContentDeps & Readonly<{ clock: Clock }>;
+export type CreateSceneryDeps = ClonePlanContentDeps &
+  Readonly<{ planRepo: BudgetPlanRepository; clock: Clock }>;
 
 // US4/CA4 — deriva um cenário (filho RASCUNHO nomeado) de um plano não-aprovado e clona o conteúdo inteiro.
 export const createScenery =
@@ -58,5 +64,10 @@ export const createScenery =
     );
     if (!derived.ok) return derived;
 
-    return clonePlanContent(deps)(found.value, derived.value.plan, now, actor.value);
+    return clonePlanContent(deps)({
+      source: found.value,
+      target: derived.value.plan,
+      now,
+      actor: actor.value,
+    });
   };

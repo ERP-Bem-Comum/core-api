@@ -10,6 +10,7 @@ import type {
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
 import { budgetResultToInsert, budgetResultFromRow } from '../mappers/budget-result.mapper.ts';
+import { describeDbError } from './plan-writes-in-tx.drizzle.ts';
 
 const safe = async <T>(
   ctx: string,
@@ -18,7 +19,7 @@ const safe = async <T>(
   try {
     return ok(await op());
   } catch (cause) {
-    process.stderr.write(`[budget-result-repo:${ctx}] ${String(cause)}\n`);
+    process.stderr.write(`[budget-result-repo:${ctx}] ${describeDbError(cause)}\n`);
     return err('budget-result-repo-unavailable');
   }
 };
@@ -92,7 +93,34 @@ export const createDrizzleBudgetResultRepository = (
         }
         return ok(results);
       } catch (cause) {
-        process.stderr.write(`[budget-result-repo:listByBudgetId] ${String(cause)}\n`);
+        process.stderr.write(`[budget-result-repo:listByBudgetId] ${describeDbError(cause)}\n`);
+        return err('budget-result-repo-unavailable');
+      }
+    },
+
+    // #1092 (F9) — mesma blindagem do `listByBudgetId`, para N orçamentos num SELECT ... IN.
+    listByBudgetIds: async (budgetIds: readonly BudgetId[]) => {
+      if (budgetIds.length === 0) return ok([]);
+      try {
+        const rows = await db
+          .select()
+          .from(schema.budgetResults)
+          .where(
+            inArray(
+              schema.budgetResults.budgetId,
+              budgetIds.map((id) => id as unknown as string),
+            ),
+          )
+          .orderBy(schema.budgetResults.id);
+        const results: BudgetResult[] = [];
+        for (const row of rows) {
+          const mapped = budgetResultFromRow(row);
+          if (!mapped.ok) return err('budget-result-corrupt');
+          results.push(mapped.value);
+        }
+        return ok(results);
+      } catch (cause) {
+        process.stderr.write(`[budget-result-repo:listByBudgetIds] ${describeDbError(cause)}\n`);
         return err('budget-result-repo-unavailable');
       }
     },

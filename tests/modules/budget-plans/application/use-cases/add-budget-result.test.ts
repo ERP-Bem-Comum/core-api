@@ -7,7 +7,11 @@ import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import { addBudgetResult } from '#src/modules/budget-plans/application/use-cases/add-budget-result.ts';
 import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
-import { InMemorySubcategoryLaunchTypeReader } from '#src/modules/budget-plans/adapters/persistence/repos/subcategory-launch-type-reader.in-memory.ts';
+import {
+  InMemorySubcategoryLaunchTypeReader,
+  WITHOUT_TREE,
+  WITHOUT_PLAN_SCOPE,
+} from '#src/modules/budget-plans/adapters/persistence/repos/subcategory-launch-type-reader.in-memory.ts';
 import { InMemoryBudgetExistsReader } from '#src/modules/budget-plans/adapters/persistence/repos/budget-exists-reader.in-memory.ts';
 import * as SubcategoryId from '#src/modules/budget-plans/domain/cost-structure/subcategory-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
@@ -22,7 +26,11 @@ describe('addBudgetResult (use case)', () => {
 
     const r = await addBudgetResult({
       budgetResultRepo: store.repo,
-      subcategoryReader: InMemorySubcategoryLaunchTypeReader({ [String(subId)]: 'IPCA' }),
+      subcategoryReader: InMemorySubcategoryLaunchTypeReader(
+        { [String(subId)]: 'IPCA' },
+        WITHOUT_TREE,
+        WITHOUT_PLAN_SCOPE,
+      ),
       budgetReader: InMemoryBudgetExistsReader([String(budgetId)]),
     })({
       budgetId: String(budgetId),
@@ -43,9 +51,11 @@ describe('addBudgetResult (use case)', () => {
 
     const r = await addBudgetResult({
       budgetResultRepo: store.repo,
-      subcategoryReader: InMemorySubcategoryLaunchTypeReader({
-        [String(subId)]: 'DESPESAS_PESSOAIS',
-      }),
+      subcategoryReader: InMemorySubcategoryLaunchTypeReader(
+        { [String(subId)]: 'DESPESAS_PESSOAIS' },
+        WITHOUT_TREE,
+        WITHOUT_PLAN_SCOPE,
+      ),
       budgetReader: InMemoryBudgetExistsReader([String(budgetId)]),
     })({
       budgetId: String(budgetId),
@@ -63,7 +73,11 @@ describe('addBudgetResult (use case)', () => {
     const store = InMemoryBudgetResultRepository();
     const r = await addBudgetResult({
       budgetResultRepo: store.repo,
-      subcategoryReader: InMemorySubcategoryLaunchTypeReader({ [UUID_VALIDO]: 'IPCA' }),
+      subcategoryReader: InMemorySubcategoryLaunchTypeReader(
+        { [UUID_VALIDO]: 'IPCA' },
+        WITHOUT_TREE,
+        WITHOUT_PLAN_SCOPE,
+      ),
       budgetReader: InMemoryBudgetExistsReader([]), // nenhum orçamento existe
     })({
       budgetId: String(BudgetId.generate()),
@@ -81,7 +95,7 @@ describe('addBudgetResult (use case)', () => {
     const store = InMemoryBudgetResultRepository();
     const r = await addBudgetResult({
       budgetResultRepo: store.repo,
-      subcategoryReader: InMemorySubcategoryLaunchTypeReader({}),
+      subcategoryReader: InMemorySubcategoryLaunchTypeReader({}, WITHOUT_TREE, WITHOUT_PLAN_SCOPE),
       budgetReader: InMemoryBudgetExistsReader([String(budgetId)]),
     })({
       budgetId: String(budgetId),
@@ -97,7 +111,7 @@ describe('addBudgetResult (use case)', () => {
     const store = InMemoryBudgetResultRepository();
     const r = await addBudgetResult({
       budgetResultRepo: store.repo,
-      subcategoryReader: InMemorySubcategoryLaunchTypeReader({}),
+      subcategoryReader: InMemorySubcategoryLaunchTypeReader({}, WITHOUT_TREE, WITHOUT_PLAN_SCOPE),
       budgetReader: InMemoryBudgetExistsReader([]),
     })({
       budgetId: 'nao-e-uuid',
