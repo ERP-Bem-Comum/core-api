@@ -96,6 +96,9 @@ const member = (over: Partial<TeamMemberWithDemographics> = {}): TeamMemberWithD
   age: 41,
   // #1055: geração no contrato de `TeamMember` (idade 41 → Millennial).
   generation: 'MILLENNIAL',
+  // Spec 131: PcD como códigos.
+  pwdAnswer: 'SIM',
+  pwdTypes: ['VISUAL'],
   ...over,
 });
 
@@ -112,6 +115,9 @@ const memberWithoutDemographics = (): TeamMemberWithDemographics =>
     age: null,
     // Sem data de nascimento → geração 'NA' (NUNCA null — #1055).
     generation: 'NA',
+    // Spec 131: sem resposta → null, sem tipos.
+    pwdAnswer: null,
+    pwdTypes: [],
   });
 
 interface AppHandle {
@@ -268,7 +274,15 @@ describe('reports/http — GET /reports/team: colunas demográficas (REPORTS-TEA
     // Assert
     assert.deepEqual(
       keys,
-      [...CURRENT_TEN_KEYS, 'genderIdentity', 'race', 'age', 'generation'].sort(),
+      [
+        ...CURRENT_TEN_KEYS,
+        'genderIdentity',
+        'race',
+        'age',
+        'generation',
+        'pwdAnswer',
+        'pwdTypes',
+      ].sort(),
     );
   });
 });

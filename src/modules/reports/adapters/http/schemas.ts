@@ -1,7 +1,8 @@
 /**
  * Schemas Zod da rota de relatórios (ADR-0027). Zod só na borda.
  *
- * `teamMemberSchema` espelha `TeamMember` (14 colunas — 10 do #238 + as 3 demográficas + geração).
+ * `teamMemberSchema` espelha `TeamMember` (16 colunas — 10 do #238 + as 3 demográficas + geração +
+ * resposta e tipos de PcD da spec 131).
  */
 import * as z from 'zod/v4';
 
@@ -26,6 +27,9 @@ export const teamMemberSchema = z.object({
   // REPORTS-TEAM-GENERATION (#1055): código da geração (recorte Pew pelo ano de nascimento),
   // derivado no `partners`. NUNCA null (sem data de nascimento → 'NA'); rótulo PT-BR fica no front.
   generation: z.string(),
+  // Spec 131 do web-app: Pessoa com Deficiência, códigos (rótulo PT no front). `null` = não respondeu.
+  pwdAnswer: z.string().nullable(),
+  pwdTypes: z.array(z.string()),
 });
 
 export type TeamMemberDto = z.infer<typeof teamMemberSchema>;

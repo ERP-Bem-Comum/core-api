@@ -173,9 +173,12 @@ export type SubmitDraftBody = z.infer<typeof submitDraftBodySchema>;
 // ─── PATCH /documents/:id (adjustDocument) ──────────────────────────────────
 
 /**
- * Body do ajuste de documento Open. `version` = optimistic lock. Campos são todos opcionais
- * (PATCH semântico), mas ao menos um deve ser informado além do `version`. O domínio recalcula
- * líquido e regenera filhos.
+ * Body do ajuste de documento. `version` = optimistic lock. Campos são todos opcionais
+ * (PATCH semântico), mas ao menos um deve ser informado além do `version`.
+ *
+ * - **Aberto:** ajuste completo — o domínio recalcula o líquido e regenera os filhos.
+ * - **Aprovado (#1057):** só `description`, `dueDate`, `paymentMethod` + `paymentDetail` (do título
+ *   PAI) e `taxonomy` (cascateia aos impostos). O documento continua Aprovado.
  */
 export const adjustDocumentBodySchema = z
   .object({
@@ -190,6 +193,23 @@ export const adjustDocumentBodySchema = z
     description: z.string().max(500).nullable().optional(),
     // #273 US2: complemento da forma de pagamento — null apaga; ausente não altera (CA6).
     paymentDetail: paymentDetailInput.nullable().optional(),
+    // #1057: só no Aprovado. A forma troca UMA vez, e nunca para Boleto/Guia.
+    paymentMethod: paymentMethodSchema.optional(),
+    // #1057: só no Aprovado. Os 5 níveis juntos, como na conciliação — caminho parcial não é validável.
+    taxonomy: z
+      .object({
+        programRef: uuidV4(),
+        budgetPlanRef: uuidV4(),
+        costCenterRef: uuidV4(),
+        categoryRef: uuidV4(),
+        subcategoryRef: uuidV4(),
+      })
+      .meta({
+        description:
+          'Categorização (Programa → Plano → Centro de Custo → Categoria → Subcategoria) do documento ' +
+          'Aprovado, cascateada aos títulos de imposto. Caminho existente e ativo do plano.',
+      })
+      .optional(),
   })
   .refine((b) => Object.keys(b).filter((k) => k !== 'version').length > 0, {
     message: 'pelo menos um campo além de version deve ser informado',
@@ -287,6 +307,14 @@ const payableResponseSchema = z
     retentionType: retentionTypeSchema.nullable(),
     valueCents: centsStringSchema,
     status: z.string(),
+    paymentMethodChangedAt: z.iso
+      .datetime()
+      .nullable()
+      .meta({
+        description:
+          '#1057: instante em que a forma de pagamento foi trocada depois da aprovação. ' +
+          'Não-nulo = a troca já foi usada (só uma é permitida); null = ainda pode trocar.',
+      }),
   })
   .strict();
 

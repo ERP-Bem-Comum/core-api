@@ -19,7 +19,8 @@ const clock = ClockFixed(new Date('2026-06-01T12:00:00.000Z'));
 
 // REPORTS-TEAM-DEMOGRAPHIC-COLUMNS: 10 colunas do #238 + as 3 demográficas da tabela Equipe ABC;
 // #1055 acrescenta `generation`. `dateOfBirth` NÃO entra — só `age` (idade com o Clock injetado) e
-// `generation` (código derivado do ano de nascimento) atravessam.
+// `generation` (código derivado do ano de nascimento) atravessam. A spec 131 acrescenta a resposta e
+// os tipos de PcD (códigos — o texto livre de "Outra" não atravessa).
 const PROJECTION_KEYS = [
   'active',
   'age',
@@ -31,6 +32,8 @@ const PROJECTION_KEYS = [
   'id',
   'name',
   'program',
+  'pwdAnswer',
+  'pwdTypes',
   'race',
   'registrationStatus',
   'role',

@@ -49,8 +49,12 @@ export const collaboratorToDetailDto = (
     hasChildren: c.hasChildren,
     childrenCount: c.childrenCount,
     childrenAges: c.childrenAges === null ? null : [...c.childrenAges],
-    isPwd: c.isPwd,
-    pwdDescription: c.pwdDescription,
+    pwd:
+      c.pwd === null
+        ? null
+        : c.pwd.answer === 'SIM'
+          ? { answer: 'SIM', types: [...c.pwd.types], otherDescription: c.pwd.otherDescription }
+          : { answer: c.pwd.answer, types: [], otherDescription: null },
     isOnLeave: c.isOnLeave,
     leaveDuration: c.leaveDuration,
     leaveRenewable: c.leaveRenewable,

@@ -220,7 +220,11 @@ export const parCollaborators = mysqlTable(
     hasChildren: boolean('has_children'),
     childrenCount: int('children_count'),
     childrenAges: varchar('children_ages', { length: 100 }),
-    isPwd: boolean('is_pwd'),
+    // Pessoa com Deficiência (spec 131): resposta (SIM/NAO/PREFIRO_NAO_RESPONDER), tipos marcados
+    // (CSV na ordem do formulário — sem JSON, ADR-0020) e o texto de "Outra". `pwd_description` era
+    // o "Qual?" do formato antigo e virou o texto de "Outra" (a migration converte, sem perder texto).
+    pwdAnswer: varchar('pwd_answer', { length: 30 }),
+    pwdTypes: varchar('pwd_types', { length: 120 }),
     pwdDescription: varchar('pwd_description', { length: 255 }),
     isOnLeave: boolean('is_on_leave'),
     leaveDuration: varchar('leave_duration', { length: 50 }),

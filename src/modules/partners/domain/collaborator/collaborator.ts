@@ -21,6 +21,7 @@ import * as DisableReason from './disable-reason.ts';
 import * as Sex from './sex.ts';
 import * as MaritalStatus from './civil-status.ts';
 import * as Territory from './territory.ts';
+import * as Pwd from './pwd.ts';
 import * as PaymentTarget from '../shared/payment-target.ts';
 import type {
   BankAccount,
@@ -152,8 +153,7 @@ export const register = (
     hasChildren: null,
     childrenCount: null,
     childrenAges: null,
-    isPwd: null,
-    pwdDescription: null,
+    pwd: null,
     isOnLeave: null,
     leaveDuration: null,
     leaveRenewable: null,
@@ -217,6 +217,9 @@ export const edit = (
   const fixed = PersonalData.resolveImmutablePersonalData(collaborator, input, at);
   if (!fixed.ok) return fixed;
 
+  const pwd = Pwd.resolvePwdFill(collaborator.pwd, input.pwd);
+  if (!pwd.ok) return pwd;
+
   // Spread preserva os demais pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
   const edited: Collaborator = immutable({
     ...collaborator,
@@ -233,6 +236,7 @@ export const edit = (
     rg: fixed.value.rg,
     dateOfBirth: fixed.value.dateOfBirth,
     race: fixed.value.race,
+    pwd: pwd.value,
   });
 
   return ok({
@@ -268,6 +272,10 @@ export const completeRegistration = (
   // gravado ainda em PreRegistration, e o autocadastro não pode apagá-los nem trocá-los.
   const fixed = PersonalData.resolveImmutablePersonalData(collaborator, input, at);
   if (!fixed.ok) return fixed;
+
+  // Spec 131: mesma regra do `edit` — o PUT pode ter preenchido o PcD ainda em PreRegistration.
+  const pwd = Pwd.resolvePwdFill(collaborator.pwd, input.pwd);
+  if (!pwd.ok) return pwd;
 
   const education = input.education === null ? ok(null) : Education.parse(input.education);
   if (!education.ok) return education;
@@ -314,8 +322,7 @@ export const completeRegistration = (
     hasChildren: input.hasChildren ?? null,
     childrenCount: input.childrenCount ?? null,
     childrenAges: input.childrenAges ?? null,
-    isPwd: input.isPwd ?? null,
-    pwdDescription: input.pwdDescription ?? null,
+    pwd: pwd.value,
     isOnLeave: input.isOnLeave ?? null,
     leaveDuration: input.leaveDuration ?? null,
     leaveRenewable: input.leaveRenewable ?? null,

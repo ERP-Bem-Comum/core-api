@@ -6,6 +6,28 @@ a próxima geração sobrescreve, e um CHANGELOG divergente do histórico é reg
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) ·
 versionamento: [SemVer 2.0.0](https://semver.org/lang/pt-BR/).
 
+## [1.0.0-rc.7] — 2026-11-04
+
+### Adicionado
+
+- **budget-plans:** criar plano a partir de outro ano (#1092) e cópia de plano tudo ou nada ([#1095](https://github.com/ERP-Bem-Comum/core-api/pull/1095))
+
+### Corrigido
+
+- **deps:** zera o pnpm audit — zod, fastify, nodemailer e 6ª rodada do fast-uri ([#1090](https://github.com/ERP-Bem-Comum/core-api/pull/1090))
+
+### Interno
+
+- **inquiries:** revisão dos 90 dias das sete inquiries paradas desde 06/08 ([#1100](https://github.com/ERP-Bem-Comum/core-api/pull/1100))
+
+## [1.0.0-rc.6] — 2026-10-23
+
+### Adicionado
+
+- **partners:** Pessoa com Deficiência no formato do cliente (spec 131 do web-app) ([#1086](https://github.com/ERP-Bem-Comum/core-api/pull/1086))
+- **partners:** identidade de gênero "Queer" (spec 130 do web-app) ([#1085](https://github.com/ERP-Bem-Comum/core-api/pull/1085))
+- **financial:** editar documento Aprovado — forma de pagamento, categorização e descrição ([#1084](https://github.com/ERP-Bem-Comum/core-api/pull/1084))
+
 ## [1.0.0-rc.5] — 2026-10-20
 
 ### Adicionado

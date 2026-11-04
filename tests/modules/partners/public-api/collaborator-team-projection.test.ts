@@ -48,7 +48,7 @@ const CURRENT_TEN_KEYS = [
   'experienceInPublicSector',
 ];
 
-const NEW_KEYS = ['genderIdentity', 'race', 'age', 'generation'];
+const NEW_KEYS = ['genderIdentity', 'race', 'age', 'generation', 'pwdAnswer', 'pwdTypes'];
 
 /** Colaborador em pré-cadastro: campos pessoais todos null. */
 const makeActive = (): CollaboratorType => {
@@ -121,6 +121,22 @@ describe('partners/public-api — toTeamProjection (REPORTS-TEAM-DEMOGRAPHIC-COL
     // Assert
     assert.equal(p.generation, 'MILLENNIAL');
     assert.equal(semDataP.generation, 'NA', 'sem data de nascimento → NA, nunca null');
+  });
+
+  it('spec 131: PcD sai como códigos, sem o texto de "Outra"; sem resposta → null e sem tipos', () => {
+    const answered: CollaboratorType = {
+      ...makeComplete(),
+      pwd: { answer: 'SIM', types: ['TEA', 'OUTRA'], otherDescription: 'relato pessoal' },
+    };
+
+    const p = Projection.toTeamProjection(answered, today('2026-06-01'));
+    const none = Projection.toTeamProjection(makeActive(), today('2026-06-01'));
+
+    assert.equal(p.pwdAnswer, 'SIM');
+    assert.deepEqual(p.pwdTypes, ['TEA', 'OUTRA']);
+    assert.ok(!JSON.stringify(p).includes('relato pessoal'), 'o relato não cruza a borda');
+    assert.equal(none.pwdAnswer, null);
+    assert.deepEqual(none.pwdTypes, []);
   });
 
   it('CA2: aniversário JÁ feito no ano → anos completos', () => {

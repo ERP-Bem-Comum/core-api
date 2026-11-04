@@ -32,6 +32,10 @@ const payableSnapshot = (p: Payable): Readonly<Record<string, string | null>> =>
   status: p.status,
   value: fromMoney(p.value),
   retentionType: p.retentionType,
+  // #1057: forma e complemento são do TÍTULO, e é dele que a remessa lê — a troca de Boleto para Pix
+  // num Aprovado só fica auditável se o de→para estiver na trilha do título, com o código antigo.
+  paymentMethod: p.paymentMethod,
+  paymentDetail: p.paymentDetail,
 });
 
 const diffSnapshots = (
@@ -106,6 +110,44 @@ export const projectReclassification = (
     { ...base, target: { kind: 'Document' as const, id: input.documentId } },
     ...input.payableIds.map((id) => ({ ...base, target: { kind: 'Payable' as const, id } })),
   ];
+};
+
+export type WithReclassificationInput = Readonly<{
+  before: DocumentTaxonomy;
+  after: DocumentTaxonomy;
+  payableIds: readonly PayableId[];
+}>;
+
+// #1057: a edição do Aprovado é UM ato — descrição, forma e categorização num save só. A categorização
+// entra no MESMO marco das outras mudanças (mesmo `eventId`, instante e autor), e não num segundo
+// marco paralelo: o Histórico mostraria dois registros para um clique. Cada título ganha o de→para da
+// taxonomia, como em `projectReclassification`; quem já tinha entry (o pai, se a forma mudou) a recebe
+// somada às outras mudanças.
+export const withReclassification = (
+  entries: readonly FinancialTimelineEntry[],
+  input: WithReclassificationInput,
+): readonly FinancialTimelineEntry[] => {
+  const first = entries[0];
+  if (first === undefined) return entries;
+  const extra = projectReclassification({
+    eventId: first.eventId,
+    documentId: first.documentId,
+    before: input.before,
+    after: input.after,
+    payableIds: input.payableIds,
+    actor: first.actor,
+    occurredAt: first.occurredAt,
+  }).map((e) => ({ ...e, eventType: first.eventType, reason: first.reason }));
+
+  const sameTarget = (a: FinancialTimelineEntry, b: FinancialTimelineEntry): boolean =>
+    a.target.kind === b.target.kind && a.target.id === b.target.id;
+
+  const merged = entries.map((entry) => {
+    const add = extra.find((e) => sameTarget(e, entry));
+    return add === undefined ? entry : { ...entry, changes: [...entry.changes, ...add.changes] };
+  });
+  const missing = extra.filter((e) => !entries.some((entry) => sameTarget(entry, e)));
+  return [...merged, ...missing];
 };
 
 // ─── #823: trilha da geração de remessa ──────────────────────────────────────

@@ -63,6 +63,7 @@ describe('enums — parse aceita legado e rejeita desconhecido', () => {
     { ns: OccupationArea, valid: 'PARC', err: 'invalid-occupation-area' },
     { ns: EmploymentRelationship, valid: 'CLT', err: 'invalid-employment-relationship' },
     { ns: GenderIdentity, valid: 'NAO_BINARIO', err: 'invalid-gender-identity' },
+    { ns: GenderIdentity, valid: 'QUEER', err: 'invalid-gender-identity' },
     { ns: Race, valid: 'INDIGENA', err: 'invalid-race' },
     { ns: FoodCategory, valid: 'VEGANO', err: 'invalid-food-category' },
     { ns: Education, valid: 'DOUTORADO', err: 'invalid-education' },

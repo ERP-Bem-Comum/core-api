@@ -18,7 +18,7 @@
 
 import { describe, before, after, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
@@ -33,8 +33,14 @@ import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters
 import { createDrizzleTimelineRepository } from '#src/modules/financial/adapters/persistence/repos/timeline-repository.drizzle.ts';
 import { bulkUpdateDueDate } from '#src/modules/financial/application/use-cases/bulk-update-due-date.ts';
 import { createInMemoryRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.in-memory.ts';
+import { createInMemoryTaxonomyPathRead } from '#src/modules/financial/adapters/persistence/repos/taxonomy-path-read.in-memory.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
-import { finSupplierView } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import {
+  finRemittancePayables,
+  finRemittances,
+  finSupplierView,
+} from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
@@ -257,6 +263,97 @@ if (!process.env['MYSQL_INTEGRATION']) {
         if (!stale.ok) assert.equal(stale.error, 'document-version-conflict');
 
         await repo.delete(created.document.id, 1); // versão corrente após o update bem-sucedido
+      });
+    });
+
+    // #1057 — a troca de forma num Aprovado grava NO TÍTULO por UPDATE, sem apagá-lo: o id do título
+    // não muda. O vínculo com remessa aqui é o único que um título Aprovado pode ter — remessa
+    // descartada porque o arquivo nunca chegou ao banco (ADR-0065 §4); `fin_remittance_payables`
+    // guarda esse rastro com FK RESTRICT, e o hard replace antigo morria nela.
+    describe('#1057 — troca de forma no Aprovado preserva o vínculo com a remessa', () => {
+      const PM_SUP = '5a000000-0000-4000-8000-0000000000f2';
+      const APPROVER = '5a000000-0000-4000-8000-0000000000f3';
+
+      it('Boleto → PIX com o título pai numa remessa descartada: grava por UPDATE, mesmo id', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const supplierR = SupplierRef.rehydrate(PM_SUP);
+        const grossR = Money.fromCents(100000);
+        const byR = UserRef.rehydrate(APPROVER);
+        if (!supplierR.ok || !grossR.ok || !byR.ok) throw new Error('test setup: refs');
+        const created = Document.create({
+          id: DocumentId.generate(),
+          documentNumber: 'NFS-1057-INT',
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'Boleto',
+          paymentDetail: '3'.repeat(44),
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-11-01'),
+        });
+        if (!created.ok) throw new Error('test setup: create');
+        const approvedR = Document.approve({
+          ...created.value,
+          by: byR.value,
+          at: new Date('2026-10-20T10:00:00Z'),
+        });
+        if (!approvedR.ok) throw new Error('test setup: approve');
+        const { document, payables } = approvedR.value;
+        assert.equal(isOk(await repo.save({ document, payables }, [])), true);
+
+        const remittanceId = newUuid();
+        await handle.db.insert(finRemittances).values({
+          id: remittanceId,
+          cedenteAccountId: newUuid(),
+          nsa: 1057,
+          fileName: `CB-1057-${remittanceId}.REM`,
+          contentHash: '0'.repeat(64),
+          status: 'Discarded',
+          generatedAt: '2026-10-21 10:00:00.000',
+        });
+        await handle.db.insert(finRemittancePayables).values({
+          remittanceId,
+          payableId: payables.parent.id,
+          documentId: document.id,
+          yourNumber: '1057',
+        });
+
+        try {
+          const edited = Document.editApproved({
+            document,
+            payables,
+            paymentMethod: 'PIX',
+            at: new Date('2026-10-23T12:00:00Z'),
+          });
+          if (!edited.ok) throw new Error('test setup: editApproved');
+          const saved = await repo.save(
+            { document: edited.value.document, payables: edited.value.payables },
+            [],
+            0,
+          );
+          assert.equal(isOk(saved), true, 'o UPDATE por id não esbarra na FK da remessa');
+
+          const back = await repo.findById(document.id);
+          assert.ok(isOk(back) && back.value.payables !== null);
+          const parent = back.value.payables.parent;
+          assert.equal(parent.id, payables.parent.id, 'mesmo título — não foi recriado');
+          assert.equal(parent.paymentMethod, 'PIX');
+          assert.equal(parent.paymentDetail, null);
+          assert.notEqual(parent.paymentMethodChangedAt, null);
+          assert.equal(back.value.document.status, 'Approved');
+          assert.equal(back.value.document.paymentMethod, 'PIX');
+        } finally {
+          await handle.db
+            .delete(finRemittancePayables)
+            .where(eq(finRemittancePayables.remittanceId, remittanceId));
+          await handle.db.delete(finRemittances).where(eq(finRemittances.id, remittanceId));
+          await repo.delete(document.id, 1);
+        }
       });
     });
 
@@ -650,7 +747,9 @@ if (!process.env['MYSQL_INTEGRATION']) {
           repo,
           clock: ClockReal(),
           remittances: createInMemoryRemittanceRepository(),
+          taxonomyPaths: createInMemoryTaxonomyPathRead(),
         });
+        const actor = '5a000000-0000-4000-8000-0000000000f1';
         const a = buildDoc('BULK-X-A');
         const b = buildDoc('BULK-X-B');
         for (const d of [a, b]) {
@@ -664,6 +763,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         const first = await run({
           items: [{ documentId: idA, expectedVersion: 0 }],
           dueDate: new Date('2027-02-02'),
+          actor,
         });
         assert.equal(isOk(first), true);
 
@@ -676,6 +776,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
             { documentId: ghost, expectedVersion: 0 },
           ],
           dueDate: new Date('2027-05-05'),
+          actor,
         });
         assert.equal(isOk(mixed), true);
         if (mixed.ok) {

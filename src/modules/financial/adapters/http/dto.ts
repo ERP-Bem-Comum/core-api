@@ -238,6 +238,9 @@ export const documentToDto = (
           retentionType: p.retentionType ?? null,
           valueCents: moneyToCentsString(p.value.cents),
           status: p.status,
+          // #1057: não-nulo = a forma já foi trocada depois da aprovação (o front trava o campo).
+          paymentMethodChangedAt:
+            p.paymentMethodChangedAt === null ? null : p.paymentMethodChangedAt.toISOString(),
         }));
 
   // #62/Feature 2: expõe o anexo (fileName derivado do último segmento da key) — o front mostra o

@@ -48,13 +48,7 @@ import type {
 } from '../../domain/document/repository.ts';
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import { projectReclassification } from '../../domain/timeline/projection.ts';
-import {
-  BudgetPlanRef,
-  CategoryRef,
-  CostCenterRef,
-  ProgramRef,
-  SubcategoryRef,
-} from '../../domain/shared/refs.ts';
+import { resolveTaxonomyPath, type TaxonomyPathInput } from '../resolve-taxonomy-path.ts';
 import * as UserRefVO from '../../../../shared/kernel/user-ref.ts';
 import { newUuid } from '../../../../shared/utils/id.ts';
 
@@ -79,15 +73,8 @@ export type ConfirmReconciliationAllocationInput = Readonly<{
   reconciledValueCents: number;
 }>;
 
-// M2 (RN-M2-03/09): os 5 níveis, sempre os 5. A borda recusa antes de chegar aqui um bloco parcial —
-// meio caminho não identifica nó nenhum na árvore do plano, e não há o que validar contra ela.
-export type ConfirmReconciliationTaxonomyInput = Readonly<{
-  programRef: string;
-  budgetPlanRef: string;
-  costCenterRef: string;
-  categoryRef: string;
-  subcategoryRef: string;
-}>;
+// M2 (RN-M2-03/09): os 5 níveis, sempre os 5 — a forma vive com a validação, em `resolve-taxonomy-path`.
+export type ConfirmReconciliationTaxonomyInput = TaxonomyPathInput;
 
 export type ConfirmReconciliationInput = Readonly<{
   transactionId: string;
@@ -143,49 +130,6 @@ const mapAllocations = (
     mapped.push({ payableId: pid.value, reconciledValueCents: a.reconciledValueCents });
   }
   return ok(mapped);
-};
-
-// M2/RN-M2-09/10: o caminho pedido tem de ser o caminho REAL da folha na árvore do plano, e a folha
-// tem de estar viva. A subcategoria determina os quatro ancestrais univocamente, então validar é
-// resolver o caminho pela folha e conferir se os outros quatro batem — não há combinação a enumerar.
-//
-// O `active` cobre o M2-10 (nó desativado entre a leitura da tela e o confirm): o caminho existe, mas
-// gravá-lo produziria classificação morta, que some do relatório sem ninguém entender por quê.
-const resolveTaxonomy = async (
-  taxonomyPaths: TaxonomyPathRead,
-  input: ConfirmReconciliationTaxonomyInput,
-): Promise<Result<DocumentTaxonomy, ConfirmReconciliationError>> => {
-  const pathR = await taxonomyPaths.findPathBySubcategory(input.subcategoryRef);
-  if (!pathR.ok) return err(pathR.error);
-  const path = pathR.value;
-  if (path?.active !== true) return err('taxonomy-path-invalid');
-  if (
-    path.categoryRef !== input.categoryRef ||
-    path.costCenterRef !== input.costCenterRef ||
-    path.budgetPlanRef !== input.budgetPlanRef ||
-    path.programRef !== input.programRef
-  ) {
-    return err('taxonomy-path-invalid');
-  }
-
-  // Formato só depois da árvore: a rehydrate confirma o que o plano já afirmou existir. Um ref que a
-  // árvore devolve e o branded recusa é corrupção do lado do plano, e o slug diz isso.
-  const program = ProgramRef.rehydrate(input.programRef);
-  const budgetPlan = BudgetPlanRef.rehydrate(input.budgetPlanRef);
-  const costCenter = CostCenterRef.rehydrate(input.costCenterRef);
-  const category = CategoryRef.rehydrate(input.categoryRef);
-  const subcategory = SubcategoryRef.rehydrate(input.subcategoryRef);
-  if (!program.ok || !budgetPlan.ok || !costCenter.ok || !category.ok || !subcategory.ok) {
-    return err('taxonomy-path-invalid');
-  }
-
-  return ok({
-    programRef: program.value,
-    budgetPlanRef: budgetPlan.value,
-    costCenterRef: costCenter.value,
-    categoryRef: category.value,
-    subcategoryRef: subcategory.value,
-  });
 };
 
 // M2/RN-M2-03/04/07: monta a reclassificação de cada documento cujo título LÍQUIDO está na seleção.
@@ -315,7 +259,7 @@ export const confirmReconciliation =
     const occurredAt = deps.clock.now();
     let reclassifications: readonly ReconciliationReclassification[] = [];
     if (input.taxonomy !== undefined) {
-      const taxonomyR = await resolveTaxonomy(deps.taxonomyPaths, input.taxonomy);
+      const taxonomyR = await resolveTaxonomyPath(deps.taxonomyPaths, input.taxonomy);
       if (!taxonomyR.ok) return err(taxonomyR.error);
       const builtR = await buildReclassifications(deps, {
         payableIds: input.payableIds,

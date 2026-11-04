@@ -11,6 +11,8 @@ export type GenderIdentity =
   | 'MULHER_TRANS'
   | 'TRAVESTI'
   | 'NAO_BINARIO'
+  // spec 130 do web-app (P.O., 23/10): opção do cliente, antes de "Outro".
+  | 'QUEER'
   | 'OUTRO';
 export type GenderIdentityError = 'invalid-gender-identity';
 
@@ -22,6 +24,7 @@ const VALUES: ReadonlySet<string> = new Set<GenderIdentity>([
   'MULHER_TRANS',
   'TRAVESTI',
   'NAO_BINARIO',
+  'QUEER',
   'OUTRO',
 ]);
 

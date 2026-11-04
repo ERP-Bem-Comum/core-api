@@ -275,6 +275,9 @@ export const finPayables = mysqlTable(
     // #231: data de pagamento (preenchida na baixa manual); null enquanto não pago.
     paidAt: date('paid_at', { mode: 'date' }),
 
+    // #1057: quando a forma foi trocada depois da aprovação (a P.O. permite UMA troca). Null = não trocou.
+    paymentMethodChangedAt: datetime('payment_method_changed_at', { mode: 'date', fsp: 3 }),
+
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
   },
   (t) => [

@@ -38,6 +38,20 @@ const networkRefSchema = z
 export const createBudgetPlanBodySchema = z.object({
   year: z.number().int().min(YEAR_MIN).max(YEAR_MAX),
   programRef: uuidV4(),
+  // #1092 — copia o conteúdo da última versão APROVADA do plano deste programa no ano informado.
+  importFromYear: z
+    .number()
+    .int()
+    .min(YEAR_MIN)
+    .max(YEAR_MAX)
+    .optional()
+    .meta({
+      description:
+        'Ano de origem ("Criar a partir do ano de"). Copia centros de custo, categorias, ' +
+        'subcategorias, redes e valores mensais da última versão aprovada do plano deste ' +
+        'programa naquele ano. Ausente: o plano nasce vazio.',
+      examples: [2025],
+    }),
 });
 
 export type CreateBudgetPlanBody = z.infer<typeof createBudgetPlanBodySchema>;

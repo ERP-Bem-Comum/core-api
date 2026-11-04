@@ -1,13 +1,34 @@
 ---
 inquiry: 0012
 title: "Inquiry-0012 — BFF: AWS API Gateway managed vs. Fastify burro próprio"
-state: blocked
-last_reviewed: 2026-08-06
+state: superseded
+opened: 2026-05-07
+decided: 2026-11-04
+last_reviewed: 2026-11-04
 ---
 
 [← Voltar ao README de Inquiries](./README.md)
 
 # Inquiry-0012 — BFF: AWS API Gateway managed vs. Fastify burro próprio
+
+> ⛔ **Superada na revisão de 2026-11-04.** A escolha "API Gateway × Fastify" deixou de ser a pergunta
+> viva, por três fatos:
+>
+> 1. O [ADR-0059](../architecture/adr/0059-bff-aggregates-without-business-rules.md) (`Accepted`) já
+>    substituiu parcialmente o ADR-0005: o BFF agrega, mas não decide regra de negócio.
+> 2. **A topologia real não tem API Gateway.** Os processos que este repositório executa (a API e os
+>    workers, todos sobre a mesma imagem, com o grupo escolhido por `WORKER_GROUP`) são declarados no
+>    manifesto versionado [`src/deploy/workloads.ts`](../../src/deploy/workloads.ts), que é a fonte
+>    primária. Os ambientes hospedados rodam esses processos como serviços de ECS, e o front é a única
+>    borda pública. A ausência de API Gateway no caminho foi confirmada pela Codebit, que opera a infra,
+>    em comunicação ao dono do repositório em 2026-11-04.
+> 3. **Direção do dono do repo:** no futuro, em vez de um BFF, um **load balancer** na frente de serviços
+>    desmembrados por hierarquia e módulo, para facilitar o desenvolvimento e reduzir a corrupção de
+>    contexto de agentes de IA. Isso é uma pergunta **nova**, não esta: vira inquiry ou ADR próprio quando
+>    o trabalho começar.
+>
+> O Gap 1 (§4.1, legado sem prefixo `api/v1`) também perdeu o objeto: o roteamento por prefixo entre
+> legado e core que o motivava não existe na topologia real. O corpo abaixo é preservado como registro.
 
 - **Aberta em:** 2026-05-07
 - **Última atualização:** 2026-05-22 — ver [§9](#9-atualização-2026-05-22--impacto-do-adr-0021)

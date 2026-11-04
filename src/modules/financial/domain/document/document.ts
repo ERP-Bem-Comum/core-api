@@ -130,6 +130,8 @@ const buildOpenPayables = (params: {
     paymentMethod: params.paymentMethod,
     paymentDetail: params.paymentDetail,
     paidAt: null,
+    // Em `Open` a forma é livre — a marca só existe depois da aprovação.
+    paymentMethodChangedAt: null,
   });
   const children: readonly Payable[] = params.retentions.map((r, index) => {
     const occurrence = params.retentions.slice(0, index).filter((x) => x.type === r.type).length;
@@ -147,6 +149,7 @@ const buildOpenPayables = (params: {
       paymentMethod: params.paymentMethod,
       paymentDetail: params.paymentDetail,
       paidAt: null,
+      paymentMethodChangedAt: null,
     });
   });
   return immutable<Payables>({ parent, children });
@@ -834,6 +837,150 @@ export const editMetadata = (
   return ok(immutable<EditMetadataOutput>({ document, payables, events }));
 };
 
+// ─── #1057: edição do documento Aprovado (decisões da P.O., 14/10) ───────────────────────────────
+
+export type EditApprovedInput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  // `undefined` preserva; em `description`/`paymentDetail` o `null` apaga — a convenção do agregado.
+  description?: string | null;
+  // Forma e complemento do título PAI. Os impostos (filhos) mantêm os deles.
+  paymentMethod?: PaymentMethod;
+  paymentDetail?: string | null;
+  // Caminho INTEIRO, já validado contra a árvore do plano pela aplicação (ver `DocumentTaxonomy`).
+  taxonomy?: DocumentTaxonomy;
+  at: Date;
+}>;
+
+export type EditApprovedOutput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+const paysByBarcode = (m: PaymentMethod): boolean => m === 'Boleto' || m === 'GuiaRecolhimento';
+const isBlankDetail = (s: string | null): boolean => s === null || s.trim().length === 0;
+
+// Corrige descrição, categorização e forma de pagamento de um documento Aprovado SEM desfazer a
+// aprovação. Fornecedor, emissão e valor seguem imutáveis — o que muda aqui não altera o QUANTO nem o
+// A QUEM se paga, só o COMO e o SOB QUAL projeto.
+//
+// Regras da forma de pagamento (só o título pai):
+//   · muda UMA vez depois de aprovado (`paymentMethodChangedAt` marca a troca);
+//   · não vai PARA Boleto/Guia — pediria um código de barras novo;
+//   · depois de gravado, o código de barras não se edita; só a Guia lançada sem código o recebe.
+// O código antigo não se perde: fica na trilha como "antes".
+//
+// Tudo isto é só de título Aprovado (P.O., 23/10). Transmitido não se edita — e o título preso em
+// remessa É transmitido, desde a geração (ADR-0065 §2), por isso não há consulta à remessa aqui.
+// Forma e complemento tocam só o pai; descrição e categorização são do documento e chegam a todos os
+// títulos, por isso pedem todos em Aprovado.
+//
+// A categorização cascateia aos impostos pelo snapshot do `DocumentSaved`, exatamente como em
+// `reclassifyTaxonomy` — a taxonomia é do documento, e o read-model reescreve todos os títulos dele.
+type ApprovedPayment = Readonly<{
+  payables: Payables;
+  paymentMethod: PaymentMethod;
+  paymentDetail: string | null;
+}>;
+
+const isApprovedPayable = (p: Payable): boolean => p.status === 'Approved';
+
+const editableAfterApproval = (input: EditApprovedInput): boolean => {
+  const { parent, children } = input.payables;
+  const touchesPayment = input.paymentMethod !== undefined || input.paymentDetail !== undefined;
+  const touchesDocument = input.description !== undefined || input.taxonomy !== undefined;
+  if (touchesPayment && !isApprovedPayable(parent)) return false;
+  if (touchesDocument && ![parent, ...children].every(isApprovedPayable)) return false;
+  return true;
+};
+
+// A troca de forma/complemento do pai, isolada para `editApproved` ler como composição. Sem pedido de
+// troca, ou pedido igual ao gravado, devolve o estado atual.
+const changeApprovedPayment = (
+  input: EditApprovedInput,
+): Result<ApprovedPayment, DocumentError> => {
+  const parent = input.payables.parent;
+  const current: ApprovedPayment = {
+    payables: input.payables,
+    paymentMethod: input.document.paymentMethod,
+    paymentDetail: input.document.paymentDetail,
+  };
+  if (input.paymentMethod === undefined && input.paymentDetail === undefined) return ok(current);
+
+  const method = input.paymentMethod ?? parent.paymentMethod;
+  const methodChanges = method !== parent.paymentMethod;
+  // Forma nova sem complemento informado → o complemento da forma antiga não serve à nova.
+  const fallbackDetail = methodChanges ? null : parent.paymentDetail;
+  const detail = input.paymentDetail !== undefined ? input.paymentDetail : fallbackDetail;
+  if (!methodChanges && detail === parent.paymentDetail) return ok(current);
+
+  if (methodChanges) {
+    if (parent.paymentMethodChangedAt !== null) return err('payment-method-already-changed');
+    if (paysByBarcode(method)) return err('payment-method-not-allowed-after-approval');
+  } else if (paysByBarcode(method)) {
+    const fillsEmptyGuia = method === 'GuiaRecolhimento' && isBlankDetail(parent.paymentDetail);
+    if (!fillsEmptyGuia) return err('payment-barcode-not-editable');
+  }
+
+  // A régua do complemento é a de `updatePayablePayment` — uma só definição de "código válido".
+  const repaid = updatePayablePayment({
+    document: input.document,
+    payables: input.payables,
+    payableId: parent.id,
+    paymentMethod: method,
+    paymentDetail: detail,
+  });
+  if (!repaid.ok) return err(repaid.error);
+
+  const payables = methodChanges
+    ? immutable<Payables>({
+        parent: immutable<Payable>({
+          ...repaid.value.payables.parent,
+          paymentMethodChangedAt: input.at,
+        }),
+        children: repaid.value.payables.children,
+      })
+    : repaid.value.payables;
+
+  // O documento espelha a forma do pai: é dela que o detalhe lê, e é a semente dos títulos.
+  return ok({ payables, paymentMethod: method, paymentDetail: detail });
+};
+
+export const editApproved = (
+  input: EditApprovedInput,
+): Result<EditApprovedOutput, DocumentError> => {
+  const d = input.document;
+  if (!editableAfterApproval(input)) return err('document-edit-requires-approved-payables');
+  const payment = changeApprovedPayment(input);
+  if (!payment.ok) return err(payment.error);
+  const { payables } = payment.value;
+
+  const document = immutable<ApprovedDocument>({
+    ...d,
+    description: input.description !== undefined ? input.description : d.description,
+    paymentMethod: payment.value.paymentMethod,
+    paymentDetail: payment.value.paymentDetail,
+    ...(input.taxonomy !== undefined
+      ? {
+          programRef: input.taxonomy.programRef,
+          budgetPlanRef: input.taxonomy.budgetPlanRef,
+          costCenterRef: input.taxonomy.costCenterRef,
+          categoryRef: input.taxonomy.categoryRef,
+          subcategoryRef: input.taxonomy.subcategoryRef,
+        }
+      : {}),
+  });
+
+  return ok(
+    immutable<EditApprovedOutput>({
+      document,
+      payables,
+      events: documentSavedEvents(document, payables),
+    }),
+  );
+};
+
 export type UndoApprovalInput = Readonly<{
   document: ApprovedDocument;
   payables: Payables;
@@ -861,7 +1008,10 @@ export const undoApproval = (
   if (progressed) return err('document-has-progressed-payable');
 
   const d = input.document;
-  const toOpen = (p: Payable): Payable => immutable<Payable>({ ...p, status: 'Open' });
+  // #1057: a marca de "forma já trocada" sai junto — de volta à edição, a forma é livre, e uma nova
+  // aprovação é um novo ciclo, com direito à sua troca.
+  const toOpen = (p: Payable): Payable =>
+    immutable<Payable>({ ...p, status: 'Open', paymentMethodChangedAt: null });
   const payables = immutable<Payables>({
     parent: toOpen(input.payables.parent),
     children: input.payables.children.map(toOpen),

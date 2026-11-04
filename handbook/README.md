@@ -54,7 +54,7 @@ Contratos publica `EstadoContratualAtualizado` via outbox; Financeiro consome pa
 - 🟡 [ADR-0007](./architecture/adr/0007-multi-cloud-aws-gcp.md) em `Proposed`: precisa ser reescrito como "Strangler cross-cloud transitório GCP→AWS, alvo AWS sa-east-1" (premissa AWS-legado / GCP-novo estava invertida).
 - 🟢 [Inquiry-0014](./inquiries/0014-schema-legado-vs-modelo-alvo.md) **(NOVA — 2026-05-14):** schema legado real analisado. 32 tabelas mapeadas em [`domain/10-mapeamento-legado-schema.md`](./domain/10-mapeamento-legado-schema.md). Gap descoberto: BC de Planejamento Orçamentário ausente do handbook. Premissa de campos fiscais no legado invalidada (impacta ADR-0017 e Inquiry-0011).
 - ⬜ Skeleton dos serviços `bff-gateway` e `core-api` (após respostas da Codebit + decisão Q4 da Inquiry-0014).
-- ⬜ Primeiro BC em implementação — **recomendação:** Identity & Access (folha do grafo de FKs, desbloqueia auth/RBAC). Decisão final pela banca em [Inquiry-0014 §Q4](./inquiries/0014-schema-legado-vs-modelo-alvo.md).
+- ⬜ Primeiro BC em implementação — **recomendação:** Identity & Access (folha do grafo de FKs, desbloqueia auth/RBAC). Decisão final pela banca em [Inquiry-0014 §Q4](./inquiries/0014-schema-legado-vs-modelo-alvo.md). _(2026-11-04: a Q4 perdeu o objeto. A Integração Bancária entrou em produção primeiro, e a 0014 foi fechada como `decided`.)_
 - ⬜ ADR sobre estratégia de implementação dos 2 módulos no `core-api` (prefixos `fin_*` / `ctr_*` formalizado).
 
 ---

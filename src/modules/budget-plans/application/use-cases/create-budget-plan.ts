@@ -12,10 +12,17 @@ import type {
   BudgetPlanRepositoryError,
 } from '../../domain/budget-plan/repository.ts';
 import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-catalog.ts';
+import {
+  clonePlanContent,
+  type ClonePlanContentDeps,
+  type ClonePlanContentError,
+} from './clone-plan-content.ts';
 
 export type CreateBudgetPlanCommand = Readonly<{
   year: number;
   programRef: string;
+  // #1092 — "Criar a partir do ano de". Ausente: o plano nasce vazio, como antes.
+  importFromYear?: number | undefined;
   updatedByRef: string;
 }>;
 
@@ -27,20 +34,25 @@ export type CreateBudgetPlanError =
   | 'budget-plan-already-exists'
   | ProgramCatalogError
   | BudgetPlanRepositoryError
+  | ClonePlanContentError
   | UserRef.UserRefError;
 
-export type CreateBudgetPlanDeps = Readonly<{
-  planRepo: BudgetPlanRepository;
-  programCatalog: ProgramCatalogPort;
-  clock: Clock;
-}>;
+export type CreateBudgetPlanDeps = ClonePlanContentDeps &
+  Readonly<{
+    planRepo: BudgetPlanRepository;
+    programCatalog: ProgramCatalogPort;
+    clock: Clock;
+  }>;
 
 export type CreateBudgetPlanOutcome = Readonly<{
   plan: BudgetPlanEntity;
   event: BudgetPlanEvent;
+  // #1092 — com importação o plano nasce com os lançamentos da origem; sem ela, 0.
+  totalInCents: number;
 }>;
 
-// Estratégia α (early return): passos dependentes — ref → programa → domínio → duplicidade → persist.
+// Estratégia α (early return): passos dependentes — ref → programa → domínio → duplicidade →
+// [origem da importação → cópia] → persist.
 export const createBudgetPlan =
   (deps: CreateBudgetPlanDeps) =>
   async (
@@ -52,26 +64,56 @@ export const createBudgetPlan =
     const actor = UserRef.rehydrate(cmd.updatedByRef);
     if (!actor.ok) return actor;
 
+    // F7 da revisão: decide com os dois anos do pedido, antes de qualquer consulta.
+    if (cmd.importFromYear !== undefined) {
+      const years = BudgetPlan.checkImportYear(cmd.year, cmd.importFromYear);
+      if (!years.ok) return years;
+    }
+
     const program = await deps.programCatalog.getByRef(programRef.value);
     if (!program.ok) return program;
     if (program.value === null) return err('program-not-found');
     if (!program.value.active) return err('program-not-active');
 
+    const now = deps.clock.now();
     const created = BudgetPlan.create({
       id: BudgetPlanId.generate(),
       year: cmd.year,
       programRef: programRef.value,
-      now: deps.clock.now(),
+      now,
       actor: actor.value,
     });
     if (!created.ok) return created;
+    const { plan, event } = created.value;
 
     const existing = await deps.planRepo.findRootByYearAndProgram(cmd.year, programRef.value);
     if (!existing.ok) return existing;
     if (existing.value !== null) return err('budget-plan-already-exists');
 
-    const saved = await deps.planRepo.save(created.value.plan, [created.value.event]);
-    if (!saved.ok) return saved;
+    if (cmd.importFromYear === undefined) {
+      // Plano novo por construção: INSERT puro, sem a leitura com trava do upsert (F8 da revisão).
+      const saved = await deps.planRepo.create(plan, [event]);
+      if (!saved.ok) return saved;
+      return ok({ plan, event, totalInCents: 0 });
+    }
 
-    return ok(created.value);
+    const candidates = await deps.planRepo.listApprovedByYear({
+      year: cmd.importFromYear,
+      programRef: programRef.value,
+    });
+    if (!candidates.ok) return candidates;
+    const source = BudgetPlan.selectImportSource(plan, cmd.importFromYear, candidates.value);
+    if (!source.ok) return source;
+
+    // O plano novo é independente da origem: raiz (sem parentId), RASCUNHO, v1.0, ids novos em tudo.
+    // O BudgetPlanCreated vai no mesmo commit da cópia.
+    const cloned = await clonePlanContent(deps)({
+      source: source.value,
+      target: plan,
+      now,
+      actor: actor.value,
+      events: [event],
+    });
+    if (!cloned.ok) return cloned;
+    return ok({ plan: cloned.value.plan, event, totalInCents: cloned.value.totalInCents });
   };

@@ -57,6 +57,9 @@ const member = (over: Partial<TeamMember> = {}): TeamMember => ({
   age: 41,
   // #1055: geração entrou no contrato de `TeamMember` — a fixture a declara para seguir espelhando o port.
   generation: 'MILLENNIAL',
+  // Spec 131: PcD como códigos.
+  pwdAnswer: 'NAO',
+  pwdTypes: [],
   ...over,
 });
 

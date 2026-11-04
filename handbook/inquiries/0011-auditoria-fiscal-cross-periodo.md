@@ -1,12 +1,28 @@
 ---
 inquiry: 0011
 title: "Auditoria fiscal cross-período em sistema sob Strangler Fig"
-state: blocked
+state: decided
 opened: 2026-05-07
-last_reviewed: 2026-08-06
+decided: 2026-11-04
+last_reviewed: 2026-11-04
 ---
 
 # Inquiry-0011: Auditoria fiscal cross-período em sistema sob Strangler Fig
+
+> ✅ **Decidida na revisão de 2026-11-04 — pelo código, não pela banca.** A banca nunca deliberou, e a
+> pergunta perdeu a forma em que foi posta:
+>
+> - **A premissa "não migrar histórico" (§1) não se manteve.** O ETL carrega os payables do legado em
+>   `fin_documents` (`scripts/etl/financial/`), em vez de deixá-los congelados num schema à parte.
+> - **A correlação é por id do legado**: `legacy_id` int com UNIQUE `fin_documents_legacy_id_uq`
+>   (`src/modules/financial/adapters/persistence/schemas/mysql.ts:173-177` e `:230`). O comentário ali
+>   registra por que não é chave fiscal: `identifierCode` do legado não é único (37 distintos em 52).
+>   É a Hipótese D refinada do Apêndice D.3, reduzida ao id.
+> - **Pendência que fica fora desta inquiry:** o [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md)
+>   segue `Proposed` com as três colunas da versão original. Registrada como
+>   [#1096](https://github.com/ERP-Bem-Comum/core-api/issues/1096) — ADR novo que o substitua.
+>
+> O corpo abaixo é preservado como registro do raciocínio de maio.
 
 - **Last updated:** 2026-05-14 (Apêndice D — achado de schema)
 - **Opened by:** Gabriel Aderaldo (`gaderaldo10@gmail.com`)

@@ -64,7 +64,7 @@ import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 import { describeDriverError } from '../../../../../shared/persistence/driver-error.ts';
 import { withDeadlockRetry } from '../../../../../shared/persistence/retry-on-deadlock.ts';
-import { sameRowSet, taxLikeKey, payableKey } from './child-rows-diff.ts';
+import { sameIdSet, sameRowSet, taxLikeKey, payableKey } from './child-rows-diff.ts';
 import { makeVersionConflict, isVersionConflict } from './version-conflict.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
 
@@ -305,6 +305,7 @@ export const createDrizzleDocumentRepository = (
               paymentMethod: schema.finPayables.paymentMethod,
               paymentDetail: schema.finPayables.paymentDetail,
               paidAt: schema.finPayables.paidAt,
+              paymentMethodChangedAt: schema.finPayables.paymentMethodChangedAt,
             })
             .from(schema.finPayables)
             .where(eq(schema.finPayables.documentId, documentId));
@@ -312,16 +313,30 @@ export const createDrizzleDocumentRepository = (
           const payableRows = payables !== null ? mapPayablesToRows(payables, documentId) : [];
 
           if (!sameRowSet(existingPayables, payableRows, payableKey)) {
-            if (existingPayables.length > 0) {
-              await tx.delete(schema.finPayables).where(
-                inArray(
-                  schema.finPayables.id,
-                  existingPayables.map((r) => r.id),
-                ),
-              );
-            }
-            if (payableRows.length > 0) {
-              await tx.insert(schema.finPayables).values([...payableRows]);
+            if (sameIdSet(existingPayables, payableRows)) {
+              // #1057: os mesmos títulos com conteúdo novo → UPDATE por PK, só nas linhas que
+              // mudaram. Preserva o vínculo com a remessa (FK RESTRICT) — ver `sameIdSet`.
+              const existingKeys = new Set(existingPayables.map(payableKey));
+              for (const row of payableRows) {
+                if (existingKeys.has(payableKey(row))) continue;
+                const { id: rowId, createdAt: _createdAt, ...cols } = row;
+                await tx
+                  .update(schema.finPayables)
+                  .set(cols)
+                  .where(eq(schema.finPayables.id, rowId));
+              }
+            } else {
+              if (existingPayables.length > 0) {
+                await tx.delete(schema.finPayables).where(
+                  inArray(
+                    schema.finPayables.id,
+                    existingPayables.map((r) => r.id),
+                  ),
+                );
+              }
+              if (payableRows.length > 0) {
+                await tx.insert(schema.finPayables).values([...payableRows]);
+              }
             }
           }
 

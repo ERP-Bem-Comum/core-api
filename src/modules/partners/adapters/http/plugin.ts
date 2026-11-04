@@ -403,6 +403,8 @@ const collaboratorsRoutes =
       handler: async (req, reply) => {
         const result = await deps.completeCollaboratorRegistration({
           collaboratorId: req.params.id,
+          // Spec 131: autor da linha de PcD no histórico.
+          changedByUserId: req.userId,
           ...req.body,
         });
         if (!result.ok) return sendWriteError(reply, result.error);

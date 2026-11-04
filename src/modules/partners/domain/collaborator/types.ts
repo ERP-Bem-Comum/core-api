@@ -27,6 +27,7 @@ import type {
 import type { Sex } from './sex.ts';
 import type { MaritalStatus } from './civil-status.ts';
 import type { Territory, TerritoryInput } from './territory.ts';
+import type { Pwd, PwdInput } from './pwd.ts';
 
 export type RegistrationStatus = 'PreRegistration' | 'Complete';
 
@@ -54,8 +55,8 @@ type PersonalFields = Readonly<{
   hasChildren: boolean | null;
   childrenCount: number | null;
   childrenAges: readonly number[] | null;
-  isPwd: boolean | null;
-  pwdDescription: string | null;
+  // Pessoa com Deficiência (spec 131): resposta + tipos + texto de "Outra". Substitui isPwd/pwdDescription.
+  pwd: Pwd | null;
   isOnLeave: boolean | null;
   leaveDuration: string | null;
   leaveRenewable: boolean | null;
@@ -131,6 +132,9 @@ export type EditCollaboratorInput = Readonly<{
   rg?: string | null | undefined;
   dateOfBirth?: Date | null | undefined;
   race?: string | null | undefined;
+  // PcD (spec 131) é PREENCHIDO ATÉ COMPLETAR (P.O., 23/10/2026): ausente/`null` mantém; gravado vazio
+  // ou incompleto aceita a resposta (completa); gravado completo e diferente é RECUSADO (409).
+  pwd?: PwdInput | null | undefined;
 }>;
 
 // Payload de auto-cadastro (campos pessoais; enums como string, validados no domínio).
@@ -156,8 +160,9 @@ export type CompleteRegistrationInput = Readonly<{
   hasChildren?: boolean | null;
   childrenCount?: number | null;
   childrenAges?: readonly number[] | null;
-  isPwd?: boolean | null;
-  pwdDescription?: string | null;
+  // PcD (spec 131): mesma regra do PUT — `null` mantém o gravado. A obrigatoriedade do autocadastro
+  // é da borda pública, não do agregado (o RH completa sem ela).
+  pwd?: PwdInput | null;
   isOnLeave?: boolean | null;
   leaveDuration?: string | null;
   leaveRenewable?: boolean | null;

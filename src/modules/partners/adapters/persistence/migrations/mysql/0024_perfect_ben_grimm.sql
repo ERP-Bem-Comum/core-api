@@ -1,0 +1,1 @@
+ALTER TABLE `par_collaborators` DROP COLUMN `is_pwd`;

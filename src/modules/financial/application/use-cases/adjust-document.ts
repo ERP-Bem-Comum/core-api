@@ -8,8 +8,19 @@ import type { DocumentError } from '../../domain/document/errors.ts';
 import type {
   DocumentRepository,
   DocumentRepositoryError,
+  LoadedDocument,
 } from '../../domain/document/repository.ts';
+import type { PaymentMethod } from '../../domain/document/types.ts';
+import type { Payables } from '../../domain/payable/types.ts';
+import { withReclassification } from '../../domain/timeline/projection.ts';
+import * as UserRefVO from '../../../../shared/kernel/user-ref.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
+import {
+  resolveTaxonomyPath,
+  type ResolveTaxonomyPathError,
+  type TaxonomyPathInput,
+} from '../resolve-taxonomy-path.ts';
+import type { TaxonomyPathRead } from '../ports/taxonomy-path-read.ts';
 import type {
   HeldPayable,
   RemittanceRepository,
@@ -25,10 +36,15 @@ export type AdjustDocumentDeps = Readonly<{
   repo: DocumentRepository;
   clock: Clock;
   remittances: HeldPayablesReader;
+  // #1057: valida a categorização da edição do Aprovado contra a árvore do plano. Obrigatório, e não
+  // opcional, pelo mesmo motivo da conciliação: o composition root que esquecer de ligá-lo não compila.
+  taxonomyPaths: TaxonomyPathRead;
 }>;
 
 export type AdjustDocumentCommand = Readonly<{
   documentId: string;
+  // #1057: quem ajusta — vai à trilha. Antes o ajuste gravava autor `null`.
+  actor: string;
   // Optimistic lock (FR-009/ADR-0002 da feature 010): versão do documento lida pelo cliente.
   // Repassada ao `repo.save` como `expectedVersion` — UPDATE com WHERE version = expectedVersion.
   expectedVersion: number;
@@ -41,6 +57,10 @@ export type AdjustDocumentCommand = Readonly<{
   dueDate?: Date;
   description?: string | null;
   paymentDetail?: string | null;
+  // #1057: só num documento Aprovado (edição sem desfazer a aprovação). Forma e complemento valem
+  // para o título PAI; a categorização é o caminho inteiro e cascateia aos impostos.
+  paymentMethod?: PaymentMethod;
+  taxonomy?: TaxonomyPathInput;
 }>;
 
 export type AdjustDocumentError =
@@ -49,7 +69,9 @@ export type AdjustDocumentError =
   | DocumentId.DocumentIdError
   | Money.MoneyError
   | Retention.RetentionError
-  | RemittanceRepositoryError;
+  | RemittanceRepositoryError
+  | ResolveTaxonomyPathError
+  | UserRefVO.UserRefError;
 
 // Recusa por título preso: a única do fluxo em que a APLICAÇÃO já conhece a evidência e a descarta.
 // `findHeldPayables` apura o vínculo em `held.value` (abaixo, no caminho de valor) e o domínio recusa
@@ -171,11 +193,92 @@ const buildChanges = (
   });
 };
 
+// Os ids de TODOS os títulos da nota — pai e impostos. É sobre eles que se pergunta à remessa.
+const ownPayableIds = (payables: Payables): readonly string[] => [
+  payables.parent.id,
+  ...payables.children.map((child) => child.id),
+];
+
+// #1057: edição do documento Aprovado (decisões da P.O., 14/10) — continua Aprovado.
+//
+// Sem consulta à remessa: o título preso nela já é Transmitido (ADR-0065 §2), e é pelo status que o
+// domínio recusa.
+const editApprovedDocument = async (
+  deps: AdjustDocumentDeps,
+  cmd: AdjustDocumentCommand,
+  actor: UserRefVO.UserRef,
+  loaded: LoadedDocument,
+): Promise<Result<void, AdjustDocumentFailure>> => {
+  const approved = Document.parseApproved(loaded.document);
+  if (!approved.ok) return err(plain(approved.error));
+  if (loaded.payables === null) return err(plain('document-repository-failure'));
+  const payables = loaded.payables;
+
+  const taxonomy =
+    cmd.taxonomy === undefined ? null : await resolveTaxonomyPath(deps.taxonomyPaths, cmd.taxonomy);
+  if (taxonomy !== null && !taxonomy.ok) return err(plain(taxonomy.error));
+
+  // Vencimento primeiro, pelo caminho de sempre (`editMetadata` leva o dueDate a todos os títulos);
+  // a edição do Aprovado parte do resultado. Sem vencimento, parte do estado lido.
+  const retimed =
+    cmd.dueDate === undefined
+      ? ok({ document: approved.value, payables })
+      : Document.editMetadata({ document: approved.value, payables, dueDate: cmd.dueDate });
+  if (!retimed.ok) return err(plain(retimed.error));
+  const retimedApproved = Document.parseApproved(retimed.value.document);
+  if (!retimedApproved.ok) return err(plain(retimedApproved.error));
+
+  const edited = Document.editApproved({
+    document: retimedApproved.value,
+    payables: retimed.value.payables,
+    ...(cmd.description !== undefined ? { description: cmd.description } : {}),
+    ...(cmd.paymentMethod !== undefined ? { paymentMethod: cmd.paymentMethod } : {}),
+    ...(cmd.paymentDetail !== undefined ? { paymentDetail: cmd.paymentDetail } : {}),
+    ...(taxonomy !== null ? { taxonomy: taxonomy.value } : {}),
+    at: deps.clock.now(),
+  });
+  if (!edited.ok) return err(plain(edited.error));
+
+  const event = edited.value.events[0];
+  if (event === undefined) return err(plain('document-repository-failure'));
+  const baseEntries = buildTimelineEntries(deps.clock, {
+    event,
+    before: approved.value,
+    after: edited.value.document,
+    payablesBefore: payables,
+    payablesAfter: edited.value.payables,
+    actor,
+  });
+  // A categorização vai à trilha de CADA título (o imposto acompanha o pai), no mesmo marco.
+  const entries =
+    taxonomy === null
+      ? baseEntries
+      : withReclassification(baseEntries, {
+          before: Document.taxonomyOf(approved.value),
+          after: taxonomy.value,
+          payableIds: [payables.parent.id, ...payables.children.map((child) => child.id)],
+        });
+
+  const saved = await deps.repo.save(
+    { document: edited.value.document, payables: edited.value.payables },
+    entries,
+    cmd.expectedVersion,
+    edited.value.events,
+  );
+  if (!saved.ok) return err(plain(saved.error));
+
+  return ok(undefined);
+};
+
 export const adjustDocument =
   (deps: AdjustDocumentDeps) =>
   async (cmd: AdjustDocumentCommand): Promise<Result<void, AdjustDocumentFailure>> => {
     const id = DocumentId.rehydrate(cmd.documentId);
     if (!id.ok) return err(plain(id.error));
+
+    // Fail-closed: ajuste sem autor identificável não grava — a trilha é o controle (cf. #913).
+    const actor = UserRefVO.rehydrate(cmd.actor);
+    if (!actor.ok) return err(plain(actor.error));
 
     const found = await deps.repo.findById(id.value);
     if (!found.ok) return err(plain(found.error));
@@ -188,14 +291,23 @@ export const adjustDocument =
       cmd.interestCents !== undefined ||
       cmd.retentions !== undefined;
 
-    // #165: ajuste leve (só dueDate/description) — aceito em Open E Approved, sem regenerar os
-    // títulos-filho (preserva ids/status, propaga dueDate in-place). Campos de valor seguem o
-    // caminho completo abaixo (só Open).
+    // #1057: documento Aprovado tem caminho próprio — descrição, forma do pai e categorização, sem
+    // desfazer a aprovação. O vencimento (lote, #162) também passa por ele.
+    if (found.value.document.status === 'Approved') {
+      if (hasValueChanges) return err(plain('invalid-state-transition'));
+      return editApprovedDocument(deps, cmd, actor.value, found.value);
+    }
+
+    // Forma e categorização por esta rota são só do Aprovado: em `Open` o documento se edita inteiro.
+    if (cmd.paymentMethod !== undefined || cmd.taxonomy !== undefined) {
+      return err(plain('invalid-state-transition'));
+    }
+
+    // #165: ajuste leve (só dueDate/description) em Open, sem regenerar os títulos-filho (preserva
+    // ids/status, propaga dueDate in-place). Campos de valor seguem o caminho completo abaixo.
     if (!hasValueChanges) {
       const doc = found.value.document;
-      if (doc.status !== 'Open' && doc.status !== 'Approved') {
-        return err(plain('invalid-state-transition'));
-      }
+      if (doc.status !== 'Open') return err(plain('invalid-state-transition'));
       if (found.value.payables === null) return err(plain('document-repository-failure'));
 
       const edited = Document.editMetadata({
@@ -215,7 +327,7 @@ export const adjustDocument =
         after: edited.value.document,
         payablesBefore: found.value.payables,
         payablesAfter: edited.value.payables,
-        actor: null,
+        actor: actor.value,
       });
 
       const saved = await deps.repo.save(
@@ -239,11 +351,7 @@ export const adjustDocument =
     // Vai ao BANCO, não à memória: outra instância pode ter emitido remessa com estes títulos desde
     // que este processo os leu. Só o caminho de VALOR consulta — o ajuste leve (`editMetadata`, mais
     // acima) preserva os títulos e não muda o quanto se paga.
-    const ownIds: readonly string[] = [
-      found.value.payables.parent.id,
-      ...found.value.payables.children.map((child) => child.id),
-    ];
-    const held = await deps.remittances.findHeldPayables(ownIds);
+    const held = await deps.remittances.findHeldPayables(ownPayableIds(found.value.payables));
     if (!held.ok) return err(plain(held.error));
 
     const adjusted = Document.adjust({
@@ -281,7 +389,7 @@ export const adjustDocument =
     }
 
     // Trilha: marco de ajuste. before = estado lido (Open + payables atuais);
-    // after = estado ajustado. actor=null (ajuste não carrega autoria nesta fatia).
+    // after = estado ajustado; actor = quem ajustou (#1057).
     const event = adjusted.value.events[0];
     if (event === undefined) return err(plain('document-repository-failure'));
     const entries = buildTimelineEntries(deps.clock, {
@@ -290,7 +398,7 @@ export const adjustDocument =
       after: adjusted.value.document,
       payablesBefore: found.value.payables,
       payablesAfter: adjusted.value.payables,
-      actor: null,
+      actor: actor.value,
     });
 
     const saved = await deps.repo.save(

@@ -27,6 +27,10 @@ import type {
   CollaboratorInviteTokenRepositoryError,
 } from '#src/modules/partners/domain/collaborator/invite-token-repository.ts';
 import type { CollaboratorInviteTokenMinter } from '../ports/collaborator-invite-token-minter.ts';
+import type {
+  CollaboratorHistoryError,
+  CollaboratorHistoryRepository,
+} from '../ports/collaborator-history.ts';
 import { verifyCpfPrefix } from './verify-cpf-prefix.ts';
 
 export type CompleteCollaboratorRegistrationViaInviteCommand = Readonly<{
@@ -41,7 +45,8 @@ export type CompleteCollaboratorRegistrationViaInviteError =
   | 'collaborator-autocadastro-cpf-mismatch'
   | CollaboratorError
   | CollaboratorRepositoryError
-  | CollaboratorInviteTokenRepositoryError;
+  | CollaboratorInviteTokenRepositoryError
+  | CollaboratorHistoryError;
 
 export type CompleteCollaboratorRegistrationViaInviteOutput = Readonly<{
   collaborator: CollaboratorAggregate;
@@ -52,8 +57,13 @@ type Deps = Readonly<{
   inviteRepo: CollaboratorInviteTokenRepository;
   minter: CollaboratorInviteTokenMinter;
   collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
   clock: Clock;
 }>;
+
+// Spec 131: quem responde no autocadastro é o próprio colaborador, que não é usuário do sistema — a
+// linha de histórico registra a ORIGEM no lugar do autor.
+const AUTOCADASTRO_AUTHOR = { userId: null, userName: 'Autocadastro' } as const;
 
 export const completeCollaboratorRegistrationViaInvite =
   (deps: Deps) =>
@@ -101,6 +111,19 @@ export const completeCollaboratorRegistrationViaInvite =
 
     const saved = await deps.collaboratorRepo.save(transition.value.collaborator);
     if (!saved.ok) return saved;
+
+    // Spec 131 (P.O., 23/10/2026): a primeira resposta de PcD entra no histórico — só ela; os demais
+    // campos pessoais seguem fora do histórico ao completar o cadastro.
+    const recorded = await deps.historyRepo.record({
+      collaboratorId: String(fetched.value.id),
+      eventType: 'CollaboratorRegistrationCompleted',
+      before: fetched.value,
+      after: transition.value.collaborator,
+      occurredAt: now,
+      changedBy: AUTOCADASTRO_AUTHOR,
+      fields: ['pwd'],
+    });
+    if (!recorded.ok) return recorded;
 
     return ok({ collaborator: transition.value.collaborator, event: transition.value.event });
   };

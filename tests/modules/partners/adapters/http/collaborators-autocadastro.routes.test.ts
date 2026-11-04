@@ -39,6 +39,9 @@ const WRITER_EMAIL = 'rh.editor@example.com';
 
 const COLLAB_EMAIL = 'maria@bemcomum.org';
 const COLLAB_CPF = '11144477735'; // DV válido; prefixo '111'
+// Spec 131: a resposta de PcD é obrigatória no autocadastro.
+const PWD_NO = { answer: 'NAO' } as const;
+
 const VALID_BODY = {
   name: 'Maria Silva',
   email: COLLAB_EMAIL,
@@ -160,7 +163,7 @@ describe('US5 autocadastro — CA3 token expirado/usado/desconhecido -> 404 unif
     const first = await app.inject({
       method: 'POST',
       url: '/api/v1/collaborators/autocadastro',
-      payload: { token, cpfPrefix: '111', genderIdentity: 'MULHER_CIS' },
+      payload: { token, cpfPrefix: '111', genderIdentity: 'MULHER_CIS', pwd: PWD_NO },
     });
     assert.equal(first.statusCode, 200, 'primeiro submit consome o token');
     const reused = await app.inject({
@@ -180,7 +183,7 @@ describe('US5 autocadastro — CA4 POST /collaborators/autocadastro (Complete + 
   it('CA4: submit válido -> 200 Complete; segundo submit -> 404 (uso-único)', async () => {
     const { app, partnersDeps, teardown } = await makeApp();
     const { token } = await preRegisterAndCaptureInvite(app, partnersDeps);
-    const body = { token, cpfPrefix: '111', genderIdentity: 'MULHER_CIS' };
+    const body = { token, cpfPrefix: '111', genderIdentity: 'MULHER_CIS', pwd: PWD_NO };
     const first = await app.inject({
       method: 'POST',
       url: '/api/v1/collaborators/autocadastro',
@@ -204,7 +207,7 @@ describe('US5 autocadastro — CA5 CPF não confere -> 400', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/collaborators/autocadastro',
-      payload: { token, cpfPrefix: '999', genderIdentity: 'MULHER_CIS' },
+      payload: { token, cpfPrefix: '999', genderIdentity: 'MULHER_CIS', pwd: PWD_NO },
     });
     assert.equal(res.statusCode, 400);
     assert.equal(
@@ -217,6 +220,41 @@ describe('US5 autocadastro — CA5 CPF não confere -> 400', () => {
       url: `/api/v1/collaborators/autocadastro?token=${encodeURIComponent(token)}`,
     });
     assert.equal(stillValid.statusCode, 200, 'CA5: CPF errado NÃO invalida o token');
+    await teardown();
+  });
+});
+
+describe('Spec 131 — autocadastro: "Você é PcD?" é obrigatória', () => {
+  it('sem a resposta -> 400 e o token segue válido', async () => {
+    const { app, partnersDeps, teardown } = await makeApp();
+    const { token } = await preRegisterAndCaptureInvite(app, partnersDeps);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/collaborators/autocadastro',
+      payload: { token, cpfPrefix: '111', genderIdentity: 'MULHER_CIS' },
+    });
+    assert.equal(res.statusCode, 400);
+    const stillValid = await app.inject({
+      method: 'GET',
+      url: `/api/v1/collaborators/autocadastro?token=${encodeURIComponent(token)}`,
+    });
+    assert.equal(stillValid.statusCode, 200);
+    await teardown();
+  });
+
+  it('"Sim" sem tipo -> 422 collaborator-pwd-type-required', async () => {
+    const { app, partnersDeps, teardown } = await makeApp();
+    const { token } = await preRegisterAndCaptureInvite(app, partnersDeps);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/collaborators/autocadastro',
+      payload: { token, cpfPrefix: '111', pwd: { answer: 'SIM', types: [] } },
+    });
+    assert.equal(res.statusCode, 422);
+    assert.equal(
+      (res.json() as { error: { code: string } }).error.code,
+      'collaborator-pwd-type-required',
+    );
     await teardown();
   });
 });

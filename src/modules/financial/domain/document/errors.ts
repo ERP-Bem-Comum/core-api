@@ -33,4 +33,17 @@ export type DocumentError =
   | 'undo-requires-reason'
   // #61 (P.O., 19/10): "Voltar para edição" recusado com título fora de `Approved` — pago ou
   // conciliado desfaz-se antes (conciliação, depois baixa); transmitido não volta.
-  | 'document-has-progressed-payable';
+  | 'document-has-progressed-payable'
+  // #1057 (P.O., 14/10) — edição do documento Aprovado:
+  // a forma do título pai já foi trocada uma vez depois da aprovação. Mudar de novo é pagamento por
+  // fora, com baixa manual.
+  | 'payment-method-already-changed'
+  // a troca no Aprovado não pode ir PARA uma forma de código de barras (Boleto/Guia): ela pediria um
+  // código novo, e o código de barras não se edita depois da aprovação.
+  | 'payment-method-not-allowed-after-approval'
+  // Boleto/Guia que continua na mesma forma: o código de barras não se edita. Única exceção: Guia pai
+  // lançada sem código, que pode recebê-lo.
+  | 'payment-barcode-not-editable'
+  // a edição do Aprovado é só de título Aprovado (P.O., 23/10): transmitido — o preso em remessa
+  // inclusive — ou pago não tem descrição, forma nem categorização alteradas.
+  | 'document-edit-requires-approved-payables';

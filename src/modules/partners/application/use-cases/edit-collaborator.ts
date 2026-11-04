@@ -26,6 +26,7 @@ import type {
   PixKeyInput,
 } from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { TerritoryInput } from '#src/modules/partners/domain/collaborator/territory.ts';
+import type { PwdInput } from '#src/modules/partners/domain/collaborator/pwd.ts';
 
 export type EditCollaboratorCommand = Readonly<{
   collaboratorId: string;
@@ -48,6 +49,8 @@ export type EditCollaboratorCommand = Readonly<{
   rg?: string | null | undefined;
   dateOfBirth?: Date | null | undefined;
   race?: string | null | undefined;
+  /** PcD (spec 131): ausente/`null` mantém; preenche enquanto vazio ou incompleto; completo trava. */
+  pwd?: PwdInput | null | undefined;
 }>;
 
 export type EditCollaboratorError =
@@ -102,6 +105,7 @@ export const editCollaborator =
         rg: cmd.rg,
         dateOfBirth: cmd.dateOfBirth,
         race: cmd.race,
+        pwd: cmd.pwd,
       },
       now,
     );

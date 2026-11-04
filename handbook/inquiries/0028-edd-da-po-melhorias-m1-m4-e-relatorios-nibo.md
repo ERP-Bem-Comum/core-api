@@ -1,15 +1,31 @@
 ---
 inquiry: 0028
 title: "O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação"
-state: open
+state: decided
 opened: 2026-08-06
-last_reviewed: 2026-08-06
-open_outputs: 6  # migrar para issue — ver README §Saídas
+decided: 2026-10-15
+last_reviewed: 2026-11-04
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
 
 # Inquiry-0028: O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação
+
+> ✅ **Decidida pela P.O. em 2026-10-15**, na discussion
+> [#956](https://github.com/ERP-Bem-Comum/core-api/discussions/956), e registrada aqui na revisão de
+> 2026-11-04 (o frontmatter ficou `open` três semanas depois da resposta):
+>
+> | # | Decisão |
+> | :-- | :--- |
+> | **D1 · M2** | A M2 foi feita e validada pelo cliente. Não há o que medir. |
+> | **D3** | Com `competencia` nula, o regime de Competência usa a **data de emissão** (mês da nota). |
+> | **D4** | O mapa de reclassificação contábil vira sub-issue da melhoria dos relatórios Nibo, preenchido quando ela for priorizada. |
+> | **D2 · D5 · D6 · D7** | Ficam com o tech lead, como sub-issues de M4 (V-Expenses, portador), M1 (magic-link) e da fundação dos relatórios Nibo. |
+> | **Issues?** | Sim: **M1, M3, M4 e os 2 relatórios Nibo** viram issues no projeto "Melhorias" do Linear. |
+>
+> A §0 do EDD teve o pedido de correção aceito em 2026-09-02. Toda issue nova nasce classificada como
+> **Manutenção/Sustentação** (SLA contratual) ou **Melhoria** (prazo pela prioridade). O que resta é
+> execução, rastreada no Linear, e não pergunta.
 
 - **Opened by:** Gabriel Aderaldo (Tech Lead)
 - **Asked to:** P.O./Consultora Alessandra — documentos recebidos em 2026-08-05/06

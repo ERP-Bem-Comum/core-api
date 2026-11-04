@@ -428,6 +428,13 @@
       "when": 1792455796177,
       "tag": "0060_free_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1792757391420,
+      "tag": "0061_careless_moon_knight",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `fin_payables` ADD `payment_method_changed_at` datetime(3);
