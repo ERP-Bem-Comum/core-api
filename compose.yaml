@@ -230,7 +230,11 @@ services:
   mailpit:
     # ADR-0011 §"Pin de versões" — digest pin. Atualizar:
     # docker buildx imagetools inspect axllent/mailpit:latest --format '{{.Manifest.Digest}}'
-    image: axllent/mailpit:latest@sha256:56b1604f0624577991044e599cd3377a3d0a1265c3afdca3f1a552494134c563
+    # #1103: o build de 2026-06-17 (`56b1604f…`) morre no Docker Engine 29 (runner Ubuntu 26.04)
+    # com `listen tcp …: socket: function not implemented` — o seccomp embutido do Engine 29 nega
+    # a chamada. Medido: o mesmo build passa no Engine 28 e com `seccomp=unconfined`; o de
+    # 2026-10-31 passa no Engine 29 COM o seccomp padrão. Não afrouxar o seccomp para destravar.
+    image: axllent/mailpit:latest@sha256:9b3a463be15354c0f0eba91697d80e3e0d8a5623ef0e627cacc836bc17fd5231
     container_name: core-api-mailpit
     restart: unless-stopped
     profiles: ['mail']

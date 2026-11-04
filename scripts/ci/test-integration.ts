@@ -10,7 +10,14 @@
 
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
-import { composeUpArgs, composeDownArgs } from './compose-project.ts';
+import {
+  composeDownArgs,
+  composeLogsArgs,
+  composePsIdsArgs,
+  composeUpArgs,
+  infraFailureMessage,
+  inspectStateArgs,
+} from './compose-project.ts';
 import { backupAndWriteTestSecrets, restoreSecrets, type SecretBackup } from './secrets-vault.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
@@ -328,6 +335,27 @@ const SUITES: Readonly<Record<string, Suite>> = {
 const dockerUp = (services: readonly string[]): number =>
   spawnSync('docker', composeUpArgs(services), { stdio: 'inherit' }).status ?? 1;
 
+// #1103 — despeja a evidência ANTES do `down` apagar os containers: estado de saúde (com a saída
+// das sondas) e log de cada serviço. Best-effort: falha aqui não mascara o exit code do `up`.
+const diagnoseInfra = (services: readonly string[], status: number): void => {
+  process.stderr.write(infraFailureMessage(services, status));
+  try {
+    // O tipo diz `string`, mas `stdout` vem `null` quando o processo nem inicia (ENOENT,
+    // ETIMEDOUT, maxBuffer) — o `TypeError` do `.split` cai no `catch` abaixo.
+    const ids = spawnSync('docker', composePsIdsArgs(), { encoding: 'utf-8' })
+      .stdout.split('\n')
+      .filter((id) => id.length > 0);
+    if (ids.length > 0) {
+      process.stderr.write('── docker inspect (State) ──\n');
+      spawnSync('docker', inspectStateArgs(ids), { stdio: 'inherit' });
+    }
+    process.stderr.write('── docker compose logs ──\n');
+    spawnSync('docker', composeLogsArgs(), { stdio: 'inherit' });
+  } catch (error) {
+    process.stderr.write(`(diagnóstico indisponível: ${String(error)})\n`);
+  }
+};
+
 const dockerDown = (): void => {
   spawnSync('docker', composeDownArgs(), { stdio: 'ignore' });
 };
@@ -368,7 +396,10 @@ const main = (): number => {
   try {
     if (suite.services.length > 0) {
       const up = dockerUp(suite.services);
-      if (up !== 0) return up;
+      if (up !== 0) {
+        diagnoseInfra(suite.services, up);
+        return up;
+      }
     }
     return runNodeTest(suite);
   } finally {
