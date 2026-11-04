@@ -1,13 +1,25 @@
 ---
 inquiry: 0014
 title: "Schema legado real vs. modelo alvo do handbook"
-state: blocked
+state: decided
 opened: 2026-05-14
-last_reviewed: 2026-08-06
-open_outputs: 3  # migrar para issue — ver README §Saídas
+decided: 2026-11-04
+last_reviewed: 2026-11-04
 ---
 
 # Inquiry-0014: Schema legado real vs. modelo alvo do handbook
+
+> ✅ **Decidida na revisão de 2026-11-04 — cada pergunta foi respondida pela execução:**
+>
+> | Pergunta | Resposta no código |
+> | :--- | :--- |
+> | **Q1** correlação cross-período | `legacy_id` UNIQUE em `fin_documents`, carregado pelo ETL (`src/modules/financial/adapters/persistence/schemas/mysql.ts:173-177`). Ver a [0011](./0011-auditoria-fiscal-cross-periodo.md), decidida junto; a revisão do ADR-0017 é a [#1096](https://github.com/ERP-Bem-Comum/core-api/issues/1096). |
+> | **Q2** `categorization` / BC de orçamento | O BC existe: módulo `budget-plans`, com a taxonomia sob o [ADR-0051](../architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md) e ETL próprio em `scripts/etl/budget-plans/`. |
+> | **Q3** contratos legados | Migrados por ETL (`scripts/etl/contracts/`), e não mantidos vivos no legado. |
+> | **Q4** primeiro slice | Perdeu o objeto: a Integração Bancária está em produção. |
+>
+> As saídas pendentes da §4 (data-architecture, PERGUNTAS-EM-ABERTO) ficam sem efeito com o fechamento.
+> O corpo abaixo é preservado como registro.
 
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Banca interna (squad de arquitetura) + P.O.
