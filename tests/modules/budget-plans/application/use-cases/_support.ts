@@ -8,6 +8,10 @@ import { InMemoryProgramCatalog } from '#src/modules/budget-plans/adapters/catal
 import { InMemoryPartnerNetwork } from '#src/modules/budget-plans/adapters/network/partner-network.in-memory.ts';
 import type { BudgetPlanRepository } from '#src/modules/budget-plans/domain/budget-plan/repository.ts';
 import type { BudgetResultRepository } from '#src/modules/budget-plans/domain/budget-result/repository.ts';
+import { InMemoryCostStructureRepository } from '#src/modules/budget-plans/adapters/persistence/repos/cost-structure-repository.in-memory.ts';
+import { InMemoryPlanCloneWriter } from '#src/modules/budget-plans/adapters/persistence/repos/plan-clone-writer.in-memory.ts';
+import type { CostStructureRepository } from '#src/modules/budget-plans/domain/cost-structure/repository.ts';
+import type { PlanCloneWriter } from '#src/modules/budget-plans/application/ports/plan-clone-writer.ts';
 import type { ProgramCatalogPort } from '#src/modules/budget-plans/application/ports/program-catalog.ts';
 import type { PartnerNetworkPort } from '#src/modules/budget-plans/application/ports/partner-network.ts';
 import { createBudgetPlan } from '#src/modules/budget-plans/application/use-cases/create-budget-plan.ts';
@@ -41,21 +45,31 @@ export type Deps = Readonly<{
   planRepo: BudgetPlanRepository;
   // #458 — total do plano derivado dos lançamentos; os use cases de leitura recebem o repo de results.
   budgetResultRepo: BudgetResultRepository;
+  // #1092 — a criação com importação copia a árvore e grava tudo pelo writer atômico.
+  costStructureRepo: CostStructureRepository;
+  planCloneWriter: PlanCloneWriter;
   programCatalog: ProgramCatalogPort;
   partnerNetwork: PartnerNetworkPort;
   clock: Clock;
 }>;
 
-export const makeDeps = (): Deps => ({
-  planRepo: InMemoryBudgetPlanRepository().repo,
-  budgetResultRepo: InMemoryBudgetResultRepository().repo,
-  programCatalog: InMemoryProgramCatalog(seedPrograms),
-  partnerNetwork: InMemoryPartnerNetwork({
-    states: seedStates,
-    municipalities: seedMunicipalities,
-  }),
-  clock,
-});
+export const makeDeps = (): Deps => {
+  const planRepo = InMemoryBudgetPlanRepository().repo;
+  const budgetResultRepo = InMemoryBudgetResultRepository().repo;
+  const costStructureRepo = InMemoryCostStructureRepository().repo;
+  return {
+    planRepo,
+    budgetResultRepo,
+    costStructureRepo,
+    planCloneWriter: InMemoryPlanCloneWriter({ planRepo, costStructureRepo, budgetResultRepo }),
+    programCatalog: InMemoryProgramCatalog(seedPrograms),
+    partnerNetwork: InMemoryPartnerNetwork({
+      states: seedStates,
+      municipalities: seedMunicipalities,
+    }),
+    clock,
+  };
+};
 
 export const createPlanOrFail = async (
   deps: Deps,

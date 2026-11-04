@@ -9,4 +9,7 @@ export type BudgetPlanError =
   | 'budget-plan-calibration-open'
   | 'budget-plan-scenery-limit'
   // Exclusão do plano (#453): filhos saem antes do pai.
-  | 'budget-plan-has-children';
+  | 'budget-plan-has-children'
+  // Criar plano a partir de outro ano (#1092).
+  | 'budget-plan-import-same-year'
+  | 'budget-plan-import-source-not-approved';

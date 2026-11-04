@@ -17,6 +17,7 @@ import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/
 import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.drizzle.ts';
 import { createDrizzleCostStructureRepository } from '#src/modules/budget-plans/adapters/persistence/repos/cost-structure-repository.drizzle.ts';
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
+import { createDrizzlePlanCloneWriter } from '#src/modules/budget-plans/adapters/persistence/repos/plan-clone-writer.drizzle.ts';
 import { startCalibration } from '#src/modules/budget-plans/application/use-cases/start-calibration.ts';
 import { createScenery } from '#src/modules/budget-plans/application/use-cases/create-scenery.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
@@ -98,6 +99,7 @@ if (integrationEnabled()) {
       planRepo: createDrizzleBudgetPlanRepository(handle),
       costStructureRepo: createDrizzleCostStructureRepository(handle),
       budgetResultRepo: createDrizzleBudgetResultRepository(handle),
+      planCloneWriter: createDrizzlePlanCloneWriter(handle),
       clock: ClockFixed(NOW),
     };
 
@@ -130,6 +132,7 @@ if (integrationEnabled()) {
       planRepo: createDrizzleBudgetPlanRepository(handle),
       costStructureRepo: createDrizzleCostStructureRepository(handle),
       budgetResultRepo: createDrizzleBudgetResultRepository(handle),
+      planCloneWriter: createDrizzlePlanCloneWriter(handle),
       clock: ClockFixed(NOW),
     };
 

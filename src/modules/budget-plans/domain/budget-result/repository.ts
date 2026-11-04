@@ -20,6 +20,11 @@ export type BudgetResultRepository = Readonly<{
   listByBudgetId: (
     budgetId: BudgetId,
   ) => Promise<Result<readonly BudgetResult[], BudgetResultRepositoryError>>;
+  // #1092 (F9 da revisão) — os lançamentos de VÁRIOS orçamentos numa consulta só (IN), para a cópia
+  // de plano não fazer uma ida ao banco por rede. Lista vazia → vazio, sem tocar o banco.
+  listByBudgetIds: (
+    budgetIds: readonly BudgetId[],
+  ) => Promise<Result<readonly BudgetResult[], BudgetResultRepositoryError>>;
   // #458 — soma value_cents por orçamento, EM LOTE (SUM ... GROUP BY budget_id). É o total derivado
   // por Rede, e a entrada do total do plano. Uma query para a página inteira da lista (evita N+1).
   // Orçamento sem lançamento NÃO aparece no mapa; lista vazia → mapa vazio (sem `IN ()` degenerado).

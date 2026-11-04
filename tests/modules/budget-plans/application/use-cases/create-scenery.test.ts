@@ -18,6 +18,7 @@ import * as CostStructure from '#src/modules/budget-plans/domain/cost-structure/
 import { InMemoryBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.in-memory.ts';
 import { InMemoryCostStructureRepository } from '#src/modules/budget-plans/adapters/persistence/repos/cost-structure-repository.in-memory.ts';
 import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
+import { InMemoryPlanCloneWriter } from '#src/modules/budget-plans/adapters/persistence/repos/plan-clone-writer.in-memory.ts';
 import { createScenery } from '#src/modules/budget-plans/application/use-cases/create-scenery.ts';
 
 const NOW = new Date('2026-07-09T12:00:00.000Z');
@@ -30,12 +31,23 @@ const ACTOR = (() => {
   return r.value;
 })();
 
-const buildDeps = () => ({
-  planStore: InMemoryBudgetPlanRepository(),
-  costStore: InMemoryCostStructureRepository(),
-  resultStore: InMemoryBudgetResultRepository(),
-  clock: ClockFixed(NOW),
-});
+const buildDeps = () => {
+  const planStore = InMemoryBudgetPlanRepository();
+  const costStore = InMemoryCostStructureRepository();
+  const resultStore = InMemoryBudgetResultRepository();
+  return {
+    planStore,
+    costStore,
+    resultStore,
+    // #1092 — a cópia grava pelo writer atômico, sobre os mesmos stores.
+    planCloneWriter: InMemoryPlanCloneWriter({
+      planRepo: planStore.repo,
+      costStructureRepo: costStore.repo,
+      budgetResultRepo: resultStore.repo,
+    }),
+    clock: ClockFixed(NOW),
+  };
+};
 
 const seedPlanWithTree = async (deps: ReturnType<typeof buildDeps>, approve: boolean) => {
   const planId = BudgetPlanId.generate();
@@ -91,6 +103,7 @@ describe('createScenery (use case) — US4/CA4', () => {
       planRepo: deps.planStore.repo,
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
+      planCloneWriter: deps.planCloneWriter,
       clock: deps.clock,
     })({ parentPlanId: String(planId), name: 'Otimista', updatedByRef: ACTOR_REF });
 
@@ -113,6 +126,7 @@ describe('createScenery (use case) — US4/CA4', () => {
       planRepo: deps.planStore.repo,
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
+      planCloneWriter: deps.planCloneWriter,
       clock: deps.clock,
     })({ parentPlanId: String(planId), name: '   ', updatedByRef: ACTOR_REF });
     assert.ok(isErr(r));
@@ -126,6 +140,7 @@ describe('createScenery (use case) — US4/CA4', () => {
       planRepo: deps.planStore.repo,
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
+      planCloneWriter: deps.planCloneWriter,
       clock: deps.clock,
     })({ parentPlanId: String(planId), name: 'X', updatedByRef: ACTOR_REF });
     assert.ok(isErr(r));

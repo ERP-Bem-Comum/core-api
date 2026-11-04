@@ -22,6 +22,7 @@ import * as BudgetResult from '#src/modules/budget-plans/domain/budget-result/bu
 import { InMemoryBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.in-memory.ts';
 import { InMemoryCostStructureRepository } from '#src/modules/budget-plans/adapters/persistence/repos/cost-structure-repository.in-memory.ts';
 import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
+import { InMemoryPlanCloneWriter } from '#src/modules/budget-plans/adapters/persistence/repos/plan-clone-writer.in-memory.ts';
 import { startCalibration } from '#src/modules/budget-plans/application/use-cases/start-calibration.ts';
 
 // #413 — mês do exercício nas fixtures (o VO tem suíte própria; aqui mês inválido é erro de teste).
@@ -42,12 +43,23 @@ const ACTOR = (() => {
   return r.value;
 })();
 
-const buildDeps = () => ({
-  planStore: InMemoryBudgetPlanRepository(),
-  costStore: InMemoryCostStructureRepository(),
-  resultStore: InMemoryBudgetResultRepository(),
-  clock: ClockFixed(NOW),
-});
+const buildDeps = () => {
+  const planStore = InMemoryBudgetPlanRepository();
+  const costStore = InMemoryCostStructureRepository();
+  const resultStore = InMemoryBudgetResultRepository();
+  return {
+    planStore,
+    costStore,
+    resultStore,
+    // #1092 — a cópia grava pelo writer atômico, sobre os mesmos stores.
+    planCloneWriter: InMemoryPlanCloneWriter({
+      planRepo: planStore.repo,
+      costStructureRepo: costStore.repo,
+      budgetResultRepo: resultStore.repo,
+    }),
+    clock: ClockFixed(NOW),
+  };
+};
 
 // Semeia um plano APROVADO com 1 budget, árvore (cc→cat→2 subs) e 2 budget_results.
 const seedApprovedPlan = async (deps: ReturnType<typeof buildDeps>) => {
@@ -129,6 +141,7 @@ describe('startCalibration (use case) — US4 orquestração da clonagem', () =>
       planRepo: deps.planStore.repo,
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
+      planCloneWriter: deps.planCloneWriter,
       clock: deps.clock,
     })({ parentPlanId: String(planId), updatedByRef: ACTOR_REF });
 
@@ -186,6 +199,7 @@ describe('startCalibration (use case) — US4 orquestração da clonagem', () =>
       planRepo: deps.planStore.repo,
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
+      planCloneWriter: deps.planCloneWriter,
       clock: deps.clock,
     })({ parentPlanId: String(planId), updatedByRef: ACTOR_REF });
     assert.ok(isErr(r));

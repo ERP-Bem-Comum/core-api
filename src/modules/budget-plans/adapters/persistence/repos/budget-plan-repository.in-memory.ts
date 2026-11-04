@@ -28,6 +28,8 @@ export type InMemoryBudgetPlanRepositoryHandle = Readonly<{
   // lê `bgp_budgets`; no in-memory precisa da MESMA fonte (o store dos planos), senão o reader e o
   // planRepo divergem — um budget criado via POST não seria reconhecido para lançar.
   hasBudget: (budgetId: string) => boolean;
+  // #1092 (F1) — o plano que contém o orçamento; null se nenhum.
+  planOfBudget: (budgetId: string) => string | null;
   clear: () => void;
 }>;
 
@@ -99,6 +101,21 @@ export const InMemoryBudgetPlanRepository = (
 
     save,
 
+    // Paridade com o INSERT puro + UNIQUE (year, program_ref, version) do drizzle: id repetido ou a
+    // mesma versão do mesmo ano + programa é recusado, sem sobrescrever.
+    create: async (plan, events) => {
+      const clash = [...map.values()].some(
+        (p) =>
+          String(p.id) === String(plan.id) ||
+          (p.year === plan.year &&
+            String(p.programRef) === String(plan.programRef) &&
+            p.version.major === plan.version.major &&
+            p.version.minor === plan.version.minor),
+      );
+      if (clash) return err('budget-plan-already-exists');
+      return save(plan, events);
+    },
+
     // Remoção atômica (mesmo tick): persiste o plano-sem-o-budget e, se o save deu certo, apaga os
     // results daquele budgetId no store co-localizado. Espelha a tx única do adapter mysql.
     removeBudget: async (plan, budgetId, events) => {
@@ -134,6 +151,12 @@ export const InMemoryBudgetPlanRepository = (
     repo,
     hasBudget: (budgetId: string) =>
       [...map.values()].some((plan) => plan.budgets.some((b) => String(b.id) === budgetId)),
+    planOfBudget: (budgetId: string) => {
+      const owner = [...map.values()].find((plan) =>
+        plan.budgets.some((b) => String(b.id) === budgetId),
+      );
+      return owner === undefined ? null : String(owner.id);
+    },
     clear: () => {
       map.clear();
     },

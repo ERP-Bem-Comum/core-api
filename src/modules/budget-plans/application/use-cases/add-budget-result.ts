@@ -57,7 +57,10 @@ export const addBudgetResult =
     const budgetExists = await deps.budgetReader.exists(budgetId.value);
     if (!budgetExists.ok) return budgetExists;
 
-    const launchType = await deps.subcategoryReader.launchTypeOf(subcategoryId.value);
+    const launchType = await deps.subcategoryReader.launchTypeOf(
+      subcategoryId.value,
+      budgetId.value,
+    );
     if (!launchType.ok) return launchType;
 
     const result = BudgetResult.create({

@@ -43,7 +43,7 @@ export const createBudgetPlanToDto = (
   programRef: String(outcome.plan.programRef),
   status: outcome.plan.status,
   version: PlanVersion.format(outcome.plan.version),
-  totalInCents: 0,
+  totalInCents: outcome.totalInCents,
 });
 
 /** Item enxuto da listagem (GET /budget-plans). */
