@@ -1,0 +1,83 @@
+name: promotion-gate
+
+# Gate da promoção para a `main` (produção) — espelho do ADR-0023 do web-app.
+#
+#   homologação (origem do PR)          a `main` só recebe da `dev` (homologação), de `release/*` ou de
+#                                       `hotfix/*` (emergência, passa com aviso).
+#   release (versão, tag e CHANGELOG)   toda promoção declara versão NOVA: a `version` do package.json
+#                                       não pode já ter tag, e o topo do CHANGELOG.md tem de ser ela.
+#
+# Por quê: em 2026 a `main` recebeu duas integrações SEM bump (#1046, #1062) e produção rodou duas
+# árvores diferentes rotuladas "rc.4"; a rc.5 foi promovida e nunca ganhou tag. Sem versão nova não há
+# como saber o que está no ar nem o que entrou.
+#
+# Os dois jobs rodam em todo PR (passam direto quando a base não é a `main`) para poderem ser checks
+# OBRIGATÓRIOS da proteção de branch — check que não roda deixa o PR pendurado.
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  homologacao:
+    name: homologação (origem do PR)
+    runs-on: ubuntu-latest
+    steps:
+      # Nome de branch é texto de quem abre o PR: entra por ENV, nunca interpolado no script.
+      - name: A main só recebe da homologação
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$BASE_REF" != "main" ]; then
+            echo "PR para '$BASE_REF' — regra só vale para a main."
+            exit 0
+          fi
+          case "$HEAD_REF" in
+            dev|release/*)
+              echo "✅ '$HEAD_REF' → main: origem homologada."
+              ;;
+            hotfix/*)
+              echo "::warning::HOTFIX direto na main ('$HEAD_REF'). Exceção de emergência: depois do merge, leve a mesma correção para a dev."
+              ;;
+            *)
+              echo "::error::A main (produção) só recebe PR da dev, de release/* ou de hotfix/*. '$HEAD_REF' precisa passar pela dev (homologação) antes. PR do Dependabot de segurança: refaça a atualização num PR para a dev e feche este."
+              exit 1
+              ;;
+          esac
+
+  release:
+    name: release (versão, tag e CHANGELOG)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Versão nova, sem tag, e CHANGELOG coerente
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$BASE_REF" != "main" ]; then
+            echo "PR para '$BASE_REF' — a regra de versão só vale na promoção para a main."
+            exit 0
+          fi
+          version="$(node -p "require('./package.json').version")"
+          echo "package.json declara: ${version}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null 2>&1; then
+            echo "::error::A versão ${version} já tem tag (v${version}) — já foi promovida. Faça o bump na dev (pnpm release:notes) antes de promover de novo."
+            exit 1
+          fi
+
+          top="$(grep -m1 -oE '^## \[[^]]+\]' CHANGELOG.md | sed -E 's/^## \[(.*)\]$/\1/' || true)"
+          if [ "$top" != "$version" ]; then
+            echo "::error::O topo do CHANGELOG.md é '${top:-nenhum}', mas o package.json declara '${version}'. Gere o CHANGELOG da versão na dev (pnpm release:notes)."
+            exit 1
+          fi
+          echo "✅ ${version}: versão nova (sem tag) e CHANGELOG coerente."

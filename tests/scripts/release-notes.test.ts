@@ -23,6 +23,7 @@ import {
   parseEntry,
   sectionFor,
   renderChangelog,
+  mergeChangelog,
   repoUrlFrom,
   type ReleaseEntry,
 } from '#scripts/ci/release-notes.ts';
@@ -275,5 +276,42 @@ describe('repoUrlFrom — a URL de link sai do manifesto', () => {
     for (const ausente of [undefined, null, '', '   ', 42, {}]) {
       assert.equal(repoUrlFrom(ausente), 'https://github.com/ERP-Bem-Comum/core-api');
     }
+  });
+});
+
+// #940 — o gerador sobrescrevia o arquivo e apagava rc.1…rc.5; cada release recompunha o histórico
+// à mão, que é a edição manual que o próprio cabeçalho proíbe.
+describe('mergeChangelog — a versão nova entra no topo, o histórico fica', () => {
+  const header = '# Changelog\n\nTexto do cabeçalho.\n\n';
+  const existing = `${header}## [1.0.0-rc.5] — 2026-10-20\n\n### Adicionado\n\n- rc5\n\n## [1.0.0-rc.4] — 2026-10-06\n\n### Corrigido\n\n- rc4\n`;
+
+  it('preserva as seções anteriores, na ordem, abaixo da versão nova', () => {
+    const rendered = `${header}## [1.0.0-rc.6] — 2026-10-23\n\n### Adicionado\n\n- rc6\n`;
+    const out = mergeChangelog(existing, rendered);
+    const versions = [...out.matchAll(/^## \[([^\]]+)\]/gm)].map((m) => m[1]);
+    assert.deepEqual(versions, ['1.0.0-rc.6', '1.0.0-rc.5', '1.0.0-rc.4']);
+    assert.ok(out.includes('- rc5') && out.includes('- rc4'), 'o conteúdo antigo segue intacto');
+  });
+
+  it('regenerar a MESMA versão substitui a seção, sem duplicar (idempotente)', () => {
+    const rendered = `${header}## [1.0.0-rc.5] — 2026-10-21\n\n### Adicionado\n\n- rc5 regenerada\n`;
+    const out = mergeChangelog(existing, rendered);
+    const versions = [...out.matchAll(/^## \[([^\]]+)\]/gm)].map((m) => m[1]);
+    assert.deepEqual(versions, ['1.0.0-rc.5', '1.0.0-rc.4']);
+    assert.ok(out.includes('- rc5 regenerada'));
+    assert.ok(!out.includes('- rc5\n'), 'a seção antiga da mesma versão saiu');
+    assert.equal(mergeChangelog(out, rendered), out, 'rodar duas vezes dá o mesmo arquivo');
+  });
+
+  it('sem CHANGELOG anterior, devolve só a geração nova', () => {
+    const rendered = `${header}## [1.0.0] — 2026-11-01\n\n### Adicionado\n\n- x\n`;
+    assert.equal(mergeChangelog('', rendered), rendered);
+  });
+
+  it('o cabeçalho é sempre o da geração nova (o antigo não sobrevive)', () => {
+    const rendered = `# Changelog\n\nCabeçalho novo.\n\n## [1.0.0-rc.6] — 2026-10-23\n\n- rc6\n`;
+    const out = mergeChangelog(existing, rendered);
+    assert.ok(out.startsWith('# Changelog\n\nCabeçalho novo.'));
+    assert.equal(out.match(/^# Changelog/gm)?.length, 1);
   });
 });

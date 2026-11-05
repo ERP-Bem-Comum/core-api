@@ -1,0 +1,63 @@
+name: release-tag
+
+# Passos 4 e 5 do rito de release (ADR-0066), AUTOMÁTICOS: o merge na `main` cria a tag anotada
+# `v<version>` no commit do merge e a release do GitHub com as notas da seção do CHANGELOG.
+#
+# Por quê: os dois passos eram manuais e foram pulados duas vezes — a rc.4 ficou nove dias sem tag e a
+# rc.5 foi promovida em 21/10 e nunca ganhou tag. Idempotente: se a tag já existe, não faz nada.
+# O `promotion-gate.yml` garante, antes do merge, que a versão é nova e o CHANGELOG bate.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: tag + release da versão promovida
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # criar a tag e a release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+      - name: Cria a tag e a release, se ainda não existirem
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+            echo "::notice::${tag} já existe — nada a fazer (integração sem bump? o promotion-gate deveria ter barrado)."
+            exit 0
+          fi
+
+          # Notas = a seção da versão no CHANGELOG (do cabeçalho dela até o próximo `## [`).
+          notes="$(mktemp)"
+          awk -v v="## [${version}]" '
+            index($0, v) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > "$notes"
+          [ -s "$notes" ] || echo "Ver CHANGELOG.md." > "$notes"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" "$SHA" -m "Versão ${version} — promovida para a main em $(date -u +%Y-%m-%d)."
+          git push origin "refs/tags/${tag}"
+
+          prerelease=()
+          case "$version" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$tag" --verify-tag --title "$tag" --notes-file "$notes" "${prerelease[@]}"
+          echo "✅ ${tag} criada em ${SHA}."

@@ -77,7 +77,15 @@ jobs:
         run: corepack enable
 
       - name: Install (frozen-lockfile)
-        run: pnpm install --frozen-lockfile
+        run: |
+          # O registry/corepack às vezes estoura o tempo no runner (7 vezes em 28/10/2026). Repetir
+          # com --frozen-lockfile não muda o que é instalado — só tolera a rede.
+          for i in 1 2 3; do
+            pnpm install --frozen-lockfile && exit 0
+            echo "::warning::pnpm install falhou (tentativa $i/3) — nova tentativa em 15s"
+            sleep 15
+          done
+          exit 1
 
       - name: Gera secrets de teste (necessário p/ suítes MinIO; o runner sobrescreve os do MySQL)
         # storage/photo/logo têm secrets:false no manifesto → o runner NÃO cria

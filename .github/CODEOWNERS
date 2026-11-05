@@ -1,0 +1,10 @@
+# Donos das travas de segurança, de supply-chain e do rito de release.
+# Qualquer PR que mexa nestes caminhos pede revisão do tech lead automaticamente — é o alerta de que
+# uma trava pode estar sendo afrouxada.
+/.github/                                  @GabrielAderaldo
+/SECURITY.md                               @GabrielAderaldo
+/package.json                              @GabrielAderaldo
+/pnpm-lock.yaml                            @GabrielAderaldo
+/pnpm-workspace.yaml                       @GabrielAderaldo
+/scripts/ci/                               @GabrielAderaldo
+/tests/infra/supply-chain-guard.test.ts    @GabrielAderaldo

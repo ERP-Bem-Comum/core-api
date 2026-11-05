@@ -1,132 +1,121 @@
 name: audit
 
-# Auditoria de vulnerabilidades conhecidas das dependências (supply-chain — ADR-0011).
+# Auditoria de vulnerabilidades conhecidas das dependências (supply-chain — ADR-0011; política espelhada
+# do ADR-0023 do web-app depois do incidente de 28/10/2026, em que o `zod` high ficou em produção).
 # `pnpm audit` consulta o registry de advisories pela rede; por isso vive AQUI (CI),
 # fora do gate W3 local (`pnpm test`/typecheck/lint), que é offline e determinístico.
 #
-# Dois níveis (issue #78):
-#   - prod  (BLOCKING): só dependencies de runtime, falha em high/critical. Protege o
-#            que vai a produção. Hoje verde (0 high/critical em --prod).
-#   - full  (REPORT-ONLY): todas as deps, incluindo devDependencies de tooling (Bruno
-#            etc.). Vulnerabilidades de ferramentas de teste não vão a runtime, então
-#            dão visibilidade mas NÃO bloqueiam (continue-on-error).
+#   prod  (BLOCKING, check OBRIGATÓRIO na proteção de dev e main) — dependencies de runtime, falha em
+#          high/critical. Roda em TODO PR e push: antes rodava só quando o PR mexia em dependência, e
+#          advisory novo em dependência JÁ instalada nunca aparecia — além de não poder ser obrigatório
+#          (check que não roda deixa o PR pendurado).
+#   full  (REPORT-ONLY) — todas as deps; visibilidade, não bloqueia.
+#   scheduled (ALERTA) — todo dia audita main E dev; vermelho abre/atualiza issue ATRIBUÍDA.
 #
-# `--ignore-registry-errors`: se o registry de advisories estiver fora do ar, sai 0
-# (não falha o build por indisponibilidade externa — anti-flaky).
+# FALHA FECHADA: registry de advisories fora do ar reprova após 3 tentativas, com a causa escrita. O
+# `--ignore-registry-errors` foi retirado: ele saía 0 sem ter auditado nada. A lógica está em
+# `.github/scripts/audit-gate.sh` (distingue achado de erro de rede pelo próprio relatório do pnpm).
 
 on:
   pull_request:
-    paths:
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.github/workflows/audit.yml'
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
   schedule:
     # Diário 06:30 UTC (03:30 BRT) — pega advisories novos sem precisar de PR.
     - cron: '30 6 * * *'
   workflow_dispatch: {}
 
 concurrency:
-  group: audit-${{ github.ref }}
+  group: audit-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  issues: write # payload mínimo do alerta agendado — ver o step "Alerta" em `prod`
 
 jobs:
   prod:
     name: audit (produção — blocking)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         # ADR-0011 §"Pin de versões" — pin por SHA.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
       - name: Node (executa .ts direto, sem flag) — versão lida do .nvmrc
         # Sem este passo o job rodava no Node pré-instalado da imagem do runner, que muda sem
-        # aviso — exatamente o "o CI escolhe sozinho" que o ADR-0073 §2 encerra. Era o único
-        # workflow que invoca pnpm e não declarava o runtime.
+        # aviso — exatamente o "o CI escolhe sozinho" que o ADR-0073 §2 encerra.
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+      - name: Habilita pnpm (corepack — packageManager pinado em package.json)
+        run: corepack enable
+      - name: Audit (dependencies de runtime ≥ high) — falha fechada
+        run: bash .github/scripts/audit-gate.sh --prod
+
+  full:
+    name: audit (todas as deps — report-only)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Node — versão lida do .nvmrc
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+      - name: Habilita pnpm (corepack — packageManager pinado em package.json)
+        run: corepack enable
+      - name: Audit completo (visibilidade de devDependencies — não bloqueia)
+        run: bash .github/scripts/audit-gate.sh --all
+
+  scheduled:
+    name: audit agendado (${{ matrix.ref }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write # abrir/comentar/fechar a issue de alerta
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [main, dev]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ matrix.ref }}
+          persist-credentials: false
+      - name: Node — versão lida do .nvmrc
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: .nvmrc
       - name: Habilita pnpm (corepack — packageManager pinado em package.json)
         run: corepack enable
       - name: Audit (dependencies de runtime ≥ high)
-        id: audit
-        run: |
-          set -o pipefail
-          pnpm audit --prod --audit-level=high --ignore-registry-errors 2>&1 | tee /tmp/audit.txt
+        env:
+          AUDIT_OUT: ${{ runner.temp }}/audit.txt
+        run: bash .github/scripts/audit-gate.sh --prod
 
-      # Alerta do agendado. NÃO dispara em `pull_request`: ali o check vermelho JÁ é o sinal, e
-      # abrir issue a cada PR com dep vulnerável produziria exatamente o ruído que o dedup abaixo
-      # existe para evitar. O buraco que este step fecha é outro — o agendado rodou e falhou 8 dias
-      # seguidos na `main` sem ninguém saber (#633), porque o vermelho só existia na aba Actions.
-      - name: Alerta — abre ou atualiza a issue do audit vermelho
-        if: failure() && github.event_name == 'schedule'
+      - name: Alerta — abre ou atualiza a issue (atribuída)
+        if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ matrix.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ASSIGNEES: GabrielAderaldo,lekadecastro
+          AUDIT_OUT: ${{ runner.temp }}/audit.txt
           DEADMAN_DISCORD_WEBHOOK: ${{ secrets.DEADMAN_DISCORD_WEBHOOK }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -uo pipefail
-          # Marcador ESTÁVEL no título: é a chave de dedup. `gh issue create` NÃO é idempotente —
-          # cada chamada abre uma issue nova, e foi assim que o #368 gerou 14 issues idênticas
-          # (ver a nota longa em `deadman-audit.yml`). Aqui a defesa é buscar antes de criar.
-          MARKER='[audit-prod] advisories high em dependência de produção'
-          PKGS=$(grep -oE '^│ (high|critical) +│ [^│]+' /tmp/audit.txt 2>/dev/null \
-                 | sed -E 's/.*│ +//' | sort -u | head -20)
-          [ -z "$PKGS" ] && PKGS='(não foi possível extrair a lista — ver o log do run)'
-          BODY=$(printf '%s\n\n%s\n\n```\n%s\n```\n\n%s\n' \
-            "O \`audit --prod\` agendado falhou em **$(date -u +%Y-%m-%d)**." \
-            'Advisories `high`/`critical` em dependência de **produção**:' \
-            "$PKGS" \
-            "Run: ${RUN_URL}")
+        run: bash .github/scripts/audit-alert.sh open
 
-          EXISTING=$(gh issue list --state open --search "\"$MARKER\" in:title" \
-                       --json number --jq '.[0].number' 2>/dev/null || true)
-
-          if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body "$BODY" || echo "::warning::falha ao comentar na #$EXISTING"
-            echo "::notice::alerta anexado à issue #$EXISTING (dedup)"
-          else
-            gh issue create --title "🔴 $MARKER" --body "$BODY" \
-              --label "seguranca,needs-triage" || echo "::warning::falha ao abrir a issue"
-          fi
-
-          # Discord é BEST-EFFORT, mesma semântica do `deadman-audit.yml`: a issue é o registro
-          # auditável; o webhook é o empurrão. Falha dele não suprime nem retenta a issue.
-          if [ -n "${DEADMAN_DISCORD_WEBHOOK:-}" ]; then
-            curl -fsS -X POST "$DEADMAN_DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
-              -d "$(jq -nc --arg c "🔴 audit --prod vermelho na main — ${RUN_URL}" '{content:$c}')" \
-              >/dev/null || echo "::warning::Discord não notificado (best-effort)"
-          fi
-          exit 1 # o step de alerta NÃO mascara a falha do audit
-
-      # Fecha o ciclo: sem isto a issue fica presa ligada e vira ruído permanente — o mesmo
-      # mecanismo que deixou o cabeçalho do `bruno-all.sh` apodrecer por meses.
-      - name: Resolve — comenta na issue quando o audit voltar a verde
-        if: success() && github.event_name == 'schedule'
+      - name: Resolve — fecha a issue quando voltar a verde
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ matrix.ref }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -uo pipefail
-          MARKER='[audit-prod] advisories high em dependência de produção'
-          EXISTING=$(gh issue list --state open --search "\"$MARKER\" in:title" \
-                       --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -n "$EXISTING" ]; then
-            gh issue close "$EXISTING" --comment "✅ \`audit --prod\` voltou a verde em $(date -u +%Y-%m-%d). Run: ${RUN_URL}" \
-              || echo "::warning::falha ao fechar a #$EXISTING"
-          fi
-
-  full:
-    name: audit (todas as deps — report-only)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: Habilita pnpm (corepack — packageManager pinado em package.json)
-        run: corepack enable
-      - name: Audit completo (visibilidade de devDependencies — não bloqueia)
-        continue-on-error: true
-        run: pnpm audit --audit-level=high --ignore-registry-errors
+        run: bash .github/scripts/audit-alert.sh close
