@@ -17,6 +17,7 @@ a cópia local pode estar defasada. Verificadas em 2026-07-31.
 | `fastify` | <https://fastify.dev/llms.txt> | `llms-full.txt` (11 MB) | 42 arq · 688 KB |
 | `docker` | <https://docs.docker.com/llms.txt> | — | 7 arq · 160 KB |
 | `zod` | <https://zod.dev/llms.txt> | `llms-full.txt` (254 KB) | 1 arq · 4 KB |
+| `bun` | <https://bun.com/llms.txt> | `https://bun.com/docs/<caminho>.md` por página | — (só ponteiro; verificado em 2026-11-05, doc = 1.4.4) |
 
 **Como usar:** `WebFetch` na URL do `llms.txt` para o índice, depois na página específica. Custa uma
 chamada de rede e traz a versão atual — a cópia local traz a versão de quando foi baixada.

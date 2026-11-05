@@ -18,7 +18,7 @@ description: >
   famílias tutor/strategist/theorist) ou para o
   expert de tecnologia (drizzle-orm-expert, mysql-database-expert,
   mysql2-driver-expert, typescript-language-expert, nodejs-runtime-expert,
-  docker-compose-expert, pnpm-workspace-expert, fastify-server-expert,
+  bun-runtime-expert, docker-compose-expert, pnpm-workspace-expert, fastify-server-expert,
   nodemailer-email-expert). Substitui agents especializados como ponto de
   entrada — herda regras do CLAUDE.md raiz e do handbook.
 ---
@@ -132,6 +132,15 @@ ADRs do handbook são **imutáveis**. Nunca contradizer um ADR aceito — abrir 
 - "qual API nativa substitui essa lib?" → [`nodejs-runtime-expert`](./nodejs-runtime-expert.md)
 
 > Scripts FS específicos → skill [`nodejs-fs-scripter`](../skills/nodejs-fs-scripter/SKILL.md). Processos externos → skill [`nodejs-process-runner`](../skills/nodejs-process-runner/SKILL.md).
+
+### 🟠 Bun runtime (épica `epic/bun-runtime` — ADR-0076 pendente)
+
+- "trocar `node` por `bun` em script, Dockerfile ou CI" → [`bun-runtime-expert`](./bun-runtime-expert.md)
+- "por que esse teste some/falha no `bun test` e passa no `node --test`?" → [`bun-runtime-expert`](./bun-runtime-expert.md)
+- "`bunfig.toml`, `@types/bun`, `.env` automático, `--parallel`/`--isolate`" → [`bun-runtime-expert`](./bun-runtime-expert.md)
+- "esse módulo `node:*` funciona no Bun?" → [`bun-runtime-expert`](./bun-runtime-expert.md)
+
+> Enquanto o ADR-0076 não for aceito, o runtime decidido segue sendo o Node (ADR-0002): perguntas sobre o código que roda hoje continuam no [`nodejs-runtime-expert`](./nodejs-runtime-expert.md).
 
 ### 🪢 Driver mysql2 (lado cliente do canal MySQL)
 
