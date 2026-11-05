@@ -71,7 +71,8 @@ describe('semgrep.yml — CA1: job que roda o Semgrep sobre as rules locais', ()
   it('define um job e invoca o semgrep apontando para a config .semgrep', () => {
     present();
     assert.match(wf, /^\s*semgrep:/m, 'job `semgrep` ausente');
-    assert.match(wf, /runs-on:\s*ubuntu-latest/, '`runs-on: ubuntu-latest` ausente');
+    // A versão exata é cobrada por `tests/cleanup/workflow-runner-pinned.test.ts` (#1105).
+    assert.match(wf, /runs-on:\s*ubuntu-\d{2}\.\d{2}/, '`runs-on: ubuntu-NN.NN` ausente');
     assert.match(wf, /semgrep/i, 'invocação do semgrep ausente');
     assert.match(wf, /\.semgrep/, 'referência à config `.semgrep/` ausente');
   });

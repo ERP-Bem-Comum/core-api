@@ -23,7 +23,7 @@ permissions:
 jobs:
   quality:
     name: typecheck + format + lint + test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         # ADR-0011 §"Pin de versões" — pin por SHA.

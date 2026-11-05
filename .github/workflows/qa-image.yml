@@ -57,7 +57,7 @@ env:
 
 jobs:
   build-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         # ADR-0011 §"Pin de versões" — pin por SHA (tag flutuante pode ser reescrita upstream).
