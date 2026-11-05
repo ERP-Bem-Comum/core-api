@@ -97,6 +97,7 @@
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.1",
     "drizzle-kit": "^0.31.10",
+    "oxc-parser": "0.156.0",
     "oxlint": "1.86.0",
     "oxlint-tsgolint": "7.0.2003",
     "prettier": "^3.8.3",

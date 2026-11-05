@@ -5,7 +5,7 @@
  *
  * Por que existe: o `oxlint` cobre 154 das 158 regras que o ESLint aplicava neste repositório. Das
  * quatro restantes, `no-octal` é recusado pelo próprio compilador (`TS1121`); as outras três vivem
- * aqui, reimplementadas sobre a AST do TypeScript 7 em `tests/support/lint-gaps.ts`:
+ * aqui, reimplementadas sobre a AST ESTree do `oxc-parser` em `tests/support/lint-gaps.ts`:
  *
  * - **`no-class`** — `no-restricted-syntax` sobre `ClassDeclaration`/`ClassExpression`. Invariante
  *   do CLAUDE.md: tipos são `type Readonly<{}>`, comportamento é função.
@@ -16,6 +16,10 @@
  * Fidelidade: na migração (05/10/2026), a reimplementação acusou exatamente os mesmos 46 nomes que
  * o ESLint em 2033 arquivos (com a regra forçada também nos testes), e os fixtures do autoteste
  * foram conferidos contra o ESLint linha a linha.
+ *
+ * Parser: até novembro/2026 a AST vinha da API `typescript/unstable/*`, que lê um campo privado do
+ * Node (`stdout._handle.fd`) e quebrava sob o Bun antes da primeira asserção. Hoje vem do
+ * `oxc-parser`; os fixtures do autoteste passaram sem mudar marcador algum.
  */
 
 import { describe, it } from 'node:test';
@@ -26,8 +30,8 @@ import { join } from 'node:path';
 
 import { findClasses, findMemberOrder, findNaming } from '../support/lint-gaps.ts';
 import type { GapFinding } from '../support/lint-gaps.ts';
+import { parseTs } from '../support/oxc-ast.ts';
 import { PROJECT_ROOT } from '../support/source-scan.ts';
-import { withProject } from '../support/ts-ast.ts';
 
 /**
  * Nomes fora do padrão por DECISÃO, cada um com o motivo. Chave por arquivo + nome, não por
@@ -66,43 +70,60 @@ const trackedTs = (): ReadonlySet<string> =>
   );
 
 /**
- * `unscanned` é o que separa este gate de um verde por vacuidade: são os `.ts` **versionados** que
- * o programa do TypeScript não entrega, por caírem fora dos globs de `include` do `tsconfig.json`.
- * Arquivo assim é rastreado e nunca varrido — escapa do banimento de `class` e da convenção de
- * nomes sem que nada acuse.
+ * Arquivos do programa do TypeScript, relativos à raiz — perguntados ao compilador pela CLI
+ * (`--listFilesOnly`), que roda igual sob Node e Bun.
+ */
+const programFiles = (): ReadonlySet<string> =>
+  new Set(
+    execFileSync(
+      join(PROJECT_ROOT, 'node_modules', '.bin', 'tsc'),
+      ['-p', 'tsconfig.json', '--listFilesOnly'],
+      { cwd: PROJECT_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    )
+      .split('\n')
+      .filter((abs) => abs.startsWith(`${PROJECT_ROOT}/`))
+      .map((abs) => abs.slice(PROJECT_ROOT.length + 1)),
+  );
+
+/**
+ * Duas guardas contra verde por vacuidade, cada uma para um jeito diferente de um arquivo escapar:
  *
- * A guarda anterior era `scanned > 1500`, um limiar: com 2041 arquivos hoje, dezenas poderiam
- * escapar sem derrubar o número. Contagem não é a propriedade — a propriedade é **nenhum arquivo
- * versionado de fora**, e é ela que se afirma aqui (rule `testing.md`).
+ * - **`outsideProgram`** — `.ts` **versionados** que caem fora dos globs de `include` do
+ *   `tsconfig.json`. Desde a troca para o oxc, este gate os varre mesmo assim (lê o que o git
+ *   lista, não o que o compilador carrega) — mas o `typecheck` não os vê. Era esta guarda, e só
+ *   ela, que garantia isso; por isso ela continua aqui.
+ * - **`unparsed`** — arquivos com erro de sintaxe. Árvore parcial esconde nó, e nó escondido é
+ *   classe ou nome que a regra não vê.
+ *
+ * A guarda original era `scanned > 1500`, um limiar: dezenas de arquivos poderiam escapar sem
+ * derrubar o número. Contagem não é a propriedade — a propriedade é **nenhum arquivo de fora**, e
+ * é ela que se afirma aqui (rule `testing.md`).
  */
 const scan = (): Readonly<{
-  scanned: number;
   trackedCount: number;
-  unscanned: readonly string[];
+  outsideProgram: readonly string[];
+  unparsed: readonly string[];
   findings: readonly Located[];
 }> => {
-  const tracked = trackedTs();
-  const rel = (abs: string): string => abs.slice(PROJECT_ROOT.length + 1);
-  return withProject(
-    join(PROJECT_ROOT, 'tsconfig.json'),
-    (abs) => tracked.has(rel(abs)),
-    (files) => {
-      const seen = new Set(files.map((sf) => rel(sf.fileName)));
-      return {
-        scanned: files.length,
-        trackedCount: tracked.size,
-        unscanned: [...tracked].filter((p) => !seen.has(p)).sort(),
-        findings: files.flatMap((sf) => {
-          const file = rel(sf.fileName);
-          const naming = file.startsWith('tests/') ? [] : findNaming(sf);
-          return [...findClasses(sf), ...findMemberOrder(sf), ...naming].map((f) => ({
-            ...f,
-            file,
-          }));
-        }),
-      };
-    },
+  const tracked = [...trackedTs()].sort();
+  const inProgram = programFiles();
+  const parsed = tracked.map((file) =>
+    parseTs(file, readFileSync(join(PROJECT_ROOT, file), 'utf8')),
   );
+  return {
+    trackedCount: tracked.length,
+    outsideProgram: tracked.filter((p) => !inProgram.has(p)),
+    unparsed: parsed
+      .filter((pf) => pf.errors.length > 0)
+      .map((pf) => `${pf.fileName}: ${pf.errors[0] ?? ''}`),
+    findings: parsed.flatMap((pf) => {
+      const naming = pf.fileName.startsWith('tests/') ? [] : findNaming(pf);
+      return [...findClasses(pf), ...findMemberOrder(pf), ...naming].map((f) => ({
+        ...f,
+        file: pf.fileName,
+      }));
+    }),
+  };
 };
 
 const isException = (f: Located): boolean =>
@@ -113,7 +134,7 @@ const report = (xs: readonly Located[]): string =>
   xs.map((f) => `${f.file}:${String(f.line)}  ${f.name} — ${f.detail}`).join('\n');
 
 describe('LINT-GAPS — class, casing e ordem de membros', () => {
-  const { trackedCount, unscanned, findings } = scan();
+  const { trackedCount, outsideProgram, unparsed, findings } = scan();
 
   it('nenhuma classe no repositório', () => {
     const offenders = findings.filter((f) => f.rule === 'no-class');
@@ -145,29 +166,36 @@ describe('LINT-GAPS — class, casing e ordem de membros', () => {
     );
   });
 
-  it('todo `.ts` versionado entra na varredura (guarda contra verde por vacuidade)', () => {
+  it('todo `.ts` versionado está no programa do TypeScript (o `typecheck` o vê)', () => {
     assert.deepEqual(
-      unscanned,
+      outsideProgram,
       [],
-      `${String(unscanned.length)} de ${String(trackedCount)} arquivo(s) versionado(s) ficaram ` +
-        `fora do programa do TypeScript:\n${unscanned.join('\n')}\n\n` +
-        'Eles escapam do banimento de `class` e da convenção de nomes sem acusar. Ou o arquivo ' +
-        'entra num glob de `include` do tsconfig.json, ou entra em IGNORED_PREFIXES com o motivo.',
+      `${String(outsideProgram.length)} de ${String(trackedCount)} arquivo(s) versionado(s) ` +
+        `ficaram fora do programa do TypeScript:\n${outsideProgram.join('\n')}\n\n` +
+        'O `typecheck` não os verifica. Ou o arquivo entra num glob de `include` do ' +
+        'tsconfig.json, ou entra em IGNORED_PREFIXES com o motivo.',
     );
   });
 
-  it('o `typescript` está em versão EXATA (ADR-0072 D4)', () => {
-    // Estes gates leem a AST pela API `typescript/unstable/*`. Uma faixa (`^7.0.2`) deixa a
-    // resolução trocar essa superfície sem decisão — e foi exatamente o que aconteceu: o pin
-    // estava afirmado no ADR e no `ts-ast.ts`, e o manifesto dizia `^7.0.2` até a revisão.
-    const manifest = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf8')) as {
-      devDependencies?: Record<string, string>;
-    };
-    const spec = manifest.devDependencies?.['typescript'] ?? '(ausente)';
-    assert.match(
-      spec,
-      /^\d+\.\d+\.\d+$/,
-      `typescript declarado como "${spec}" — fixar a versão exata`,
-    );
+  it('todo `.ts` versionado é analisado sem erro de sintaxe (árvore inteira)', () => {
+    assert.deepEqual(unparsed, [], `Arquivo com árvore parcial:\n${unparsed.join('\n')}`);
   });
+
+  for (const dependency of ['typescript', 'oxc-parser']) {
+    it(`o \`${dependency}\` está em versão EXATA`, () => {
+      // `oxc-parser`: a forma da árvore ESTree é a superfície de que este gate depende — uma faixa
+      // deixa a resolução trocá-la sem decisão. `typescript`: ADR-0072 D4, ainda vigente. O motivo
+      // que o D4 escreveu (a API `unstable/` destes gates) deixou de valer com a troca para o oxc;
+      // a divergência é do ADR a registrar, não deste teste a resolver.
+      const manifest = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf8')) as {
+        devDependencies?: Record<string, string>;
+      };
+      const spec = manifest.devDependencies?.[dependency] ?? '(ausente)';
+      assert.match(
+        spec,
+        /^\d+\.\d+\.\d+$/,
+        `${dependency} declarado como "${spec}" — fixar a versão exata`,
+      );
+    });
+  }
 });
