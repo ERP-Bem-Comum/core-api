@@ -31,7 +31,7 @@ permissions:
 jobs:
   integration:
     name: integração (${{ matrix.suite }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # FASE 2 (#523): report-only encerrada — #519/#520/#521/#522 corrigidos/mergeados e a matriz 100% verde.
     # Sem `continue-on-error`: um leg vermelho torna `needs.integration.result=failure` → o job
     # `gate` (abaixo) falha de verdade. Marcar `integração (gate)` como required no branch protection
@@ -119,7 +119,7 @@ jobs:
     name: integração (gate)
     if: always()
     needs: [integration]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Falha se qualquer suíte falhou ou foi cancelada
         # result ∈ success|failure|cancelled|skipped. Só `success` passa. Sem `continue-on-error`
