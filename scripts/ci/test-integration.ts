@@ -211,6 +211,9 @@ export const SUITES: Readonly<Record<string, Suite>> = {
     // nada: o que ele mede é o InnoDB sob escrita simultânea, e um fake responderia o que o autor
     // do fake imaginou.
     'tests/modules/financial/adapters/persistence/payable-cas-concurrency.drizzle-mysql.test.ts',
+    // `fin_payables_paid_at_chk` recusa Paid sem paid_at (errno 3819) — só o banco recusa. Estava
+    // órfão desde a criação; religado no replanejamento de 06/11/2026.
+    'tests/modules/financial/adapters/persistence/payable-paid-at-check.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/cost-center-read.drizzle-mysql.test.ts',
@@ -378,12 +381,7 @@ const INTEGRATION_TIMEOUT_MS = 300_000;
 const expandPaths = (patterns: readonly string[]): string[] =>
   patterns.flatMap((p) => globSync(p).sort()).map((p) => `./${p}`);
 
-const runBunTest = (suite: Suite): number => {
-  const paths = expandPaths(suite.paths);
-  if (paths.length === 0) {
-    process.stderr.write(`nenhum arquivo casou os caminhos da suíte: ${suite.paths.join(', ')}\n`);
-    return 1;
-  }
+const runBunTest = (suite: Suite, paths: readonly string[]): number => {
   // `--no-env-file`: o Bun carrega `.env` sozinho, e um `.env` esquecido satisfaria a validação
   // de ambiente em silêncio (ADR-0068). `--isolate`: global novo por arquivo, que é o que o
   // processo-por-arquivo do `node --test` dava. Serial por padrão (o banco é compartilhado);
@@ -402,14 +400,44 @@ const runBunTest = (suite: Suite): number => {
   );
 };
 
+/**
+ * As três medições do contrato de isolamento (`.claude/rules/testing.md`), na MESMA subida do
+ * compose: banco limpo → repetição sem recriar (acha dependência do arquivo com o próprio resíduo)
+ * → ordem invertida sobre o banco sujo (acha dependência entre arquivos). Passar numa não diz nada
+ * sobre a outra — por isso as três, e o resultado de cada uma é reportado.
+ */
+const prove = (suite: Suite, paths: readonly string[]): number => {
+  const rounds: readonly (readonly [string, readonly string[]])[] = [
+    ['1/3 banco limpo', paths],
+    ['2/3 repetição sem recriar o banco', paths],
+    ['3/3 ordem invertida sobre o banco sujo', [...paths].reverse()],
+  ];
+  const results = rounds.map(([label, order]) => {
+    process.stderr.write(`\n── prova ${label} ──\n`);
+    return [label, runBunTest(suite, order)] as const;
+  });
+  process.stderr.write('\n── resultado das três provas ──\n');
+  for (const [label, status] of results) {
+    process.stderr.write(`${status === 0 ? 'verde   ' : 'VERMELHO'}  ${label}\n`);
+  }
+  return results.some(([, status]) => status !== 0) ? 1 : 0;
+};
+
 const main = (): number => {
   const name = process.argv[2];
+  const proveAll = process.argv.includes('--prove');
   const suite = name === undefined ? undefined : SUITES[name];
   if (suite === undefined) {
     process.stderr.write(
-      `uso: node scripts/ci/test-integration.ts <suite>\nsuites: ${Object.keys(SUITES).join(', ')}\n`,
+      `uso: node scripts/ci/test-integration.ts <suite> [--prove]\n` +
+        `suites: ${Object.keys(SUITES).join(', ')}\n`,
     );
     return EX_USAGE;
+  }
+  const paths = expandPaths(suite.paths);
+  if (paths.length === 0) {
+    process.stderr.write(`nenhum arquivo casou os caminhos da suíte: ${suite.paths.join(', ')}\n`);
+    return 1;
   }
 
   // Backup dos secrets de dev preexistentes + escrita dos de teste (0o644). O restore roda no
@@ -425,7 +453,7 @@ const main = (): number => {
         return up;
       }
     }
-    return runBunTest(suite);
+    return proveAll ? prove(suite, paths) : runBunTest(suite, paths);
   } finally {
     if (suite.services.length > 0) dockerDown();
     if (backup !== undefined) restoreSecrets(backup);

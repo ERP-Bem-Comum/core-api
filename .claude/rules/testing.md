@@ -51,6 +51,7 @@ Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **
 - **Limpe na ENTRADA, não na saída.** Em `beforeAll`/`beforeEach`, das tabelas cujo espaço de chave o arquivo escreve. Quem só limpa em `after` fica à mercê da ordem — e um `beforeEach` **sem** `afterEach` entrega o resíduo do último caso ao próximo arquivo.
 - **Limpe por TABELA, nunca por PK quando há UNIQUE natural.** `await db.delete(t)`, não `db.delete(t).where(inArray(t.id, […]))`. A limpeza por PK não pega resíduo inserido com **outro id** que colide na UNIQUE de negócio (CNPJ, CPF, `code`, `legacy_id`) — foi exatamente a colisão do **#521**.
 - **Não afrouxe o teste para "passar".** Colisão de UNIQUE em setup é falha de isolamento, não motivo para trocar `assert.rejects` por matcher frouxo nem para remover o índice. Duplicata **intencional** (teste de `integrity-violation`) é asserção legítima — não confundir com resíduo.
+- **As três medições abaixo saem num comando só:** `pnpm run test:integration:<suíte> -- --prove` roda, na mesma subida do compose, banco limpo → repetição sem recriar → ordem invertida sobre o banco sujo, e reporta cada uma. Os comandos manuais a seguir ficam como explicação do que ele faz.
 - **Prova mecânica: a suíte tem de passar em ordem invertida.** Se inverter quebra, há dependência escondida.
 
   ```bash

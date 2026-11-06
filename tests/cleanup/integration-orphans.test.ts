@@ -44,8 +44,6 @@ const GATE_READ =
  */
 const KNOWN_ORPHANS: Readonly<Record<string, string>> = {
   // financial
-  'tests/modules/financial/adapters/persistence/payable-paid-at-check.drizzle-mysql.test.ts':
-    'religar em `financial`, sem conserto',
   'tests/jobs/financial/payable-view-backfill/backfill.integration.test.ts':
     'religar em `financial`; trocar `result.ok` (Result<_, never>, tautológico) por `failed === 0`',
   'tests/workers/payable-view-projection/projection.integration.test.ts':
