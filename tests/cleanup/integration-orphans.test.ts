@@ -53,13 +53,6 @@ const KNOWN_ORPHANS: Readonly<Record<string, string>> = {
     'religar em `auth` com AUTH_SYNC_TEST_DATABASE_URL; limpar antes',
   'tests/modules/auth/adapters/persistence/user-read.drizzle.test.ts':
     'fundir em approver-authority.drizzle.test.ts',
-  // budget-plans
-  'tests/modules/budget-plans/adapters/persistence/remove-plan-atomic.drizzle-mysql.test.ts':
-    'religar em `budget-plans`; tirar a URL real (BUDGET_PLANS_DATABASE_URL)',
-  'tests/modules/budget-plans/adapters/persistence/planned-amounts-or-filter.drizzle-mysql.test.ts':
-    'fundir em budget-plans-read-port.integration.test.ts',
-  'tests/modules/budget-plans/adapters/persistence/cost-structure-deactivate.drizzle-mysql.test.ts':
-    'fundir em cost-structure-repository.suite.ts; tirar a URL real',
   // partners
   'tests/modules/partners/adapters/persistence/collaborator-food-category-length.drizzle-mysql.test.ts':
     'religar em `partners`; usar mysqlTestConnectionString()',

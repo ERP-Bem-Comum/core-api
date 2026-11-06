@@ -125,41 +125,52 @@ export const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/programs/adapters/persistence/drizzle-mysql.test.ts',
     'tests/modules/programs/adapters/persistence/program-list-read.drizzle-mysql.test.ts',
   ]),
-  'budget-plans': mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
-    // #316 — árvore de custos (estava órfã: escrita na Fatia 2 mas nunca registrada no runner).
-    'tests/modules/budget-plans/adapters/persistence/cost-structure.drizzle-mysql.test.ts',
-    // #317 — BudgetResultRepository (add/list/delete) contra MySQL real.
-    'tests/modules/budget-plans/adapters/persistence/budget-result.drizzle-mysql.test.ts',
-    // #318 — ciclo de vida: FK auto-ref parent_id (0004) + listChildren + findRoot + alocação de versão.
-    'tests/modules/budget-plans/adapters/persistence/plan-lifecycle.drizzle-mysql.test.ts',
-    // #319 — Consolidado ABC: listApprovedByYear (WHERE status/year/program + ORDER BY id) + vigente por família.
-    'tests/modules/budget-plans/adapters/persistence/consolidated.drizzle-mysql.test.ts',
-    // #423 — contrato do BudgetPlanRepository contra MySQL real (estava órfão: nunca registrado). Cobre
-    // listPaged rootsOnly=true (parent_id IS NULL) + upsert/listYears/ordenação sobre FK auto-referente.
-    'tests/modules/budget-plans/adapters/persistence/drizzle-mysql.test.ts',
-    // #377 BGP-DELETE-BUDGET-ATOMIC — removeBudget atômico: upsert do plano + delete dos
-    // bgp_budget_results na MESMA tx; caminho feliz + rollback (evento malformado reverte tudo).
-    'tests/modules/budget-plans/adapters/persistence/remove-budget-atomic.drizzle-mysql.test.ts',
-    // #1092 — cópia de plano (importação/calibração/cenário) tudo ou nada: plano + árvore +
-    // lançamentos numa tx; caminho feliz com mais de um lote + rollback por UNIQUE no último passo.
-    'tests/modules/budget-plans/adapters/persistence/plan-clone-writer.drizzle-mysql.test.ts',
-    // #1092 — regressão dos achados da revisão que só o MySQL real reproduz (concorrência, lock e
-    // log de erro do driver). `REGRESSION_REPEAT` (default 1) repete cada cenário; a medição usou 1000.
-    'tests/regression/budget-plans-1092/f02-race-false-orphan.mysql.test.ts',
-    'tests/regression/budget-plans-1092/f03-concurrent-import-503.mysql.test.ts',
-    'tests/regression/budget-plans-1092/f05-log-leaks-params.mysql.test.ts',
-    'tests/regression/budget-plans-1092/f08-gap-lock-blocks-other-plans.mysql.test.ts',
-    // BGP-ETL-LEGACY-ID (fatia 1/3 ETL) — legacy_id INT NULL + UNIQUE nas 6 tabelas bgp_*:
-    // CA1 (information_schema) + CA2 (multiplos NULL) + CA3 (dup -> ER_DUP_ENTRY) + CA4 (regressao).
-    'tests/modules/budget-plans/adapters/persistence/legacy-id.drizzle-mysql.test.ts',
-    // BGP-ETL-WRITE-PORT (fatia 2/3 ETL) — buildBudgetPlansEtlPort: pool boot-scoped (CA1),
-    // grava legacy_id (CA2), idempotencia por legacy_id (CA3), erro de conexao -> Result (CA5).
-    'tests/modules/budget-plans/public-api/budget-plans-etl-port.integration.test.ts',
-    // BGP-READ-PORT (fatia 1/3 REPORTS-REALIZED-VS-PLANNED) — buildBudgetPlansReadPort:
-    // pool boot-scoped (CA1), 3 niveis da arvore (CA2), grade de 12 meses com zerados (CA3),
-    // filtros combinaveis programa/plano/ano/Rede (CA4), plain rows (CA6).
-    'tests/modules/budget-plans/public-api/budget-plans-read-port.integration.test.ts',
-  ]),
+  // `BUDGET_PLANS_DATABASE_URL` explícita: arquivos desta suíte a preferem e fazem DELETE sem WHERE
+  // em `bgp_*`. Vinda do env da suíte, ela sobrescreve uma URL real que o shell tenha herdado.
+  'budget-plans': mysqlSuite(
+    { MYSQL_INTEGRATION: '1', BUDGET_PLANS_DATABASE_URL: mysqlTestConnectionString() },
+    [
+      // #316 — árvore de custos (estava órfã: escrita na Fatia 2 mas nunca registrada no runner).
+      'tests/modules/budget-plans/adapters/persistence/cost-structure.drizzle-mysql.test.ts',
+      // Religados em 06/11/2026 (eram órfãos desde a criação): `active=false` preserva o lançamento e
+      // o id da subcategoria (denuncia uma FK CASCADE em bgp_budget_results); e remover o plano é
+      // atômico — transação, CASCADE da árvore, rollback no RESTRICT, errno 1451 virando
+      // `budget-plan-has-children`. Os dois só se provam contra MySQL real.
+      'tests/modules/budget-plans/adapters/persistence/cost-structure-deactivate.drizzle-mysql.test.ts',
+      'tests/modules/budget-plans/adapters/persistence/remove-plan-atomic.drizzle-mysql.test.ts',
+      // #317 — BudgetResultRepository (add/list/delete) contra MySQL real.
+      'tests/modules/budget-plans/adapters/persistence/budget-result.drizzle-mysql.test.ts',
+      // #318 — ciclo de vida: FK auto-ref parent_id (0004) + listChildren + findRoot + alocação de versão.
+      'tests/modules/budget-plans/adapters/persistence/plan-lifecycle.drizzle-mysql.test.ts',
+      // #319 — Consolidado ABC: listApprovedByYear (WHERE status/year/program + ORDER BY id) + vigente por família.
+      'tests/modules/budget-plans/adapters/persistence/consolidated.drizzle-mysql.test.ts',
+      // #423 — contrato do BudgetPlanRepository contra MySQL real (estava órfão: nunca registrado). Cobre
+      // listPaged rootsOnly=true (parent_id IS NULL) + upsert/listYears/ordenação sobre FK auto-referente.
+      'tests/modules/budget-plans/adapters/persistence/drizzle-mysql.test.ts',
+      // #377 BGP-DELETE-BUDGET-ATOMIC — removeBudget atômico: upsert do plano + delete dos
+      // bgp_budget_results na MESMA tx; caminho feliz + rollback (evento malformado reverte tudo).
+      'tests/modules/budget-plans/adapters/persistence/remove-budget-atomic.drizzle-mysql.test.ts',
+      // #1092 — cópia de plano (importação/calibração/cenário) tudo ou nada: plano + árvore +
+      // lançamentos numa tx; caminho feliz com mais de um lote + rollback por UNIQUE no último passo.
+      'tests/modules/budget-plans/adapters/persistence/plan-clone-writer.drizzle-mysql.test.ts',
+      // #1092 — regressão dos achados da revisão que só o MySQL real reproduz (concorrência, lock e
+      // log de erro do driver). `REGRESSION_REPEAT` (default 1) repete cada cenário; a medição usou 1000.
+      'tests/regression/budget-plans-1092/f02-race-false-orphan.mysql.test.ts',
+      'tests/regression/budget-plans-1092/f03-concurrent-import-503.mysql.test.ts',
+      'tests/regression/budget-plans-1092/f05-log-leaks-params.mysql.test.ts',
+      'tests/regression/budget-plans-1092/f08-gap-lock-blocks-other-plans.mysql.test.ts',
+      // BGP-ETL-LEGACY-ID (fatia 1/3 ETL) — legacy_id INT NULL + UNIQUE nas 6 tabelas bgp_*:
+      // CA1 (information_schema) + CA2 (multiplos NULL) + CA3 (dup -> ER_DUP_ENTRY) + CA4 (regressao).
+      'tests/modules/budget-plans/adapters/persistence/legacy-id.drizzle-mysql.test.ts',
+      // BGP-ETL-WRITE-PORT (fatia 2/3 ETL) — buildBudgetPlansEtlPort: pool boot-scoped (CA1),
+      // grava legacy_id (CA2), idempotencia por legacy_id (CA3), erro de conexao -> Result (CA5).
+      'tests/modules/budget-plans/public-api/budget-plans-etl-port.integration.test.ts',
+      // BGP-READ-PORT (fatia 1/3 REPORTS-REALIZED-VS-PLANNED) — buildBudgetPlansReadPort:
+      // pool boot-scoped (CA1), 3 niveis da arvore (CA2), grade de 12 meses com zerados (CA3),
+      // filtros combinaveis programa/plano/ano/Rede (CA4), plain rows (CA6).
+      'tests/modules/budget-plans/public-api/budget-plans-read-port.integration.test.ts',
+    ],
+  ),
   // `FINANCIAL_DATABASE_URL` explícita: o teste de concorrência a EXIGE (recusa cair no default), e
   // os demais a preferem — vinda daqui, ela sobrescreve uma URL real que o shell tenha herdado.
   // `VAN_S3_*` e `S3_*`: as composições HTTP EXIGEM a config de storage e falham cedo sem ela

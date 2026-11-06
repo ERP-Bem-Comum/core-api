@@ -593,6 +593,68 @@ if (integrationEnabled()) {
       await port.close();
     });
 
+    // S6 do #502 (decisao da P.O.): estado E municipio JUNTOS somam as duas Redes — OR no ON do LEFT
+    // JOIN, nunca AND (uma Rede e estadual XOR municipal, o AND zeraria) e nunca no WHERE (apagaria
+    // os meses zerados). Fundido aqui em 06/11/2026 a partir de `planned-amounts-or-filter
+    // .drizzle-mysql.test.ts`, que nunca rodou; o 3o caso dele (so estado) e o de cima.
+    it('estado E municipio JUNTOS somam as duas Redes (OR no ON), nunca zeram', async () => {
+      const fx = await seedPlan({ year: 2060, label: 'CA4-or' });
+      await seedResult({
+        budgetId: fx.stateBudgetId,
+        subcategoryId: fx.subA.id,
+        month: 6,
+        valueCents: 700_00,
+      });
+      await seedResult({
+        budgetId: fx.municipalityBudgetId,
+        subcategoryId: fx.subA.id,
+        month: 6,
+        valueCents: 300_00,
+      });
+
+      const port = await openPort();
+      const rows = await rowsOf(port, {
+        budgetPlanId: fx.planId,
+        partnerStateRef: fx.stateRef,
+        partnerMunicipalityRef: fx.municipalityRef,
+      });
+      const row = rows.find((r) => r.subcategoryId === fx.subA.id && r.month === 6);
+
+      assert.equal(row?.plannedCents, 1000_00, 'estado(700) + municipio(300) = 1000 (OR), nao 0');
+      await port.close();
+    });
+
+    it('a grade de 12 meses sobrevive ao filtro combinado estado+municipio (OR no ON)', async () => {
+      const fx = await seedPlan({ year: 2061, label: 'CA4-or-grade' });
+      await seedResult({
+        budgetId: fx.stateBudgetId,
+        subcategoryId: fx.subA.id,
+        month: 6,
+        valueCents: 700_00,
+      });
+      await seedResult({
+        budgetId: fx.municipalityBudgetId,
+        subcategoryId: fx.subA.id,
+        month: 6,
+        valueCents: 300_00,
+      });
+
+      const port = await openPort();
+      const rows = await rowsOf(port, {
+        budgetPlanId: fx.planId,
+        partnerStateRef: fx.stateRef,
+        partnerMunicipalityRef: fx.municipalityRef,
+      });
+      const subRows = rows.filter((r) => r.subcategoryId === fx.subA.id);
+      assert.equal(subRows.length, 12, 'os 12 meses continuam presentes');
+      assert.equal(
+        subRows.filter((r) => r.month !== 6).every((r) => r.plannedCents === 0),
+        true,
+        'meses sem lancamento seguem zerados, nao ausentes',
+      );
+      await port.close();
+    });
+
     it('filtros COMBINAM (AND): plano + ano + estado', async () => {
       const fx = await seedPlan({ year: 2046, label: 'CA4-combo' });
       await seedResult({
