@@ -73,6 +73,14 @@ jobs:
           # tests/cleanup/node-version-single-source.test.ts.
           node-version-file: .nvmrc
 
+      - name: Bun (runner da suíte, bun:test) — versão lida do .bun-version
+        # O runner é executado por `node`, mas chama `bun test` (scripts/ci/test-integration.ts).
+        # Pin por SHA (ADR-0011). `bun-version-file` e nunca um literal — cobrado por
+        # tests/cleanup/bun-version-single-source.test.ts.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
       - name: Habilita pnpm (corepack lê a versão do packageManager)
         run: corepack enable
 
@@ -98,10 +106,10 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Integração (${{ matrix.suite }}) — sobe compose efêmero + roda a suíte
-        # O runner: compose up --wait (config-parity: conf.d + initdb.d) → node --test
+        # O runner: compose up --wait (config-parity: conf.d + initdb.d) → bun test
         # → finally: down -v. O `down -v` é INOFENSIVO aqui (VM efêmera), destrutivo
-        # só em dev (#500). Exit code != 0 = vermelho, MESMO com "fail 0/cancelled 1"
-        # no sumário do node:test (o caso do #521). Confia-se SÓ no exit code.
+        # só em dev (#500). Exit code != 0 = vermelho, mesmo que o sumário pareça verde
+        # (o caso do #521). Confia-se SÓ no exit code.
         run: node --enable-source-maps scripts/ci/test-integration.ts "${{ matrix.suite }}"
 
       - name: Diagnóstico do compose em caso de falha
