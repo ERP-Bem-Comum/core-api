@@ -54,6 +54,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const f = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!f.ok) throw new Error(`[e2e] financial: ${f.error}`);
       financial = f.value;
+
+      // Limpa na ENTRADA (rule testing.md). O `runOnce` reivindica até `batchSize` eventos pendentes
+      // em ordem de `occurred_at`: com resíduo dos vizinhos da suíte `financial`, o evento deste
+      // teste podia nem ser reivindicado, e `delivered` contaria eventos alheios. `fin_outbox` não
+      // tem seed de migration nem FK de entrada — o `remittance-read` já a limpa inteira.
+      await financial.db.delete(finOutbox);
     });
 
     afterAll(async () => {

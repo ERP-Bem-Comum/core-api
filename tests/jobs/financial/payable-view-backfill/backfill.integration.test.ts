@@ -81,12 +81,18 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.equal(rec.valueCents, 100000);
       assert.equal(rec.status, 'Open');
 
+      // `backfillPayableViews` devolve `Result<_, never>` — é SEMPRE `ok`. A falha do upsert aparece
+      // só em `failed` (o lote inteiro), então é `failed`/`applied` que se afirma, não `ok`.
       const store = createDrizzlePayableViewStore(handle, ClockReal());
-      const result = await backfillPayableViews(source.value.records, store, BACKFILL_AT);
-      assert.equal(result.ok, true);
+      const total = source.value.records.length;
+      const first = await backfillPayableViews(source.value.records, store, BACKFILL_AT);
+      assert.ok(first.ok);
+      assert.deepEqual(first.value, { applied: total, failed: 0 }, 'o upsert em lote falhou');
 
-      // idempotência no banco: rerodar não duplica.
-      await backfillPayableViews(source.value.records, store, BACKFILL_AT);
+      // idempotência no banco: rerodar não duplica, e também não falha.
+      const again = await backfillPayableViews(source.value.records, store, BACKFILL_AT);
+      assert.ok(again.ok);
+      assert.deepEqual(again.value, { applied: total, failed: 0 }, 'a 2ª rodada falhou');
 
       const list = await store.list();
       assert.equal(list.ok, true);

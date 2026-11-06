@@ -265,6 +265,12 @@ export const SUITES: Readonly<Record<string, Suite>> = {
     // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
     'tests/modules/financial/public-api/realized-provisioned-subcategory.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
+    // Religados no replanejamento de 06/11/2026 (eram órfãos desde a criação):
+    // projeção do read-model de títulos (claim por consumidor com SKIP LOCKED, anti-join, DLQ que
+    // retém a origem) e o reader SQL do backfill (o filtro `dueDate instanceof Date` depende do
+    // modo de data do Drizzle — um fake não o reproduz).
+    'tests/workers/payable-view-projection/projection.integration.test.ts',
+    'tests/jobs/financial/payable-view-backfill/backfill.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
   'etl:contracts': mysqlSuite(ETL_DB_ENV, ['tests/etl/contracts/writer.integration.test.ts']),

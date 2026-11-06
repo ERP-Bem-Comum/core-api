@@ -44,10 +44,6 @@ const GATE_READ =
  */
 const KNOWN_ORPHANS: Readonly<Record<string, string>> = {
   // financial
-  'tests/jobs/financial/payable-view-backfill/backfill.integration.test.ts':
-    'religar em `financial`; trocar `result.ok` (Result<_, never>, tautológico) por `failed === 0`',
-  'tests/workers/payable-view-projection/projection.integration.test.ts':
-    'religar em `financial`; limpar `fin_outbox` na entrada',
   'tests/modules/financial/adapters/persistence/document-repository-concurrency.drizzle-mysql.test.ts':
     'religar em `financial`; exige FINANCIAL_DATABASE_URL e a fase 2 virou verde vazio',
   'tests/modules/financial/adapters/http/approve-with-provisioned-role.http.test.ts':
