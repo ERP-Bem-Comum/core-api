@@ -67,7 +67,9 @@ type BootResult = Readonly<{ code: number | null; signal: NodeJS.Signals | null;
  */
 const bootServer = (env: Readonly<Record<string, string>>): Promise<BootResult> =>
   new Promise((resolvePromise) => {
-    const child = spawn(process.execPath, ['--enable-source-maps', SERVER], {
+    // `node`, não `process.execPath`: sob `bun test` este é o Bun, e o servidor sobe com `node` no
+    // Dockerfile e no `package.json`. O teste mede o boot do runtime de produção.
+    const child = spawn('node', ['--enable-source-maps', SERVER], {
       cwd: REPO_ROOT,
       env: { PATH: process.env['PATH'] ?? '', ...env },
     });

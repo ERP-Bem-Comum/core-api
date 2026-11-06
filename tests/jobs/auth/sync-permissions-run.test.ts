@@ -25,7 +25,9 @@ type RunOutcome = Readonly<{ code: number; stderr: string }>;
 // o teste passaria a depender do ambiente.
 const runJob = async (env: Readonly<Record<string, string>>): Promise<RunOutcome> =>
   new Promise<RunOutcome>((settle) => {
-    const child = spawn(process.execPath, ['--enable-source-maps', RUN], {
+    // `node`, não `process.execPath`: sob `bun test` este é o Bun, e o job roda com `node`
+    // (`package.json` e taskdef). O teste mede o runtime de produção.
+    const child = spawn('node', ['--enable-source-maps', RUN], {
       cwd: REPO_ROOT,
       env: { PATH: process.env['PATH'] ?? '', ...env },
     });

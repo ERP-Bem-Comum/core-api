@@ -36,7 +36,9 @@ const enabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1' && CONN.
 
 const runSeed = async (): Promise<number> =>
   new Promise<number>((settle) => {
-    const child = spawn(process.execPath, ['--enable-source-maps', SEED], {
+    // `node`, não `process.execPath`: sob `bun test` este é o Bun, e `pnpm seed:admin` roda com
+    // `node`. O teste mede o script real, no runtime real.
+    const child = spawn('node', ['--enable-source-maps', SEED], {
       cwd: REPO_ROOT,
       stdio: 'ignore',
       env: {
