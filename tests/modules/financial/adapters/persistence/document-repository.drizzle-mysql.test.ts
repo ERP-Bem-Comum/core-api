@@ -266,6 +266,84 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
     });
 
+    // #273 — complemento da forma de pagamento (código de barras do boleto, chave Pix…). Fundido aqui
+    // em 06/11/2026 a partir de `document-repository-payment-detail.test.ts`, que nunca rodou (não
+    // estava em suíte nenhuma). Ganhou a asserção do TÍTULO: o pai nasce herdando o complemento
+    // (`document.ts:131`), e é `fin_payables.payment_detail` que a remessa CNAB lê.
+    describe('paymentDetail — Drizzle + MySQL (#273)', () => {
+      const PD_SUP = '5a000000-0000-4000-8000-0000000000d1';
+      const build = (
+        documentNumber: string,
+        paymentDetail?: string,
+      ): Document.CreateDocumentOutput => {
+        const supplierR = SupplierRef.rehydrate(PD_SUP);
+        if (!supplierR.ok) throw new Error('test setup: supplier');
+        const grossR = Money.fromCents(100000);
+        if (!grossR.ok) throw new Error('test setup: money');
+        const r = Document.create({
+          id: DocumentId.generate(),
+          documentNumber,
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'TED',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-07-01'),
+          ...(paymentDetail !== undefined ? { paymentDetail } : {}),
+        });
+        if (!r.ok) throw new Error('test setup: create');
+        return r.value;
+      };
+
+      it('round-trip preserva o complemento no documento E no título pai', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const detail = '34191.79001 01043.510047 91020.150008 9 12345678901234';
+        const created = build('NFS-PD-ROUNDTRIP', detail);
+
+        const saved = await repo.save(
+          { document: created.document, payables: created.payables },
+          [],
+        );
+        assert.equal(isOk(saved), true);
+
+        const found = await repo.findById(created.document.id);
+        assert.ok(found.ok, 'findById falhou');
+        assert.equal(found.value.document.paymentDetail, detail, 'fin_documents.payment_detail');
+        assert.ok(found.value.payables, 'o documento salvo voltou sem títulos');
+        assert.equal(
+          found.value.payables.parent.paymentDetail,
+          detail,
+          'fin_payables.payment_detail — é o que a remessa lê',
+        );
+
+        await repo.delete(created.document.id, 0);
+      });
+
+      it('documento sem complemento lê null nos dois lados, sem erro de mapper', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const created = build('NFS-PD-LEGACY');
+
+        const saved = await repo.save(
+          { document: created.document, payables: created.payables },
+          [],
+        );
+        assert.equal(isOk(saved), true);
+
+        const found = await repo.findById(created.document.id);
+        assert.ok(found.ok, 'findById falhou');
+        assert.equal(found.value.document.paymentDetail, null);
+        assert.ok(found.value.payables, 'o documento salvo voltou sem títulos');
+        assert.equal(found.value.payables.parent.paymentDetail, null);
+
+        await repo.delete(created.document.id, 0);
+      });
+    });
+
     // #1057 — a troca de forma num Aprovado grava NO TÍTULO por UPDATE, sem apagá-lo: o id do título
     // não muda. O vínculo com remessa aqui é o único que um título Aprovado pode ter — remessa
     // descartada porque o arquivo nunca chegou ao banco (ADR-0065 §4); `fin_remittance_payables`

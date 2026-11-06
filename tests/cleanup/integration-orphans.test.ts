@@ -48,8 +48,6 @@ const KNOWN_ORPHANS: Readonly<Record<string, string>> = {
     'religar em `financial`; exige FINANCIAL_DATABASE_URL e a fase 2 virou verde vazio',
   'tests/modules/financial/adapters/http/approve-with-provisioned-role.http.test.ts':
     'religar em `financial`; buildVanStorage lança erro sem VAN_S3_*',
-  'tests/modules/financial/adapters/persistence/document-repository-payment-detail.test.ts':
-    'fundir em document-repository.drizzle-mysql.test.ts',
   // auth
   'tests/modules/auth/adapters/persistence/reset-lockout.integration.test.ts':
     'religar em `auth`; os irmãos precisam limpar reset/lockout antes de auth_user',
