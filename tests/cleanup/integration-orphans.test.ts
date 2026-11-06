@@ -81,10 +81,9 @@ const KNOWN_ORPHANS: Readonly<Record<string, string>> = {
   'tests/modules/contracts/adapters/persistence/repos/document-repository.drizzle.test.ts':
     'religar em `contracts`; migrar e limpar ctr_documents + ctr_outbox na entrada',
   'tests/modules/contracts/adapters/persistence/mysql-driver-tuning.test.ts':
-    'dividir: CA-11 apagar, CA-12 fundir em mysql-driver.test.ts',
+    'CA-12 fundir em mysql-driver.test.ts, antes do CA-8 de lá (o CA-11 já saiu)',
   'tests/shared/persistence/mysql-pool-config.test.ts':
     'CA-8 religar medindo o corte de idleTimeout (hoje mede o de maxIdle)',
-  'tests/shared/persistence/pool-registry.test.ts': 'apagar o CA-9 (não tem como falhar)',
   'tests/cleanup/schema-collation.test.ts': 'trocar por gate estático (contra o banco não falha)',
 };
 

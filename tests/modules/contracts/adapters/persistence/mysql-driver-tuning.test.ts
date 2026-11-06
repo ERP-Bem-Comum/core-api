@@ -91,28 +91,11 @@ describe('CTR-DB-DRIVER-POOL-TUNING — CA-10: override de idleTimeoutMs', () =>
   });
 });
 
-// ─── CA-11 — integration: session time_zone = +00:00 ──────────────────────
-describe.skipIf(!integrationEnabled())(
-  'CTR-DB-DRIVER-POOL-TUNING — CA-11: session time_zone (integration)',
-  () => {
-    it('CA-11: SELECT @@session.time_zone retorna +00:00 após openMysql', async () => {
-      const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: false });
-      assert.ok(r.ok, `openMysql falhou: ${!r.ok ? r.error : ''}`);
-      if (!r.ok) return;
-      try {
-        const result = await r.value.db.execute(sql`SELECT @@session.time_zone AS tz`);
-        // mysql2 retorna [rows, fields]; drizzle.execute devolve diretamente um array de rows.
-        // Defensivo: aceitar ambos os shapes.
-        const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
-        const first = (rows as readonly { tz?: unknown }[])[0];
-        assert.ok(first, 'esperava ao menos 1 row');
-        assert.equal(first.tz, '+00:00', 'session.time_zone deve ser +00:00 — audit §M2');
-      } finally {
-        await r.value.close();
-      }
-    });
-  },
-);
+// O antigo CA-11 (`SELECT @@session.time_zone` = +00:00 após openMysql) saiu em 06/11/2026: o
+// mysql2 nunca emite `SET time_zone` — a opção `timezone` só converte `Date` no lado JS — então o
+// caso media o `server.cnf`, não o driver. O fuso do servidor é afirmado por
+// `tests/infra/mysql-compose.test.ts` (CA-10, `@@global.time_zone`). O CA-9.1 acima cobre o
+// `timezone: 'Z'` que o driver de fato recebe.
 
 // ─── CA-12 — integration: default applyMigrations === false ──────────────
 describe.skipIf(!integrationEnabled())(
