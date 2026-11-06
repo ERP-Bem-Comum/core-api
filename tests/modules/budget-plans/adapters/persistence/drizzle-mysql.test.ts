@@ -4,13 +4,13 @@
 
 import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
-import { isNotNull } from 'drizzle-orm';
 
 import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.drizzle.ts';
 import { runBudgetPlanRepositoryContract } from './budget-plan-repository.suite.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 const VALID_CONN = mysqlTestConnectionString();
 
@@ -43,8 +43,7 @@ if (integrationEnabled()) {
     await h.db.delete(h.schema.bgpOutbox);
     await h.db.delete(h.schema.budgets);
     // FK auto-referente `parent_id` (onDelete restrict): filhos (cenários/calibrações) antes dos pais.
-    await h.db.delete(h.schema.budgetPlans).where(isNotNull(h.schema.budgetPlans.parentId));
-    await h.db.delete(h.schema.budgetPlans);
+    await deleteAllBudgetPlans(h.db);
   };
 
   runBudgetPlanRepositoryContract('Drizzle/MySQL (truncated)', {

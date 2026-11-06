@@ -4,7 +4,6 @@
 // (2 cenários do mesmo pai não colidem na UNIQUE). Opt-in MYSQL_INTEGRATION=1.
 import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
-import { isNotNull } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
@@ -21,6 +20,7 @@ import { createDrizzlePlanCloneWriter } from '#src/modules/budget-plans/adapters
 import { startCalibration } from '#src/modules/budget-plans/application/use-cases/start-calibration.ts';
 import { createScenery } from '#src/modules/budget-plans/application/use-cases/create-scenery.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 const VALID_CONN = mysqlTestConnectionString();
 const NOW = new Date('2026-07-09T12:00:00.000Z');
@@ -64,8 +64,7 @@ if (integrationEnabled()) {
     await h.db.delete(h.schema.categories);
     await h.db.delete(h.schema.costCenters);
     await h.db.delete(h.schema.budgets);
-    await h.db.delete(h.schema.budgetPlans).where(isNotNull(h.schema.budgetPlans.parentId));
-    await h.db.delete(h.schema.budgetPlans);
+    await deleteAllBudgetPlans(h.db);
   };
 
   const seedRoot = async (h: BudgetPlansMysqlHandle, approve: boolean) => {

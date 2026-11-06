@@ -12,6 +12,7 @@ import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/
 import { createDrizzleCostStructureRepository } from '#src/modules/budget-plans/adapters/persistence/repos/cost-structure-repository.drizzle.ts';
 import { runCostStructureRepositoryContract } from './cost-structure-repository.suite.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 const VALID_CONN = mysqlTestConnectionString();
 
@@ -46,7 +47,7 @@ if (integrationEnabled()) {
     await h.db.delete(h.schema.subcategories);
     await h.db.delete(h.schema.categories);
     await h.db.delete(h.schema.costCenters);
-    await h.db.delete(h.schema.budgetPlans);
+    await deleteAllBudgetPlans(h.db);
   };
 
   const NOW = new Date('2026-07-08T12:00:00.000Z');

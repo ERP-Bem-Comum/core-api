@@ -14,7 +14,6 @@
 import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { isNotNull } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
@@ -34,6 +33,7 @@ import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/
 import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.drizzle.ts';
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 // #413 — mês do exercício nas fixtures (o VO tem suíte própria; aqui mês inválido é erro de teste).
 const FIXTURE_MONTH = (() => {
@@ -82,8 +82,7 @@ if (integrationEnabled()) {
     await h.db.delete(h.schema.budgetResults);
     await h.db.delete(h.schema.budgets);
     // FK auto-referente parent_id: filhos antes dos pais.
-    await h.db.delete(h.schema.budgetPlans).where(isNotNull(h.schema.budgetPlans.parentId));
-    await h.db.delete(h.schema.budgetPlans);
+    await deleteAllBudgetPlans(h.db);
   };
 
   // Semeia 1 plano com 1 orcamento (persistido) + 1 resultado dependente. Devolve os repos, os ids e o

@@ -5,7 +5,7 @@
 // A linha `MEASURE {...}` vai para o stdout com a contagem, para a taxa ser lida sem parsear o TAP.
 
 import process from 'node:process';
-import { isNotNull } from 'drizzle-orm';
+
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import type { Result } from '#src/shared/primitives/result.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
@@ -48,6 +48,7 @@ import { addBudgetResult } from '#src/modules/budget-plans/application/use-cases
 import { approveBudgetPlan } from '#src/modules/budget-plans/application/use-cases/approve-budget-plan.ts';
 import { startCalibration } from '#src/modules/budget-plans/application/use-cases/start-calibration.ts';
 import { createScenery } from '#src/modules/budget-plans/application/use-cases/create-scenery.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 export const REPEAT = (() => {
   const raw = Number(process.env['REGRESSION_REPEAT'] ?? '1');
@@ -276,8 +277,7 @@ export const truncateBudgetPlans = async (h: BudgetPlansMysqlHandle): Promise<vo
   await h.db.delete(h.schema.categories);
   await h.db.delete(h.schema.costCenters);
   await h.db.delete(h.schema.budgets);
-  await h.db.delete(h.schema.budgetPlans).where(isNotNull(h.schema.budgetPlans.parentId));
-  await h.db.delete(h.schema.budgetPlans);
+  await deleteAllBudgetPlans(h.db);
 };
 
 // Conteúdo de cópia montado direto pelo domínio: plano novo com 1 rede, árvore vazia e `results`

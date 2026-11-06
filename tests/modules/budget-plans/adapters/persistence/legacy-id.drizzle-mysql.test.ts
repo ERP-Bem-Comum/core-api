@@ -25,6 +25,7 @@ import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persist
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import * as schema from '#src/modules/budget-plans/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 const VALID_CONN = mysqlTestConnectionString();
 
@@ -105,7 +106,7 @@ if (integrationEnabled()) {
     await db.execute(sql`DELETE FROM bgp_categories`);
     await db.execute(sql`DELETE FROM bgp_cost_centers`);
     await db.execute(sql`DELETE FROM bgp_budgets`);
-    await db.execute(sql`DELETE FROM bgp_budget_plans`);
+    await deleteAllBudgetPlans(db);
   };
 
   // Insere a cadeia de pais nativa (SEM legacy_id — colunas existentes).

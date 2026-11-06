@@ -41,6 +41,7 @@ import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/ada
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
 import { createDrizzleCostStructureRepository } from '#src/modules/budget-plans/adapters/persistence/repos/cost-structure-repository.drizzle.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 const VALID_CONN = process.env['BUDGET_PLANS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
@@ -87,7 +88,7 @@ if (integrationEnabled()) {
     await h.db.delete(h.schema.subcategories);
     await h.db.delete(h.schema.categories);
     await h.db.delete(h.schema.costCenters);
-    await h.db.delete(h.schema.budgetPlans);
+    await deleteAllBudgetPlans(h.db);
   };
 
   describe('#454 gap 3 — desativar não encosta no lançamento (Drizzle + MySQL)', () => {

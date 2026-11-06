@@ -12,7 +12,7 @@
 import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { eq, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { isOk, isErr } from '#src/shared/index.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
@@ -35,6 +35,7 @@ import { createDrizzleCostStructureRepository } from '#src/modules/budget-plans/
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
 import { createDrizzlePlanCloneWriter } from '#src/modules/budget-plans/adapters/persistence/repos/plan-clone-writer.drizzle.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 const VALID_CONN = mysqlTestConnectionString();
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
@@ -157,8 +158,7 @@ if (integrationEnabled()) {
     await h.db.delete(h.schema.categories);
     await h.db.delete(h.schema.costCenters);
     await h.db.delete(h.schema.budgets);
-    await h.db.delete(h.schema.budgetPlans).where(isNotNull(h.schema.budgetPlans.parentId));
-    await h.db.delete(h.schema.budgetPlans);
+    await deleteAllBudgetPlans(h.db);
   });
 
   it('grava plano, árvore e 600 lançamentos (mais de um lote) numa transação', async () => {

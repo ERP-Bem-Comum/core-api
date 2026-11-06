@@ -38,6 +38,7 @@ import {
   openBudgetPlansMysql,
   type BudgetPlansMysqlHandle,
 } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 // A request fixa esta connection-string literal (mesma das fatias do ETL).
 const VALID_CONN = mysqlTestConnectionString();
@@ -97,7 +98,7 @@ if (integrationEnabled()) {
     await db.execute(sql`DELETE FROM bgp_categories`);
     await db.execute(sql`DELETE FROM bgp_cost_centers`);
     await db.execute(sql`DELETE FROM bgp_budgets`);
-    await db.execute(sql`DELETE FROM bgp_budget_plans`);
+    await deleteAllBudgetPlans(db);
   };
 
   // ── Fixture: um plano completo (1 centro -> 1 categoria -> 2 subcategorias) com 2 Redes

@@ -21,7 +21,7 @@
 import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { isNotNull, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
@@ -39,6 +39,7 @@ import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/
 import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.drizzle.ts';
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { deleteAllBudgetPlans } from '#tests/support/budget-plans-reset.ts';
 
 const VALID_CONN = process.env['BUDGET_PLANS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
@@ -87,8 +88,7 @@ if (integrationEnabled()) {
     await h.db.delete(h.schema.categories);
     await h.db.delete(h.schema.costCenters);
     // FK auto-referente parent_id: filhos antes dos pais.
-    await h.db.delete(h.schema.budgetPlans).where(isNotNull(h.schema.budgetPlans.parentId));
-    await h.db.delete(h.schema.budgetPlans);
+    await deleteAllBudgetPlans(h.db);
   };
 
   // 1 plano RASCUNHO + 1 orçamento + 1 resultado dependente (o que precisa sumir junto).
