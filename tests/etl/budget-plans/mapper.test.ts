@@ -12,7 +12,7 @@
  * domain/ nem application/. Estes testes so exercitam funcoes puras de `scripts/`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

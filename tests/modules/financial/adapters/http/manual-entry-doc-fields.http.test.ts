@@ -9,7 +9,7 @@
  * vê → a resposta não tem os campos → `undefined`. Roda em `pnpm test` puro (InMemory).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -82,7 +82,7 @@ interface AppHandle {
 let handle: AppHandle;
 const txIds: string[] = [];
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildFinancialHttpDeps({ driver: 'memory' });
   const cedenteId = CedenteAccountId.generate();
   const account = createCedente({
@@ -144,7 +144,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

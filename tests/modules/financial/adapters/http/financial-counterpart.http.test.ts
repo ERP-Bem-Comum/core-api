@@ -3,7 +3,7 @@
  * Driver memory com stores SEMEADOS (contrapartida Pending em B + extrato Credit Pending). Auth fake.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler, LightMyRequestResponse } from 'fastify';
 
@@ -81,7 +81,7 @@ let handle: AppHandle;
 let txId: string;
 let counterpartId: string;
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildFinancialHttpDeps({ driver: 'memory' });
   const accountB = createCedente({
     id: CedenteAccountId.generate(),
@@ -163,7 +163,7 @@ before(async () => {
   handle = { app, teardown: () => app.close() };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

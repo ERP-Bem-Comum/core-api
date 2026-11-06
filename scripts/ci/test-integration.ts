@@ -4,11 +4,12 @@
 //
 // Cada suite declara: serviços Docker a subir (mysql|minio), se cria os secrets de TESTE,
 // a env var de gate (MYSQL_INTEGRATION etc.), a concorrência e os paths de teste.
-// O runner: cria secrets → `docker compose up --wait` → `node --test` → SEMPRE derruba e limpa.
+// O runner: cria secrets → `docker compose up --wait` → `bun test` → SEMPRE derruba e limpa.
 //
 // Sem dependências novas (ADR-0011): só node:child_process (spawnSync, shell:false) + node:fs.
 
 import { spawnSync } from 'node:child_process';
+import { globSync } from 'node:fs';
 import process from 'node:process';
 import {
   composeDownArgs,
@@ -27,7 +28,7 @@ type Suite = Readonly<{
   services: readonly ('mysql' | 'minio' | 'mailpit')[];
   secrets: boolean; // cria os secrets de teste do MySQL
   env: Readonly<Record<string, string>>;
-  concurrency1: boolean; // --test-concurrency=1
+  concurrency1: boolean; // um arquivo por vez (banco compartilhado); false → `--parallel`
   paths: readonly string[];
 }>;
 
@@ -360,18 +361,39 @@ const dockerDown = (): void => {
   spawnSync('docker', composeDownArgs(), { stdio: 'ignore' });
 };
 
-const runNodeTest = (suite: Suite): number => {
-  // `--experimental-strip-types` e `--no-warnings` saíram (redundantes no Node 24, ver
-  // `tests/cleanup/node-flags-not-redundant.test.ts`). `--enable-source-maps` FICA: o
-  // `drizzle-orm` publica source map, e estas suítes rodam contra MySQL real — é exatamente onde
-  // um stack trace apontando o `.ts` da lib em vez do `.js` empacotado paga por si.
+/**
+ * Timeout por teste E por hook. O `node --test` não tinha nenhum; o `bun test` tem 5 s por
+ * padrão, e estas suítes sobem migrations e conectam no MySQL em `beforeAll`. O valor existe para
+ * matar o que trava, não para medir lentidão.
+ */
+const INTEGRATION_TIMEOUT_MS = 300_000;
+
+/**
+ * Expande os padrões da suíte em caminhos `./…`. O `bun test` trata argumento posicional como
+ * FILTRO de substring, não glob (`test/discovery`): `migrations/*.test.ts` entre aspas casaria
+ * zero arquivos. O prefixo `./` faz o Bun ler o argumento como caminho exato.
+ */
+const expandPaths = (patterns: readonly string[]): string[] =>
+  patterns.flatMap((p) => globSync(p).sort()).map((p) => `./${p}`);
+
+const runBunTest = (suite: Suite): number => {
+  const paths = expandPaths(suite.paths);
+  if (paths.length === 0) {
+    process.stderr.write(`nenhum arquivo casou os caminhos da suíte: ${suite.paths.join(', ')}\n`);
+    return 1;
+  }
+  // `--no-env-file`: o Bun carrega `.env` sozinho, e um `.env` esquecido satisfaria a validação
+  // de ambiente em silêncio (ADR-0068). `--isolate`: global novo por arquivo, que é o que o
+  // processo-por-arquivo do `node --test` dava. Serial por padrão (o banco é compartilhado);
+  // suíte sem banco comum roda com `--parallel`, que já implica `--isolate`.
   const flags = [
-    '--enable-source-maps',
-    '--test',
-    ...(suite.concurrency1 ? ['--test-concurrency=1'] : []),
+    'test',
+    '--no-env-file',
+    `--timeout=${String(INTEGRATION_TIMEOUT_MS)}`,
+    suite.concurrency1 ? '--isolate' : '--parallel',
   ];
   return (
-    spawnSync('node', [...flags, ...suite.paths], {
+    spawnSync('bun', [...flags, ...paths], {
       stdio: 'inherit',
       env: { ...process.env, ...suite.env },
     }).status ?? 1
@@ -389,7 +411,7 @@ const main = (): number => {
   }
 
   // Backup dos secrets de dev preexistentes + escrita dos de teste (0o644). O restore roda no
-  // `finally` — mesmo que o `up` falhe ou o `node --test` saia com exit≠0 — devolvendo o dev intacto.
+  // `finally` — mesmo que o `up` falhe ou o `bun test` saia com exit≠0 — devolvendo o dev intacto.
   const backup: SecretBackup | undefined = suite.secrets
     ? backupAndWriteTestSecrets(SECRETS_DIR, TEST_SECRETS)
     : undefined;
@@ -401,7 +423,7 @@ const main = (): number => {
         return up;
       }
     }
-    return runNodeTest(suite);
+    return runBunTest(suite);
   } finally {
     if (suite.services.length > 0) dockerDown();
     if (backup !== undefined) restoreSecrets(backup);

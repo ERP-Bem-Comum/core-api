@@ -22,7 +22,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 
 /** Este arquivo cita os três padrões para detectá-los — é a única exceção legítima. */
 const SELF = 'tests/cleanup/skills-describe-live-harness.test.ts';

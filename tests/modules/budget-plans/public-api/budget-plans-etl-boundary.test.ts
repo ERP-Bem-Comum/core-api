@@ -13,7 +13,7 @@
  * ASCII puro. Codigo EN, comentarios PT-BR.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { access, readFile, readdir } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';

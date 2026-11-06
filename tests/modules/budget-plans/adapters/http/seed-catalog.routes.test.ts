@@ -14,7 +14,7 @@
  * O RED do ticket vive no unit `e2e-seed.test.ts` (símbolo `parseE2eBudgetPlansSeed` inexistente).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

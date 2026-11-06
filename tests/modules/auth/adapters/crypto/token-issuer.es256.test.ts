@@ -4,7 +4,7 @@
  * CA4 (formato JWT) e CA5 (chave A nao verifica com chave B — sem forja). ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { generateKeyPair } from 'jose';
 

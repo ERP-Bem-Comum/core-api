@@ -8,7 +8,7 @@
  * RED esperado: `src/jobs/migrate/migrate.ts` ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { runMigrations, type ModuleMigrator } from '#src/jobs/migrate/migrate.ts';

@@ -3,7 +3,7 @@
 // Espelha `van-status-scan/scan-loop.test.ts`. O que muda de assunto aqui é a decisão de não
 // despejar a quarentena item a item: ela é consultável, e a fila é o caso normal de uma caixa que
 // é do convênio.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 

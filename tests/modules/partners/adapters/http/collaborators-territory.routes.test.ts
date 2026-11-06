@@ -3,7 +3,7 @@
  * POST testa a escrita (201/422); o detalhe é verificado por seed (reader distinto em memory).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

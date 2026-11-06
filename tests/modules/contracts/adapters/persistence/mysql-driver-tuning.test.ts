@@ -15,7 +15,7 @@
  *   - best-practice MySQL `handbook/reference/mysql/best-practices/jusdb/03-timeout-variables-production-guide.md` §"Pool–MySQL alignment".
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { sql } from 'drizzle-orm';
@@ -31,9 +31,8 @@ const VALID_CONN = mysqlTestConnectionString();
 const DUMMY_ROOT_PWD = 'rootpw-migration-test-only';
 const CONTAINER = 'core-api-mysql';
 
+/** Opt-in: sem `MYSQL_INTEGRATION=1` (rode `pnpm test:integration`), os blocos de integração pulam. */
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
-const skipReason = (): string =>
-  integrationEnabled() ? 'unexpected' : 'MYSQL_INTEGRATION≠1 (rode `pnpm test:integration`)';
 
 const resetCoreDatabase = (): void => {
   spawnSync(
@@ -93,62 +92,60 @@ describe('CTR-DB-DRIVER-POOL-TUNING — CA-10: override de idleTimeoutMs', () =>
 });
 
 // ─── CA-11 — integration: session time_zone = +00:00 ──────────────────────
-describe('CTR-DB-DRIVER-POOL-TUNING — CA-11: session time_zone (integration)', () => {
-  it('CA-11: SELECT @@session.time_zone retorna +00:00 após openMysql', async (t) => {
-    if (!integrationEnabled()) {
-      t.skip(skipReason());
-      return;
-    }
-    const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: false });
-    assert.ok(r.ok, `openMysql falhou: ${!r.ok ? r.error : ''}`);
-    if (!r.ok) return;
-    try {
-      const result = await r.value.db.execute(sql`SELECT @@session.time_zone AS tz`);
-      // mysql2 retorna [rows, fields]; drizzle.execute devolve diretamente um array de rows.
-      // Defensivo: aceitar ambos os shapes.
-      const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
-      const first = (rows as readonly { tz?: unknown }[])[0];
-      assert.ok(first, 'esperava ao menos 1 row');
-      assert.equal(first.tz, '+00:00', 'session.time_zone deve ser +00:00 — audit §M2');
-    } finally {
-      await r.value.close();
-    }
-  });
-});
+describe.skipIf(!integrationEnabled())(
+  'CTR-DB-DRIVER-POOL-TUNING — CA-11: session time_zone (integration)',
+  () => {
+    it('CA-11: SELECT @@session.time_zone retorna +00:00 após openMysql', async () => {
+      const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: false });
+      assert.ok(r.ok, `openMysql falhou: ${!r.ok ? r.error : ''}`);
+      if (!r.ok) return;
+      try {
+        const result = await r.value.db.execute(sql`SELECT @@session.time_zone AS tz`);
+        // mysql2 retorna [rows, fields]; drizzle.execute devolve diretamente um array de rows.
+        // Defensivo: aceitar ambos os shapes.
+        const rows = Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+        const first = (rows as readonly { tz?: unknown }[])[0];
+        assert.ok(first, 'esperava ao menos 1 row');
+        assert.equal(first.tz, '+00:00', 'session.time_zone deve ser +00:00 — audit §M2');
+      } finally {
+        await r.value.close();
+      }
+    });
+  },
+);
 
 // ─── CA-12 — integration: default applyMigrations === false ──────────────
-describe('CTR-DB-DRIVER-POOL-TUNING — CA-12: default applyMigrations (integration)', () => {
-  it('CA-12: openMysql sem applyMigrations NÃO aplica migrations (M5 prod-safe)', async (t) => {
-    if (!integrationEnabled()) {
-      t.skip(skipReason());
-      return;
-    }
-    // Reset hard — sem tabelas do domínio.
-    resetCoreDatabase();
+describe.skipIf(!integrationEnabled())(
+  'CTR-DB-DRIVER-POOL-TUNING — CA-12: default applyMigrations (integration)',
+  () => {
+    it('CA-12: openMysql sem applyMigrations NÃO aplica migrations (M5 prod-safe)', async () => {
+      // Reset hard — sem tabelas do domínio.
+      resetCoreDatabase();
 
-    const r = await openMysql({ connectionString: VALID_CONN }); // sem applyMigrations
-    assert.ok(r.ok, `openMysql falhou: ${!r.ok ? r.error : ''}`);
-    if (!r.ok) return;
+      const r = await openMysql({ connectionString: VALID_CONN }); // sem applyMigrations
+      assert.ok(r.ok, `openMysql falhou: ${!r.ok ? r.error : ''}`);
+      if (!r.ok) return;
 
-    try {
-      // SELECT em tabela do domínio: deve falhar com ER 1146 (Table doesn't exist).
-      let raised: Error | null = null;
       try {
-        await r.value.db.execute(sql`SELECT * FROM ctr_contracts LIMIT 1`);
-      } catch (e) {
-        raised = e instanceof Error ? e : new Error(JSON.stringify(e));
+        // SELECT em tabela do domínio: deve falhar com ER 1146 (Table doesn't exist).
+        let raised: Error | null = null;
+        try {
+          await r.value.db.execute(sql`SELECT * FROM ctr_contracts LIMIT 1`);
+        } catch (e) {
+          raised = e instanceof Error ? e : new Error(JSON.stringify(e));
+        }
+        assert.ok(
+          raised !== null,
+          'esperava erro ER_NO_SUCH_TABLE em ctr_contracts — default applyMigrations deveria ser false',
+        );
+        assert.match(
+          raised.message,
+          /doesn't exist|ER_NO_SUCH_TABLE/,
+          'mensagem deve indicar tabela inexistente',
+        );
+      } finally {
+        await r.value.close();
       }
-      assert.ok(
-        raised !== null,
-        'esperava erro ER_NO_SUCH_TABLE em ctr_contracts — default applyMigrations deveria ser false',
-      );
-      assert.match(
-        raised.message,
-        /doesn't exist|ER_NO_SUCH_TABLE/,
-        'mensagem deve indicar tabela inexistente',
-      );
-    } finally {
-      await r.value.close();
-    }
-  });
-});
+    });
+  },
+);

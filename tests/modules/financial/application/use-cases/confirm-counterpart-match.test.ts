@@ -7,7 +7,7 @@
  * CA2: confirmar → duas pernas conciliadas e vinculadas, 0 duplicata, contrapartida Matched.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';

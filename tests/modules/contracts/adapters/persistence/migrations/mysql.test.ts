@@ -14,7 +14,7 @@
  * MySQL 8.4 Refman §INFORMATION_SCHEMA CHECK_CONSTRAINTS Table.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -193,124 +193,111 @@ describe('CTR-DB-MIGRATION-MYSQL — CA-3..9: SQL gerado contém estruturas espe
 // container. Razão: o `mysql-compose.test.ts` (ticket #1) também testa o
 // lifecycle do MySQL e dois `before/after` paralelos com `compose down -v`
 // destroem o ambiente um do outro. Aqui apenas assumimos um MySQL externo via
-// `core-api-mysql`; se ausente, todos os CAs funcionais fazem `t.skip()`.
+// `core-api-mysql`; se ausente, o bloco inteiro é pulado.
 // Quem orquestra: `pnpm test:integration` (sobe MySQL → roda suite → derruba).
-describe('CTR-DB-MIGRATION-MYSQL — CA-10..14: aplicação E2E contra MySQL real', () => {
-  let appliedOk = false;
-  let envReady = false;
-  let skipReason = '';
 
-  before(() => {
-    // Opt-in: CAs funcionais só rodam quando `MYSQL_INTEGRATION=1` está setado.
-    // Razão: `pnpm test` default não orquestra Docker; o lifecycle é gerido pelo
-    // target `pnpm test:integration`, que sobe o MySQL com `--wait` antes de
-    // disparar o node:test. Sem opt-in, todos os CA-10..14 são `t.skip()`.
-    if (process.env.MYSQL_INTEGRATION !== '1') {
-      skipReason = 'MYSQL_INTEGRATION≠1 (rode `pnpm test:integration`)';
-      return;
-    }
-    if (!dockerAvailable()) {
-      skipReason = 'docker indisponível';
-      return;
-    }
-    const inspect = sh(`docker inspect ${CONTAINER} --format '{{.State.Health.Status}}'`);
-    if (inspect.code !== 0 || inspect.stdout.trim() !== 'healthy') {
-      skipReason = `container ${CONTAINER} não está healthy (rode 'pnpm test:integration')`;
-      return;
-    }
-    envReady = true;
-    // Drop/recreate DB para garantir estado limpo (init script já criou via env).
-    // Sem backticks no nome do DB: `bash -c "..."` interpreta `` `core` ``
-    // como command substitution (chamada ao comando "core"), produzindo
-    // string vazia e syntax error silencioso. `core` não é reserved word —
-    // dispensa backticks. (Bug descoberto em CTR-DB-DRIVER-MYSQL #4 quando
-    // o database chegou ao before com tabelas pré-existentes vindas das
-    // outras suítes de integração — `applyMigration` falhava com ER 1050.)
-    const dropR = dockerExecRoot('DROP DATABASE IF EXISTS core', 'mysql');
-    if (dropR.code !== 0) {
-      process.stderr.write(`DROP DATABASE falhou: ${dropR.stderr}\n`);
-    }
-    const createR = dockerExecRoot(
-      'CREATE DATABASE core CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci',
-      'mysql',
-    );
-    if (createR.code !== 0) {
-      process.stderr.write(`CREATE DATABASE falhou: ${createR.stderr}\n`);
-    }
-    const r = applyMigration();
-    appliedOk = r.code === 0;
-    if (!appliedOk) {
-      process.stderr.write(`apply migration falhou: ${r.stderr}\n`);
-    }
-  });
+/**
+ * Por que pular, ou `undefined` para rodar. Avaliado no REGISTRO do bloco: o `bun:test` 1.4.4 não
+ * tem skip em tempo de execução (o `t.skip()` do node:test), e `describe.skipIf` decide antes de
+ * qualquer hook. Opt-in: `pnpm test` não orquestra Docker; quem sobe o MySQL com `--wait` é o
+ * `pnpm test:integration`.
+ */
+const resolveSkipReason = (): string | undefined => {
+  if (process.env.MYSQL_INTEGRATION !== '1') {
+    return 'MYSQL_INTEGRATION≠1 (rode `pnpm test:integration`)';
+  }
+  if (!dockerAvailable()) return 'docker indisponível';
+  const inspect = sh(`docker inspect ${CONTAINER} --format '{{.State.Health.Status}}'`);
+  if (inspect.code !== 0 || inspect.stdout.trim() !== 'healthy') {
+    return `container ${CONTAINER} não está healthy (rode 'pnpm test:integration')`;
+  }
+  return undefined;
+};
 
-  it('CA-10: aplicar migration contra MySQL retorna exit 0', (t) => {
-    if (!envReady) {
-      t.skip(skipReason);
-      return;
-    }
-    assert.ok(appliedOk, 'aplicação da migration falhou (ver stderr acima)');
-  });
+const skipReason = resolveSkipReason();
 
-  it('CA-11: information_schema.tables lista as 3 tabelas ctr_*', (t) => {
-    if (!envReady) {
-      t.skip(skipReason);
-      return;
-    }
-    const r = dockerExecRoot(
-      "SELECT table_name FROM information_schema.tables WHERE table_schema = 'core' ORDER BY table_name",
-      'mysql',
-    );
-    assert.equal(r.code, 0, `query falhou: ${r.stderr}`);
-    const lines = r.stdout
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0);
-    const expected = ['ctr_amendments', 'ctr_contract_homologated_amendments', 'ctr_contracts'];
-    for (const tableName of expected) {
-      assert.ok(
-        lines.includes(tableName),
-        `tabela ${tableName} ausente em information_schema; obtido: ${lines.join(', ')}`,
+describe.skipIf(skipReason !== undefined)(
+  'CTR-DB-MIGRATION-MYSQL — CA-10..14: aplicação E2E contra MySQL real',
+  () => {
+    let appliedOk = false;
+
+    beforeAll(() => {
+      // Drop/recreate DB para garantir estado limpo (init script já criou via env).
+      // Sem backticks no nome do DB: `bash -c "..."` interpreta `` `core` ``
+      // como command substitution (chamada ao comando "core"), produzindo
+      // string vazia e syntax error silencioso. `core` não é reserved word —
+      // dispensa backticks. (Bug descoberto em CTR-DB-DRIVER-MYSQL #4 quando
+      // o database chegou ao before com tabelas pré-existentes vindas das
+      // outras suítes de integração — `applyMigration` falhava com ER 1050.)
+      const dropR = dockerExecRoot('DROP DATABASE IF EXISTS core', 'mysql');
+      if (dropR.code !== 0) {
+        process.stderr.write(`DROP DATABASE falhou: ${dropR.stderr}\n`);
+      }
+      const createR = dockerExecRoot(
+        'CREATE DATABASE core CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci',
+        'mysql',
       );
-    }
-  });
+      if (createR.code !== 0) {
+        process.stderr.write(`CREATE DATABASE falhou: ${createR.stderr}\n`);
+      }
+      const r = applyMigration();
+      appliedOk = r.code === 0;
+      if (!appliedOk) {
+        process.stderr.write(`apply migration falhou: ${r.stderr}\n`);
+      }
+    });
 
-  it('CA-12: information_schema.check_constraints contém os 7 CHECKs', (t) => {
-    if (!envReady) {
-      t.skip(skipReason);
-      return;
-    }
-    const r = dockerExecRoot(
-      "SELECT constraint_name FROM information_schema.check_constraints WHERE constraint_schema = 'core' ORDER BY constraint_name",
-      'mysql',
-    );
-    assert.equal(r.code, 0, `query falhou: ${r.stderr}`);
-    const got = r.stdout
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean);
-    const expected = [
-      'ctr_amendments_homologation_completeness_chk',
-      'ctr_amendments_kind_chk',
-      'ctr_amendments_status_chk',
-      'ctr_contracts_current_period_kind_chk',
-      'ctr_contracts_ended_at_consistency_chk',
-      'ctr_contracts_original_period_kind_chk',
-      'ctr_contracts_status_chk',
-    ];
-    for (const c of expected) {
-      assert.ok(got.includes(c), `CHECK ${c} ausente; obtido: ${got.join(', ')}`);
-    }
-  });
+    it('CA-10: aplicar migration contra MySQL retorna exit 0', () => {
+      assert.ok(appliedOk, 'aplicação da migration falhou (ver stderr acima)');
+    });
 
-  it('CA-13: INSERT que viola F-L1 (status=Active com ended_at populado) é rejeitado', (t) => {
-    if (!envReady) {
-      t.skip(skipReason);
-      return;
-    }
-    // Tentar Active com ended_at preenchido — deve violar bicondicional.
-    const r = dockerExecRoot(
-      `INSERT INTO ctr_contracts (
+    it('CA-11: information_schema.tables lista as 3 tabelas ctr_*', () => {
+      const r = dockerExecRoot(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'core' ORDER BY table_name",
+        'mysql',
+      );
+      assert.equal(r.code, 0, `query falhou: ${r.stderr}`);
+      const lines = r.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      const expected = ['ctr_amendments', 'ctr_contract_homologated_amendments', 'ctr_contracts'];
+      for (const tableName of expected) {
+        assert.ok(
+          lines.includes(tableName),
+          `tabela ${tableName} ausente em information_schema; obtido: ${lines.join(', ')}`,
+        );
+      }
+    });
+
+    it('CA-12: information_schema.check_constraints contém os 7 CHECKs', () => {
+      const r = dockerExecRoot(
+        "SELECT constraint_name FROM information_schema.check_constraints WHERE constraint_schema = 'core' ORDER BY constraint_name",
+        'mysql',
+      );
+      assert.equal(r.code, 0, `query falhou: ${r.stderr}`);
+      const got = r.stdout
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const expected = [
+        'ctr_amendments_homologation_completeness_chk',
+        'ctr_amendments_kind_chk',
+        'ctr_amendments_status_chk',
+        'ctr_contracts_current_period_kind_chk',
+        'ctr_contracts_ended_at_consistency_chk',
+        'ctr_contracts_original_period_kind_chk',
+        'ctr_contracts_status_chk',
+      ];
+      for (const c of expected) {
+        assert.ok(got.includes(c), `CHECK ${c} ausente; obtido: ${got.join(', ')}`);
+      }
+    });
+
+    it('CA-13: INSERT que viola F-L1 (status=Active com ended_at populado) é rejeitado', () => {
+      // Tentar Active com ended_at preenchido — deve violar bicondicional.
+      const r = dockerExecRoot(
+        `INSERT INTO ctr_contracts (
          id, sequential_number, title, objective, signed_at,
          original_value_cents, original_period_kind, original_period_start,
          current_value_cents, current_period_kind, current_period_start,
@@ -321,19 +308,15 @@ describe('CTR-DB-MIGRATION-MYSQL — CA-10..14: aplicação E2E contra MySQL rea
          1000, 'Fixed', NOW(3),
          'Active', NOW(3)
        )`,
-    );
-    assert.notEqual(r.code, 0, 'INSERT deveria ter sido rejeitado pelo CHECK F-L1');
-    assert.match(r.stderr + r.stdout, /check\s+constraint|3819|violated/i);
-  });
+      );
+      assert.notEqual(r.code, 0, 'INSERT deveria ter sido rejeitado pelo CHECK F-L1');
+      assert.match(r.stderr + r.stdout, /check\s+constraint|3819|violated/i);
+    });
 
-  it('CA-14: INSERT que viola F-L2 (status=Homologated sem completude) é rejeitado', (t) => {
-    if (!envReady) {
-      t.skip(skipReason);
-      return;
-    }
-    // Setup: inserir um contrato válido para satisfazer FK
-    const setup = dockerExecRoot(
-      `INSERT INTO ctr_contracts (
+    it('CA-14: INSERT que viola F-L2 (status=Homologated sem completude) é rejeitado', () => {
+      // Setup: inserir um contrato válido para satisfazer FK
+      const setup = dockerExecRoot(
+        `INSERT INTO ctr_contracts (
          id, sequential_number, title, objective, signed_at,
          original_value_cents, original_period_kind, original_period_start,
          current_value_cents, current_period_kind, current_period_start,
@@ -344,12 +327,12 @@ describe('CTR-DB-MIGRATION-MYSQL — CA-10..14: aplicação E2E contra MySQL rea
          1000, 'Fixed', NOW(3),
          'Active', NULL
        )`,
-    );
-    assert.equal(setup.code, 0, `setup contract falhou: ${setup.stderr}`);
+      );
+      assert.equal(setup.code, 0, `setup contract falhou: ${setup.stderr}`);
 
-    // Tentar Homologated sem homologated_at — deve violar F-L2.
-    const r = dockerExecRoot(
-      `INSERT INTO ctr_amendments (
+      // Tentar Homologated sem homologated_at — deve violar F-L2.
+      const r = dockerExecRoot(
+        `INSERT INTO ctr_amendments (
          id, contract_id, amendment_number, description, created_at,
          kind, status
        ) VALUES (
@@ -358,8 +341,9 @@ describe('CTR-DB-MIGRATION-MYSQL — CA-10..14: aplicação E2E contra MySQL rea
          'AD 01-001/2026', 'd', NOW(3),
          'Misc', 'Homologated'
        )`,
-    );
-    assert.notEqual(r.code, 0, 'INSERT deveria ter sido rejeitado pelo CHECK F-L2');
-    assert.match(r.stderr + r.stdout, /check\s+constraint|3819|violated/i);
-  });
-});
+      );
+      assert.notEqual(r.code, 0, 'INSERT deveria ter sido rejeitado pelo CHECK F-L2');
+      assert.match(r.stderr + r.stdout, /check\s+constraint|3819|violated/i);
+    });
+  },
+);

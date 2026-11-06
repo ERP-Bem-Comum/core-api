@@ -6,7 +6,7 @@
  * InMemoryAuthOutbox e o port OutboxPort do auth ainda nao existem. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { InMemoryAuthOutbox } from '#src/modules/auth/adapters/outbox/auth-outbox.in-memory.ts';

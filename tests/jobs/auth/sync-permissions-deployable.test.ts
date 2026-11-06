@@ -10,7 +10,7 @@
  * legítimo e não deve quebrar este teste.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFile, access } from 'node:fs/promises';
 import { resolve } from 'node:path';

@@ -10,7 +10,7 @@
  * `FinancialCompositionConfig.payableViewStore` (seam adicionada na composição — ver composition.ts).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -87,7 +87,7 @@ interface AppHandle {
 }
 let handle: AppHandle;
 
-before(async () => {
+beforeAll(async () => {
   const store = createInMemoryPayableViewStore();
   const apply = applyPayableEvent({ store });
 
@@ -137,7 +137,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

@@ -1,7 +1,7 @@
 // BDG-BUDGET-CALC (#317) — W0/W1 RED. Entidade BudgetResult: compõe o guard de modelo
 // (ensureMatchesLaunchType) + o cálculo (calculate) num smart constructor. Regra de negócio
 // no domínio (application só orquestra) — application.md §"if de negócio mora no domain".
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as BudgetResult from '#src/modules/budget-plans/domain/budget-result/budget-result.ts';

@@ -3,7 +3,7 @@
  * DEVE FALHAR: a rota não existe (404). `supplier:read`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

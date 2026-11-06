@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // W0 RED: o adapter nativo ainda não existe (value import → ERR_MODULE_NOT_FOUND em runtime).

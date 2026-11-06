@@ -13,7 +13,7 @@
  * row↔domínio, o round-trip do contractor/metadados falha.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
@@ -35,13 +35,13 @@ const FINANCIER_UUID = '7f3a1234-5678-4abc-9def-fedcba987654';
 if (integrationEnabled()) {
   let handle: MysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle) await handle.close();
   });
 

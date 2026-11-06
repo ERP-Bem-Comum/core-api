@@ -4,7 +4,7 @@
 // os dados sintéticos do arquivo de exercício atravessam o Multipag de verdade — inclusive a
 // inspeção estrutural que o `CnabRemittanceTranslator` faz antes de devolver. Com um tradutor
 // falso, o teste ficaria verde no dia em que o cedente fictício deixasse de ser aceito.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

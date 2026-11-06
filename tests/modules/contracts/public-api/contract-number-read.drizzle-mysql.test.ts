@@ -18,7 +18,7 @@
  * Contrato de isolamento (testing.md): limpa por tabela na ENTRADA os próprios refs; order-independent.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { inArray } from 'drizzle-orm';
@@ -72,7 +72,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
     };
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysql({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[contracts:contract-number-read] conexão: ${r.error}`);
       handle = r.value;
@@ -86,7 +86,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await seedContract(ID_B, NUM_B);
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle.db
         .delete(handle.schema.contracts)
         .where(inArray(handle.schema.contracts.id, [...IDS]));

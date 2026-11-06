@@ -27,7 +27,7 @@
  * `present()`/`rulesPresent()` de cada `it()` falha com "... ausente".
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

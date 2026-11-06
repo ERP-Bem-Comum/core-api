@@ -8,7 +8,7 @@
  * Camada unit (entra no `pnpm test`): preset é puro, sem I/O.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as PermissionCatalog from '#src/modules/auth/domain/authorization/permission-catalog.ts';

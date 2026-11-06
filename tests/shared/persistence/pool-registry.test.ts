@@ -8,7 +8,7 @@
  * DEVE FALHAR: `src/shared/persistence/pool-registry.ts` (createPoolRegistry) ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createPoolRegistry } from '#src/shared/persistence/pool-registry.ts';
@@ -76,7 +76,7 @@ describe('PoolRegistry — dedup por connection-string (CORE-WORKER-RUNNER-POOL-
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 const EFFECT_CONN = mysqlTestUrl();
 
-describe('PoolRegistry — dedup real de conexões (CA-9)', { skip: !integrationEnabled() }, () => {
+describe.skipIf(!integrationEnabled())('PoolRegistry — dedup real de conexões (CA-9)', () => {
   it('CA-9: 3 getOrCreate na MESMA url → 1 pool; conexões vêm do pool único (não 3×)', async () => {
     const registry = createPoolRegistry({ connectionLimit: 4 });
     const p1 = registry.getOrCreate(EFFECT_CONN);

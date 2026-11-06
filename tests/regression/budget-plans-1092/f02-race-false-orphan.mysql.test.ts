@@ -1,7 +1,7 @@
 // Achado 2 — versão NATURAL, no MySQL real: sem gancho nenhum, o usuário A cria um cenário e o
 // usuário B, ao mesmo tempo, cria uma subcategoria e lança nela. Ocorrência = A recebe órfão falso.
 // GATE: MYSQL_INTEGRATION=1.
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
@@ -19,7 +19,7 @@ import {
 
 if (mysqlEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({
       connectionString: mysqlTestConnectionString(),
       applyMigrations: true,
@@ -27,7 +27,7 @@ if (mysqlEnabled()) {
     if (!r.ok) throw new Error(`fixture: ${r.error}`);
     handle = r.value;
   });
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

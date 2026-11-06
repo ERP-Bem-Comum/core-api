@@ -12,7 +12,7 @@
 //   Só roda com `MYSQL_INTEGRATION=1`. Sem isso, o `describe` não é registrado e o runner não
 //   reporta teste algum — sem skip enganoso e sem falso negativo.
 
-import { describe, before, after, beforeEach, it } from 'node:test';
+import { describe, beforeAll, afterAll, beforeEach, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
@@ -52,7 +52,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('DocumentRepository — save concorrente com retenção (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({
         connectionString,
         applyMigrations: true,
@@ -62,7 +62,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

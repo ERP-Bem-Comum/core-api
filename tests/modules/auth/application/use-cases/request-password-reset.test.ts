@@ -9,7 +9,7 @@
  * (worker email-dispatch). O teste verifica EMISSAO do evento, nao chamada sincrona de envio.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { requestPasswordReset } from '#src/modules/auth/application/use-cases/request-password-reset.ts';

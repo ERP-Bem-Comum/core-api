@@ -15,7 +15,7 @@
  * 422 ContractCannotExpireYet · 200 encerramento.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

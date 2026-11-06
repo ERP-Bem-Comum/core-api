@@ -17,7 +17,7 @@
  * integração dos adapters Drizzle. Os dois níveis são necessários: o in-memory guarda a regra, o
  * de integração guarda a tradução dela em SQL.
  */
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';

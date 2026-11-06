@@ -5,7 +5,7 @@
  * Hoje o evento é magro ({ type, documentId, payableIds }) → asserts abaixo falham.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';

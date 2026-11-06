@@ -20,7 +20,7 @@
  * Um padrão sem o parêntese acusaria justamente quem documenta a regra.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
 

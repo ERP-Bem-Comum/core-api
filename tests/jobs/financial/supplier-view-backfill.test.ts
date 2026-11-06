@@ -2,7 +2,7 @@
  * FIN-SUPPLIER-VIEW-BACKFILL · W0 — popula o read-model com fornecedores legados (US2 #47).
  * DEVE FALHAR até existir `backfillSupplierViews` (lógica pura, testável com store in-memory).
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

@@ -15,7 +15,7 @@
  * "Se uma citação não bater com a página daqui, ela veio de outra edição — reancorar, não ajustar".
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';

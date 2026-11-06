@@ -12,7 +12,7 @@
  * DEVE FALHAR em W0 - activate-deactivate-user.ts ainda nao existe. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/primitives/result.ts';

@@ -7,7 +7,7 @@
  * estável entre 9 e 10. Em dev, `GET /docs` deve servir a UI (200 ou 302 para o index).
  */
 
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, afterEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

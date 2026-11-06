@@ -8,7 +8,7 @@
  * Driver memory (sem Docker). `contract:write` vem do seed RBAC.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

@@ -1,7 +1,7 @@
 // Round-trip row↔domínio da conciliação (#123). Cobre Active+difference, Undone (audit) e rejeição
 // de type inválido vindo do banco. Teste puro — roda no gate.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { confirm, undo } from '#src/modules/financial/domain/reconciliation/reconciliation.ts';

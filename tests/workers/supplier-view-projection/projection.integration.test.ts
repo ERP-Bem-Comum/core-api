@@ -4,7 +4,7 @@
 // runOnce do worker genérico com o delivery do composition root → read-model do financial populado.
 // GATE: só com MYSQL_INTEGRATION=1 (ver `package.json §test:integration:financial`).
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -38,7 +38,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     let partners: PartnersMysqlHandle;
     let financial: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       // ⚠️ As migrations do `contracts` entram PRIMEIRO, e não por capricho de ordem: o claim por
       // consumidor consulta `eventos_processados` (ADR-0064), e essa tabela é criada apenas pelo
       // journal do `contracts` (`0001_motionless_wind_dancer.sql:34`) — ela é cross-módulo por
@@ -63,7 +63,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       financial = f.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await contracts?.close();
       await partners?.close();
       await financial?.close();

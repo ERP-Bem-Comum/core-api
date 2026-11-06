@@ -41,7 +41,7 @@
  * seriam acusados. É a armadilha nº 6 catalogada em `tests/support/source-scan.ts`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
 

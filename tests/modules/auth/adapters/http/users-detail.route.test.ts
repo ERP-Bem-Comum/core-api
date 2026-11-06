@@ -5,7 +5,7 @@
  * Driver memory; fastify.inject. CA6..CA8 (rota). ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -88,13 +88,13 @@ describe('AUTH-GET-USER — GET /api/v1/users/:id', () => {
   let adminToken: string;
   let targetId: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
     targetId = await register(app, 'alvo@example.com');
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

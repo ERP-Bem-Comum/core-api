@@ -7,7 +7,7 @@
  *   código 1 e stderr "Cannot find module", sem a mensagem PT-BR esperada.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

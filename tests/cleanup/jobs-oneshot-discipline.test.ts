@@ -22,7 +22,7 @@
  * explica a regra. Foi a armadilha que a auditoria do inventário registrou duas vezes.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
 

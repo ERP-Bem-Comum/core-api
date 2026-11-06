@@ -10,7 +10,7 @@
  * `repos/{contract,amendment}-repository.drizzle-mysql.ts` não existirem.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
@@ -76,7 +76,7 @@ if (integrationEnabled()) {
   // Sentinel `let handle` setado no top-level before; visível nas factories.
   let handle: MysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) {
       throw new Error(`fixture: openMysql falhou — ${r.error}`);
@@ -87,7 +87,7 @@ if (integrationEnabled()) {
   // CRÍTICO: sem este `after`, o pool mysql2 (com `enableKeepAlive: true`)
   // mantém conexões TCP vivas e o processo node nunca termina — node:test
   // não força exit enquanto houver handles I/O ativos.
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

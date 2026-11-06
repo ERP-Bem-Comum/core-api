@@ -6,7 +6,7 @@
  * fastify.inject. ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -91,12 +91,12 @@ describe('AUTH-HTTP-CREATE-USER — POST /api/v1/users', () => {
   let teardown: () => Promise<void>;
   let adminToken: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 
@@ -239,12 +239,12 @@ describe('AUTH-MASS-APPROVE-SETTABLE — POST /api/v1/users (massApprovalPermiss
   let teardown: () => Promise<void>;
   let adminToken: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeMaApp());
     adminToken = await login(app, ADMIN_MA);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

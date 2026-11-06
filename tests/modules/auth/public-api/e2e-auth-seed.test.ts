@@ -7,7 +7,7 @@
  * Camada testável (entra no `pnpm test`) do C5 — o smoke E2E (`contracts-smoke.e2e.ts`) roda só com Docker.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { parseE2eAuthSeed } from '#src/modules/auth/public-api/http.ts';

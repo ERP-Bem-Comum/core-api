@@ -1,7 +1,7 @@
 // CA close/export + guard CA4 (#125) — closeReconciliationPeriod, exportReconciliation e o guard
 // period-closed (via recordManualEntry). Adapters in-memory reais.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/index.ts';

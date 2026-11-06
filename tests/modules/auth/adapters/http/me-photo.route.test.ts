@@ -6,7 +6,7 @@
  * Driver memory (storage de foto in-memory). fastify.inject. ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -83,12 +83,12 @@ describe('USR-ME-PHOTO — PUT/DELETE /api/v1/me/photo', () => {
   let teardown: () => Promise<void>;
   let token: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     token = await login(app, SELF);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

@@ -3,7 +3,7 @@
 // supplier/cedente) → NiboExportRow[] → toNiboCsv. Fakes in-memory, sem Docker.
 // Cobre os 3 caminhos (A lançamento / B manual #141 / C transferência #143) + CA5 (degradação) + CA6 (erros).
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { type Result, ok } from '#src/shared/primitives/result.ts';

@@ -7,7 +7,7 @@
 // DEVE FALHAR em W0: a tabela fin_outbox ainda não existe (nenhuma migration a cria).
 // GATE: só roda com MYSQL_INTEGRATION=1 (pnpm run test:integration:financial). ASCII puro.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { sql } from 'drizzle-orm';
@@ -27,13 +27,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('#127 — fin_outbox schema (Drizzle + MySQL, integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[fin-outbox-schema] conexao: ${r.error}`);
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

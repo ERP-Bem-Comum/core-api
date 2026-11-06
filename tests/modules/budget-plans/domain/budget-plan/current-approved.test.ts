@@ -1,6 +1,6 @@
 // BDG-CONSOLIDATED-CSV (US5) — W2 — regra pura "vigente por família" (year × programRef).
 // A versão APROVADA mais alta de cada família vence (maior major; empate → maior minor).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

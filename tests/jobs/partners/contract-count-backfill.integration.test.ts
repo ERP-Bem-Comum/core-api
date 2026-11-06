@@ -3,7 +3,7 @@
 // Valida a query GROUP BY + a semântica "vivo" (Pending/Active contam; Cancelled/Expired não) e a
 // idempotência do setCount contra MySQL real. GATE: só com MYSQL_INTEGRATION=1 (W2/I1).
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { inArray } from 'drizzle-orm';
@@ -76,7 +76,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
     };
 
-    before(async () => {
+    beforeAll(async () => {
       const c = await openMysql({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!c.ok) throw new Error(`[backfill:e2e] contracts: ${c.error}`);
       contracts = c.value;
@@ -129,7 +129,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       );
     });
 
-    after(async () => {
+    afterAll(async () => {
       await contracts?.close();
       await partners?.close();
     });

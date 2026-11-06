@@ -19,7 +19,7 @@
  * detecção vive em JavaScript, sobre o `source-scan`, e não num comando externo.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 

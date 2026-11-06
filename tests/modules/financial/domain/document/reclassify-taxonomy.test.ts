@@ -11,7 +11,7 @@
 //   Inv. 1    — nenhum título é criado, e nenhum id muda.
 //   Inv. 6    — reclassificar para o mesmo valor não altera nada.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Document from '#src/modules/financial/domain/document/document.ts';

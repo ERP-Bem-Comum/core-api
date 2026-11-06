@@ -2,7 +2,7 @@
 // (ids e valores do plano). Força a falha com 500 lançamentos e a chave repetida DENTRO do primeiro
 // lote. Ocorrência = a linha de stderr contém algum parâmetro do plano (o id da rede).
 // GATE: MYSQL_INTEGRATION=1.
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import * as BudgetResultId from '#src/modules/budget-plans/domain/budget-result/budget-result-id.ts';
@@ -15,7 +15,7 @@ import { mysqlEnabled, measure, buildCloneContent, truncateBudgetPlans } from '.
 
 if (mysqlEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({
       connectionString: mysqlTestConnectionString(),
       applyMigrations: true,
@@ -24,7 +24,7 @@ if (mysqlEnabled()) {
     handle = r.value;
     await truncateBudgetPlans(handle);
   });
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

@@ -16,7 +16,7 @@
  * CA6 REMOVIDO (P.O. 2026-07-20): sem k-anonimato — o grafico mostra a contagem real.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

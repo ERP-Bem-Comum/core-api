@@ -2,7 +2,7 @@
 // Insere programas via repo e valida a listagem ordenada por programNumber (projeção ProgramView).
 // GATE: só roda com MYSQL_INTEGRATION=1 (package.json §test:integration:programs).
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -29,7 +29,7 @@ if (process.env['MYSQL_INTEGRATION'] === '1') {
   describe('ProgramsReadPort.listAll — Drizzle + MySQL (integração)', () => {
     let handle: ProgramsMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openProgramsMysql({ connectionString: VALID_CONN, applyMigrations: true });
       if (!r.ok) throw new Error(`fixture: openProgramsMysql falhou — ${r.error}`);
       handle = r.value;
@@ -38,7 +38,7 @@ if (process.env['MYSQL_INTEGRATION'] === '1') {
       await handle.db.delete(handle.schema.programs);
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

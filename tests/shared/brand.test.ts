@@ -27,7 +27,7 @@
  * O `assert.equal` em seguida confirma que o teste rodou (não foi skipped).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { Brand, BrandOf } from '#src/shared/primitives/brand.ts';

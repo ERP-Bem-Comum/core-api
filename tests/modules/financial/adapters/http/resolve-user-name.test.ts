@@ -11,7 +11,7 @@
  * e o NOME quando o usuário existe com nome.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';

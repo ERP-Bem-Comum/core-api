@@ -6,7 +6,7 @@
  * sem rotas de escrita (FR-011). Espelha user-permissions.route.test.ts (US1). ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -78,12 +78,12 @@ describe('AUTH-PERMISSIONS-CATALOG — GET /api/v1/permissions', () => {
   let teardown: () => Promise<void>;
   let adminToken: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

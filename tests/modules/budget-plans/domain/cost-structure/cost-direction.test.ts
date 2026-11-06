@@ -1,5 +1,5 @@
 // BDG-COST-STRUCTURE (#316) — W0 RED. VO CostDirection: direcionamento do Centro de Custo (legado CostCenterType).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as CostDirection from '#src/modules/budget-plans/domain/cost-structure/cost-direction.ts';

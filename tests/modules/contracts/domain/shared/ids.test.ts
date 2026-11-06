@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // `ids.ts` agora é um BARREL — reexporta tipos e funções dos 4 módulos fragmentados:

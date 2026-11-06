@@ -7,7 +7,7 @@
  * anti-replay do uso-único, a garantia que o `auth` find→save NÃO tem).
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as InviteToken from '#src/modules/partners/domain/collaborator/invite-token.ts';
@@ -40,13 +40,13 @@ const buildToken = (over: { tokenHash?: string } = {}) => {
 if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openPartnersMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!opened.ok) throw new Error(`open failed: ${opened.error}`);
     handle = opened.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

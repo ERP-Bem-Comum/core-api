@@ -11,7 +11,7 @@
 // `removeBudget` atomico controlavel — quando `failRemove`, retorna erro SEM mutar nada (rollback
 // conceitual). Assim CA1 (falha parcial reverte tudo) e CA2 (caminho feliz) sao provados no use-case,
 // e a atomicidade real (tx MySQL) fica no companion `remove-budget-atomic.drizzle-mysql.test.ts` (CA4).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';

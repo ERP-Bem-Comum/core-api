@@ -3,7 +3,7 @@
  * SEMEADOS (extrato Pending em maio). Auth via hooks FAKE.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -55,7 +55,7 @@ interface AppHandle {
 }
 let handle: AppHandle;
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildFinancialHttpDeps({ driver: 'memory' });
   const fitid = Fitid.fromNative('f-may');
   if (!fitid.ok) throw new Error('setup: fitid');
@@ -125,7 +125,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

@@ -7,7 +7,7 @@
 // DEVE FALHAR em W0: `save` ainda não aceita `events`/não escreve no fin_outbox.
 // GATE: MYSQL_INTEGRATION=1 (na lista do runner). ASCII puro.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { sql } from 'drizzle-orm';
@@ -79,12 +79,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('#127 Fatia A — atomicidade documento+evento (Drizzle + MySQL)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[document-outbox-atomic] conexao: ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

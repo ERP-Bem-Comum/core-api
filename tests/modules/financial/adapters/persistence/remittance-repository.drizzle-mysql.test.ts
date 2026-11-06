@@ -7,7 +7,7 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1`.
 
-import { describe, it, before, beforeEach, after } from 'node:test';
+import { describe, it, beforeAll, beforeEach, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq, inArray } from 'drizzle-orm';
@@ -91,7 +91,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('RemittanceRepository — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 4 });
       if (!r.ok) throw new Error(`[financial:remittance-repo] Falha ao conectar: ${r.error}`);
       handle = r.value;
@@ -179,7 +179,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // `delete(finDocuments)` de qualquer outra suíte falhar com `ER_ROW_IS_REFERENCED_2` — inclusive
     // suítes que não conhecem remessa, porque o CASCADE nota→título esbarra na FK do vínculo. O
     // dano aparece longe da causa, num arquivo que não tem nada a ver com o assunto.
-    after(async () => {
+    afterAll(async () => {
       await handle.db.delete(finRemittancePayables);
       await handle.db.delete(finRemittances);
       await handle.db.delete(finPayables);

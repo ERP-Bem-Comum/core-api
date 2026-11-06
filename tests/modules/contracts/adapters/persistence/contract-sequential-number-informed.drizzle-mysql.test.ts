@@ -16,7 +16,7 @@
  * `UNIQUE(sequential_number)`), a outbox deles e o contador dos dois anos; não trunca tabela.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { createPool } from 'mysql2/promise';
@@ -78,7 +78,7 @@ if (process.env['MYSQL_INTEGRATION'] !== '1') {
         .where(inArray(schema.ctrContractSeq.year, [YEAR, GAP_YEAR]));
     };
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysql({ connectionString, applyMigrations: true });
       if (!r.ok) throw new Error(`fixture: openMysql falhou — ${r.error}`);
       handle = r.value;
@@ -86,7 +86,7 @@ if (process.env['MYSQL_INTEGRATION'] !== '1') {
 
     beforeEach(cleanup);
 
-    after(async () => {
+    afterAll(async () => {
       await cleanup();
       await handle.close();
     });

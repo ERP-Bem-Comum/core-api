@@ -3,7 +3,7 @@
  * DEVE FALHAR no W0: `domain/collaborator/sex.ts` ainda não existe. GREEN no W1.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Sex from '#src/modules/partners/domain/collaborator/sex.ts';

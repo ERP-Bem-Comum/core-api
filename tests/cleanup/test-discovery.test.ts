@@ -3,7 +3,8 @@
  *
  * Molde: tests/cleanup/*.test.ts (varrem o fonte e exigem um estado desejado).
  *
- * O runner descobre exatamente um glob: `tests/**‍/*.test.ts` (script `test` do package.json).
+ * O runner descobre a partir de um diretório só: `bun test ./tests` (script `test` do package.json),
+ * que casa `*.test.ts` (e, se existissem, `*_test.ts`/`*.spec.ts`/`*_spec.ts` — hoje zero).
  * Um arquivo `.test.ts` escrito em `src/` ou `scripts/` é sintaticamente válido, passa no
  * typecheck, passa no lint — e **nunca roda**. O autor vê verde e conclui que cobriu o caso.
  *
@@ -18,7 +19,7 @@
  * visível no próprio caminho do arquivo.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
 

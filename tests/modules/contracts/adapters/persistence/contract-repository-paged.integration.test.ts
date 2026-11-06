@@ -10,7 +10,7 @@
  * adapter Drizzle. Sem Docker: todos os `it` viram skip.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -34,13 +34,13 @@ const truncate = async (h: MysqlHandle): Promise<void> => {
 };
 
 if (integrationEnabled()) {
-  before(async () => {
+  beforeAll(async () => {
     const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;
@@ -130,8 +130,8 @@ if (integrationEnabled()) {
   });
 } else {
   describe('listPaged (Drizzle/MySQL) — CTR-HTTP-CONTRACT-LIST-FILTERS', () => {
-    it('skip: MYSQL_INTEGRATION≠1 (sem Docker)', (t) => {
-      t.skip('MYSQL_INTEGRATION≠1');
+    it.skip('skip: MYSQL_INTEGRATION≠1 (sem Docker)', () => {
+      /* no-op — o caso existe só para o skip aparecer no relatório */
     });
   });
 }

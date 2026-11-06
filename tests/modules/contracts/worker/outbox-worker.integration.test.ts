@@ -13,7 +13,7 @@
  * AAA: Arrange / Act / Assert delimitados por comentários.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // ── Módulo sob teste ──────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ const truncateOutbox = async (handle: MysqlHandle): Promise<void> => {
 if (integrationEnabled()) {
   let handle: MysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) {
       throw new Error(`Falha ao abrir MySQL: ${JSON.stringify(r.error)}`);
@@ -80,7 +80,7 @@ if (integrationEnabled()) {
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

@@ -15,7 +15,14 @@ verify:
     expect: ['scripts/handbook/link-scan.ts']
 ---
 
-Runner: Node test runner nativo, executando `.ts` direto. O type stripping é default desde o Node 23.6, e `--experimental-strip-types`/`--no-warnings` foram removidos de todos os pontos de invocação do repositório — `tests/cleanup/node-flags-not-redundant.test.ts` cobra cada um e impede o retorno. **`--enable-source-maps` permanece**, e não por inércia: `drizzle-orm` publica 444 `.js.map`, e sem a flag um erro dentro da lib reporta o `.js` empacotado em vez do `.ts` de origem. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras de lint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`) estão no `.oxlintrc.json`, no override `files: ['tests/**/*.ts']`; o `naming-convention`, que o oxlint não tem, fica de fora de `tests/` no próprio gate `tests/cleanup/lint-gaps.test.ts`.
+Runner: **`bun:test`** (épica `epic/bun-runtime`, etapa 1), com asserções em `node:assert/strict` — a troca para `expect` é a etapa 2. O script é `bun test --no-env-file ./tests`: `--no-env-file` porque o Bun carrega `.env` sozinho, e um `.env` esquecido satisfaria a validação de ambiente em silêncio ([ADR-0068](../../handbook/architecture/adr/0068-env-fail-fast-every-environment.md)). A descoberta parte de **um diretório só** — `./tests` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. Os servidores, workers e jobs seguem em `node --enable-source-maps`, e para eles vale `tests/cleanup/node-flags-not-redundant.test.ts`.
+
+Quatro diferenças do `bun:test` que **não dão erro** — medidas no Bun 1.4.4, e cada uma já mordeu esta suíte:
+
+- **Callback de teste com parâmetro é `done`.** `it('x', (t) => …)` espera `t()` e estoura o timeout. O contexto `t` do `node:test` não existe aqui, e **não há skip em tempo de execução** (`test.extend`, que a doc online descreve, não existe na 1.4.4): a condição de skip é avaliada no REGISTRO, com `it.skipIf(cond)` / `describe.skipIf(cond)`. Limpeza por teste: `onTestFinished(fn)`.
+- **Objeto de opções no 2º argumento é IGNORADO.** `it('x', { skip: 'motivo' }, fn)` **roda** o teste. `{ timeout }` vai no 3º argumento: `it('x', fn, ms)`.
+- **`beforeAll` roda num `describe` cujos `it` estão todos pulados** — só não roda quando o próprio bloco é `describe.skipIf`. Skip que vale para o bloco inteiro é `describe.skipIf`, nunca `it.skipIf` em cada caso.
+- **Timeout de 5 s por teste e por hook** (o `node:test` não tinha nenhum). O unitário mais lento mede 2,4 s; o runner de integração passa `--timeout` explícito. As regras de lint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`) estão no `.oxlintrc.json`, no override `files: ['tests/**/*.ts']`; o `naming-convention`, que o oxlint não tem, fica de fora de `tests/` no próprio gate `tests/cleanup/lint-gaps.test.ts`.
 
 ## Quatro naturezas de arquivo, e só uma roda no gate
 
@@ -38,9 +45,9 @@ Ao criar teste novo, a pergunta é o que ele testa: **um arquivo de `src/`** →
 
 ## Contrato de isolamento — integração contra MySQL real
 
-Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **no mesmo banco**, arquivo a arquivo, com `--test-concurrency=1`. O runner **não recria** o schema entre arquivos irmãos: o resíduo de um é visível ao próximo. O contrato abaixo é o que torna cada arquivo independente de ordem.
+Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **no mesmo banco**, arquivo a arquivo (`bun test --isolate`, serial — global novo por arquivo, como o processo-por-arquivo do `node --test`). O runner **não recria** o schema entre arquivos irmãos: o resíduo de um é visível ao próximo. O contrato abaixo é o que torna cada arquivo independente de ordem.
 
-- **Limpe na ENTRADA, não na saída.** Em `before`/`beforeEach`, das tabelas cujo espaço de chave o arquivo escreve. Quem só limpa em `after` fica à mercê da ordem — e um `beforeEach` **sem** `afterEach` entrega o resíduo do último caso ao próximo arquivo.
+- **Limpe na ENTRADA, não na saída.** Em `beforeAll`/`beforeEach`, das tabelas cujo espaço de chave o arquivo escreve. Quem só limpa em `after` fica à mercê da ordem — e um `beforeEach` **sem** `afterEach` entrega o resíduo do último caso ao próximo arquivo.
 - **Limpe por TABELA, nunca por PK quando há UNIQUE natural.** `await db.delete(t)`, não `db.delete(t).where(inArray(t.id, […]))`. A limpeza por PK não pega resíduo inserido com **outro id** que colide na UNIQUE de negócio (CNPJ, CPF, `code`, `legacy_id`) — foi exatamente a colisão do **#521**.
 - **Não afrouxe o teste para "passar".** Colisão de UNIQUE em setup é falha de isolamento, não motivo para trocar `assert.rejects` por matcher frouxo nem para remover o índice. Duplicata **intencional** (teste de `integrity-violation`) é asserção legítima — não confundir com resíduo.
 - **Prova mecânica: a suíte tem de passar em ordem invertida.** Se inverter quebra, há dependência escondida.
@@ -49,10 +56,11 @@ Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **
   sed -n '/^  partners: mysqlSuite(/,/^  ]),/p' scripts/ci/test-integration.ts \
     | grep -oE "'tests/[^']+'" | tr -d "'" \
     | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}' \
-    | xargs node --test --test-concurrency=1
+    | sed 's|^|./|' \
+    | xargs bun test --no-env-file --isolate --timeout=300000
   ```
 
-  A inversão usa `awk` de propósito: a versão anterior desta rule usava `tail -r`, que **só existe no macOS** — no CI Linux o comando falhava antes de rodar teste algum.
+  O `bun test` executa os arquivos **na ordem passada** (medido em 05/11/2026 pela ordem dos `<testsuite>` no JUnit), por isso a inversão prova. O `./` é obrigatório: sem ele o argumento é filtro de substring, não caminho, e os padrões com `*` não seriam expandidos — expanda-os antes. A inversão usa `awk` de propósito: a versão anterior desta rule usava `tail -r`, que **só existe no macOS** — no CI Linux o comando falhava antes de rodar teste algum.
 
 - **Segunda prova, que a inversão NÃO substitui: a suíte tem de passar DUAS VEZES seguidas, sem recriar o banco entre elas.** A ordem invertida acha dependência **entre arquivos**; ela é cega para a dependência do arquivo com o **próprio resíduo da execução anterior**, porque ambas as ordens partem de um banco limpo. Medido em 18/08/2026: `financial` passou 164/164 em ordem normal **e** invertida, e falhou **6** ao repetir sem limpar — todas em arquivos que a inversão aprovara minutos antes. Duas provas, dois defeitos diferentes; passar numa não diz nada sobre a outra.
 

@@ -2,7 +2,7 @@
 // NFS-e com 1 retenção (ISS) via saveDocument → pai + 1 filho em fin_payables; a query devolve as 2
 // linhas com os campos do documento. GATE: MYSQL_INTEGRATION=1 (na lista do runner financial).
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -28,12 +28,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('#221 — PayableListView (Drizzle + MySQL · JOIN payable⋈documento)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[payable-list-view] conexao: ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

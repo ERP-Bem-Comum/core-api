@@ -17,7 +17,7 @@
  *   historical  — aparato expurgado, protegido pelo ADR-0057 §5
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

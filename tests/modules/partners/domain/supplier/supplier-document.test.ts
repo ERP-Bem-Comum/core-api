@@ -3,7 +3,7 @@
  * kernel. Os documentos são sintéticos (DV calculado), nunca dado real de cadastro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as SupplierDocument from '#src/modules/partners/domain/supplier/supplier-document.ts';

@@ -9,7 +9,7 @@
  * `http.depends_on.migrate`; os e2e ainda não invocam o migrate.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -104,36 +104,39 @@ const configAppProfile = (): ComposeConfig | null => {
   }
 };
 
-describe('CORE-MIGRATE-BOOT-INVERT — CA-B2/B4: compose depends_on migrate', { skip }, () => {
-  it('CA-B2: http depende de migrate com condition service_completed_successfully', () => {
-    const cfg = configAppProfile();
-    const cond = cfg?.services?.['http']?.depends_on?.['migrate']?.condition;
-    assert.equal(
-      cond,
-      'service_completed_successfully',
-      `http.depends_on.migrate deveria ser service_completed_successfully, foi ${String(cond)}`,
-    );
-  });
+describe.skipIf(Boolean(skip))(
+  'CORE-MIGRATE-BOOT-INVERT — CA-B2/B4: compose depends_on migrate',
+  () => {
+    it('CA-B2: http depende de migrate com condition service_completed_successfully', () => {
+      const cfg = configAppProfile();
+      const cond = cfg?.services?.['http']?.depends_on?.['migrate']?.condition;
+      assert.equal(
+        cond,
+        'service_completed_successfully',
+        `http.depends_on.migrate deveria ser service_completed_successfully, foi ${String(cond)}`,
+      );
+    });
 
-  it('CA-B2b: migrate é ativado no profile app (para ser dependência do http)', () => {
-    const cfg = configAppProfile();
-    assert.ok(cfg?.services?.['migrate'], 'migrate deveria estar ativo com --profile app');
-  });
+    it('CA-B2b: migrate é ativado no profile app (para ser dependência do http)', () => {
+      const cfg = configAppProfile();
+      assert.ok(cfg?.services?.['migrate'], 'migrate deveria estar ativo com --profile app');
+    });
 
-  it('CA-B4: sem profile, migrate e http NÃO sobem (default só-infra)', () => {
-    const r = sh(`docker compose -f "${COMPOSE_YAML}" config --services`);
-    assert.equal(r.code, 0, `config --services falhou: ${r.stderr}`);
-    const services = r.stdout
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    assert.ok(
-      !services.includes('migrate'),
-      `migrate não deveria subir no default: ${JSON.stringify(services)}`,
-    );
-    assert.ok(
-      !services.includes('http'),
-      `http não deveria subir no default: ${JSON.stringify(services)}`,
-    );
-  });
-});
+    it('CA-B4: sem profile, migrate e http NÃO sobem (default só-infra)', () => {
+      const r = sh(`docker compose -f "${COMPOSE_YAML}" config --services`);
+      assert.equal(r.code, 0, `config --services falhou: ${r.stderr}`);
+      const services = r.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      assert.ok(
+        !services.includes('migrate'),
+        `migrate não deveria subir no default: ${JSON.stringify(services)}`,
+      );
+      assert.ok(
+        !services.includes('http'),
+        `http não deveria subir no default: ${JSON.stringify(services)}`,
+      );
+    });
+  },
+);

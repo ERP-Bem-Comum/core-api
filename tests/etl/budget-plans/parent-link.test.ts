@@ -5,7 +5,7 @@
 // (hierarquia perdida em silêncio). `classifyParentLink` separa os dois — e um terceiro, que a
 // issue não tinha visto: o pai cujo `provision` falhou, que ficava no mapa de uuids com um id que
 // não corresponde a linha alguma no destino.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { classifyParentLink } from '#scripts/etl/budget-plans/main.ts';

@@ -5,7 +5,7 @@
  * MySQL real. Sem o env, a suite é skipped.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {
@@ -21,13 +21,13 @@ const CONTRACTOR = '22222222-2222-4222-8222-222222222222';
 if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openPartnersMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!opened.ok) throw new Error(`open failed: ${opened.error}`);
     handle = opened.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

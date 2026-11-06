@@ -9,7 +9,7 @@
  * 'document-not-owned', erros de storage propagados.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { getDocumentContent } from '#src/modules/contracts/application/use-cases/get-document-content.ts';

@@ -14,7 +14,7 @@
  * passaria num teste só de deny e inviabilizaria trabalho legítimo.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';

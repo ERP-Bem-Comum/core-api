@@ -6,7 +6,7 @@
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 // Espelha `document-repository.drizzle-mysql.test.ts`.
 
-import { describe, before, after } from 'node:test';
+import { describe, beforeAll, afterAll } from 'bun:test';
 import process from 'node:process';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
@@ -29,7 +29,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('SupplierViewStore — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) {
         throw new Error(`[financial:supplier-view-store] Falha ao conectar ao MySQL: ${r.error}`);
@@ -37,7 +37,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

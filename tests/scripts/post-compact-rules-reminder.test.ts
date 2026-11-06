@@ -11,7 +11,7 @@
  * do log real, que muda a cada sessão e tornaria o resultado não-determinístico.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, accessSync, constants } from 'node:fs';

@@ -7,7 +7,7 @@
  * CA6 (>200 → rejeita). Fundamento: OWASP AI Exchange, l.3735 — "denial-of-service input validation:
  * input validation and sanitization to reject or correct malicious (e.g. very large) content".
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { suppliersBatchBodySchema } from '#src/modules/partners/adapters/http/supplier-schemas.ts';

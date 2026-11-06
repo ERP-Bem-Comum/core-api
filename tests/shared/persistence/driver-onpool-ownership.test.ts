@@ -20,7 +20,7 @@
  * decidido em tempo de construção e independe de haver banco do outro lado.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { createPool, type Pool } from 'mysql2/promise';
 

@@ -1,7 +1,7 @@
 // BDG-PLAN-LIFECYCLE (US4) — W1-C RED. Orquestração da clonagem: startCalibration deriva um filho
 // EM_CALIBRACAO de um plano APROVADO E clona o conteúdo (cost-structure + budgets + budget_results),
 // remapeando ids via os mapas. O aprovado permanece intacto.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';

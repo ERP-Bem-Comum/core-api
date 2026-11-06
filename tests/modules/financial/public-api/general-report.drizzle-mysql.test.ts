@@ -7,7 +7,7 @@
  * GATE: só roda com MYSQL_INTEGRATION=1 (suíte `financial`).
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { inArray } from 'drizzle-orm';
@@ -37,13 +37,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('openGeneralReportReader — Drizzle + MySQL (REP-6 · #442 · Slice A)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[financial:general-report] conexão: ${r.error}`);
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

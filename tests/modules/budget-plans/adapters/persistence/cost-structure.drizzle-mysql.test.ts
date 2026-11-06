@@ -2,7 +2,7 @@
 // (cost-structure-repository.suite.ts) contra MySQL real. Opt-in MYSQL_INTEGRATION=1
 // (padrão do projeto) — no `pnpm test` puro só o teste estrutural roda.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 
@@ -27,13 +27,13 @@ describe('createDrizzleCostStructureRepository — shape', () => {
 if (integrationEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openBudgetPlansMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

@@ -10,7 +10,7 @@
  * getCount), o use case de projeção e o decode via contrato de integração da US6a.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // RED: símbolos ainda inexistentes (W1 cria).

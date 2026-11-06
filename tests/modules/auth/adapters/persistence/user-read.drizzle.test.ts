@@ -11,7 +11,7 @@
  * o arquivo apenas registra o skip e não toca Docker/MySQL.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -60,13 +60,13 @@ if (!integrationEnabled()) {
 } else {
   let handle: AuthMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openAuthMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openAuthMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

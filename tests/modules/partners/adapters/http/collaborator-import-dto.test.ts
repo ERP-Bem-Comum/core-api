@@ -4,7 +4,7 @@
  * DEVE FALHAR: `parseCollaboratorImportCsv` ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { parseCollaboratorImportCsv } from '#src/modules/partners/adapters/http/collaborator-import-dto.ts';

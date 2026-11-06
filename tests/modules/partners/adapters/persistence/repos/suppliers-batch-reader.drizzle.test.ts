@@ -3,7 +3,7 @@
 // items = refs existentes (só id/name/document/service_category — minimização); missing = ausentes.
 // GATE: só com MYSQL_INTEGRATION=1.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -25,7 +25,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('suppliers-batch-reader — e2e par_suppliers (CA7 WHERE IN)', () => {
     let handle: PartnersMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openPartnersMysql({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[suppliers-batch-reader:e2e] partners: ${r.error}`);
       handle = r.value;
@@ -60,7 +60,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         ]);
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

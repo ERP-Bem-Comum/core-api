@@ -12,7 +12,7 @@
 //
 // RED esperado: `rename*`/`setActive*`/`withInheritedActive` ainda não existem.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as CostStructure from '#src/modules/budget-plans/domain/cost-structure/cost-structure.ts';

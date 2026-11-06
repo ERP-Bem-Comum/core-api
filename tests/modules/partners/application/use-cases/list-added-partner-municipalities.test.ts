@@ -7,7 +7,7 @@
  * `name` via catálogo IBGE; ignora os Inactive; ordena por nome.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryPartnerGeographyStore } from '#src/modules/partners/adapters/persistence/repos/partner-geography-repository.in-memory.ts';

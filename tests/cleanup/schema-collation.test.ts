@@ -37,7 +37,7 @@
 // GATE: só roda com `MYSQL_INTEGRATION=1` — consulta o BANCO, não o fonte. É a diferença desta para
 // as demais invariantes de `tests/cleanup/`, que perguntam ao git.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { sql } from 'drizzle-orm';
@@ -76,7 +76,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       return first?.n ?? -1;
     };
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 2 });
       if (!r.ok) throw new Error(`[cleanup:schema-collation] Falha ao conectar: ${r.error}`);
       handle = r.value;
@@ -84,7 +84,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle.db.execute(sql.raw(`DROP TABLE IF EXISTS ${PROBE}`));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle.db.execute(sql.raw(`DROP TABLE IF EXISTS ${PROBE}`));
     });
 

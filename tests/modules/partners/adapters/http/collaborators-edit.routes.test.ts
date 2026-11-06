@@ -6,7 +6,7 @@
  * 409). PUT edita os 7 cadastrais (pessoais preservados). POST→PUT no mesmo writer (memory).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/index.ts';

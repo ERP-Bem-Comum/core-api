@@ -17,7 +17,7 @@
  * sobrou.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import type { preHandlerAsyncHookHandler } from 'fastify';
@@ -89,12 +89,12 @@ const buildWithNodeEnv = async (nodeEnv: string | undefined): Promise<AppHandle>
 let homolog: AppHandle;
 let producao: AppHandle;
 
-before(async () => {
+beforeAll(async () => {
   homolog = await buildWithNodeEnv('homologation');
   producao = await buildWithNodeEnv('production');
 });
 
-after(async () => {
+afterAll(async () => {
   await homolog.teardown();
   await producao.teardown();
 });

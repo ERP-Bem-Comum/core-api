@@ -6,7 +6,7 @@
  * Fallbacks graciosos: só o nome quando falta a sigla; `Plano ${year} v${maj}.${min}` quando falta o programa.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { composePlanLabel } from '#src/modules/budget-plans/adapters/persistence/repos/plan-label.ts';

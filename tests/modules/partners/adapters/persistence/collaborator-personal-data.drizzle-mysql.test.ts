@@ -12,7 +12,7 @@
  * Fixtures sintéticas: nenhum RG, CPF ou nascimento de pessoa real.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { eq } from 'drizzle-orm';
 
@@ -90,13 +90,13 @@ const completedWithout = (): CollaboratorEntity => {
 if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openPartnersMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!opened.ok) throw new Error(`openPartnersMysql falhou: ${opened.error}`);
     handle = opened.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

@@ -5,7 +5,7 @@
  * linha com CPF reidrata sem erro — antes do #1022 ela quebrava na leitura (`Cnpj.parse`).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';

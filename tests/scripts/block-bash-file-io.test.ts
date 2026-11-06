@@ -17,7 +17,7 @@
  * na primeira semana. Nenhum assert é constante — todos dependem do hook classificar.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';

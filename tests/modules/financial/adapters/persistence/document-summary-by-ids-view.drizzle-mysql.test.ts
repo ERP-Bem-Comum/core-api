@@ -7,7 +7,7 @@
 // Espelha o mecanismo de gate/bootstrap/teardown de
 // tests/modules/financial/adapters/persistence/payable-summary-by-ids-view.drizzle-mysql.test.ts (#357).
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { sql } from 'drizzle-orm';
@@ -37,13 +37,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('DocumentSummaryByIdsView — Drizzle + MySQL (integração) (#358)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[financial:document-summary-by-ids-view] conexão: ${r.error}`);
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

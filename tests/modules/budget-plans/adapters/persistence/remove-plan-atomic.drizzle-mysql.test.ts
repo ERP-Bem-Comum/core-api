@@ -18,7 +18,7 @@
 // GATE: MYSQL_INTEGRATION=1. Skip limpo sem o env (só o teste estrutural roda no `pnpm test` puro).
 // RED esperado: `remove` ainda não existe no BudgetPlanRepository/adapter drizzle.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { isNotNull, eq } from 'drizzle-orm';
@@ -66,13 +66,13 @@ describe('remove plan atomic — shape', () => {
 if (integrationEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openBudgetPlansMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

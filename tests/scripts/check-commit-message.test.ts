@@ -14,7 +14,7 @@
  * exatamente essa delegação, porque é ela que distingue este gate de um `grep 'Assisted-by:'`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { accessSync, constants } from 'node:fs';
 import path from 'node:path';

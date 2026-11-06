@@ -4,7 +4,7 @@
  * Substitui a cobertura de parsing do antigo `cli/commands/run-outbox-worker.ts` (removido com a CLI).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';

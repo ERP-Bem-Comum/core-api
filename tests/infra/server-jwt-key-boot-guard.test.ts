@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 
 import { mysqlTestConnectionString } from '../support/mysql-conn.ts';
 
@@ -91,7 +91,6 @@ const bootServer = (env: Readonly<Record<string, string>>): Promise<BootResult> 
 describe('AUTH-JWT-KEY-BOOT-GUARD — contrato de boot do servidor (#515)', () => {
   it(
     'CA1 — producao sem AUTH_JWT_*: encerra com 78, stderr nomeia a variavel, porta nao abre',
-    { timeout: BOOT_TIMEOUT_MS + 10_000 },
     async () => {
       const { code, signal, stderr } = await bootServer(PROD_ENV_SEM_CHAVE);
 
@@ -107,11 +106,11 @@ describe('AUTH-JWT-KEY-BOOT-GUARD — contrato de boot do servidor (#515)', () =
       );
       assert.match(stderr, /AUTH_JWT_PRIVATE_KEY/, 'o operador precisa ler QUAL variavel falta');
     },
+    BOOT_TIMEOUT_MS + 10_000,
   );
 
   it(
     'CA3 — producao com chave malformada: encerra com 78, nao com 1 (falha generica)',
-    { timeout: BOOT_TIMEOUT_MS + 10_000 },
     async () => {
       // Hoje a excecao de `importPKCS8` sobe ate `main().catch` e sai com 1 — a plataforma de
       // deploy nao consegue distinguir "configuracao errada" de "aplicacao quebrada".
@@ -127,5 +126,6 @@ describe('AUTH-JWT-KEY-BOOT-GUARD — contrato de boot do servidor (#515)', () =
         `esperado ${EX_CONFIG} (EX_CONFIG), veio ${String(code)}. stderr: ${stderr}`,
       );
     },
+    BOOT_TIMEOUT_MS + 10_000,
   );
 });

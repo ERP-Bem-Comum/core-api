@@ -2,7 +2,7 @@
  * FIN-SUPPLIER-VIEW-LIST-DTO · W0 — findPaged resolve fornecedor pelo read-model local (US2 #47).
  * DEVE FALHAR até o in-memory document repo aceitar um SupplierViewStore e enriquecer os itens.
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

@@ -1,5 +1,5 @@
 // BDG-COST-STRUCTURE (#316) — W0 RED. Agregado da árvore de custos: montar/editar + editabilidade por status.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as CostStructure from '#src/modules/budget-plans/domain/cost-structure/cost-structure.ts';

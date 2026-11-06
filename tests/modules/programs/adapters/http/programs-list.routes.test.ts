@@ -7,7 +7,7 @@
  * substring (name OU sigla) e o detalhe por UUID (404 para inexistente).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

@@ -22,7 +22,7 @@
  * teste rápido, deixando o `typecheck` como o único gate real.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
   chmodSync,
@@ -122,27 +122,28 @@ describe('CA-4/CA-5 — .githooks/pre-commit existe, é executável, e core.hook
     );
   });
 
-  it('quando core.hooksPath ESTÁ instalado, resolve para um diretório com "pre-commit"', (t) => {
-    // `core.hooksPath` é estado LOCAL de máquina (.git/config), não conteúdo
-    // versionado — um clone limpo não o tem. Exigi-lo aqui reprovaria em CI e
-    // derrubaria o gate required de todo PR, que é o oposto do objetivo deste
-    // ticket. Leitura pura; nunca escrevemos no repo real.
-    const cfg = spawnSync('git', ['config', '--get', 'core.hooksPath'], {
-      cwd: REPO_ROOT,
-      encoding: 'utf-8',
-    });
-    if (cfg.status !== 0) {
-      t.skip('core.hooksPath não instalado nesta cópia — instalação é manual (ver CLAUDE.md)');
-      return;
-    }
-    const raw = cfg.stdout.trim();
-    assert.ok(raw.length > 0, 'core.hooksPath configurado, mas com valor vazio');
-    const resolved = isAbsolute(raw) ? raw : join(REPO_ROOT, raw);
-    assert.ok(
-      existsSync(join(resolved, 'pre-commit')),
-      `core.hooksPath resolve para "${resolved}", que não contém um arquivo "pre-commit"`,
-    );
+  // `core.hooksPath` é estado LOCAL de máquina (.git/config), não conteúdo
+  // versionado — um clone limpo não o tem. Exigi-lo aqui reprovaria em CI e
+  // derrubaria o gate required de todo PR, que é o oposto do objetivo deste
+  // ticket. Leitura pura; nunca escrevemos no repo real. Lida no REGISTRO: o
+  // bun:test 1.4.4 não tem skip em tempo de execução — sem o hook instalado
+  // nesta cópia (instalação manual, ver CLAUDE.md), o caso é pulado.
+  const cfg = spawnSync('git', ['config', '--get', 'core.hooksPath'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf-8',
   });
+  it.skipIf(cfg.status !== 0)(
+    'quando core.hooksPath ESTÁ instalado, resolve para um diretório com "pre-commit"',
+    () => {
+      const raw = cfg.stdout.trim();
+      assert.ok(raw.length > 0, 'core.hooksPath configurado, mas com valor vazio');
+      const resolved = isAbsolute(raw) ? raw : join(REPO_ROOT, raw);
+      assert.ok(
+        existsSync(join(resolved, 'pre-commit')),
+        `core.hooksPath resolve para "${resolved}", que não contém um arquivo "pre-commit"`,
+      );
+    },
+  );
 });
 
 // ─── Blocker 2 — o filtro de staged precisa pegar delete e rename ───────────────────────────────

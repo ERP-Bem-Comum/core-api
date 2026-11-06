@@ -7,7 +7,7 @@
 //
 // RED esperado: `planTotalCents` ainda não existe.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

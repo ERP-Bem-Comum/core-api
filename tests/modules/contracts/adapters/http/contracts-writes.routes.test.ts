@@ -15,7 +15,7 @@
  * unicidade · 422 invariante semântica · 201 create · 200 activate/homologate.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

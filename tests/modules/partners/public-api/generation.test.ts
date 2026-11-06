@@ -8,7 +8,7 @@
  * `generationIdOf` depende SÓ do ano de nascimento (não de uma data de referência) e extrai o ano
  * em UTC — então o resultado independe do fuso da máquina.
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

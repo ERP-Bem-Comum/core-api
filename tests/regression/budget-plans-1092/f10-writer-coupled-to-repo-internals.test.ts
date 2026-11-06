@@ -4,7 +4,7 @@
 // O caminho do fonte é resolvido a partir deste arquivo, não do cwd: o teste roda igual de qualquer
 // diretório (worktree, script do CI). Repetir não muda o resultado; o laço só mantém o formato da
 // medição.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

@@ -4,7 +4,7 @@
  * CA4 (salt -> hashes diferentes) e CA5 (formato PHC) sao especificos do argon2 real. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeArgon2PasswordHasher } from '#src/modules/auth/adapters/crypto/password-hasher.argon2.ts';

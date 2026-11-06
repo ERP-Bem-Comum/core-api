@@ -14,7 +14,7 @@
 // E o que ela prova por AUSÊNCIA: sem `taxonomy` no input, nenhuma reclassificação viaja — a M2 não
 // muda o caminho de quem só concilia.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, type Result } from '#src/shared/primitives/result.ts';

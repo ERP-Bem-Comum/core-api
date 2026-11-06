@@ -13,7 +13,7 @@
  * RED esperado: o compose ainda expõe os 6 serviços antigos; os 3 de grupo não existem.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
@@ -130,88 +130,95 @@ const envValue = (svc: ComposeService | undefined, key: string): string | undefi
   return (env as Record<string, string>)[key];
 };
 
-describe('CORE-WORKER-CONSOLIDATION-DEPLOY — 6→3 workers no compose (W0)', { skip }, () => {
-  it('CA-1: profile workers ativa exatamente os 3 serviços de grupo', () => {
-    const workerOnly = activeServices(WORKER_PROFILES).filter(
-      (s) => !activeServices(APP_PROFILE).includes(s),
-    );
-    assert.deepEqual(
-      [...workerOnly].sort(),
-      ['worker-email', 'worker-outbox', 'worker-projections'],
-      `profile workers deveria expor só os 3 grupos, expôs ${JSON.stringify(workerOnly)}`,
-    );
-  });
-
-  it('CA-1b: nenhum nome de worker standalone sobrevive', () => {
-    const all = activeServices(WORKER_PROFILES);
-    for (const legacy of LEGACY_WORKERS) {
-      assert.ok(!all.includes(legacy), `serviço legado ${legacy} ainda existe no compose`);
-    }
-  });
-
-  for (const [name, spec] of Object.entries(EXPECTED)) {
-    describe(`serviço ${name} (grupo ${spec.group})`, () => {
-      const svc = (): ComposeService | undefined => configWithWorkers()?.services?.[name];
-
-      it('CA-2: executa o worker-runner (não server.ts nem run.ts por-worker)', () => {
-        const full = [...asArr(svc()?.entrypoint), ...asArr(svc()?.command)].join(' ');
-        assert.match(
-          full,
-          new RegExp(RUNNER.replace(/[/.]/g, '\\$&')),
-          `deveria rodar o runner: "${full}"`,
-        );
-        assert.doesNotMatch(full, /src\/server\.ts/, `worker não pode rodar o server: "${full}"`);
-        assert.doesNotMatch(
-          full,
-          /worker\/run\.ts|projection\/run\.ts|email-dispatch\/run\.ts/,
-          `worker não pode rodar um run.ts standalone: "${full}"`,
-        );
-      });
-
-      it('CA-3: WORKER_GROUP correto', () => {
-        assert.equal(
-          envValue(svc(), 'WORKER_GROUP'),
-          spec.group,
-          `WORKER_GROUP deveria ser ${spec.group}, foi ${String(envValue(svc(), 'WORKER_GROUP'))}`,
-        );
-      });
-
-      it('CA-4: união de secrets do grupo (serviço + top-level)', () => {
-        const cfg = configWithWorkers();
-        const names = secretNames(cfg?.services?.[name]);
-        for (const secret of spec.secrets) {
-          assert.ok(
-            names.includes(secret),
-            `${name} deveria usar o secret ${secret}, tem ${JSON.stringify(names)}`,
-          );
-          assert.ok(cfg?.secrets?.[secret], `secret top-level ${secret} ausente em secrets:`);
-        }
-      });
-
-      it('CA-5: hardening preservado (cap_drop ALL + read_only + no-new-privileges + depends_on healthy)', () => {
-        const s = svc();
-        assert.ok(
-          (s?.cap_drop ?? []).includes('ALL'),
-          `cap_drop ALL ausente: ${JSON.stringify(s?.cap_drop)}`,
-        );
-        assert.equal(s?.read_only, true, `read_only deveria ser true, foi ${String(s?.read_only)}`);
-        assert.ok(
-          (s?.security_opt ?? []).some((o) => o.includes('no-new-privileges:true')),
-          `no-new-privileges ausente: ${JSON.stringify(s?.security_opt)}`,
-        );
-        assert.equal(
-          s?.depends_on?.['mysql']?.condition,
-          'service_healthy',
-          `depends_on mysql deveria ser service_healthy, foi ${String(s?.depends_on?.['mysql']?.condition)}`,
-        );
-      });
+describe.skipIf(Boolean(skip))(
+  'CORE-WORKER-CONSOLIDATION-DEPLOY — 6→3 workers no compose (W0)',
+  () => {
+    it('CA-1: profile workers ativa exatamente os 3 serviços de grupo', () => {
+      const workerOnly = activeServices(WORKER_PROFILES).filter(
+        (s) => !activeServices(APP_PROFILE).includes(s),
+      );
+      assert.deepEqual(
+        [...workerOnly].sort(),
+        ['worker-email', 'worker-outbox', 'worker-projections'],
+        `profile workers deveria expor só os 3 grupos, expôs ${JSON.stringify(workerOnly)}`,
+      );
     });
-  }
 
-  it('CA-6: sem --profile workers, nenhum grupo é ativado (opt-in)', () => {
-    const base = activeServices('');
-    for (const name of Object.keys(EXPECTED)) {
-      assert.ok(!base.includes(name), `${name} não deveria estar ativo sem --profile workers`);
+    it('CA-1b: nenhum nome de worker standalone sobrevive', () => {
+      const all = activeServices(WORKER_PROFILES);
+      for (const legacy of LEGACY_WORKERS) {
+        assert.ok(!all.includes(legacy), `serviço legado ${legacy} ainda existe no compose`);
+      }
+    });
+
+    for (const [name, spec] of Object.entries(EXPECTED)) {
+      describe(`serviço ${name} (grupo ${spec.group})`, () => {
+        const svc = (): ComposeService | undefined => configWithWorkers()?.services?.[name];
+
+        it('CA-2: executa o worker-runner (não server.ts nem run.ts por-worker)', () => {
+          const full = [...asArr(svc()?.entrypoint), ...asArr(svc()?.command)].join(' ');
+          assert.match(
+            full,
+            new RegExp(RUNNER.replace(/[/.]/g, '\\$&')),
+            `deveria rodar o runner: "${full}"`,
+          );
+          assert.doesNotMatch(full, /src\/server\.ts/, `worker não pode rodar o server: "${full}"`);
+          assert.doesNotMatch(
+            full,
+            /worker\/run\.ts|projection\/run\.ts|email-dispatch\/run\.ts/,
+            `worker não pode rodar um run.ts standalone: "${full}"`,
+          );
+        });
+
+        it('CA-3: WORKER_GROUP correto', () => {
+          assert.equal(
+            envValue(svc(), 'WORKER_GROUP'),
+            spec.group,
+            `WORKER_GROUP deveria ser ${spec.group}, foi ${String(envValue(svc(), 'WORKER_GROUP'))}`,
+          );
+        });
+
+        it('CA-4: união de secrets do grupo (serviço + top-level)', () => {
+          const cfg = configWithWorkers();
+          const names = secretNames(cfg?.services?.[name]);
+          for (const secret of spec.secrets) {
+            assert.ok(
+              names.includes(secret),
+              `${name} deveria usar o secret ${secret}, tem ${JSON.stringify(names)}`,
+            );
+            assert.ok(cfg?.secrets?.[secret], `secret top-level ${secret} ausente em secrets:`);
+          }
+        });
+
+        it('CA-5: hardening preservado (cap_drop ALL + read_only + no-new-privileges + depends_on healthy)', () => {
+          const s = svc();
+          assert.ok(
+            (s?.cap_drop ?? []).includes('ALL'),
+            `cap_drop ALL ausente: ${JSON.stringify(s?.cap_drop)}`,
+          );
+          assert.equal(
+            s?.read_only,
+            true,
+            `read_only deveria ser true, foi ${String(s?.read_only)}`,
+          );
+          assert.ok(
+            (s?.security_opt ?? []).some((o) => o.includes('no-new-privileges:true')),
+            `no-new-privileges ausente: ${JSON.stringify(s?.security_opt)}`,
+          );
+          assert.equal(
+            s?.depends_on?.['mysql']?.condition,
+            'service_healthy',
+            `depends_on mysql deveria ser service_healthy, foi ${String(s?.depends_on?.['mysql']?.condition)}`,
+          );
+        });
+      });
     }
-  });
-});
+
+    it('CA-6: sem --profile workers, nenhum grupo é ativado (opt-in)', () => {
+      const base = activeServices('');
+      for (const name of Object.keys(EXPECTED)) {
+        assert.ok(!base.includes(name), `${name} não deveria estar ativo sem --profile workers`);
+      }
+    });
+  },
+);

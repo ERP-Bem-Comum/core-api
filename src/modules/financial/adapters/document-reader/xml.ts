@@ -81,7 +81,12 @@ const sniffEncoding = (bytes: Uint8Array): string => {
 // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types -- Uint8Array não é readonly nativo no TS 6
 const decodeBytes = (bytes: Uint8Array): string => {
   try {
-    return new TextDecoder(sniffEncoding(bytes)).decode(bytes);
+    // O rótulo vem do próprio XML e pode ser qualquer string; rótulo desconhecido lança
+    // `RangeError`, que o `catch` abaixo trata. O `@types/bun` restringe o parâmetro a uma união
+    // fechada de encodings — a asserção devolve o contrato da Web API (WHATWG aceita `string`).
+    return new TextDecoder(
+      sniffEncoding(bytes) as ConstructorParameters<typeof TextDecoder>[0],
+    ).decode(bytes);
   } catch {
     return new TextDecoder('utf-8').decode(bytes);
   }

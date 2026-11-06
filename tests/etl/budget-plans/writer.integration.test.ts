@@ -12,7 +12,7 @@
  * 38 categorias · 390 subcategorias. model: 4367 IPCA · 276 PESSOAIS · 36 LOGISTICAS.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { runBudgetPlansEtl } from '#scripts/etl/budget-plans/main.ts';
@@ -33,8 +33,8 @@ const skipReason = RUN
 
 const opts = { connectionString: CORE_CONN, dryRun: false } as const;
 
-describe('BUDGET-PLANS ETL integration — legado -> bgp_*', { skip: skipReason }, () => {
-  before(async () => {
+describe.skipIf(Boolean(skipReason))('BUDGET-PLANS ETL integration — legado -> bgp_*', () => {
+  beforeAll(async () => {
     await loadLegacyFixture(LEGACY_CONN!, FIXTURE);
   });
 

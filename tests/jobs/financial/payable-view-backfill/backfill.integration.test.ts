@@ -2,7 +2,7 @@
 // backfillPayableViews → fin_payable_view. Valida o SELECT/JOIN + mapeamento de status contra MySQL
 // real. GATE: só com MYSQL_INTEGRATION=1.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -33,12 +33,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('payable-view-backfill — e2e fin_payables → fin_payable_view', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[backfill:e2e] financial: ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

@@ -6,7 +6,7 @@
  * CA2: reopen numa Matched → Pending (limpa matchedTransactionRef).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';

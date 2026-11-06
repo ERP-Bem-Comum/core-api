@@ -1,6 +1,6 @@
 // W0 RED (#121) — VO MatchScore + função de score pura (D-MATCH). CA1–CA3. Domínio puro, gate.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr } from '#src/shared/index.ts';

@@ -9,7 +9,7 @@
  * vírgula). Fastify.inject por cenário (ADR-0037).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -139,7 +139,7 @@ type PreviewBody = Readonly<{
 // agora impõe.
 let cedenteAccountId = '';
 
-before(async () => {
+beforeAll(async () => {
   const deps = await buildFinancialHttpDeps({
     driver: 'memory',
     remittancePreviewReader: reader,
@@ -169,7 +169,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

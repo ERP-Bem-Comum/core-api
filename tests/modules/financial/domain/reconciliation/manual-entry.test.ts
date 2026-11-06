@@ -1,6 +1,6 @@
 // W0 RED (#124) — domínio do lançamento manual (US5). CA1/CA2. Domínio puro, gate.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr } from '#src/shared/index.ts';

@@ -6,7 +6,7 @@
  * in-memory semeados (transação Pending + título Paid + conta Active). Auth via hooks FAKE.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -78,7 +78,7 @@ let TX_ID = '';
 const PAYABLE_A = PayableId.generate();
 const PAYABLE_B = PayableId.generate();
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildFinancialHttpDeps({ driver: 'memory' });
 
   const cedenteId = CedenteAccountId.generate();
@@ -199,7 +199,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

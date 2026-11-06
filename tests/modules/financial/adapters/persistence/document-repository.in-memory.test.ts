@@ -1,4 +1,4 @@
-import { describe } from 'node:test';
+import { describe } from 'bun:test';
 
 import { documentRepositoryContract } from './document-repository.suite.ts';
 // W0 RED: o adapter in-memory ainda não existe.

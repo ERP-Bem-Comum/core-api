@@ -14,7 +14,7 @@
  * é um clique. Por isso a convenção recomenda ID onde o alvo é volátil e caminho onde é estável.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

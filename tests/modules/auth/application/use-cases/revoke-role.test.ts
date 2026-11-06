@@ -7,7 +7,7 @@
  * (cannot-self-lockout) -> sem save. DEVE FALHAR em W0 (use case inexistente). ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { revokeRole } from '#src/modules/auth/application/use-cases/revoke-role.ts';

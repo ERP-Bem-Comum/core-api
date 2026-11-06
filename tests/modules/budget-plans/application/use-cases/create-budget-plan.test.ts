@@ -6,7 +6,7 @@
  * nasce RASCUNHO v1.0 com evento BudgetPlanCreated.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import { createBudgetPlan } from '#src/modules/budget-plans/application/use-cases/create-budget-plan.ts';

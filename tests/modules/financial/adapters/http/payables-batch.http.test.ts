@@ -9,7 +9,7 @@
  * resolução real é coberta em test:integration / Bruno E2E.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -96,7 +96,7 @@ const seedPayable = async (): Promise<{ payableId: string; documentId: string }>
   return { payableId: seeded.payableId, documentId };
 };
 
-before(async () => {
+beforeAll(async () => {
   const deps = await buildFinancialHttpDeps({ driver: 'memory' });
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({
@@ -112,7 +112,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

@@ -2,7 +2,7 @@
 //
 // A função é pura, então estes testes não simulam bucket nem banco: montam registros já lidos e os
 // vínculos já consultados, e afirmam os baldes. O que exige storage é a fatia do efeito.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // ETL-LEGACY-DIRECT-CONNECTION (W0 RED): o reader do legado passa a conectar por

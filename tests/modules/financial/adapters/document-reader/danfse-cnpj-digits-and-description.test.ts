@@ -9,7 +9,7 @@
  * mapper poluía a descrição com "Fornecedor lido: …" (superado pelo #560, que resolve o supplierRef).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 

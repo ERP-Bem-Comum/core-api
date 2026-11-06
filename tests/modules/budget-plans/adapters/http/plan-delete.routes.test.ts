@@ -11,7 +11,7 @@
  * RED esperado: a rota não existe → 404 do Fastify em tudo.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

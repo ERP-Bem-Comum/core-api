@@ -9,7 +9,7 @@
 //
 // ⚠️ Nenhum dado real de cadastro: convênio `000000` (reservado pelo gate de máscara), UUIDs e
 // referências sintéticas.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createInMemoryVanReturnMatchReader } from '#src/modules/financial/adapters/persistence/repos/van-return-match-reader.in-memory.ts';

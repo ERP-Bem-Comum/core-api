@@ -6,7 +6,7 @@
 //
 // ⚠️ Nenhum dado real de cadastro: convênio `000000` (reservado pelo gate de máscara), contas e
 // referências sintéticas.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

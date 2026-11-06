@@ -2,7 +2,7 @@
 // (`../../ERP-BACKEND/src/common/utils/calc-total-value-result.ts`). Valores de referência
 // calculados à mão a partir das fórmulas em .claude/.pipeline/BDG-BUDGET-CALC/001-research/LEGACY-FORMULAS.md.
 // Cálculo é função pura sobre discriminated union `CalcModelInput` (discriminante = LaunchType).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as CalcModel from '#src/modules/budget-plans/domain/budget-result/calc-model.ts';

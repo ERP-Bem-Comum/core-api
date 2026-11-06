@@ -3,7 +3,7 @@
  * e da trava do "Voltar para edição" (POST /documents/:id/undo-approval). Driver memory; auth FAKE.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -39,7 +39,7 @@ const authorize =
 let app: Awaited<ReturnType<typeof buildApp>>;
 let teardown: () => Promise<void>;
 
-before(async () => {
+beforeAll(async () => {
   const deps = await buildFinancialHttpDeps({ driver: 'memory' });
   app = await buildApp({
     config: readHttpConfig({ RATE_LIMIT_MAX: '10000' }),
@@ -51,7 +51,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await teardown();
 });
 

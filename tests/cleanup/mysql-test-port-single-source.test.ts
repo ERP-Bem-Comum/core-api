@@ -14,7 +14,7 @@
  * Sustentação: 000-request.md §Critérios de aceite + §🚨 Caso protegido.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

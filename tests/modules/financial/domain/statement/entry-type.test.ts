@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // W0 RED (#159 caminho A): o VO EntryType ainda não existe. Conjunto canônico = spec 017

@@ -7,7 +7,7 @@
  * DEVE FALHAR: `src/workers/runner/group.ts` (runWorkerGroup) ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { runWorkerGroup, type WorkerSpec } from '#src/workers/runner/group.ts';

@@ -32,7 +32,7 @@
  * trava o ACOPLAMENTO compose↔guard, não confia cegamente no código de produção.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

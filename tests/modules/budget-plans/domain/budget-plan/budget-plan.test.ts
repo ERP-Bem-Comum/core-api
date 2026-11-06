@@ -6,7 +6,7 @@
  * 1 orçamento por parceiro — estado XOR município; total = Σ budgets).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';

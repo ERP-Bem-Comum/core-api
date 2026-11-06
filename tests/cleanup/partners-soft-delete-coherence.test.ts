@@ -21,7 +21,7 @@
  * convenção é que nunca foi uniforme, e padronizá-la é decisão do dono do repo, não deste gate.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';

@@ -3,7 +3,7 @@
  * Driver memory com stores SEMEADOS (extrato Pending + conta Active). Auth via hooks FAKE.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -76,7 +76,7 @@ interface AppHandle {
 let handle: AppHandle;
 const txIds: string[] = [];
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildFinancialHttpDeps({ driver: 'memory' });
   const cedenteId = CedenteAccountId.generate();
   const account = createCedente({
@@ -143,7 +143,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

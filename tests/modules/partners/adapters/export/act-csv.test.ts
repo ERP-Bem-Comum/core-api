@@ -3,7 +3,7 @@
  * células (Active/Inactive) e anti-CSV-injection. Espelha `supplier-csv.test.ts`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { BOM, LINE_TERMINATOR } from '#src/shared/utils/csv.ts';

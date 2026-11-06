@@ -1,6 +1,6 @@
 // W0 RED (#125) — domínio do fechamento de período (US6). CA1–CA3. Domínio puro, gate.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr } from '#src/shared/index.ts';

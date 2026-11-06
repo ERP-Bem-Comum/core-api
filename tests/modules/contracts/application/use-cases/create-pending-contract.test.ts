@@ -7,7 +7,7 @@
  * DEVE FALHAR no W0 — `createPendingContract` ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';

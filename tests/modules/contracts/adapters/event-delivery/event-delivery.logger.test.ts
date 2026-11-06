@@ -7,7 +7,7 @@
  *   2. algo é escrito em stdout (captura via mock de process.stdout.write)
  */
 
-import { describe, it, mock } from 'node:test';
+import { describe, it, spyOn } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { LoggerEventDelivery } from '#src/modules/contracts/adapters/event-delivery/event-delivery.logger.ts';
@@ -50,7 +50,7 @@ describe('LoggerEventDelivery — smoke', () => {
     const written: string[] = [];
     const original = process.stdout.write.bind(process.stdout);
     // Intercept stdout writes
-    mock.method(process.stdout, 'write', (chunk: unknown) => {
+    const spy = spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
       written.push(String(chunk));
       return true;
     });
@@ -66,7 +66,7 @@ describe('LoggerEventDelivery — smoke', () => {
         `stdout deve conter o eventType; got: ${combined.slice(0, 200)}`,
       );
     } finally {
-      mock.restoreAll();
+      spy.mockRestore();
       // Suppress unused-variable warning for original — kept for restoration reference
       void original;
     }

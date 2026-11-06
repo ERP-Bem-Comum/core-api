@@ -1,7 +1,7 @@
 // CA5 (#120): round-trip row↔domínio do extrato. `entryType` (string aberta) preservado; toDomain
 // revalida enums vindos do banco (movement). Teste puro — roda no gate (sem Docker).
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { importStatement } from '#src/modules/financial/domain/statement/bank-statement.ts';

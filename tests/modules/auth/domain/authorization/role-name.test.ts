@@ -18,7 +18,7 @@
  * ASCII puro (precaucao Node 24 strip-types).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as RoleName from '#src/modules/auth/domain/authorization/role-name.ts';

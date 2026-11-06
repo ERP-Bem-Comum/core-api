@@ -8,7 +8,7 @@
  * `meta.totalPages = ceil(total / limit)` (com total=0 → totalPages=0).
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { listContracts } from '#src/modules/contracts/application/use-cases/list-contracts.ts';

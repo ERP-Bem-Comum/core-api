@@ -7,7 +7,7 @@
  * Roda no `pnpm test` puro (unpdf in-process; OFX é texto).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 

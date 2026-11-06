@@ -2,7 +2,7 @@
  * CTR-AUTH-RESET-PERSISTENCE — W0/W1 — InMemory PasswordResetTokenRepository. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryPasswordResetTokenStore } from '#src/modules/auth/adapters/persistence/repos/password-reset-token-repository.in-memory.ts';

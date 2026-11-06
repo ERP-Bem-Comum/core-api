@@ -3,7 +3,7 @@
 // em centavos. Tradução da árvore US4: consolidamos apenas as RAÍZES aprovadas
 // (parentId IS NULL) — é o `version = 1 AND status = APROVADO` do legado sem dupla contagem de
 // calibrações/cenários. Sem plano aprovado → resultado vazio coerente (totalCents 0, plans []).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

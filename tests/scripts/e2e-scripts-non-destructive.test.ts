@@ -7,7 +7,7 @@
 //      ela nasceu: a #500 corrigiu o runner de integração e os quatro `.sh` ficaram para trás.
 //   2. FUNCIONAL — o backup/restore realmente devolve o que existia e remove o que não existia.
 //      Roda o shell de verdade, sem Docker: o que se prova aqui é o contrato dos secrets.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';

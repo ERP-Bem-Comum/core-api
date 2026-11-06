@@ -25,7 +25,7 @@
  * e do valor recebido, que são os três elementos exigidos por FR-010.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { readModuleDriverConfigs } from '#src/shared/persistence/module-driver-config.ts';

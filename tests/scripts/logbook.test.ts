@@ -9,7 +9,7 @@
  * Por isso os testes de "sem fim" são o núcleo desta suíte, não um caso de borda.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, accessSync, constants } from 'node:fs';

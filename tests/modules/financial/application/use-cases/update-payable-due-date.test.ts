@@ -6,7 +6,7 @@
  * CA3: documento inexistente → document-not-found; título não-pertencente → payable-not-found.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Money from '#src/shared/kernel/money.ts';

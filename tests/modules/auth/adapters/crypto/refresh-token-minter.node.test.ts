@@ -2,7 +2,7 @@
  * W0 (RED) - contract + especifico (tokenHash = sha256(token)) do minter real. Ticket: A5b. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 

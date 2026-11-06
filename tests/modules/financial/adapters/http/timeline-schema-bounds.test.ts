@@ -9,7 +9,7 @@
  * existente (≤ limites do banco) passa a ser rejeitado (CA4).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { timelineEntrySchema } from '#src/modules/financial/adapters/http/schemas.ts';

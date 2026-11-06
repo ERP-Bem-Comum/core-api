@@ -6,7 +6,7 @@
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 // Espelha `cedente-account-store.drizzle-mysql.test.ts`.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { and, eq } from 'drizzle-orm';
@@ -92,7 +92,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('ExpectedCounterpartStore — Drizzle + MySQL (integração · #269)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) {
         throw new Error(
@@ -102,7 +102,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

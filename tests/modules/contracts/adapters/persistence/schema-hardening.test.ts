@@ -16,7 +16,7 @@
  * Padrão de meta-teste consistente com `contract-repository.shape.test.ts` (CTR-DB-REPO-LIST-N1).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

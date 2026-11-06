@@ -7,7 +7,7 @@
  * Espelha tests/modules/auth/adapters/storage/profile-photo-storage.in-memory.test.ts.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryLogoStorage } from '#src/modules/programs/adapters/storage/logo-storage.in-memory.ts';

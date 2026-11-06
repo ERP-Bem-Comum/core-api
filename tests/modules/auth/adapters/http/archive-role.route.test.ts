@@ -13,7 +13,7 @@
  * de buildAuthHttpDeps (as permissoes do admin vivem no agregado User, nao no role store).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -117,12 +117,12 @@ describe('AUTH-ARCHIVE-ROLE — PATCH /api/v1/roles/:id/deactivate', () => {
   let store: ReturnType<typeof makeInMemoryRoleStore>;
   let adminToken: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown, store } = await makeApp());
     adminToken = await login(app, ADMIN);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

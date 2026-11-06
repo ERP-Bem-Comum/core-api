@@ -7,7 +7,7 @@
  * ASCII puro.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -288,7 +288,7 @@ describe('AUTH-HTTP-ROUTES — forgot-password (BE-REC-003)', () => {
 });
 
 // Sentinela para garantir que o composition memory sobe sem segredo externo (chaves ES256 efêmeras).
-before(() => {
+beforeAll(() => {
   assert.equal(typeof buildAuthHttpDeps, 'function');
   assert.equal(typeof authHttpPlugin, 'function');
 });

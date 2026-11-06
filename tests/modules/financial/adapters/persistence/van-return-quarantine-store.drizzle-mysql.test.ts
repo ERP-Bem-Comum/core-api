@@ -13,7 +13,7 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1`.
 
-import { describe, it, before, beforeEach, after } from 'node:test';
+import { describe, it, beforeAll, beforeEach, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { sql } from 'drizzle-orm';
@@ -41,7 +41,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('VanReturnQuarantineStore — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 4 });
       if (!r.ok) throw new Error(`[financial:van-quarantine] Falha ao conectar: ${r.error}`);
       handle = r.value;
@@ -53,7 +53,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle.db.delete(finVanReturnQuarantine);
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

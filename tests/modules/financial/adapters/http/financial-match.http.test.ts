@@ -3,7 +3,7 @@
  * Driver memory com stores SEMEADOS (statement Pending + candidatos). Auth via hooks FAKE.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -61,7 +61,7 @@ const A = PayableId.generate();
 const B = PayableId.generate();
 const D = new Date('2024-05-18T00:00:00.000Z');
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildFinancialHttpDeps({ driver: 'memory' });
   const fitid = Fitid.fromNative('f-tx');
   if (!fitid.ok) throw new Error('setup: fitid');
@@ -147,7 +147,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

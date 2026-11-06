@@ -9,7 +9,7 @@
  * que retorna Result e garante `maxIdle < connectionLimit` por construção) ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { createPool } from 'mysql2/promise';
 
@@ -84,7 +84,7 @@ describe('buildPoolOptions — invariante estrutural (CORE-DB-POOL-CONFIG-INVARI
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 const EFFECT_CONN = mysqlTestUrl();
 
-describe('buildPoolOptions — EFEITO de reaping (CA-8)', { skip: !integrationEnabled() }, () => {
+describe.skipIf(!integrationEnabled())('buildPoolOptions — EFEITO de reaping (CA-8)', () => {
   it('CA-8: conexões ociosas acima de maxIdle fecham após idleTimeout', async () => {
     const built = buildPoolOptions({
       connectionString: EFFECT_CONN,

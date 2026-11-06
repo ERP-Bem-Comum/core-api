@@ -22,7 +22,7 @@
  * `oxc-parser`; os fixtures do autoteste passaram sem mudar marcador algum.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';

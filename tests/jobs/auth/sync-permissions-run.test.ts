@@ -6,7 +6,7 @@
  * que o teste trava: um job que conectasse primeiro daria exit 1, não 78.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';

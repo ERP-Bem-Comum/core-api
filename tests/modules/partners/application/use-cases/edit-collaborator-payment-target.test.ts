@@ -6,7 +6,7 @@
  * momento). `null` em banco/PIX MANTÉM o gravado — é o que o front em produção envia.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { Clock } from '#src/shared/ports/clock.ts';

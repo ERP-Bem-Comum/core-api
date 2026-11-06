@@ -6,7 +6,7 @@
  * do catalogo / nome vazio), 403 (sem role:create) e 401 (sem token). ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -77,12 +77,12 @@ describe('AUTH-CREATE-ROLE — POST /api/v1/roles', () => {
   let teardown: () => Promise<void>;
   let adminToken: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

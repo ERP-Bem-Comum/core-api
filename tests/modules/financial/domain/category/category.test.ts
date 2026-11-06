@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // W0 RED (020-fin-categorization-ref · US1): o domínio Category ainda não existe.

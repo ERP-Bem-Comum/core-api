@@ -8,7 +8,7 @@
  * TOMADOR logo depois (não pode ser pego). Gabarito = a nota fictícia da P.O. (fixture).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 

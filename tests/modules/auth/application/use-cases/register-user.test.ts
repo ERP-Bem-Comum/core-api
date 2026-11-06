@@ -5,7 +5,7 @@
  * DEVE FALHAR em W0 - register-user.ts nao existe. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { registerUser } from '#src/modules/auth/application/use-cases/register-user.ts';

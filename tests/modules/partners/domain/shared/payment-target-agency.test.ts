@@ -5,7 +5,7 @@
  * A regra é compartilhada pelos 4 tipos de parceiro (Supplier, Act, Financier, Collaborator).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createBankAccount } from '#src/modules/partners/domain/shared/payment-target.ts';

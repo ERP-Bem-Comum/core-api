@@ -11,7 +11,7 @@
  * CA5..CA7: validação de borda (uuid/data/enum → 400).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler, LightMyRequestResponse } from 'fastify';
 
@@ -65,7 +65,7 @@ let handle: AppHandle;
 // Captura o filtro que a borda repassa ao reader — prova o parse+map da querystring.
 let lastFilter: CashflowFilter | undefined;
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildReportsHttpDeps({ driver: 'memory' });
   const deps = {
     ...base,
@@ -96,7 +96,7 @@ before(async () => {
   handle = { app, teardown: () => app.close() };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

@@ -4,7 +4,7 @@
  * Idempotência por legacy_id das 4 entidades + findByLegacyId. Truncate no beforeEach.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { eq } from 'drizzle-orm';
 
@@ -97,7 +97,7 @@ if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
   let port: PartnersEtlPort | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openPartnersMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!opened.ok) throw new Error(`fixture: openPartnersMysql falhou — ${opened.error}`);
     handle = opened.value;
@@ -107,7 +107,7 @@ if (integrationEnabled()) {
     port = built.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (port !== null) await port.close();
     if (handle !== null) await handle.close();
     handle = null;

@@ -17,7 +17,7 @@
  * CI, e um gate cuja resposta depende de onde roda não verifica nada.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';

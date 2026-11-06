@@ -13,7 +13,7 @@
  * correta e garante que nenhum script do package.json regrida para `chmod 600`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';

@@ -125,7 +125,7 @@
  * quer pegar — migration para o DDL divergente, schema para a declaração que nunca gerou DDL.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
 

@@ -6,7 +6,7 @@
 //
 // GATE: MYSQL_INTEGRATION=1 (na lista do runner financial). ASCII puro.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq } from 'drizzle-orm';
@@ -58,12 +58,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('#127 Fatia B — atomicidade conciliacao+evento (Drizzle + MySQL)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[reconciliation-outbox-atomic] conexao: ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

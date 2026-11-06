@@ -2,7 +2,7 @@
  * PARTNERS-TERRITORY — W1 — Entity PartnerMunicipality (soft-delete, ADR-0001 da feature).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as PartnerMunicipality from '#src/modules/partners/domain/geography/partner-municipality.ts';

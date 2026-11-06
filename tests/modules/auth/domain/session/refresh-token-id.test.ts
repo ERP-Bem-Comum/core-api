@@ -3,7 +3,7 @@
  * Espelha role-id.ts (UUID v4). DEVEM FALHAR em W0. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as RefreshTokenId from '#src/modules/auth/domain/session/refresh-token-id.ts';

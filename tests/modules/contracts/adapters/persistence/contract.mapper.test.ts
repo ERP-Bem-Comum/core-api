@@ -19,7 +19,7 @@
  * Estado W1 (GREEN): mapper refatorado com tagged records + case constructors passa tudo.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';

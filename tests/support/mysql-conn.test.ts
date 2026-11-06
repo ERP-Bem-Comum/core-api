@@ -15,7 +15,7 @@
  * em vez de depender do ambiente ambiente do runner — determinístico, sem MYSQL_PORT vazando.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // RED-by-inexistence: este import resolve para um módulo que o W1 vai criar. Enquanto

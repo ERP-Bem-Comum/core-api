@@ -1,7 +1,7 @@
 // BDG-PLAN-LIFECYCLE (US4) — W1-A RED. State machine do plano: derivação de filhos (calibração/cenário)
 // + aprovação. Funções puras sobre BudgetPlan; guards por status + scenarioName (fiéis ao legado
 // budget-plans.service.ts). Versionamento: calibração = major+1; cenário = minor+1 (comentário version.ts).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';

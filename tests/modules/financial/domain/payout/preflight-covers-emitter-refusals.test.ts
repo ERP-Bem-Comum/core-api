@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { CnabTranslateError } from '#src/modules/financial/application/ports/cnab-remittance-translator.ts';

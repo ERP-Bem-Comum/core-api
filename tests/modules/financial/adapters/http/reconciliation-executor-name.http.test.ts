@@ -13,7 +13,7 @@
  * CA4 (reader sem user:read recebe o nome — 200, resolução server-side).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 

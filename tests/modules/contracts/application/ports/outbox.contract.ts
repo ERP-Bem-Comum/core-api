@@ -13,7 +13,7 @@
  *   5. round-trip event → row → event preserva tipo e campos semânticos
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { OutboxPort } from '#src/modules/contracts/application/ports/outbox.ts';

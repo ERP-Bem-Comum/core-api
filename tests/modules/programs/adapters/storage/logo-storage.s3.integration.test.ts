@@ -10,7 +10,7 @@
  * ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 
@@ -58,11 +58,11 @@ if (!integrationOn) {
   const KEY = 'programs/integration-program/logo';
 
   describe('createS3LogoStorage — MinIO', () => {
-    before(async () => {
+    beforeAll(async () => {
       await admin.send(new CreateBucketCommand({ Bucket: bucket }));
     });
 
-    after(async () => {
+    afterAll(async () => {
       const list = await admin.send(new ListObjectsV2Command({ Bucket: bucket }));
       const objects = (list.Contents ?? [])
         .map((o) => o.Key)

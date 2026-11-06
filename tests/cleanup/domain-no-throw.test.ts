@@ -24,7 +24,7 @@
  * ensinar a regra, e um padrão que os acusasse reprovaria justamente quem a documenta.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';

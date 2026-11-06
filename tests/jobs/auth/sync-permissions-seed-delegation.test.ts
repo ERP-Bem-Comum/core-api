@@ -13,7 +13,7 @@
  * ⚠️ Mesmo requisito do teste irmão: `AUTH_SYNC_TEST_DATABASE_URL` explícita, banco DESCARTÁVEL.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
@@ -57,13 +57,13 @@ const runSeed = async (): Promise<number> =>
 if (enabled()) {
   let handle: AuthMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openAuthMysql({ connectionString: CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openAuthMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

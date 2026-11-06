@@ -7,7 +7,7 @@
  * `timeline-document-not-found` (deve 404) — hoje ambos caem em 422.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

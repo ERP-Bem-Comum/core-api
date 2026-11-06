@@ -5,7 +5,7 @@
 // (ADR-0041; ver context/planning/SHARED-STORE-AND-JOB-COORDINATION.md — Kleppmann: lock de eficiência).
 // GATE: MYSQL_INTEGRATION=1. DEVE FALHAR em W0 (claimJobRun inexistente — erro já no import).
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -24,12 +24,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
     let handle: MysqlHandle;
     const NOW = new Date('2026-06-17T03:05:00.000Z');
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysql({ connectionString, applyMigrations: true });
       if (!r.ok) throw new Error(`[job-run] ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

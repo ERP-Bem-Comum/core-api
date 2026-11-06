@@ -1,7 +1,7 @@
 // #161: transactionsToRows deve truncar os campos de texto aos limites do varchar do schema
 // (memo 500, payee_name 255, entry_type 16) — senão um extrato com texto longo derruba o INSERT inteiro.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { importStatement } from '#src/modules/financial/domain/statement/bank-statement.ts';

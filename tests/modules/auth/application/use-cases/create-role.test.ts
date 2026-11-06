@@ -7,7 +7,7 @@
  * InMemory real de RoleRepository. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createRole } from '#src/modules/auth/application/use-cases/create-role.ts';

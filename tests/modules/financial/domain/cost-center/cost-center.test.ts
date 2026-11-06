@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // W0 RED (020-fin-categorization-ref · US2): o domínio CostCenter ainda não existe.

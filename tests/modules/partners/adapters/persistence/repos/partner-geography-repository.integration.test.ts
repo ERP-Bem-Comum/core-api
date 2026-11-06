@@ -8,7 +8,7 @@
  *        saveMunicipality (insert/update), findMunicipalityByCode, listMunicipalities.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
@@ -30,13 +30,13 @@ const RJ_IBGE = '3304557'; // Rio de Janeiro/RJ
 if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openPartnersMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!opened.ok) throw new Error(`open failed: ${opened.error}`);
     handle = opened.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

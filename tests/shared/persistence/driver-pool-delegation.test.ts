@@ -10,7 +10,7 @@
  * propagação de erro quanto a garantia de `maxIdle` inexistem.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildPoolOptions as buildContracts } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';

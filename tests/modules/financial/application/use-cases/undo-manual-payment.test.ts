@@ -6,7 +6,7 @@
 // A remessa é um dublê mínimo (`findHeldPayables` + `findById`): gerar uma remessa de verdade em
 // memória arrastaria conta-cedente, convênio e tradução CNAB para um teste que não mede nada disso.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/primitives/result.ts';

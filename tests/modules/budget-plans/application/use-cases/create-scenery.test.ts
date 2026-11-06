@@ -2,7 +2,7 @@
 // não-aprovado e clona o conteúdo (mesma helper clonePlanContent do startCalibration). Foco: a
 // derivação de cenário (versão minor+1, scenarioName) + guards; a clonagem profunda já é coberta em
 // start-calibration.test.ts.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';

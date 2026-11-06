@@ -6,7 +6,7 @@
  * DEVE FALHAR ate o W1: `password-reset-token.ts` ainda nao existe. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as ResetToken from '#src/modules/auth/domain/session/password-reset-token.ts';

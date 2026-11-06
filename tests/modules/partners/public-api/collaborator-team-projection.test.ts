@@ -15,7 +15,7 @@
  * CA6: os 10 campos atuais seguem idênticos.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';

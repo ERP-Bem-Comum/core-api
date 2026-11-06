@@ -2,7 +2,7 @@
 // O seed inseria email/cpf/telephone CRUS (só normalizava dígitos), permitindo persistir um
 // perfil que o read-path (mapper) rejeita. Agora valida via os mesmos VOs do domínio.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { validateAdminProfile } from '#scripts/seed/admin-user.ts';

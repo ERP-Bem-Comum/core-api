@@ -10,7 +10,7 @@
  * de acusar — o mesmo modo de falha que fez a migração de setembro perder o `no-restricted-imports`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { GAP_FIXTURES, expectedLines } from './lint-gaps.fixtures.ts';

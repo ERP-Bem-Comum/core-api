@@ -14,7 +14,7 @@
  * Driver memory. `seed.contractCounts: [{ contractorRef, activeCount }]` é a API de seed que o W1 entrega.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { FastifyPluginAsync } from 'fastify';
 

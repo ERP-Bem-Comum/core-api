@@ -6,7 +6,7 @@
 //   CA3: id inexistente → ausente no resultado (degradação graciosa, sem erro).
 //   CA4: campos nullable respeitados (supplierRef null → null no retorno).
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createInMemoryPayableDocumentView } from '#src/modules/financial/adapters/persistence/repos/payable-document-view.in-memory.ts';

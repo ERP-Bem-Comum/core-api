@@ -11,7 +11,7 @@
  * reconcile do contador e idempotência (2ª rodada tudo already-exists, de-para regenerado).
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 
@@ -31,68 +31,71 @@ const skipReason = RUN
   ? false
   : 'PARTNERS_ETL_INTEGRATION!=1 ou ETL_LEGACY_CONNECTION_STRING ausente';
 
-describe('CONTRACTS WRITER integration — legado → core-api destino', { skip: skipReason }, () => {
-  before(async () => {
-    await loadLegacyFixture(LEGACY_CONN!, FIXTURE);
-  });
+describe.skipIf(Boolean(skipReason))(
+  'CONTRACTS WRITER integration — legado → core-api destino',
+  () => {
+    beforeAll(async () => {
+      await loadLegacyFixture(LEGACY_CONN!, FIXTURE);
+    });
 
-  it('migra fixture (pós-parceiros): balanço, allowlist, estados e contador', async () => {
-    // Pré-condição: suppliers da fixture no destino (remap por legacy_id).
-    const partners = await runEtl({ connectionString: CORE_CONN, dryRun: false });
-    assert.ok(partners.ok, `ETL de parceiros deve suceder: ${JSON.stringify(partners)}`);
+    it('migra fixture (pós-parceiros): balanço, allowlist, estados e contador', async () => {
+      // Pré-condição: suppliers da fixture no destino (remap por legacy_id).
+      const partners = await runEtl({ connectionString: CORE_CONN, dryRun: false });
+      assert.ok(partners.ok, `ETL de parceiros deve suceder: ${JSON.stringify(partners)}`);
 
-    const r = await runContractsEtl({ connectionString: CORE_CONN, dryRun: false });
-    assert.ok(r.ok, `writer deve suceder: ${JSON.stringify(r)}`);
-    if (!r.ok) return;
-    const report = r.value;
+      const r = await runContractsEtl({ connectionString: CORE_CONN, dryRun: false });
+      assert.ok(r.ok, `writer deve suceder: ${JSON.stringify(r)}`);
+      if (!r.ok) return;
+      const report = r.value;
 
-    // Fixture: 1 programa (100% migrável) + 3 contratos (2 migráveis + 1 allowlist).
-    assert.equal(report.programs.read, 1);
-    assert.equal(report.programs.quarantined, 0);
-    assert.equal(report.contracts.read, 3);
-    assert.equal(report.contracts.quarantined, 1, 'só o contrato 3 (ExcludedByDecision)');
-    for (const tally of [report.programs, report.contracts]) {
-      assert.ok(tally.read === tally.migrated + tally.quarantined + tally.alreadyExists);
-    }
+      // Fixture: 1 programa (100% migrável) + 3 contratos (2 migráveis + 1 allowlist).
+      assert.equal(report.programs.read, 1);
+      assert.equal(report.programs.quarantined, 0);
+      assert.equal(report.contracts.read, 3);
+      assert.equal(report.contracts.quarantined, 1, 'só o contrato 3 (ExcludedByDecision)');
+      for (const tally of [report.programs, report.contracts]) {
+        assert.ok(tally.read === tally.migrated + tally.quarantined + tally.alreadyExists);
+      }
 
-    // Reconcile do contador: fixture tem seqs 1 e 2 em 2025 → last_seq 2.
-    assert.deepEqual(report.seqReconciled, [{ year: 2025, lastSeq: 2 }]);
+      // Reconcile do contador: fixture tem seqs 1 e 2 em 2025 → last_seq 2.
+      assert.deepEqual(report.seqReconciled, [{ year: 2025, lastSeq: 2 }]);
 
-    // De-para: 1 programa + 2 contratos (Active + Terminated); exclusão NÃO entra.
-    const depara = (await readFile('.tmp/etl-contracts/de-para.jsonl', 'utf8'))
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as Readonly<Record<string, unknown>>);
-    const contracts = depara.filter((d) => d['entity'] === 'contract');
-    assert.equal(contracts.length, 2);
-    assert.deepEqual(
-      contracts.map((c) => String(c['status'])).sort((a, b) => a.localeCompare(b)),
-      ['Active', 'Terminated'],
-    );
+      // De-para: 1 programa + 2 contratos (Active + Terminated); exclusão NÃO entra.
+      const depara = (await readFile('.tmp/etl-contracts/de-para.jsonl', 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as Readonly<Record<string, unknown>>);
+      const contracts = depara.filter((d) => d['entity'] === 'contract');
+      assert.equal(contracts.length, 2);
+      assert.deepEqual(
+        contracts.map((c) => String(c['status'])).sort((a, b) => a.localeCompare(b)),
+        ['Active', 'Terminated'],
+      );
 
-    // Quarentena: a exclusão carrega a tag e a referência da decisão.
-    const summary = await readFile('.tmp/etl-contracts/quarantine.summary.jsonl', 'utf8');
-    assert.ok(summary.includes('"ExcludedByDecision"'));
-  });
+      // Quarentena: a exclusão carrega a tag e a referência da decisão.
+      const summary = await readFile('.tmp/etl-contracts/quarantine.summary.jsonl', 'utf8');
+      assert.ok(summary.includes('"ExcludedByDecision"'));
+    });
 
-  it('idempotência: 2ª rodada tudo already-exists e de-para REGENERADO', async () => {
-    const second = await runContractsEtl({ connectionString: CORE_CONN, dryRun: false });
-    assert.ok(second.ok);
-    if (!second.ok) return;
+    it('idempotência: 2ª rodada tudo already-exists e de-para REGENERADO', async () => {
+      const second = await runContractsEtl({ connectionString: CORE_CONN, dryRun: false });
+      assert.ok(second.ok);
+      if (!second.ok) return;
 
-    assert.equal(second.value.contracts.migrated, 0);
-    assert.equal(second.value.contracts.alreadyExists, 2);
-    assert.equal(second.value.contracts.quarantined, 1);
-    assert.equal(second.value.programs.migrated, 0);
-    assert.equal(second.value.programs.alreadyExists, 1);
+      assert.equal(second.value.contracts.migrated, 0);
+      assert.equal(second.value.contracts.alreadyExists, 2);
+      assert.equal(second.value.contracts.quarantined, 1);
+      assert.equal(second.value.programs.migrated, 0);
+      assert.equal(second.value.programs.alreadyExists, 1);
 
-    // Artefato reprodutível (W2 issue 2): truncado por run e regenerado no already-exists.
-    const depara = (await readFile('.tmp/etl-contracts/de-para.jsonl', 'utf8'))
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line) as Readonly<Record<string, unknown>>);
-    const contracts = depara.filter((d) => d['entity'] === 'contract');
-    assert.equal(contracts.length, 2, 'de-para regenerado, sem acúmulo entre runs');
-    assert.ok(contracts.every((c) => c['alreadyExisted'] === true));
-  });
-});
+      // Artefato reprodutível (W2 issue 2): truncado por run e regenerado no already-exists.
+      const depara = (await readFile('.tmp/etl-contracts/de-para.jsonl', 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as Readonly<Record<string, unknown>>);
+      const contracts = depara.filter((d) => d['entity'] === 'contract');
+      assert.equal(contracts.length, 2, 'de-para regenerado, sem acúmulo entre runs');
+      assert.ok(contracts.every((c) => c['alreadyExisted'] === true));
+    });
+  },
+);

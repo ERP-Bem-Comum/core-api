@@ -2,7 +2,7 @@
 // Valida o que só o banco real pega: FK auto-referente parent_id (migration 0004), listChildren,
 // findRootByYearAndProgram com parentId IS NULL, e a alocação de versão que fecha o Blocker do W2
 // (2 cenários do mesmo pai não colidem na UNIQUE). Opt-in MYSQL_INTEGRATION=1.
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isNotNull } from 'drizzle-orm';
 
@@ -44,13 +44,13 @@ describe('createDrizzleBudgetPlanRepository — shape', () => {
 if (integrationEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openBudgetPlansMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

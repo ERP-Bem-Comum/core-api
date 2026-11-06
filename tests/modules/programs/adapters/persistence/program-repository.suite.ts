@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk } from '#src/shared/index.ts';
 import * as ProgramId from '#src/modules/programs/domain/shared/program-id.ts';

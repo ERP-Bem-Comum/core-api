@@ -6,7 +6,7 @@
  * API ainda não existe → RED por inexistência.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { applyPayableEvent } from '#src/modules/financial/application/use-cases/apply-payable-event.ts';

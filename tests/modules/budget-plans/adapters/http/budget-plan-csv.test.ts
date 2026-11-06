@@ -4,7 +4,7 @@
 // Decisão Gabriel 2026-07-09: como o core-api não modela mês (BudgetResult = 1 valor por
 // orçamento×subcategoria; parcelamento temporal fora de escopo #233), mantemos o header de
 // 20 colunas do legado e pomos o valor em JAN, R$ 0,00 em FEV..DEZ.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { BOM } from '#src/shared/utils/csv.ts';

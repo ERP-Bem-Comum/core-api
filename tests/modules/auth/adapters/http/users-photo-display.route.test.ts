@@ -6,7 +6,7 @@
  * inexistente; 400 id malformado. Driver memory. fastify.inject. ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 
@@ -120,12 +120,12 @@ describe('USR-ME-PHOTO-DISPLAY — GET /api/v1/users/:id/photo', () => {
   let teardown: () => Promise<void>;
   let adminToken: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

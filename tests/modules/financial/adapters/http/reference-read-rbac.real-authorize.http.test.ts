@@ -16,7 +16,7 @@
  * ASCII puro (precaução Node 24 strip-types). Driver memory.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -94,11 +94,11 @@ describe('#200 — reference:read RBAC com authorize REAL', () => {
   let app: AppHandle;
   let teardown: () => Promise<void>;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

@@ -15,7 +15,7 @@
  * AAA: Arrange / Act / Assert delimitados por comentários.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // ── Infra Drizzle ─────────────────────────────────────────────────────────────
@@ -66,13 +66,13 @@ describe('CTR-AUTO-EXPIRE — CA-1 (estrutural): findExpirable existe no adapter
 if (integrationEnabled()) {
   let handle: MysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

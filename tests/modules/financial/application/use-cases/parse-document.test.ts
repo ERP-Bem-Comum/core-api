@@ -4,7 +4,7 @@
  * O use case não tem repo/storage → a ausência de efeito é estrutural (não há o que persistir).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, err, type Result } from '#src/shared/primitives/result.ts';

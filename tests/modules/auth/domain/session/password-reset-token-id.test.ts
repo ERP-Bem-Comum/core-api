@@ -2,7 +2,7 @@
  * CTR-AUTH-RESET-TOKEN — W0 (RED) — id do token de reset (espelha refresh-token-id). ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as ResetTokenId from '#src/modules/auth/domain/session/password-reset-token-id.ts';

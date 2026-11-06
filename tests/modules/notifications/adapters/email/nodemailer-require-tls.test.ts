@@ -6,11 +6,11 @@
  * Prova que createNodemailerEmailSender REPASSA config.requireTLS ao
  * nodemailer.createTransport (ambos os branches: pool e sem-pool).
  *
- * Tecnica: argument-captor via t.mock.method sobre nodemailer.createTransport.
+ * Tecnica: argument-captor via spyOn sobre nodemailer.createTransport.
  * NAO ha rede - createTransport apenas constroi o transporter (SMTPTransport /
  * SMTPPool nao conectam ate o primeiro send/verify), entao este teste roda no
- * `pnpm test` puro (fora do gate NOTIFICATIONS_INTEGRATION). t.mock auto-restaura
- * o metodo ao fim de cada teste.
+ * `pnpm test` puro (fora do gate NOTIFICATIONS_INTEGRATION). O spy chama o metodo
+ * original e e restaurado por onTestFinished ao fim de cada teste.
  *
  * Estes tests DEVEM FALHAR em W0 - o baseOpts atual (nodemailer.ts:49-54) nao
  * inclui requireTLS, logo opts.requireTLS === undefined em runtime.
@@ -18,7 +18,7 @@
  * ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, onTestFinished, spyOn } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import nodemailer from 'nodemailer';
@@ -40,16 +40,25 @@ const baseConfig = (overrides: Partial<SmtpConfig> = {}): SmtpConfig =>
   }) as SmtpConfig;
 
 interface Captor {
-  mock: { calls: readonly { arguments: readonly unknown[] }[] };
+  mock: { calls: readonly (readonly unknown[])[] };
 }
 
+/** Espiona `createTransport` (sem trocar a implementacao) e restaura ao fim do teste. */
+const captureCreateTransport = (): Captor => {
+  const spy = spyOn(nodemailer, 'createTransport');
+  onTestFinished(() => {
+    spy.mockRestore();
+  });
+  return spy;
+};
+
 const firstOpts = (captor: Captor): Record<string, unknown> | undefined =>
-  captor.mock.calls[0]?.arguments[0] as Record<string, unknown> | undefined;
+  captor.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
 
 describe('createNodemailerEmailSender - requireTLS wiring (NOTIF-SMTP-REQUIRETLS)', () => {
-  it('CA1: config.requireTLS=true com pool=false -> transport recebe requireTLS:true', (t) => {
+  it('CA1: config.requireTLS=true com pool=false -> transport recebe requireTLS:true', () => {
     // Arrange
-    const captor = t.mock.method(nodemailer, 'createTransport');
+    const captor = captureCreateTransport();
 
     // Act
     createNodemailerEmailSender(baseConfig({ pool: false, requireTLS: true }));
@@ -60,9 +69,9 @@ describe('createNodemailerEmailSender - requireTLS wiring (NOTIF-SMTP-REQUIRETLS
     assert.equal(opts?.['requireTLS'], true);
   });
 
-  it('CA1: config.requireTLS=true com pool=true -> requireTLS:true tambem no branch de pool', (t) => {
+  it('CA1: config.requireTLS=true com pool=true -> requireTLS:true tambem no branch de pool', () => {
     // Arrange
-    const captor = t.mock.method(nodemailer, 'createTransport');
+    const captor = captureCreateTransport();
 
     // Act
     createNodemailerEmailSender(baseConfig({ pool: true, maxConnections: 5, requireTLS: true }));
@@ -74,9 +83,9 @@ describe('createNodemailerEmailSender - requireTLS wiring (NOTIF-SMTP-REQUIRETLS
     assert.equal(opts?.['pool'], true, 'branch de pool preservado');
   });
 
-  it('CA2: config.requireTLS=false -> transport recebe requireTLS:false (opt-out repassado)', (t) => {
+  it('CA2: config.requireTLS=false -> transport recebe requireTLS:false (opt-out repassado)', () => {
     // Arrange
-    const captor = t.mock.method(nodemailer, 'createTransport');
+    const captor = captureCreateTransport();
 
     // Act
     createNodemailerEmailSender(baseConfig({ requireTLS: false }));

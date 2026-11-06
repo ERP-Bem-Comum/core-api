@@ -13,7 +13,7 @@
 //   - tsc: excess-property no `Document.create({ ..., paymentDetail })` + acesso a `.paymentDetail`.
 //   - runtime (sob Docker): a coluna não existe → save/findById não preservam o valor.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
@@ -75,7 +75,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('DocumentRepository — paymentDetail (Drizzle + MySQL / integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({
         connectionString,
         applyMigrations: true,
@@ -90,7 +90,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

@@ -2,7 +2,7 @@
 // (program-repository.suite.ts) contra MySQL real. Opt-in MYSQL_INTEGRATION=1
 // (padrão do projeto) — no `pnpm test` puro só o teste estrutural roda.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { openProgramsMysql } from '#src/modules/programs/adapters/persistence/drivers/mysql-driver.ts';
@@ -25,13 +25,13 @@ describe('createDrizzleProgramRepository — shape', () => {
 if (integrationEnabled()) {
   let handle: ProgramsMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openProgramsMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openProgramsMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

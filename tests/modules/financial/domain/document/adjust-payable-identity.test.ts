@@ -27,7 +27,7 @@
  * de integração está vermelha no CI (#519). Ou seja: nenhum teste automatizado hoje veria isto.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Money from '#src/shared/kernel/money.ts';

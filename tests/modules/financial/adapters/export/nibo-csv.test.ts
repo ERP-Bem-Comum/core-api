@@ -1,7 +1,7 @@
 // W0 RED (#146 / FIN-RECON-EXPORT-CSV-NIBO) — serializador puro do layout Nibo (15 colunas).
 // CA1 (15 col + cabeçalho), CA2 (sinal + decimal vírgula), CA3 (rótulos), CA4 (transferência). Node puro.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { toNiboCsv, type NiboExportRow } from '#src/modules/financial/adapters/export/nibo-csv.ts';

@@ -4,7 +4,7 @@
  * conta `Active` → segue normal. Driver memory; conta semeada via domínio.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';

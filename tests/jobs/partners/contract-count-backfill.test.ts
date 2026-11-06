@@ -8,7 +8,7 @@
  * doesn't change after the first application, even if the operation is subsequently applied
  * multiple times."
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryContractCountStore } from '#src/modules/partners/adapters/persistence/repos/contract-count-store.in-memory.ts';

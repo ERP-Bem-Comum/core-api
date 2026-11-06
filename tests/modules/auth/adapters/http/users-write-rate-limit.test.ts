@@ -6,7 +6,7 @@
  * O rate-limit roda em onRequest (antes do preHandler de auth) -> POSTs sem token contam. ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -25,7 +25,7 @@ describe('HTTP-SEC-HARDENING — F5 rate-limit nas rotas de escrita de users', (
   let app: AppHandle;
   let shutdown: () => Promise<void>;
 
-  before(async () => {
+  beforeAll(async () => {
     const authDeps = await buildAuthHttpDeps({ driver: 'memory' });
     const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
     app = await buildApp({
@@ -56,7 +56,7 @@ describe('HTTP-SEC-HARDENING — F5 rate-limit nas rotas de escrita de users', (
     };
   });
 
-  after(async () => {
+  afterAll(async () => {
     await shutdown();
   });
 

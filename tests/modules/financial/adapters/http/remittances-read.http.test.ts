@@ -9,7 +9,7 @@
  * vírgula). O repo de remessa é semeado via seam de composição e injetado por `config.remittanceRepo`.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -125,7 +125,7 @@ type ListBody = Readonly<{
 type DetailBody = ListItem &
   Readonly<{ payableIds: readonly string[]; documentIds: readonly string[] }>;
 
-before(async () => {
+beforeAll(async () => {
   // As remessas da fixture são criadas pelo `save`, que desde o ADR-0065 §2 transiciona os títulos
   // por CAS — título não declarado seria recusado, e não haveria remessa nenhuma a listar. Este
   // arquivo mede a LEITURA (lista e detalhe); o estado dos títulos é pressuposto, não objeto.
@@ -159,7 +159,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

@@ -19,7 +19,7 @@
  * "Table doesn't exist" em todos os testes de integração.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { sql } from 'drizzle-orm';
 
@@ -84,7 +84,7 @@ const isCheckConstraintError = (err: unknown): boolean => {
 if (integrationEnabled()) {
   let handle: MysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) {
       throw new Error(`fixture: openMysql falhou — ${r.error}`);
@@ -92,7 +92,7 @@ if (integrationEnabled()) {
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

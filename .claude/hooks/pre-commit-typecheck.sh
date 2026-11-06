@@ -96,12 +96,12 @@ echo "▶ [3/4] Lint (oxlint)..." >&2
 run_pnpm_script "lint" "lint"
 
 # ---------------------------------------------------------------------------
-# Check 4 — Tests (node:test; o stripping de tipos é default no Node 24, sem flag)
+# Check 4 — Tests (bun:test, via `pnpm test` → `bun test --no-env-file ./tests`)
 # ---------------------------------------------------------------------------
 HAS_TESTS=$(find "${CORE_API_DIR}/tests" -name '*.test.ts' -print -quit 2>/dev/null || true)
 if [ -n "${HAS_TESTS}" ]; then
   echo "" >&2
-  echo "▶ [4/4] Test run (node --test)..." >&2
+  echo "▶ [4/4] Test run (bun test)..." >&2
   run_pnpm_script "test" "tests"
 else
   echo "" >&2

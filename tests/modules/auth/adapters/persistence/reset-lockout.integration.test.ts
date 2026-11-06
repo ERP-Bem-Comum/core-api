@@ -4,7 +4,7 @@
  * (schema auth_password_reset / auth_login_lockout + migrations 0001/0002). ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
@@ -29,13 +29,13 @@ const POLICY = { threshold: 5, stepsMinutes: [1, 5, 15, 60] } as const;
 if (integrationEnabled()) {
   let handle: AuthMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openAuthMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openAuthMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

@@ -1,7 +1,7 @@
 // Integração: findPaged resolve fornecedor via LEFT JOIN fin_documents × fin_supplier_view (US2 #47).
 // GATE: MYSQL_INTEGRATION=1 (test:integration:financial). Valida o JOIN contra MySQL real.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -29,12 +29,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('findPaged — LEFT JOIN fin_supplier_view (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[list-dto-join] ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

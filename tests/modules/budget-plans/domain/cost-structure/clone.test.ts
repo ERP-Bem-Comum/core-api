@@ -1,7 +1,7 @@
 // BDG-PLAN-LIFECYCLE (US4) — W1-C RED. Clonagem profunda da árvore de custos pai→filho (calibração/
 // cenário). Função pura: id-factory injetado (pureza), devolve a nova árvore + mapa oldSubcat→newSubcat
 // (o legado casa subcategoria por NOME ao clonar; aqui casamos por id via o mapa — mais robusto).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

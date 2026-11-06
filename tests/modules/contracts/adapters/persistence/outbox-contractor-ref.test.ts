@@ -10,7 +10,7 @@
  * `supplier-outbox.mapper.ts`) + o accessor, sem bump de `OUTBOX_SCHEMA_VERSION`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';

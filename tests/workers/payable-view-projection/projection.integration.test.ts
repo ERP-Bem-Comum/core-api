@@ -5,7 +5,7 @@
 // exercita as migrations 0027 (fin_payable_view + CHECKs) e 0028 (fin_outbox_dead_letter) no banco
 // real, e o `ON DUPLICATE KEY UPDATE` do store Drizzle. GATE: só com MYSQL_INTEGRATION=1.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -42,7 +42,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     let contracts: MysqlHandle;
     let financial: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       // ⚠️ Mesma dependência do `supplier-view-projection`: o claim por consumidor consulta
       // `eventos_processados` (ADR-0064), criada apenas pelo journal do `contracts` — tabela
       // cross-módulo sem dono entre os journals (#830). Sem isto, o SELECT do claim estoura com
@@ -56,7 +56,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       financial = f.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await contracts?.close();
       await financial?.close();
     });

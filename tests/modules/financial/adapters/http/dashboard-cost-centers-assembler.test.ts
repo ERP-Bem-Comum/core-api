@@ -10,7 +10,7 @@
  * O motor de variação (`variation.ts`) permanece PURO — aqui só provamos o REUSO na borda.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { dashboardCostCentersToDto } from '#src/modules/financial/adapters/http/dto.ts';

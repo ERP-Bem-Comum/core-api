@@ -2,7 +2,7 @@
 //
 // O que se fixa aqui é o CONTRATO que o web-app lê: nomes de campo (`status`, `remittanceNsa`,
 // `remittanceYourNumber`), status em EN, alvo sempre o TÍTULO, autor e motivo onde existem.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { UserRef } from '#src/shared/kernel/user-ref.ts';

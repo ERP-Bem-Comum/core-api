@@ -12,7 +12,7 @@
  * forma quebrada, e extrator que não distingue uso de menção acusa quem a documenta.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join, resolve } from 'node:path';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
@@ -165,7 +165,7 @@ describe('LINK-SCAN — gitignore de diretório ausente (o caso que derrubou o C
   // limpar as `GIT_*` a consulta responderia sobre o repositório de verdade.
   const ignored = (paths: readonly string[]) => withoutGitEnv(() => ignoredPaths(repo, paths));
 
-  before(() => {
+  beforeAll(() => {
     repo = mkdtempSync(join(tmpdir(), 'link-scan-ignore-'));
     // `env` sanitizado além do `cwd`: dentro de um `git commit`, `GIT_DIR` vence o `cwd` e este
     // `init` marcaria o repositório REAL como bare. Ver `tests/support/git-fixture.ts`.
@@ -175,7 +175,7 @@ describe('LINK-SCAN — gitignore de diretório ausente (o caso que derrubou o C
     writeFileSync(join(repo, '.gitignore'), 'material-local/\n');
   });
 
-  after(() => {
+  afterAll(() => {
     rmSync(repo, { recursive: true, force: true });
   });
 

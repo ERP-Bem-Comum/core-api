@@ -6,7 +6,7 @@
  * photo-object-missing (distinto de photo-storage-unavailable: mapeia 404, nao 503). ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryProfilePhotoStorage } from '#src/modules/auth/adapters/storage/profile-photo-storage.in-memory.ts';

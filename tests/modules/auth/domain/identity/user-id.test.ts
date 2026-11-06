@@ -7,7 +7,7 @@
  * DEVEM FALHAR em W0 - user-id.ts nao existe. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as UserId from '#src/modules/auth/domain/identity/user-id.ts';

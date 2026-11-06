@@ -12,7 +12,7 @@
  * Sufixo `.e2e.ts` (não `.test.ts`) -> fora do glob de `pnpm test`. ASCII puro.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -65,7 +65,7 @@ const waitReady = async (): Promise<void> => {
 const VALID_CPF = '11144477735';
 
 describe('COLLABORATORS-HTTP-E2E-SMOKE — borda /api/v1 (server real + partners MySQL RW split)', () => {
-  before(waitReady);
+  beforeAll(waitReady);
 
   it('CA1: GET /health -> 200', async () => {
     assert.equal((await get('/health')).status, 200);

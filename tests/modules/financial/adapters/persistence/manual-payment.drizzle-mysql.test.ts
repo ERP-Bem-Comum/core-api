@@ -2,7 +2,7 @@
 // persiste o `Pago` (irmãos seguem `Aprovado`) E que a trilha aceita `PayableManuallyPaid` (CHECK
 // relaxado pela migration 0020). GATE: MYSQL_INTEGRATION=1 (na lista do runner financial).
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -37,12 +37,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('#223 — baixa manual de titulo (Drizzle + MySQL)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[manual-payment] conexao: ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

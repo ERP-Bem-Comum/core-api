@@ -4,7 +4,7 @@
  * Ausente, vazia ou só-espaços → err (o `run.ts` traduz para exit 78 / EX_CONFIG).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { readSyncPermissionsConfig } from '#src/jobs/auth/sync-permissions/config.ts';

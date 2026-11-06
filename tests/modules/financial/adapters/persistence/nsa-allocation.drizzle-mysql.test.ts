@@ -13,7 +13,7 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 
-import { describe, it, before, beforeEach, after } from 'node:test';
+import { describe, it, beforeAll, beforeEach, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq, like } from 'drizzle-orm';
@@ -76,7 +76,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('Alocação de NSA — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       // poolLimit > 1 é ESSENCIAL: com uma conexão só, as "concorrentes" seriam serializadas pelo
       // pool e o teste passaria mesmo sem lock nenhum — verde vazio.
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 8 });
@@ -100,7 +100,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         .where(like(finConvenioNsa.convenio, `${OWN_CONVENIO_PREFIX}%`));
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

@@ -19,7 +19,7 @@
  * fiscal, cuja correção exige fixture real. Qualquer NOVA ocorrência reprova.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
 

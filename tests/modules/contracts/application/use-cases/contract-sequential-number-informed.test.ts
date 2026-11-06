@@ -7,7 +7,7 @@
  * informados à mão, e um número de 2027 digitado não move o início de 2027 (`0001/2027`).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';

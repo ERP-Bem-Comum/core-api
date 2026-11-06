@@ -2,7 +2,7 @@
 // Toda implementação passa pelos MESMOS cenários — InMemory hoje,
 // Drizzle/SQLite no W1, Drizzle/MySQL no futuro.
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { AmendmentRepository } from '#src/modules/contracts/domain/amendment/repository.ts';

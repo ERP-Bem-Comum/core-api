@@ -3,7 +3,7 @@
 // InMemory, Drizzle/SQLite, Drizzle/MySQL — passa pelos MESMOS cenários.
 // Divergências = bugs de mapeamento ou drift de schema.
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';

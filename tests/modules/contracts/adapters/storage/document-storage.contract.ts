@@ -18,7 +18,7 @@
  * ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 
@@ -66,11 +66,11 @@ export const runDocumentStorageContract = (
   describe(`DocumentStorage contract - ${label}`, () => {
     let env: ContractSetup;
 
-    before(async () => {
+    beforeAll(async () => {
       env = await setup();
     });
 
-    after(async () => {
+    afterAll(async () => {
       if (env.cleanup !== undefined) {
         await env.cleanup();
       }

@@ -3,7 +3,7 @@
  * DEVE FALHAR em W0 (makeInMemoryLegacyEntityStore inexistente). Roda em `pnpm test`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryLegacyEntityStore } from '#src/modules/partners/adapters/persistence/repos/legacy-entity-store.in-memory.ts';

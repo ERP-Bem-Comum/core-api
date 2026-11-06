@@ -9,7 +9,7 @@
  * que a morte precisa ser declarada.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -85,7 +85,7 @@ describe('TOMBSTONE — quando recusar', () => {
 describe('TOMBSTONE — backlinks a partir do disco', () => {
   let root = '';
 
-  before(() => {
+  beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), 'tombstone-'));
     mkdirSync(join(root, 'handbook/sub'), { recursive: true });
     mkdirSync(join(root, '.claude'), { recursive: true });
@@ -98,7 +98,7 @@ describe('TOMBSTONE — backlinks a partir do disco', () => {
     writeFileSync(join(root, 'handbook/menciona.md'), 'exemplo: `[alvo](./alvo.md)`\n');
   });
 
-  after(() => {
+  afterAll(() => {
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -128,7 +128,7 @@ describe('TOMBSTONE — backlinks a partir do disco', () => {
 describe('TOMBSTONE — rename devolve o caminho ANTIGO (o que derrubou a 1ª reorganização)', () => {
   let repo = '';
 
-  before(() => {
+  beforeAll(() => {
     repo = mkdtempSync(join(tmpdir(), 'tombstone-rename-'));
     // `env` sanitizado, e não só `cwd`: dentro do `git commit` o hook roda a suíte com `GIT_DIR`
     // exportado, e ele VENCE o `cwd` — o fixture viraria decorativo e estes comandos operariam no
@@ -147,7 +147,7 @@ describe('TOMBSTONE — rename devolve o caminho ANTIGO (o que derrubou a 1ª re
     git('mv', 'todo/card.md', 'done/card.md');
   });
 
-  after(() => {
+  afterAll(() => {
     rmSync(repo, { recursive: true, force: true });
   });
 

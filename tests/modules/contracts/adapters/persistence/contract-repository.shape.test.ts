@@ -15,7 +15,7 @@
  * Sustentação: audit `handbook/reviews/0002-audit-adapters-persistence-mysql.md` §H1, §M4.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

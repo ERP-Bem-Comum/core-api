@@ -18,7 +18,7 @@
  *   6. moveToDeadLetter move a row da outbox para a DLQ.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 

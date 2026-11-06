@@ -8,7 +8,7 @@
  * Driver memory. fastify.inject. ASCII puro. Harness espelha programs-logo.routes.test.ts.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 

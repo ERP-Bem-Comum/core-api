@@ -11,7 +11,7 @@
  * Sustentação: ADR-0020, ADR-0013, decisões D1–D10 de `000-request.md`.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -40,9 +40,8 @@ const BAD_AUTH_CONN = mysqlTestConnectionString({
   database: 'inexistente',
 });
 
+/** Opt-in: sem `MYSQL_INTEGRATION=1` (rode `pnpm test:integration`), o bloco CA-5..8 pula. */
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
-const skipReason = (): string =>
-  integrationEnabled() ? 'unexpected' : 'MYSQL_INTEGRATION≠1 (rode `pnpm test:integration`)';
 
 // Reset hard do database `core` via docker exec — garante estado limpo
 // (sem `__drizzle_migrations` orfã que o test do ticket #3 não popula).
@@ -97,77 +96,53 @@ describe('CTR-DB-DRIVER-MYSQL — CA-2: shape do mysql-driver.ts', () => {
 });
 
 // ─── CA-5..CA-8 — Runtime contra MySQL real (opt-in) ──────────────────────
-describe('CTR-DB-DRIVER-MYSQL — CA-5..8: runtime contra MySQL real', () => {
-  let envReady = false;
-  let skipMsg = '';
-
-  before(() => {
-    if (!integrationEnabled()) {
-      skipMsg = skipReason();
-      return;
-    }
-    envReady = true;
-  });
-
-  it('CA-5: openMysql contra container healthy retorna ok(handle)', async (t) => {
-    if (!envReady) {
-      t.skip(skipMsg);
-      return;
-    }
-    const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: false });
-    assert.ok(r.ok, `openMysql falhou: ${!r.ok ? r.error : ''}`);
-    if (!r.ok) return;
-    await r.value.close();
-  });
-
-  it('CA-6: openMysql contra credenciais inválidas retorna mysql-driver-connect-failed', async (t) => {
-    if (!envReady) {
-      t.skip(skipMsg);
-      return;
-    }
-    const r = await openMysql({ connectionString: BAD_AUTH_CONN, applyMigrations: false });
-    assert.equal(r.ok, false, 'esperado err');
-    if (r.ok) return;
-    assert.equal(r.error, 'mysql-driver-connect-failed');
-  });
-
-  it('CA-7: openMysql com string mal-formada retorna mysql-driver-connection-string-invalid', async (t) => {
-    if (!envReady) {
-      t.skip(skipMsg);
-      return;
-    }
-    const r = await openMysql({
-      connectionString: 'http://not-a-mysql-url',
-      applyMigrations: false,
+describe.skipIf(!integrationEnabled())(
+  'CTR-DB-DRIVER-MYSQL — CA-5..8: runtime contra MySQL real',
+  () => {
+    it('CA-5: openMysql contra container healthy retorna ok(handle)', async () => {
+      const r = await openMysql({ connectionString: VALID_CONN, applyMigrations: false });
+      assert.ok(r.ok, `openMysql falhou: ${!r.ok ? r.error : ''}`);
+      if (!r.ok) return;
+      await r.value.close();
     });
-    assert.equal(r.ok, false);
-    if (r.ok) return;
-    assert.equal(r.error, 'mysql-driver-connection-string-invalid');
-  });
 
-  it('CA-8: openMysql com applyMigrations: true é idempotente (duas chamadas seguidas)', async (t) => {
-    if (!envReady) {
-      t.skip(skipMsg);
-      return;
-    }
-    // Reset DB pra garantir estado determinístico — outras suites integration
-    // podem ter aplicado tabelas SEM popular `__drizzle_migrations` (ex.: o
-    // migration test do ticket #3 aplica via `docker exec mysql`, fora do
-    // controle do drizzle migrator). Sem reset, o migrator tenta CREATE TABLE
-    // em tabela existente → ER 1050.
-    resetCoreDatabase();
+    it('CA-6: openMysql contra credenciais inválidas retorna mysql-driver-connect-failed', async () => {
+      const r = await openMysql({ connectionString: BAD_AUTH_CONN, applyMigrations: false });
+      assert.equal(r.ok, false, 'esperado err');
+      if (r.ok) return;
+      assert.equal(r.error, 'mysql-driver-connect-failed');
+    });
 
-    // Primeira aplicação: garante schema presente (ou no-op se já presente).
-    const r1 = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
-    assert.ok(r1.ok, `1ª openMysql falhou: ${!r1.ok ? r1.error : ''}`);
-    if (!r1.ok) return;
-    await r1.value.close();
+    it('CA-7: openMysql com string mal-formada retorna mysql-driver-connection-string-invalid', async () => {
+      const r = await openMysql({
+        connectionString: 'http://not-a-mysql-url',
+        applyMigrations: false,
+      });
+      assert.equal(r.ok, false);
+      if (r.ok) return;
+      assert.equal(r.error, 'mysql-driver-connection-string-invalid');
+    });
 
-    // Segunda aplicação: deve passar sem erro (journal entende que migration
-    // 0000 já foi aplicada).
-    const r2 = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
-    assert.ok(r2.ok, `2ª openMysql falhou: ${!r2.ok ? r2.error : ''}`);
-    if (!r2.ok) return;
-    await r2.value.close();
-  });
-});
+    it('CA-8: openMysql com applyMigrations: true é idempotente (duas chamadas seguidas)', async () => {
+      // Reset DB pra garantir estado determinístico — outras suites integration
+      // podem ter aplicado tabelas SEM popular `__drizzle_migrations` (ex.: o
+      // migration test do ticket #3 aplica via `docker exec mysql`, fora do
+      // controle do drizzle migrator). Sem reset, o migrator tenta CREATE TABLE
+      // em tabela existente → ER 1050.
+      resetCoreDatabase();
+
+      // Primeira aplicação: garante schema presente (ou no-op se já presente).
+      const r1 = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
+      assert.ok(r1.ok, `1ª openMysql falhou: ${!r1.ok ? r1.error : ''}`);
+      if (!r1.ok) return;
+      await r1.value.close();
+
+      // Segunda aplicação: deve passar sem erro (journal entende que migration
+      // 0000 já foi aplicada).
+      const r2 = await openMysql({ connectionString: VALID_CONN, applyMigrations: true });
+      assert.ok(r2.ok, `2ª openMysql falhou: ${!r2.ok ? r2.error : ''}`);
+      if (!r2.ok) return;
+      await r2.value.close();
+    });
+  },
+);

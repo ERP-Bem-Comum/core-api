@@ -3,7 +3,7 @@
  * DEVE FALHAR no W0: os 12 campos + a coerência de filhos ainda não existem. GREEN no W1.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';

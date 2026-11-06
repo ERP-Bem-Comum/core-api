@@ -16,7 +16,7 @@
  * refs históricas legítimas (ex.: "ADR-0018 baniu X em 2026-05-14...").
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';

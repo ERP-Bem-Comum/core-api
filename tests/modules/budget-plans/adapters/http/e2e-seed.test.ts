@@ -11,7 +11,7 @@
  * `Record<string, string | undefined>` no lugar de `process.env`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { parseE2eBudgetPlansSeed } from '#src/modules/budget-plans/adapters/http/e2e-seed.ts';

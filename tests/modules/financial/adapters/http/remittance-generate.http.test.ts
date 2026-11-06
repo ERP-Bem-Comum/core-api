@@ -8,7 +8,7 @@
  * permissões por vírgula). Fastify.inject por cenário (ADR-0037).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import type { preHandlerAsyncHookHandler } from 'fastify';
@@ -198,12 +198,12 @@ const seedCedenteAccount = async (): Promise<string> => {
   return (res.json() as { id: string }).id;
 };
 
-before(async () => {
+beforeAll(async () => {
   handle = await buildHandle();
   cedenteAccountId = await seedCedenteAccount();
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 
@@ -343,7 +343,7 @@ describe('financial/http — POST /remittances · conta-cedente sem convênio (#
   // mascarando com um conflito de cadastro o que este bloco quer medir.
   let accountId = '';
 
-  before(async () => {
+  beforeAll(async () => {
     const res = await handle.app.inject({
       method: 'POST',
       url: '/api/v2/financial/cedente-accounts',
@@ -440,11 +440,11 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
   // mecânica de propósito — depender da disciplina de deploy é apostar que ninguém vai esquecer.
   const originalMode = process.env['AUTH_RBAC_MODE'];
 
-  before(() => {
+  beforeAll(() => {
     process.env['AUTH_RBAC_MODE'] = 'bypass';
   });
 
-  after(() => {
+  afterAll(() => {
     if (originalMode === undefined) delete process.env['AUTH_RBAC_MODE'];
     else process.env['AUTH_RBAC_MODE'] = originalMode;
   });
@@ -472,7 +472,7 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
   let bypassHandle: AppHandle;
   let bypassAccountId: string;
 
-  before(async () => {
+  beforeAll(async () => {
     bypassHandle = await buildHandle(bypassAuthorize);
     const seeded = await bypassHandle.app.inject({
       method: 'POST',
@@ -494,7 +494,7 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
     bypassAccountId = (seeded.json() as { id: string }).id;
   });
 
-  after(async () => {
+  afterAll(async () => {
     await bypassHandle.teardown();
   });
 

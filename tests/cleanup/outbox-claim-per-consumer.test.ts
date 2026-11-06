@@ -24,7 +24,7 @@
  * errados; foi a ausência de um gate estrutural que deixou isso durar.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { PROJECT_ROOT, walkFiles, readSource, isCommentLine } from '../support/source-scan.ts';

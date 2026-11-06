@@ -1,5 +1,5 @@
 // BDG-COST-STRUCTURE (#316) — W0 RED. VO LaunchType: os 4 modelos de lançamento (compartilhado com US3/#317).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as LaunchType from '#src/modules/budget-plans/domain/cost-structure/launch-type.ts';

@@ -6,7 +6,7 @@
  * com `event_type='DocumentCancelled'` (corrupção) é rejeitada como estado inválido.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { mapRowToTimelineEntry } from '#src/modules/financial/adapters/persistence/mappers/timeline.mapper.ts';

@@ -8,7 +8,7 @@
  * DEVE FALHAR em W0: parEmailOutbox ainda nao existe no schema do partners. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { getTableConfig } from 'drizzle-orm/mysql-core';

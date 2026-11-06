@@ -4,7 +4,7 @@
  * W0 RED: o read-port (in-memory) ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createInMemoryContractCategorizationReadStore } from '#src/modules/contracts/adapters/persistence/repos/contract-categorization-read.in-memory.ts';

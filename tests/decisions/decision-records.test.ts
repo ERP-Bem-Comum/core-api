@@ -8,7 +8,7 @@
  * Cada registro é validado alegação por alegação, de forma que a falha nomeie o ID exato.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';

@@ -4,7 +4,7 @@
  * Espelha save-document-cascade.test.ts (assertions de cascata) + submit-draft-approver-limit.test.ts (seed).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, isErr, isOk } from '#src/shared/index.ts';

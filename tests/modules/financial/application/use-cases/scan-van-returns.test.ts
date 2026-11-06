@@ -3,7 +3,7 @@
 // A triagem já é testada como função pura em `van-return-triage.test.ts`. O que se prova AQUI é o
 // que só existe com storage: que os bytes certos são hasheados, que a quarentena fica consultável
 // depois da varredura, e que rodar de novo não estraga o que já estava lá.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 

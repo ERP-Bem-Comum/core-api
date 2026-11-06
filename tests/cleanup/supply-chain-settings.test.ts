@@ -22,7 +22,7 @@
  * não invariante vigente; um gate aqui nasceria vermelho.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readSource } from '../support/source-scan.ts';
 

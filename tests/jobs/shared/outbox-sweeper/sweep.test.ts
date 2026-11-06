@@ -7,7 +7,7 @@
  * evento — o defeito que o ADR-0064 fecha. Por isso o caso mais importante aqui é o mais
  * chato: com lista de consumidores vazia, não marcar NADA.
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';

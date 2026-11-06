@@ -6,7 +6,7 @@
  * planos APROVADOS). years = anos distintos dos planos ∪ {anoCorrente, anoCorrente+1}.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk } from '#src/shared/index.ts';
 import { getBudgetPlanOptions } from '#src/modules/budget-plans/application/use-cases/get-budget-plan-options.ts';

@@ -3,7 +3,7 @@
  * Parametrizada; NAO executa direto. Setup sync-ou-async. ASCII puro.
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { RefreshTokenRepository } from '#src/modules/auth/domain/session/refresh-token-repository.ts';

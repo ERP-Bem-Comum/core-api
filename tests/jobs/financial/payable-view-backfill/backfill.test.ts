@@ -3,7 +3,7 @@
  * histórico (upsert em lote, idempotente). DEVE FALHAR em W0 (`backfill.ts` inexistente).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createInMemoryPayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.in-memory.ts';

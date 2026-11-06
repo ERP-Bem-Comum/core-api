@@ -17,7 +17,7 @@
  * precisa declarar, que é o que a mensagem existe para dizer.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { readProgramsLogoConfig } from '#src/modules/programs/public-api/http.ts';

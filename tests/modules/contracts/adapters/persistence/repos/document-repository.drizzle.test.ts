@@ -9,7 +9,7 @@
  * ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { DocumentRepositoryDrizzle } from '#src/modules/contracts/adapters/persistence/repos/document-repository.drizzle.ts';

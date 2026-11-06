@@ -16,7 +16,7 @@
 //
 // Referência: `tests/modules/contracts/adapters/persistence/drizzle-mysql.test.ts`.
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { eq, sql } from 'drizzle-orm';
 
@@ -61,7 +61,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('DocumentRepository — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({
         connectionString,
         applyMigrations: true,
@@ -76,7 +76,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

@@ -25,7 +25,7 @@
  *      não trunca dados menores existentes.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
@@ -97,7 +97,7 @@ const completeWithFoodCategory = (base: ReturnType<typeof buildBase>, foodCatego
 if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openPartnersMysql({
       connectionString: VALID_CONN,
       applyMigrations: true,
@@ -106,7 +106,7 @@ if (integrationEnabled()) {
     handle = opened.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

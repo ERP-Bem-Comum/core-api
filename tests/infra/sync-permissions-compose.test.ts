@@ -19,7 +19,7 @@
  * falha por ambiente.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
@@ -75,7 +75,7 @@ const configFor = (profile: string): ComposeConfig | null => {
 
 const svc = (): ComposeService | undefined => configFor('jobs')?.services?.[SERVICE];
 
-describe('#462 — serviço sync-permissions no compose', { skip }, () => {
+describe.skipIf(Boolean(skip))('#462 — serviço sync-permissions no compose', () => {
   it('o serviço existe (com --profile jobs)', () => {
     assert.ok(svc(), `serviço ${SERVICE} ausente no compose`);
   });

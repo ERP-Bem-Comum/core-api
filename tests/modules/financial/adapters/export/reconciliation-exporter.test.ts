@@ -1,6 +1,6 @@
 // CA5 (#125) — exporter OFX/CSV (Node puro). Teste de borda, roda no gate (sem Docker).
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as StatementTransactionId from '#src/modules/financial/domain/statement/statement-transaction-id.ts';

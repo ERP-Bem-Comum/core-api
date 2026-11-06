@@ -2,7 +2,7 @@
 // Semeia um collaborator real e valida a projeção das 9 colunas LGPD-safe contra par_collaborators.
 // GATE: só roda com MYSQL_INTEGRATION=1 (registrado em test:integration:partners).
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -48,13 +48,13 @@ if (process.env['MYSQL_INTEGRATION'] !== '1') {
   describe('listCollaboratorsForProjection — Drizzle + MySQL (REP-1 · #238)', () => {
     let handle: PartnersMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openPartnersMysql({ connectionString: CONN, applyMigrations: true });
       if (!r.ok) throw new Error(`open: ${r.error}`);
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

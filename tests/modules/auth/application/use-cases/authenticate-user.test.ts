@@ -7,7 +7,7 @@
  * Convencao do fake minter: tokenHash === `${token}-hash` (usada para localizar o refresh persistido).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { authenticateUser } from '#src/modules/auth/application/use-cases/authenticate-user.ts';

@@ -12,7 +12,7 @@
 //
 // ⚠️ Quando este teste quebrar, a pergunta NÃO é "como faço passar". É qual das duas metades mudou,
 // e se a outra acompanhou. Editar o golden para calar o vermelho apaga exatamente o sinal.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';

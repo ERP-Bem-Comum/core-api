@@ -18,7 +18,7 @@
  * (ADR-0011: zero dependência nova), no molde de `semgrep-workflow.test.ts`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

@@ -27,7 +27,7 @@
  * ao ser calibrado contra os 16 achados da primeira rodada.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';

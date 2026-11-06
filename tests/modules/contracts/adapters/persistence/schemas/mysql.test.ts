@@ -11,7 +11,7 @@
  *   - DB Audit F-L1 (CHECK endedAt/status), F-L2 (CHECK homologation completeness)
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { getTableConfig } from 'drizzle-orm/mysql-core';
 

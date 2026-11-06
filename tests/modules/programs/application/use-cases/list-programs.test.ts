@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk } from '#src/shared/index.ts';
 import { createProgram } from '#src/modules/programs/application/use-cases/create-program.ts';

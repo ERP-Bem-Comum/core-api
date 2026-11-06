@@ -21,7 +21,7 @@
  * ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { mapS3Error } from '#src/modules/contracts/adapters/storage/s3-error-mapper.ts';

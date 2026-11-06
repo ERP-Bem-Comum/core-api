@@ -19,7 +19,7 @@
  * ASCII puro.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
@@ -69,7 +69,7 @@ const truncateAll = async (handle: AuthMysqlHandle): Promise<void> => {
 if (integrationEnabled()) {
   let handle: AuthMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openAuthMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) {
       throw new Error(`fixture: openAuthMysql falhou — ${r.error}`);
@@ -78,7 +78,7 @@ if (integrationEnabled()) {
   });
 
   // CRITICO: sem este after o pool mysql2 mantem conexoes abertas e o processo nao termina.
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

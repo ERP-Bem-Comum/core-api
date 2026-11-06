@@ -24,7 +24,7 @@
  * Ver o docstring de `filesUsing` em `tests/support/source-scan.ts`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { join, relative } from 'node:path';
 

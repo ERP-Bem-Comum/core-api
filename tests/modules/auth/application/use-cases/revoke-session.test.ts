@@ -6,7 +6,7 @@
  * DEVE FALHAR em W0 (use cases inexistentes). ASCII puro. Fake minter: tokenHash === `${token}-hash`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

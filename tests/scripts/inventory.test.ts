@@ -18,7 +18,7 @@
  * sozinha — a decisão continua sendo de quem conhece o conteúdo.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -50,7 +50,7 @@ describe('INVENTORY — menção em prosa é referência', () => {
 describe('INVENTORY — crédito de referência', () => {
   let root = '';
 
-  before(() => {
+  beforeAll(() => {
     root = mkdtempSync(join(tmpdir(), 'inventory-'));
     mkdirSync(join(root, 'handbook/research/feture_propose/tema'), { recursive: true });
     mkdirSync(join(root, 'handbook/specs'), { recursive: true });
@@ -70,7 +70,7 @@ describe('INVENTORY — crédito de referência', () => {
     );
   });
 
-  after(() => {
+  afterAll(() => {
     rmSync(root, { recursive: true, force: true });
   });
 

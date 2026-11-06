@@ -4,7 +4,7 @@
 // Cada execução povoa o repositório com 5 a 30 planos de anos, status e programas sorteados e faz a
 // mesma consulta que o `createBudgetPlan` faz. Ocorrência = a consulta não devolve nenhum candidato
 // fora de (APROVADO, ano, programa) E o comentário do domínio ainda afirma o contrário.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';

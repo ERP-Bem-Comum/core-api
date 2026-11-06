@@ -9,7 +9,7 @@
  * revogar e o role 'seed:<assignable>' (permissions vazias), descoberto via GET /api/v1/roles.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -114,7 +114,7 @@ describe('AUTH-ASSIGN-REVOKE-ROLE — POST/DELETE /api/v1/users/:id/roles', () =
   // Role de gestao do admin (contem user:assign-role) -> auto-revoke deve dar lockout.
   let managementRoleId: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
     adminId = await myId(app, adminToken);
@@ -127,7 +127,7 @@ describe('AUTH-ASSIGN-REVOKE-ROLE — POST/DELETE /api/v1/users/:id/roles', () =
     managementRoleId = management.id;
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

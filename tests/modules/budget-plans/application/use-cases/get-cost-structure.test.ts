@@ -7,7 +7,7 @@
  * reconstrói a árvore (costStructureRepo). Plano sem nós devolve árvore VAZIA (não erro).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import * as CostCenterId from '#src/modules/budget-plans/domain/cost-structure/cost-center-id.ts';

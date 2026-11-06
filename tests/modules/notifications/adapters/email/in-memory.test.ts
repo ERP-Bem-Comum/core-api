@@ -12,7 +12,7 @@
  * ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { createInMemoryEmailSender } from '#src/modules/notifications/adapters/email/in-memory.ts';

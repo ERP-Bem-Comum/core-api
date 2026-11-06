@@ -18,7 +18,7 @@
 // Natural: A importa ~1.020 lançamentos; B cria um plano de outro programa, do mesmo ano, chegando
 // num instante sorteado dentro da duração típica de A. A tabela tem 10 planos de fundo.
 // GATE: MYSQL_INTEGRATION=1.
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { sql } from 'drizzle-orm';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -60,7 +60,7 @@ if (mysqlEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
   let typicalImportMs = 0;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({
       connectionString: mysqlTestConnectionString(),
       applyMigrations: true,
@@ -98,7 +98,7 @@ if (mysqlEnabled()) {
     typicalImportMs = performance.now() - t0;
     await removeYear(mysqlRepos(handle), 2026);
   });
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

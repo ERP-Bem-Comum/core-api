@@ -12,7 +12,7 @@
 //      CA4 (regressao: insert nativo sem legacy_id segue verde).
 // ASCII puro. Codigo EN, comentarios PT-BR.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
@@ -187,13 +187,13 @@ if (integrationEnabled()) {
     }
   };
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openBudgetPlansMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await cleanAll();
       await handle.close();

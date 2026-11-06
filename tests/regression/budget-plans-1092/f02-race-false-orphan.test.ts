@@ -4,7 +4,7 @@
 // B criar uma subcategoria e lançar nela — exatamente a janela descrita no achado. Ocorrência = o
 // cenário do usuário A é recusado como "órfão" sem que exista órfão nenhum.
 // A versão NATURAL (concorrência real no MySQL) está em f02-race-false-orphan.mysql.test.ts.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { CostStructureRepository } from '#src/modules/budget-plans/domain/cost-structure/repository.ts';
 import { memoryRepos, useCases, seedPlan, measure, ACTOR_REF, PROGRAM_ETI } from './_world.ts';

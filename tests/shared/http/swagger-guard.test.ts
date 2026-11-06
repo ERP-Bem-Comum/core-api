@@ -6,7 +6,7 @@
  * NODE_ENV=production. GREEN quando o registro for condicionado a ambiente != production. ASCII puro.
  */
 
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, afterEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

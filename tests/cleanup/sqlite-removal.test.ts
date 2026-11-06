@@ -13,7 +13,7 @@
  * Sustentação: ADR-0020, decisões D1-D12 de `000-request.md`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

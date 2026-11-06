@@ -3,7 +3,7 @@
  * Tickets: AUTH-REPO-ROLE (base) · AUTH-ROLE-REPO-CRUD (isInUse via markInUse). ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryRoleStore } from '#src/modules/auth/adapters/persistence/repos/role-repository.in-memory.ts';

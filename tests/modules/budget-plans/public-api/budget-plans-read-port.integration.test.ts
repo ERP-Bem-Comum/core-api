@@ -21,7 +21,7 @@
  * ASCII puro. Codigo EN, comentarios PT-BR.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -248,7 +248,7 @@ if (integrationEnabled()) {
     return r.value;
   };
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openBudgetPlansMysql({
       connectionString: VALID_CONN,
       applyMigrations: true,
@@ -257,7 +257,7 @@ if (integrationEnabled()) {
     handle = opened.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await cleanAll();
       await handle.close();

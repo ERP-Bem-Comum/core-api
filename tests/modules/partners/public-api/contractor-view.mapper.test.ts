@@ -9,7 +9,7 @@
  * A View é PROJEÇÃO PLANA (ADR-0014): nunca expõe o agregado interno nem `par_*` cru.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

@@ -5,7 +5,7 @@
  * Catalogo fixo, read-only (FR-011). Sempre ok(...). ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { listPermissionCatalog } from '#src/modules/auth/application/use-cases/list-permission-catalog.ts';

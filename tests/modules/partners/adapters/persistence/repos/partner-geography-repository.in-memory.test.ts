@@ -4,7 +4,7 @@
  * Roda em `pnpm test` (sem MySQL).
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryPartnerGeographyStore } from '#src/modules/partners/adapters/persistence/repos/partner-geography-repository.in-memory.ts';

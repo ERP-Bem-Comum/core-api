@@ -8,7 +8,7 @@
  * dentro de `mutate` (leitura de status + escrita atômica). Retorna a árvore atualizada.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import { addCostCenter } from '#src/modules/budget-plans/application/use-cases/add-cost-center.ts';

@@ -9,7 +9,7 @@
  * Gabarito: o extrato fictício de julho/2026 (fixture). RED: `parsePdf` ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 

@@ -5,7 +5,7 @@
  * este teste. Se a coluna mudar de largura, ele reprova até a borda acompanhar.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { is } from 'drizzle-orm';
 import { MySqlVarChar } from 'drizzle-orm/mysql-core';

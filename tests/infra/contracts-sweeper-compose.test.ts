@@ -11,7 +11,7 @@
  * RED esperado: o serviço `contracts-sweeper` ainda NÃO existe no compose.yaml.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
@@ -71,96 +71,103 @@ const configWithJobs = (): ComposeConfig | null => {
 
 const sweeper = (): ComposeService | undefined => configWithJobs()?.services?.[SERVICE];
 
-describe('CTR-SWEEPER-CRON — serviço contracts-sweeper no compose (W0)', { skip }, () => {
-  it('CA1a: o serviço existe (com --profile jobs)', () => {
-    assert.ok(sweeper(), `serviço ${SERVICE} ausente no compose (profile jobs)`);
-  });
+describe.skipIf(Boolean(skip))(
+  'CTR-SWEEPER-CRON — serviço contracts-sweeper no compose (W0)',
+  () => {
+    it('CA1a: o serviço existe (com --profile jobs)', () => {
+      assert.ok(sweeper(), `serviço ${SERVICE} ausente no compose (profile jobs)`);
+    });
 
-  it('CA1b: restart "no" (one-shot — ADR-0041)', () => {
-    assert.equal(
-      sweeper()?.restart,
-      'no',
-      `restart deveria ser "no", foi ${String(sweeper()?.restart)}`,
-    );
-  });
+    it('CA1b: restart "no" (one-shot — ADR-0041)', () => {
+      assert.equal(
+        sweeper()?.restart,
+        'no',
+        `restart deveria ser "no", foi ${String(sweeper()?.restart)}`,
+      );
+    });
 
-  it('CA1c: pertence ao profile jobs', () => {
-    const profiles = sweeper()?.profiles ?? [];
-    assert.ok(
-      profiles.includes('jobs'),
-      `profiles deveria incluir "jobs", foi ${JSON.stringify(profiles)}`,
-    );
-  });
+    it('CA1c: pertence ao profile jobs', () => {
+      const profiles = sweeper()?.profiles ?? [];
+      assert.ok(
+        profiles.includes('jobs'),
+        `profiles deveria incluir "jobs", foi ${JSON.stringify(profiles)}`,
+      );
+    });
 
-  it('CA1d: depende de mysql healthy', () => {
-    const cond = sweeper()?.depends_on?.['mysql']?.condition;
-    assert.equal(
-      cond,
-      'service_healthy',
-      `depends_on mysql deveria ser service_healthy, foi ${String(cond)}`,
-    );
-  });
+    it('CA1d: depende de mysql healthy', () => {
+      const cond = sweeper()?.depends_on?.['mysql']?.condition;
+      assert.equal(
+        cond,
+        'service_healthy',
+        `depends_on mysql deveria ser service_healthy, foi ${String(cond)}`,
+      );
+    });
 
-  it('CA1e: usa o secret contracts_database_url (serviço + top-level)', () => {
-    const cfg = configWithJobs();
-    const names = (cfg?.services?.[SERVICE]?.secrets ?? []).map((s) =>
-      typeof s === 'string' ? s : (s.source ?? ''),
-    );
-    assert.ok(
-      names.includes(SECRET),
-      `serviço deveria usar o secret ${SECRET}, foi ${JSON.stringify(names)}`,
-    );
-    assert.ok(cfg?.secrets?.[SECRET], `secret top-level ${SECRET} ausente em secrets:`);
-  });
+    it('CA1e: usa o secret contracts_database_url (serviço + top-level)', () => {
+      const cfg = configWithJobs();
+      const names = (cfg?.services?.[SERVICE]?.secrets ?? []).map((s) =>
+        typeof s === 'string' ? s : (s.source ?? ''),
+      );
+      assert.ok(
+        names.includes(SECRET),
+        `serviço deveria usar o secret ${SECRET}, foi ${JSON.stringify(names)}`,
+      );
+      assert.ok(cfg?.secrets?.[SECRET], `secret top-level ${SECRET} ausente em secrets:`);
+    });
 
-  it('CA1f: security_opt no-new-privileges', () => {
-    const opts = sweeper()?.security_opt ?? [];
-    assert.ok(
-      opts.some((o) => o.includes('no-new-privileges:true')),
-      `security_opt no-new-privileges ausente, foi ${JSON.stringify(opts)}`,
-    );
-  });
+    it('CA1f: security_opt no-new-privileges', () => {
+      const opts = sweeper()?.security_opt ?? [];
+      assert.ok(
+        opts.some((o) => o.includes('no-new-privileges:true')),
+        `security_opt no-new-privileges ausente, foi ${JSON.stringify(opts)}`,
+      );
+    });
 
-  it('CA1g: entrypoint+command executam o run.ts do sweeper (não o server.ts)', () => {
-    const svc = sweeper();
-    const asArr = (v: readonly string[] | string | undefined): readonly string[] =>
-      v === undefined ? [] : typeof v === 'string' ? [v] : v;
-    const full = [...asArr(svc?.entrypoint), ...asArr(svc?.command)].join(' ');
-    assert.doesNotMatch(full, /src\/server\.ts/, `o sweeper não pode rodar o server: "${full}"`);
-    assert.match(
-      full,
-      /src\/jobs\/contracts\/sweeper\/run\.ts/,
-      `entrypoint+command deveria executar o run.ts do sweeper: "${full}"`,
-    );
-  });
+    it('CA1g: entrypoint+command executam o run.ts do sweeper (não o server.ts)', () => {
+      const svc = sweeper();
+      const asArr = (v: readonly string[] | string | undefined): readonly string[] =>
+        v === undefined ? [] : typeof v === 'string' ? [v] : v;
+      const full = [...asArr(svc?.entrypoint), ...asArr(svc?.command)].join(' ');
+      assert.doesNotMatch(full, /src\/server\.ts/, `o sweeper não pode rodar o server: "${full}"`);
+      assert.match(
+        full,
+        /src\/jobs\/contracts\/sweeper\/run\.ts/,
+        `entrypoint+command deveria executar o run.ts do sweeper: "${full}"`,
+      );
+    });
 
-  it('CA1h: SEM container_name fixo (M2 — evita conflito de nome → cron silencioso)', () => {
-    assert.equal(
-      sweeper()?.container_name,
-      undefined,
-      `container_name fixo reintroduz o bug M2: ${String(sweeper()?.container_name)}`,
-    );
-  });
+    it('CA1h: SEM container_name fixo (M2 — evita conflito de nome → cron silencioso)', () => {
+      assert.equal(
+        sweeper()?.container_name,
+        undefined,
+        `container_name fixo reintroduz o bug M2: ${String(sweeper()?.container_name)}`,
+      );
+    });
 
-  it('CA1i: hardening — cap_drop ALL + read_only', () => {
-    const svc = sweeper();
-    assert.ok(
-      (svc?.cap_drop ?? []).includes('ALL'),
-      `cap_drop deveria incluir ALL, foi ${JSON.stringify(svc?.cap_drop)}`,
-    );
-    assert.equal(svc?.read_only, true, `read_only deveria ser true, foi ${String(svc?.read_only)}`);
-  });
+    it('CA1i: hardening — cap_drop ALL + read_only', () => {
+      const svc = sweeper();
+      assert.ok(
+        (svc?.cap_drop ?? []).includes('ALL'),
+        `cap_drop deveria incluir ALL, foi ${JSON.stringify(svc?.cap_drop)}`,
+      );
+      assert.equal(
+        svc?.read_only,
+        true,
+        `read_only deveria ser true, foi ${String(svc?.read_only)}`,
+      );
+    });
 
-  it('CA3: sem --profile jobs, o serviço NÃO é ativado (opt-in)', () => {
-    const r = sh(`docker compose -f "${COMPOSE_YAML}" config --services`);
-    assert.equal(r.code, 0, `config --services falhou: ${r.stderr}`);
-    const services = r.stdout
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    assert.ok(
-      !services.includes(SERVICE),
-      `${SERVICE} não deveria estar ativo sem --profile jobs, foi ${JSON.stringify(services)}`,
-    );
-  });
-});
+    it('CA3: sem --profile jobs, o serviço NÃO é ativado (opt-in)', () => {
+      const r = sh(`docker compose -f "${COMPOSE_YAML}" config --services`);
+      assert.equal(r.code, 0, `config --services falhou: ${r.stderr}`);
+      const services = r.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      assert.ok(
+        !services.includes(SERVICE),
+        `${SERVICE} não deveria estar ativo sem --profile jobs, foi ${JSON.stringify(services)}`,
+      );
+    });
+  },
+);

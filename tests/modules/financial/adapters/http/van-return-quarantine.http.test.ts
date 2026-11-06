@@ -8,7 +8,7 @@
  * vírgula). A quarentena é semeada pelo seam de composição `vanReturnQuarantine`.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -72,7 +72,7 @@ type Item = Readonly<{
 
 type Body = Readonly<{ quarantined: readonly Item[]; total: number }>;
 
-before(async () => {
+beforeAll(async () => {
   const quarantine = createInMemoryVanReturnQuarantine();
 
   await quarantine.record([
@@ -114,7 +114,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

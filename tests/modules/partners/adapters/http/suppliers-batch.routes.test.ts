@@ -7,7 +7,7 @@
  *
  * CA1 items · CA2 missing · CA4 auth/permissão · CA5 minimização (sem bankAccount/pixKey; taxId presente).
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

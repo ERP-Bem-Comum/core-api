@@ -26,7 +26,7 @@
  * GATE: só roda com `MYSQL_INTEGRATION=1`.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -102,7 +102,7 @@ if (!integrationEnabled()) {
     }
   };
 
-  before(async () => {
+  beforeAll(async () => {
     // Os `build*HttpDeps` com driver mysql NÃO migram (CORE-MIGRATE-BOOT-INVERT) — o schema é
     // provisionado antes, como o job `migrate` faz em produção.
     const authMig = await applyAuthMigrations(CONN);
@@ -196,7 +196,7 @@ if (!integrationEnabled()) {
     closers.push(() => app.close());
   });
 
-  after(async () => {
+  afterAll(async () => {
     // `handle` só existe se o `before` passou das migrations. Sem o guard, um `before` que falhe
     // antes disso faz este hook estourar TypeError síncrono — que o `.catch` NÃO intercepta — e o
     // `teardown()` da última linha nunca roda: exatamente o travamento que o fechamento incremental

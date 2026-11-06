@@ -2,7 +2,7 @@
  * FIN-SUPPLIER-VIEW-LIST-DTO · W0 — o item da listagem ganha supplierName/supplierDocument (US2 #47).
  * DEVE FALHAR até o DTO mapear os campos (e o tipo DocumentListItem tê-los).
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { listItemToSummaryDto } from '#src/modules/financial/adapters/http/dto.ts';

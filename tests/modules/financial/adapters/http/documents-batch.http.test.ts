@@ -10,7 +10,7 @@
  * resolução real é coberta em document-summary-by-ids-view.drizzle-mysql.test.ts / Bruno E2E.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -86,7 +86,7 @@ const seedDocument = async (): Promise<string> => {
   return (createRes.json() as { id: string }).id;
 };
 
-before(async () => {
+beforeAll(async () => {
   const deps = await buildFinancialHttpDeps({ driver: 'memory' });
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({
@@ -102,7 +102,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

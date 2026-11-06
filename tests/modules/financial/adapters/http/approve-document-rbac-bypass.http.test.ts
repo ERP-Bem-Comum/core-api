@@ -16,7 +16,7 @@
  * Driver memory, sem `MYSQL_INTEGRATION`.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/primitives/result.ts';
@@ -146,10 +146,10 @@ describe('ADR-0052 — a alçada sob bypass do RBAC (borda HTTP)', () => {
     let app: AppHandle;
     let teardown: () => Promise<void>;
 
-    before(async () => {
+    beforeAll(async () => {
       ({ app, teardown } = await makeApp(true));
     });
-    after(async () => {
+    afterAll(async () => {
       await teardown();
     });
 
@@ -194,10 +194,10 @@ describe('ADR-0052 — a alçada sob bypass do RBAC (borda HTTP)', () => {
     let app: AppHandle;
     let teardown: () => Promise<void>;
 
-    before(async () => {
+    beforeAll(async () => {
       ({ app, teardown } = await makeApp(false));
     });
-    after(async () => {
+    afterAll(async () => {
       await teardown();
     });
 

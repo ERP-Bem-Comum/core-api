@@ -22,7 +22,7 @@
  * de `#src/*`. Um teste que importasse as funções passaria com o script quebrado.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync, execFileSync as run } from 'node:child_process';
 

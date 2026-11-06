@@ -5,7 +5,7 @@
  * backend gera `NN/AAAA` por ORDEM DE CRIAÇÃO dentro do contrato (escopo per-contract; ano do clock).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

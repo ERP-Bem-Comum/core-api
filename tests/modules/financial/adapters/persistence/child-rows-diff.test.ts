@@ -17,7 +17,7 @@
 //   newUuid()` a cada chamada (`document.mapper.ts:776`), então dois saves do mesmo estado
 //   produzem ids diferentes e conteúdo idêntico.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

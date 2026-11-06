@@ -3,7 +3,7 @@
 //       UNIQUE, provado em plan-clone-writer.drizzle-mysql.test.ts); o in-memory aceita.
 //   (b) Falha no meio da gravação: o MySQL faz rollback; o in-memory deixa o plano gravado.
 // Ocorrência = o in-memory diverge do MySQL.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { err } from '#src/shared/primitives/result.ts';
 import * as BudgetResultId from '#src/modules/budget-plans/domain/budget-result/budget-result-id.ts';

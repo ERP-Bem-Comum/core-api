@@ -23,7 +23,7 @@
  * armadilha que o inventário de decisões registrou duas vezes.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';

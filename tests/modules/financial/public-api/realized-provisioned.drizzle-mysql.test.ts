@@ -22,7 +22,7 @@
  * ASCII puro. Código EN, comentários PT-BR.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -99,13 +99,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('openRealizedProvisionedReader — Drizzle + MySQL (FIN-REALIZED-PROVISIONED-READ)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[financial:realized-provisioned] conexão: ${r.error}`);
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

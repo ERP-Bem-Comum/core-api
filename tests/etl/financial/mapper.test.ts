@@ -8,7 +8,7 @@
  * vocabulário) e (c) ratificadas em 2026-07-02.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

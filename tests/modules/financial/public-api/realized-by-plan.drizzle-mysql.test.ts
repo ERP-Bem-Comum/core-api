@@ -14,7 +14,7 @@
  * CA5 — batch de vários refs (anti-N+1); ref sem conciliação → 0/ausente do map.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -68,7 +68,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     let handle: FinancialMysqlHandle;
     let openRealizedByPlanReader: OpenRealizedByPlanReader;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[financial:realized-by-plan] conexão: ${r.error}`);
       handle = r.value;
@@ -77,7 +77,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       openRealizedByPlanReader = mod.openRealizedByPlanReader as OpenRealizedByPlanReader;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

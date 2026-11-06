@@ -11,7 +11,7 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1`.
 
-import { describe, it, before, beforeEach, after } from 'node:test';
+import { describe, it, beforeAll, beforeEach, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -56,7 +56,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('VanReturnMatchReader — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 4 });
       if (!r.ok) throw new Error(`[financial:van-return-match] Falha ao conectar: ${r.error}`);
       handle = r.value;
@@ -121,7 +121,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // ⚠️ Limpa também na SAÍDA — ver a nota em `remittance-repository.drizzle-mysql.test.ts`. Em
     // resumo: com as FKs `RESTRICT`, vínculo deixado para trás faz o `delete(finDocuments)` de
     // qualquer suíte vizinha falhar com `ER_ROW_IS_REFERENCED_2`, longe da causa.
-    after(async () => {
+    afterAll(async () => {
       await handle.db.delete(finRemittancePayables);
       await handle.db.delete(finRemittances);
       await handle.db.delete(finPayables);

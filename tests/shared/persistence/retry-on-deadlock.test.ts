@@ -8,7 +8,7 @@
 // ⚠️ O CA3 da issue pede repetir "em deadlock/lock-wait". Este módulo repete SÓ em deadlock,
 // deliberadamente — ver o teste "não repete lock-wait timeout" abaixo para o porquê.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

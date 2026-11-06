@@ -18,7 +18,7 @@
  * PT-BR justificado no ADR-0015 §"Idempotência". Está anotada nos dois lugares do schema.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';

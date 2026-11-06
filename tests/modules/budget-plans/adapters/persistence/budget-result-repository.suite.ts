@@ -3,7 +3,7 @@
 // comportamento — CA9). Verifica round-trip (save+list), isolamento por orçamento (CA3 do #317),
 // delete por orçamento (CA4 do #317) e, desde o #413, a dimensão mês + o upsert idempotente.
 // Backend-agnóstica.
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/primitives/result.ts';

@@ -2,7 +2,7 @@
 // P.O., 02/10, 03/10 e 19/10). Domínio puro: o status anterior chega pronto (o use case o lê da
 // trilha), e a regra da fila da remessa é do use case — aqui só as transições e as recusas.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Money from '#src/shared/kernel/money.ts';

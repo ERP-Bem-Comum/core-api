@@ -11,7 +11,7 @@
  * Sufixo `.e2e.ts` (não `.test.ts`) → fora do glob de `pnpm test`. ASCII puro.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -61,7 +61,7 @@ const waitReady = async (): Promise<void> => {
 };
 
 describe('CONTRACTS-HTTP-E2E-SMOKE — borda contracts (server real + MySQL dual-pool + MinIO)', () => {
-  before(waitReady);
+  beforeAll(waitReady);
 
   it('CA1: GET /health -> 200 (server sobe com auth+contracts mysql + storage)', async () => {
     const health = await get('/health');

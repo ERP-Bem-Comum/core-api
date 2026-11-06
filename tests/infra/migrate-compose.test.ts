@@ -13,7 +13,7 @@
  * existem no compose.yaml.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -73,7 +73,7 @@ const configWithJobs = (): ComposeConfig | null => {
 
 const migrate = (): ComposeService | undefined => configWithJobs()?.services?.[SERVICE];
 
-describe('CORE-MIGRATE-JOB — serviço migrate no compose (W0)', { skip }, () => {
+describe.skipIf(Boolean(skip))('CORE-MIGRATE-JOB — serviço migrate no compose (W0)', () => {
   it('CA6a: o serviço existe (com --profile jobs)', () => {
     assert.ok(migrate(), `serviço ${SERVICE} ausente no compose (profile jobs)`);
   });

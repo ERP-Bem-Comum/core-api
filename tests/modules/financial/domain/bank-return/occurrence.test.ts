@@ -2,7 +2,7 @@
 //
 // Os casos aqui são de FORMA (como se lê o campo) e de PRECEDÊNCIA (o que o conjunto significa).
 // Nenhum deles depende de arquivo, banco ou remessa: é a decisão pura sobre dez caracteres.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

@@ -13,7 +13,7 @@
  * CA11: `columns` CSV — válido aceito; token fora do catálogo → 400.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler, LightMyRequestResponse, FastifyRequest } from 'fastify';
 
@@ -85,7 +85,7 @@ let handle: AppHandle;
 let lastFilter: GeneralReportFilter | undefined;
 let lastPagination: GeneralReportPagination | undefined;
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildReportsHttpDeps({ driver: 'memory' });
   const deps = {
     ...base,
@@ -126,7 +126,7 @@ before(async () => {
   handle = { app, teardown: () => app.close() };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 
@@ -314,7 +314,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
 describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B: Financiador/Colaborador)', () => {
   let kindHandle: AppHandle;
 
-  before(async () => {
+  beforeAll(async () => {
     const base = await buildReportsHttpDeps({ driver: 'memory' });
     const deps = {
       ...base,
@@ -360,7 +360,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B:
     kindHandle = { app, teardown: () => app.close() };
   });
 
-  after(async () => {
+  afterAll(async () => {
     await kindHandle.teardown();
   });
 
@@ -409,7 +409,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice C:
   // Flag mutável: alterna a concessão de `bank-account:read` entre casos.
   let grantBank = true;
 
-  before(async () => {
+  beforeAll(async () => {
     const base = await buildReportsHttpDeps({ driver: 'memory' });
     // Seed: supplier COM pix/banco + financier com pix/banco null (não-supplier nunca tem).
     const seed: GeneralReportRow[] = [
@@ -442,7 +442,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice C:
     cHandle = { app, teardown: () => app.close() };
   });
 
-  after(async () => {
+  afterAll(async () => {
     await cHandle.teardown();
   });
 
@@ -502,7 +502,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice C:
 describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice D: Número do Contrato)', () => {
   let dHandle: AppHandle;
 
-  before(async () => {
+  beforeAll(async () => {
     const base = await buildReportsHttpDeps({ driver: 'memory' });
     const seed: GeneralReportRow[] = [
       row({
@@ -525,7 +525,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice D:
     dHandle = { app, teardown: () => app.close() };
   });
 
-  after(async () => {
+  afterAll(async () => {
     await dHandle.teardown();
   });
 

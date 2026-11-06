@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // CTR-DOMAIN-TAGGED-ERRORS (W0 RED) — Padrão D (DO D§22): consumo canônico

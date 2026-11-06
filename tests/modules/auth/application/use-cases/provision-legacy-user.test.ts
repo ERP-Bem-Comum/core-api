@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { provisionLegacyUser } from '#src/modules/auth/application/use-cases/provision-legacy-user.ts';

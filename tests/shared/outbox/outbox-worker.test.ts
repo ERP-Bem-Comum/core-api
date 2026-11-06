@@ -7,7 +7,7 @@
  * DEVE FALHAR em W0 (`#src/shared/outbox/` inexistente).
  */
 
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';

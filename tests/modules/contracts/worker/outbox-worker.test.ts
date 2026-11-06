@@ -12,7 +12,7 @@
  * AAA: Arrange / Act / Assert estão delimitados por comentários em cada `it()`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, onTestFinished } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 // ── Módulo sob teste (não existe em W0 → RED por ERR_MODULE_NOT_FOUND) ─────────
@@ -267,7 +267,7 @@ describe('CTR-OUTBOX-WORKER — unit: runOnce', () => {
 
 describe('CTR-OUTBOX-WORKER — unit: runLoop', () => {
   // ── CA-T6: runLoop aborta quando abortSignal.aborted = true ───────────────
-  it('CA-T6: runLoop aborta quando AbortSignal é ativado', async (ctx) => {
+  it('CA-T6: runLoop aborta quando AbortSignal é ativado', async () => {
     // Arrange: AbortController com abort após 50ms
     const controller = new AbortController();
     const outbox = InMemoryOutbox();
@@ -291,7 +291,7 @@ describe('CTR-OUTBOX-WORKER — unit: runLoop', () => {
     const abortTimer = setTimeout(() => {
       controller.abort();
     }, 60);
-    ctx.after(() => {
+    onTestFinished(() => {
       clearTimeout(abortTimer);
     });
 
@@ -317,7 +317,7 @@ describe('CTR-OUTBOX-WORKER — unit: runLoop', () => {
   });
 
   // ── CA-T7: smoke test backoff idle ────────────────────────────────────────
-  it('CA-T7 (smoke): runLoop com outbox vazia usa idleSleepMs (não trava)', async (ctx) => {
+  it('CA-T7 (smoke): runLoop com outbox vazia usa idleSleepMs (não trava)', async () => {
     // Arrange: signal que aborta imediatamente após o primeiro sleep idle
     const controller = new AbortController();
     const outbox = InMemoryOutbox();
@@ -340,7 +340,7 @@ describe('CTR-OUTBOX-WORKER — unit: runLoop', () => {
     const abortTimer = setTimeout(() => {
       controller.abort();
     }, 80);
-    ctx.after(() => {
+    onTestFinished(() => {
       clearTimeout(abortTimer);
     });
 

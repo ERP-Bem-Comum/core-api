@@ -11,7 +11,7 @@
  * Estilo espelha `tests/modules/financial/domain/document/document.test.ts` (issueDate #163).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Money from '#src/shared/kernel/money.ts';

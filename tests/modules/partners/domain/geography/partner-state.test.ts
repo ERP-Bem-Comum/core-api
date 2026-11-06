@@ -3,7 +3,7 @@
  * DEVE FALHAR: o módulo de domínio ainda não existe.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as PartnerState from '#src/modules/partners/domain/geography/partner-state.ts';

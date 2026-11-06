@@ -6,7 +6,7 @@
  * Fake hasher: digest(plain) = `fake-sha256:<sha256>`. Fake minter: tokenHash === `${token}-hash`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { changePassword } from '#src/modules/auth/application/use-cases/change-password.ts';

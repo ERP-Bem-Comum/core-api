@@ -2,7 +2,7 @@
 //
 // ⚠️ Nenhum dado real de cadastro: convênio `000000` (reservado pelo gate de máscara) e UUIDs
 // sintéticos.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr, err } from '#src/shared/index.ts';

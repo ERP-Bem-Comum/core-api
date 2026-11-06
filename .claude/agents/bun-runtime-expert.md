@@ -161,6 +161,17 @@ Medido em 05/11/2026 com uma sonda no Bun 1.4.4: `describe(nome, { skip: 'motivo
 
 O padrão vale por teste e por hook. A suíte unitária tem o maior teste em 2,4 s (medido com a máquina sob carga). As suítes de integração, que conectam no MySQL e sobem migrations em `beforeAll`, recebem `--timeout` explícito no runner. O `bunfig.toml` da 1.4.4 não documenta chave de timeout; a flag de CLI é o caminho.
 
+### 13. Lições da etapa 1 (`node:test` → `bun:test`, 05/11/2026)
+
+Medidas com sonda e na suíte real. A rule `.claude/rules/testing.md` carrega as quatro que afetam quem escreve teste; aqui fica o resto:
+
+- **Parâmetro no callback = `done`.** O contexto `t` do `node:test` (`t.skip`, `t.mock`, `t.after`) não existe. Achar todos exige AST: o `grep` por `(t)` deixou passar um `(ctx)`. Script: `.tmp/codemod-bun-test/context-params.ts`.
+- **`test.extend` (contexto com `skip()` em tempo de execução) está na doc e não existe no binário 1.4.4** (`base.extend is not a function`). É a terceira divergência entre a doc e o binário, depois de `--files-from` e do JUnit.
+- **Renomear `before`→`beforeAll` exige saber de onde vem o nome.** O `account-lockout.test.ts` tem `const after = (base, minutes) => …`. Como o `bun test` injeta `afterAll` como global, renomear essas chamadas registraria hooks em silêncio, sem erro. O codemod só renomeia chamada cujo nome veio do import de `node:test` e não tem declaração local.
+- **O JUnit do Bun reporta hooks de bloco pulado como `testcase name="(unnamed)"` `<skipped>`**, e o resumo "N skip" os inclui. Não são testes.
+- **`bun test` executa os arquivos na ordem passada.** A prova de ordem invertida da integração continua valendo.
+- **O `tsconfig` com `"types": ["node", "bun"]` estreita o `TextDecoder`** para uma união fechada de encodings (`xml.ts:84`). Rótulo vindo de dado externo precisa de asserção para o contrato WHATWG.
+
 ---
 
 ## Quem você é

@@ -10,7 +10,7 @@
  * silenciosa entre implementações que deixou dois adapters errados juntos, concordando um com o
  * outro, sem nenhum teste acusar.
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

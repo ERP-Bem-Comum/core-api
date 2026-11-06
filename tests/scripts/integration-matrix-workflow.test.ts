@@ -28,7 +28,7 @@
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -169,15 +169,10 @@ describe('integration.yml — CA4: matriz de resultado esperada', () => {
   // NÃO asserível sobre o texto do arquivo — é comportamento de CI (quais suítes passam/falham num
   // run real), verificável só no W3 via `workflow_dispatch`. Documentado no cabeçalho e no REPORT.
   // Registrado como `skip` (com razão) para ficar VISÍVEL na saída do runner, sem fingir cobertura.
-  it(
-    'verdes = contracts,auth,programs,etl:contracts,etl:financial,storage,photo,logo · vermelhos = financial#519,budget-plans#520,partners#521,etl+etl:orchestrate#522',
-    {
-      skip: 'comportamento de CI — verificável só no W3 (run real via workflow_dispatch), não sobre o texto do arquivo',
-    },
-    () => {
-      /* CA4: verificável só no W3 com run real — ver skip acima */
-    },
-  );
+  // Pulado: comportamento de CI — verificável só no W3 (run real via workflow_dispatch), não sobre o texto do arquivo
+  it.skip('verdes = contracts,auth,programs,etl:contracts,etl:financial,storage,photo,logo · vermelhos = financial#519,budget-plans#520,partners#521,etl+etl:orchestrate#522', () => {
+    /* CA4: verificável só no W3 com run real — ver skip acima */
+  });
 });
 
 describe('integration.yml — CA5: job agregador `gate` (futuro required check)', () => {

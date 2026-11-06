@@ -15,7 +15,7 @@
  * ASCII puro. Codigo EN, comentarios PT-BR.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler, LightMyRequestResponse } from 'fastify';
 
@@ -82,12 +82,12 @@ const build = async (
   return { app, teardown: () => app.close() };
 };
 
-before(async () => {
+beforeAll(async () => {
   happy = await build(() => Promise.resolve(ok(CHART)));
   broken = await build(() => Promise.resolve(err('dashboard-realized-read-unavailable')));
 });
 
-after(async () => {
+afterAll(async () => {
   await happy.teardown();
   await broken.teardown();
 });

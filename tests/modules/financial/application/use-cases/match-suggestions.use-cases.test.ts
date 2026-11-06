@@ -1,6 +1,6 @@
 // CA4/CA5 (#121) — suggestMatches (read-model) + rejectSuggestion. Usa adapters in-memory reais.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { type Result, ok } from '#src/shared/index.ts';

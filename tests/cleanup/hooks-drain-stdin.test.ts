@@ -25,7 +25,7 @@
  * varredura foi escrita, **3 dos 4** hooks que leem stdin saíam antes de drenar.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';

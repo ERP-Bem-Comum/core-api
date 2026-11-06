@@ -10,7 +10,7 @@
  * RED esperado: `buildAuthHttpDeps` ainda não aceita `rbacMode`; no modo bypass hoje ainda dá 403.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

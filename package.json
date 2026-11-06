@@ -45,7 +45,7 @@
     "release:notes": "node --enable-source-maps scripts/ci/release-notes.ts",
     "audit": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
-    "test": "node --enable-source-maps --test --test-concurrency=6 'tests/**/*.test.ts'",
+    "test": "bun test --no-env-file ./tests",
     "test:integration": "node --enable-source-maps scripts/ci/test-integration.ts contracts",
     "worker:outbox": "node --enable-source-maps src/modules/contracts/worker/run.ts",
     "worker:outbox:partners": "node --enable-source-maps src/modules/partners/worker/run.ts",
@@ -94,6 +94,7 @@
     "financial:payee-bank-distribution": "node --enable-source-maps scripts/financial/diagnostics/payee-bank-distribution.ts"
   },
   "devDependencies": {
+    "@types/bun": "1.4.4",
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.1",
     "drizzle-kit": "^0.31.10",

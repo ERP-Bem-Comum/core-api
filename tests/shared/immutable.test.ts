@@ -22,7 +22,7 @@
  * fake-it na W1 — a impl tem que ser a real, não um retorno hardcoded.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { immutable, deepImmutable } from '#src/shared/primitives/immutable.ts';

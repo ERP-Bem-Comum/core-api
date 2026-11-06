@@ -22,7 +22,7 @@
  * ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 
 import {

@@ -19,7 +19,7 @@
  * Código EN, comentários PT-BR.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -88,7 +88,7 @@ interface AppHandle {
 
 let handle: AppHandle;
 
-before(async () => {
+beforeAll(async () => {
   const financialDeps = await buildFinancialHttpDeps({ driver: 'memory' });
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({
@@ -104,7 +104,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

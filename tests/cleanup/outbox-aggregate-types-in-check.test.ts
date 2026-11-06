@@ -24,7 +24,7 @@
  * snapshot descreve o que o drizzle-kit PENSA do schema; o `.sql` é o que roda no banco.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';

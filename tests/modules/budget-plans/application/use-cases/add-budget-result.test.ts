@@ -2,7 +2,7 @@
 // Orquestra: valida ids -> confirma existência do orçamento (budgetReader) -> lê launchType da
 // subcategoria (subcategoryReader) -> BudgetResult.create -> persiste. Sem FK física (D1/D3 —
 // DESIGN-DECISIONS.md): a existência de budgetId/subcategoryId é garantida no fluxo, não no banco.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import { addBudgetResult } from '#src/modules/budget-plans/application/use-cases/add-budget-result.ts';

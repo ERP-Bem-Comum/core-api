@@ -6,7 +6,7 @@
  * DEVE FALHAR ate o W1: `account-lockout.ts` ainda nao existe. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as AccountLockout from '#src/modules/auth/domain/session/account-lockout.ts';

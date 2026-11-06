@@ -3,7 +3,7 @@
 // plano (ano + nome do programa + versão), orçamentos com nome do parceiro (Rede), subcategorias da
 // árvore de custos (com centro de custo/categoria/tipo) e os valores por (orçamento × subcategoria).
 // getConsolidatedExport faz o mesmo para todas as raízes aprovadas do ano (CA2).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

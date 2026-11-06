@@ -12,7 +12,7 @@
  * Molde: `recon-detail-title-category.http.test.ts` (#175) — mesma montagem de app in-memory.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -216,10 +216,10 @@ const post = (app: Awaited<ReturnType<typeof buildApp>>, payload: Record<string,
 describe('financial/http — contrato do bloco `taxonomy` no confirm da conciliação (M2)', () => {
   let handle: Awaited<ReturnType<typeof buildHandle>>;
 
-  before(async () => {
+  beforeAll(async () => {
     handle = await buildHandle();
   });
-  after(async () => {
+  afterAll(async () => {
     await handle.teardown();
   });
 

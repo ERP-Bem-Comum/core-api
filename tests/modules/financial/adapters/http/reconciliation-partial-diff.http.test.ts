@@ -6,7 +6,7 @@
  * real), CA5 (sinal incoerente → 422 difference-sign-invalid).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -93,7 +93,7 @@ const seedPayable = (id: string, status: DocumentStatus, valueCents: number) => 
   paymentMethod: 'PIX',
 });
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildFinancialHttpDeps({ driver: 'memory' });
 
   const cedenteId = CedenteAccountId.generate();
@@ -200,7 +200,7 @@ before(async () => {
   };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

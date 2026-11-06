@@ -3,7 +3,7 @@
  * duplicidade de `actNumber` e CRUD básico.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { makeInMemoryActStore } from '#src/modules/partners/adapters/persistence/repos/act-repository.in-memory.ts';

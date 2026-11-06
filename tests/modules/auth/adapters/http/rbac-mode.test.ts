@@ -5,7 +5,7 @@
 //
 // RED esperado: `resolveRbacMode` ainda não existe.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { resolveRbacMode, rbacBypassBanner } from '#src/modules/auth/adapters/http/rbac-mode.ts';

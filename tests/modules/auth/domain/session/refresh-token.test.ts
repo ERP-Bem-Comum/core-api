@@ -7,7 +7,7 @@
  * Cobre CA4..CA14. DEVEM FALHAR em W0. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as RefreshToken from '#src/modules/auth/domain/session/refresh-token.ts';

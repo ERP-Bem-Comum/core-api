@@ -9,7 +9,7 @@
  * RED esperado: nenhum `public-api/migrate.ts` existe ainda → o import falha.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { applyMigrations as authApply } from '#src/modules/auth/public-api/migrate.ts';

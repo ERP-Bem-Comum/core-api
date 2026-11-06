@@ -2,7 +2,7 @@
 // real (paridade com o grid Contas a Pagar). Regressão: "TODO título pago aparece na conciliação".
 // Candidato ⇔ (documento Pago  OU  título Paid)  E  título ≠ Reconciled.
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {
@@ -57,7 +57,7 @@ describe('PayableReconciliationView InMemory — searchPaid (#323)', () => {
   const view = createInMemoryPayableReconciliationView(store, docStatuses);
 
   let returned: ReadonlySet<string>;
-  before(async () => {
+  beforeAll(async () => {
     const r = await view.searchPaid();
     assert.equal(r.ok, true);
     if (!r.ok) return;

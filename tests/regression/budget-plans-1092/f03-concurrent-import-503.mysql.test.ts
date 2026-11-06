@@ -2,7 +2,7 @@
 // `budget-plan-already-exists`, e o achado diz que recebe 503 `plan-clone-write-unavailable`.
 // Mede também o mesmo par SEM importação, para separar o que é herdado do que é novo.
 // GATE: MYSQL_INTEGRATION=1.
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
@@ -42,7 +42,7 @@ const classify = (
 
 if (mysqlEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({
       connectionString: mysqlTestConnectionString(),
       applyMigrations: true,
@@ -60,7 +60,7 @@ if (mysqlEnabled()) {
       approve: true,
     });
   });
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

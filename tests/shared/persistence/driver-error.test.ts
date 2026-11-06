@@ -12,7 +12,7 @@
 //   deadlock (o InnoDB já reverteu a perdedora e a outra seguiu) e a resposta ERRADA para
 //   lock-wait, onde repetir só empilha espera sobre um lock que segue segurado.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

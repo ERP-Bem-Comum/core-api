@@ -19,7 +19,7 @@
  * `docker compose` no PATH — NUNCA falha por ambiente.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
@@ -111,48 +111,50 @@ const entrypointStr = (ep: readonly string[] | string | undefined): string => {
 };
 
 // ─── CA-1: MINIO_ROOT_PASSWORD_FILE, sem MINIO_ROOT_PASSWORD em texto ────
-describe('issue #51 — CA-1: serviço minio usa _FILE vars, sem senha em texto', { skip }, () => {
-  it('CA-1a: MINIO_ROOT_USER_FILE está presente no environment do serviço minio', () => {
-    const cfg = configWithApp();
-    const env = cfg?.services?.['minio']?.environment ?? {};
-    assert.ok(
-      'MINIO_ROOT_USER_FILE' in env,
-      `MINIO_ROOT_USER_FILE ausente no environment do serviço minio. Env: ${JSON.stringify(env)}`,
-    );
-  });
+describe.skipIf(Boolean(skip))(
+  'issue #51 — CA-1: serviço minio usa _FILE vars, sem senha em texto',
+  () => {
+    it('CA-1a: MINIO_ROOT_USER_FILE está presente no environment do serviço minio', () => {
+      const cfg = configWithApp();
+      const env = cfg?.services?.['minio']?.environment ?? {};
+      assert.ok(
+        'MINIO_ROOT_USER_FILE' in env,
+        `MINIO_ROOT_USER_FILE ausente no environment do serviço minio. Env: ${JSON.stringify(env)}`,
+      );
+    });
 
-  it('CA-1b: MINIO_ROOT_PASSWORD_FILE está presente no environment do serviço minio', () => {
-    const cfg = configWithApp();
-    const env = cfg?.services?.['minio']?.environment ?? {};
-    assert.ok(
-      'MINIO_ROOT_PASSWORD_FILE' in env,
-      `MINIO_ROOT_PASSWORD_FILE ausente no environment do serviço minio. Env: ${JSON.stringify(env)}`,
-    );
-  });
+    it('CA-1b: MINIO_ROOT_PASSWORD_FILE está presente no environment do serviço minio', () => {
+      const cfg = configWithApp();
+      const env = cfg?.services?.['minio']?.environment ?? {};
+      assert.ok(
+        'MINIO_ROOT_PASSWORD_FILE' in env,
+        `MINIO_ROOT_PASSWORD_FILE ausente no environment do serviço minio. Env: ${JSON.stringify(env)}`,
+      );
+    });
 
-  it('CA-1c: MINIO_ROOT_PASSWORD NÃO aparece como chave no environment (senha em texto claro)', () => {
-    const cfg = configWithApp();
-    const env = cfg?.services?.['minio']?.environment ?? {};
-    assert.ok(
-      !('MINIO_ROOT_PASSWORD' in env),
-      `MINIO_ROOT_PASSWORD exposta em texto claro no environment do minio! (vaza em docker inspect)`,
-    );
-  });
+    it('CA-1c: MINIO_ROOT_PASSWORD NÃO aparece como chave no environment (senha em texto claro)', () => {
+      const cfg = configWithApp();
+      const env = cfg?.services?.['minio']?.environment ?? {};
+      assert.ok(
+        !('MINIO_ROOT_PASSWORD' in env),
+        `MINIO_ROOT_PASSWORD exposta em texto claro no environment do minio! (vaza em docker inspect)`,
+      );
+    });
 
-  it('CA-1d: MINIO_ROOT_USER NÃO aparece como chave no environment (user em texto claro)', () => {
-    const cfg = configWithApp();
-    const env = cfg?.services?.['minio']?.environment ?? {};
-    assert.ok(
-      !('MINIO_ROOT_USER' in env),
-      `MINIO_ROOT_USER exposta em texto claro no environment do minio! Use MINIO_ROOT_USER_FILE.`,
-    );
-  });
-});
+    it('CA-1d: MINIO_ROOT_USER NÃO aparece como chave no environment (user em texto claro)', () => {
+      const cfg = configWithApp();
+      const env = cfg?.services?.['minio']?.environment ?? {};
+      assert.ok(
+        !('MINIO_ROOT_USER' in env),
+        `MINIO_ROOT_USER exposta em texto claro no environment do minio! Use MINIO_ROOT_USER_FILE.`,
+      );
+    });
+  },
+);
 
 // ─── CA-2: secrets top-level + referenciados nos serviços ─────────────────
-describe(
+describe.skipIf(Boolean(skip))(
   'issue #51 — CA-2: secrets minio_root_user/password no top-level e nos serviços',
-  { skip },
   () => {
     it('CA-2a: secret minio_root_user declarado no bloco top-level', () => {
       const cfg = configWithApp();
@@ -199,9 +201,8 @@ describe(
 );
 
 // ─── CA-3: cliente mc do bootstrap pinado por digest ──────────────────────
-describe(
+describe.skipIf(Boolean(skip))(
   'issue #51 — CA-3: cliente mc do bootstrap pinado por digest sha256 (ADR-0011)',
-  { skip },
   () => {
     it('CA-3: imagem do minio-bootstrap contém @sha256:', () => {
       const cfg = configWithApp();
@@ -216,9 +217,8 @@ describe(
 );
 
 // ─── CA-4: entrypoint do bootstrap não interpola senha em texto ───────────
-describe(
+describe.skipIf(Boolean(skip))(
   'issue #51 — CA-4: entrypoint do minio-bootstrap não expõe senha literal',
-  { skip },
   () => {
     it('CA-4a: entrypoint usa $(cat /run/secrets/minio_root_user) para o usuário', () => {
       const cfg = configWithApp();
@@ -256,7 +256,7 @@ describe(
 // Serviço renomeado de `app` → `http` na Fase 4 (compose.yaml). Profile `app`
 // continua ativando o serviço (`profiles: [app]` no compose). O CA-5 verifica
 // o serviço pelo novo nome `http`.
-describe('issue #51 — CA-5: serviço http tem healthcheck declarado', { skip }, () => {
+describe.skipIf(Boolean(skip))('issue #51 — CA-5: serviço http tem healthcheck declarado', () => {
   it('CA-5a: serviço http existe com o profile app ativo', () => {
     const cfg = configWithApp();
     assert.ok(cfg?.services?.['http'], `serviço http ausente na config com --profile app`);

@@ -7,7 +7,7 @@
  * `manualEntry.categoryRef`; para título, `category` vem null.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -220,11 +220,11 @@ const buildHandle = async (
 let withCat: { handle: AppHandle; txId: string };
 let noCat: { handle: AppHandle; txId: string };
 
-before(async () => {
+beforeAll(async () => {
   withCat = await buildHandle(CAT_TARIFAS);
   noCat = await buildHandle(null);
 });
-after(async () => {
+afterAll(async () => {
   await withCat.handle.teardown();
   await noCat.handle.teardown();
 });

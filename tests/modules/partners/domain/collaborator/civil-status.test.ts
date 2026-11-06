@@ -3,7 +3,7 @@
  * DEVE FALHAR no W0: `domain/collaborator/civil-status.ts` ainda não existe. GREEN no W1.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as MaritalStatus from '#src/modules/partners/domain/collaborator/civil-status.ts';

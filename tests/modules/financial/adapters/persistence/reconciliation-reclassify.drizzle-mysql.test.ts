@@ -17,7 +17,7 @@
  * `fin_payable_view` NÃO tem seed de migration — pode ser limpa inteira.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { and, eq } from 'drizzle-orm';
@@ -94,7 +94,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('M2 — reclassificação na conciliação (Drizzle + MySQL)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[financial:reconciliation-reclassify] conexão: ${r.error}`);
       handle = r.value;
@@ -105,7 +105,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle.db.delete(finPayableView);
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

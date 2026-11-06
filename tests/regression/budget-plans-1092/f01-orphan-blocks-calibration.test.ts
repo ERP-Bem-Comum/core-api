@@ -3,7 +3,7 @@
 // Força o cenário só pela porta pública: `addBudgetResult` recebe o budget do plano B e a
 // subcategoria do plano A. Se a validação da API aceitar, o órfão existe; aprova-se B e tenta-se
 // calibrá-lo. Ocorrência = a calibração de B é recusada por causa do órfão.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import {
   memoryRepos,

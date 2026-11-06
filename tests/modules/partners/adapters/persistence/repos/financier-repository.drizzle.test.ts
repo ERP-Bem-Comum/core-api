@@ -5,7 +5,7 @@
  * real (docker compose). Truncate no beforeEach. Sem este env, suite é skipped.
  */
 
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
@@ -41,13 +41,13 @@ const buildActive = (cnpjRaw: string) => {
 if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openPartnersMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!opened.ok) throw new Error(`open failed: ${opened.error}`);
     handle = opened.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) await handle.close();
   });
 

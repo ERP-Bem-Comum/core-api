@@ -2,7 +2,7 @@
 // O FR-005 exige rejeitar mês fora do exercício, e a regra é de DOMÍNIO — daí o VO com smart
 // constructor + branded type, não `number` cru (domain.md §"Branded types"). Zero throw: todo
 // caminho de erro devolve Result (domain.md §"throw proibido").
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as ExerciseMonth from '#src/modules/budget-plans/domain/shared/exercise-month.ts';

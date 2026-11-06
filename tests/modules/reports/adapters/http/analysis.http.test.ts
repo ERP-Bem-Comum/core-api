@@ -11,7 +11,7 @@
  * CA4: plano sem ref (budgetPlanRef null) → grupo id:null, rótulo null (gracioso).
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler, LightMyRequestResponse } from 'fastify';
 
@@ -100,7 +100,7 @@ let handle: AppHandle;
 // #682: captura o filtro que a borda montou, para provar o mapeamento query→filtro.
 let lastFilter: AnalysisFilter | null = null;
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildReportsHttpDeps({ driver: 'memory' });
   const deps = {
     ...base,
@@ -118,7 +118,7 @@ before(async () => {
   handle = { app, teardown: () => app.close() };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

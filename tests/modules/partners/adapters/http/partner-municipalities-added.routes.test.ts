@@ -6,7 +6,7 @@
  * Lista paginada/buscável dos municípios parceiros de TODAS as UFs (painel "Adicionados").
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

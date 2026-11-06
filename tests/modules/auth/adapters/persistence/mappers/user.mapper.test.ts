@@ -3,7 +3,7 @@
 // inválido no banco derrubava o mapper inteiro, impedindo a autenticação. O mapper deve DEGRADAR
 // o campo cosmético para null (+ log), mantendo rejeição estrita nos campos críticos.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { userFromRows } from '#src/modules/auth/adapters/persistence/mappers/user.mapper.ts';

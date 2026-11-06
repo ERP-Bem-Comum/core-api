@@ -10,7 +10,7 @@
 //
 // A M2 precisa dos 5 no caminho de escrita irmão; corrigir aqui é a mesma correção, num lugar só.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, type Result } from '#src/shared/primitives/result.ts';

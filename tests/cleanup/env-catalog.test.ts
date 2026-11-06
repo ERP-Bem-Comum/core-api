@@ -28,7 +28,7 @@
  * o motivo esteja escrito na própria entrada**, e o motivo é verificável lendo o código citado.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 

@@ -20,7 +20,7 @@
  * não há assert de "8 módulos" nem lista fechada de nomes.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';

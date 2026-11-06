@@ -16,7 +16,7 @@
  * Driver memory, sem `MYSQL_INTEGRATION`.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/primitives/result.ts';
@@ -122,11 +122,11 @@ describe('#289 — alçada do aprovador no lançamento de documento (CA6/CA9)', 
     let app: AppHandle;
     let teardown: () => Promise<void>;
 
-    before(async () => {
+    beforeAll(async () => {
       ({ app, teardown } = await makeApp(50_000)); // alçada 50000 < líquido 100000
     });
 
-    after(async () => {
+    afterAll(async () => {
       await teardown();
     });
 
@@ -150,11 +150,11 @@ describe('#289 — alçada do aprovador no lançamento de documento (CA6/CA9)', 
     let app: AppHandle;
     let teardown: () => Promise<void>;
 
-    before(async () => {
+    beforeAll(async () => {
       ({ app, teardown } = await makeApp(100_000)); // alçada 100000 >= líquido 100000
     });
 
-    after(async () => {
+    afterAll(async () => {
       await teardown();
     });
 

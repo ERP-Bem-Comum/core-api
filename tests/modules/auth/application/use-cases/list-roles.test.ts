@@ -6,7 +6,7 @@
  * erro do repositorio. Usa o adapter InMemory real de RoleRepository. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { listRoles } from '#src/modules/auth/application/use-cases/list-roles.ts';

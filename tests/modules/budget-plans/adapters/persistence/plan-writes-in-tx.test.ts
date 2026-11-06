@@ -3,7 +3,7 @@
 //   • F5 da revisão da #1092: nunca os parâmetros da query (ids, centavos) nem o valor da chave;
 //   • R2 da segunda revisão: o erro que NÃO vem do driver mantém a mensagem, senão o 503 fica
 //     impossível de diagnosticar; FK e duplicate key trazem o nome da constraint.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import {
   describeDbError,

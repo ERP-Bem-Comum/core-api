@@ -24,7 +24,7 @@
  * é a mesma: cobrar a propriedade em vez de confiar na disciplina.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';

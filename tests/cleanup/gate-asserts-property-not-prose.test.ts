@@ -24,7 +24,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 
 // Este arquivo é a única exceção legítima: ele precisa citar o padrão para detectá-lo.
 const SELF = 'tests/cleanup/gate-asserts-property-not-prose.test.ts';

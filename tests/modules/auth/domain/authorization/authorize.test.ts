@@ -7,7 +7,7 @@
  * Cobre CA9..CA10. DEVEM FALHAR em W0 - authorize.ts nao existe. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Authorize from '#src/modules/auth/domain/authorization/authorize.ts';

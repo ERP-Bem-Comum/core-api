@@ -9,7 +9,7 @@
 // projeção os escreve em CADA título do snapshot. É por isso que reclassificar o documento leva a
 // mesma classificação ao imposto retido, sem um passo de escrita por filho.
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { applyPayableEvent } from '#src/modules/financial/application/use-cases/apply-payable-event.ts';

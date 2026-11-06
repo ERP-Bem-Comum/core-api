@@ -7,7 +7,7 @@
  * Verifica idempotência (rodar 2× não duplica) + reconciliação balanceada. JAMAIS o dump de produção.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { runEtl } from '#scripts/etl/main.ts';
@@ -25,8 +25,8 @@ const skipReason = RUN
   ? false
   : 'PARTNERS_ETL_INTEGRATION!=1 ou ETL_LEGACY_CONNECTION_STRING/ETL_CORE_CONNECTION_STRING ausentes';
 
-describe('ORCHESTRATOR integration — legado → core-api (2 DBs)', { skip: skipReason }, () => {
-  before(async () => {
+describe.skipIf(Boolean(skipReason))('ORCHESTRATOR integration — legado → core-api (2 DBs)', () => {
+  beforeAll(async () => {
     await loadLegacyFixture(LEGACY_CONN!, FIXTURE);
   });
 

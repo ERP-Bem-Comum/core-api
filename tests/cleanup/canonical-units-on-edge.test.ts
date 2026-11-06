@@ -29,7 +29,7 @@
  * teto de valor, e um gate que casasse o literal `R$` acusaria justamente quem documenta bem.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readdirSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';

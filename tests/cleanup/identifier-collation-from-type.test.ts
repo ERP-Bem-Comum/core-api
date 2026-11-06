@@ -72,7 +72,7 @@
  * helper para cada intenção que ainda não tem um.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';

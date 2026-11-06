@@ -8,7 +8,7 @@
  * literal fresco) para que o teste compile no W0 e fique type-safe no W1.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { collaboratorMatchesFilter } from '#src/modules/partners/application/use-cases/list-collaborators.ts';

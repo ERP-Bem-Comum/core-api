@@ -9,7 +9,7 @@
  * da variável, que são os elementos que o operador precisa ler no stderr.
  */
 import assert from 'node:assert/strict';
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { exportPKCS8, exportSPKI, generateKeyPair } from 'jose';
 
 import { readAuthJwtKeys } from '#src/modules/auth/adapters/http/jwt-key-config.ts';
@@ -18,7 +18,7 @@ import { readAuthJwtKeys } from '#src/modules/auth/adapters/http/jwt-key-config.
 let VALID_PRIVATE = '';
 let VALID_PUBLIC = '';
 
-before(async () => {
+beforeAll(async () => {
   const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
   VALID_PRIVATE = await exportPKCS8(privateKey);
   VALID_PUBLIC = await exportSPKI(publicKey);

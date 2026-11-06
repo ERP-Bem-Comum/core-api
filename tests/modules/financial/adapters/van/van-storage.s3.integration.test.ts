@@ -9,7 +9,7 @@
 //
 // GATE: só roda com `STORAGE_INTEGRATION=1` (ver `scripts/ci/test-integration.ts §storage`).
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
@@ -56,11 +56,11 @@ if (!process.env['STORAGE_INTEGRATION']) {
   });
 
   describe('VanStorage — S3 real (MinIO)', () => {
-    before(async () => {
+    beforeAll(async () => {
       await raw.send(new CreateBucketCommand({ Bucket: bucket }));
     });
 
-    after(async () => {
+    afterAll(async () => {
       const listed = await raw.send(new ListObjectsV2Command({ Bucket: bucket }));
       const keys = (listed.Contents ?? []).flatMap((o) =>
         o.Key !== undefined ? [{ Key: o.Key }] : [],

@@ -1,6 +1,6 @@
 // Achado 7 — `importFromYear === year` só é recusado depois de idas ao repositório.
 // Ocorrência = algum método do planRepo foi chamado antes da resposta `budget-plan-import-same-year`.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { BudgetPlanRepository } from '#src/modules/budget-plans/domain/budget-plan/repository.ts';
 import { memoryRepos, useCases, measure, ACTOR_REF, PROGRAM_ETI } from './_world.ts';

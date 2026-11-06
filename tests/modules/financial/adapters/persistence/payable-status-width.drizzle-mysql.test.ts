@@ -23,7 +23,7 @@
 //   pula limpo — não quebra o `pnpm test` puro (sem DB). Isolamento (#535): ids únicos por caso +
 //   limpeza em `finally` (DELETE do documento → CASCADE nos títulos); sem resíduo, sem dependência de ordem.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq } from 'drizzle-orm';
@@ -65,13 +65,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
   describe('Largura de status (#519) — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
 
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 3 });
       if (!r.ok) throw new Error(`[financial:payable-status-width] conexão: ${r.error}`);
       handle = r.value;
     });
 
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

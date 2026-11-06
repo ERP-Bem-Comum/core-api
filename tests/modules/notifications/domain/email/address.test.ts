@@ -13,7 +13,7 @@
  * ASCII puro (precaucao Node 24 strip-types).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as EmailAddress from '#src/modules/notifications/domain/email/address.ts';

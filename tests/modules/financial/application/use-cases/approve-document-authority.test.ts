@@ -13,7 +13,7 @@
  * (mesmo fake de reader) + `transitions.test.ts` (mesmo seed de documento Open).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok, isErr, isOk } from '#src/shared/index.ts';

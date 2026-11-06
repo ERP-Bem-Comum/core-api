@@ -6,7 +6,7 @@
  * DEVEM FALHAR em W0 - user-query.in-memory.ts ainda nao existe. ASCII puro.
  */
 
-import { describe, it, before } from 'node:test';
+import { describe, it, beforeAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as User from '#src/modules/auth/domain/identity/user/user.ts';
@@ -32,7 +32,7 @@ const mkUser = (name: string, email: string, disabled = false): User.User => {
 
 let users: readonly User.User[] = [];
 
-before(() => {
+beforeAll(() => {
   users = [
     mkUser('Amanda Manoel', 'amanda@x.com'),
     mkUser('Bruno Costa', 'bruno@x.com'),

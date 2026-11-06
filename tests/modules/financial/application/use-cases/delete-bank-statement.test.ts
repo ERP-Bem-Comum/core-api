@@ -6,7 +6,7 @@
  * inexistente → `bank-statement-not-found`. Não faz undo/reopen automático. RED: use-case inexistente.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/primitives/result.ts';

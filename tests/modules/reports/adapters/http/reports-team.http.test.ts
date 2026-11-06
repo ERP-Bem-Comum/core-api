@@ -7,7 +7,7 @@
  * CA3: dado sensível (CPF/salário/etc.) NÃO aparece no payload.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler, LightMyRequestResponse } from 'fastify';
 
@@ -69,7 +69,7 @@ interface AppHandle {
 }
 let handle: AppHandle;
 
-before(async () => {
+beforeAll(async () => {
   const base = await buildReportsHttpDeps({ driver: 'memory' });
   const deps = {
     ...base,
@@ -86,7 +86,7 @@ before(async () => {
   handle = { app, teardown: () => app.close() };
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

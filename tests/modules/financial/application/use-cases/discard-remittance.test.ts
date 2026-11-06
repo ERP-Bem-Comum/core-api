@@ -6,7 +6,7 @@
  * Este use case é o passo 3 dos cinco: falha → operador confere o banco → **devolve o título** →
  * paga no internet banking → baixa manual com a data real (#224).
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';

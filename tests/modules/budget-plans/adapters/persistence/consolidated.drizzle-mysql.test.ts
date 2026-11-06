@@ -2,7 +2,7 @@
 // real. Valida o que só o banco pega: `listApprovedByYear` (WHERE status/year/program_ref + ORDER BY id
 // + hidratação de budgets em lote) e a resolução da VIGENTE por família sobre linhas reais (raiz
 // histórica APROVADA + filho APROVADO de maior versão → vence o filho). Opt-in MYSQL_INTEGRATION=1.
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
@@ -44,13 +44,13 @@ describe('createDrizzleBudgetPlanRepository.listApprovedByYear — shape', () =>
 if (integrationEnabled()) {
   let handle: BudgetPlansMysqlHandle | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openBudgetPlansMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openBudgetPlansMysql falhou — ${r.error}`);
     handle = r.value;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

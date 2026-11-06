@@ -11,7 +11,7 @@
  * proteção é não existir caminho acidental até um banco com dados.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { eq } from 'drizzle-orm';
 
@@ -68,7 +68,7 @@ if (integrationEnabled()) {
     return rows.length;
   };
 
-  before(async () => {
+  beforeAll(async () => {
     const r = await openAuthMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!r.ok) throw new Error(`fixture: openAuthMysql falhou — ${r.error}`);
     handle = r.value;
@@ -79,7 +79,7 @@ if (integrationEnabled()) {
     await handle.db.delete(schema.authRole);
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (handle !== null) {
       await handle.close();
       handle = null;

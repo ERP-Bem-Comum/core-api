@@ -6,7 +6,7 @@
  * do `MYSQL_INTEGRATION`. Localmente, prova que o reader classifica os documentos reais.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,18 +29,15 @@ const pdfs = ((): readonly string[] => {
 
 if (pdfs.length === 0) {
   describe('native-pdf REAL (#386, local)', () => {
-    it(
-      'sem fixtures reais na pasta gitignored — pulando (CI/ambiente sem os PDFs)',
-      { skip: true },
-      () => {
-        /* no-op */
-      },
-    );
+    it.skip('sem fixtures reais na pasta gitignored — pulando (CI/ambiente sem os PDFs)', () => {
+      /* no-op */
+    });
   });
 } else {
   // #386 Fatia 1 entrega a mecânica (TJ + reconstrução + DANFE); estes reais precisam de extração
   // profunda de fonte (Identity-H sem /ToUnicode) ou stream não-comprimido → Fatia 2 (#388). Marcados
-  // `todo` (rodam, não falham o gate) com a causa-raiz — não escondem o gap, documentam-no.
+  // `todo` com a causa-raiz — não escondem o gap, documentam-no. No bun:test, `it.todo` NÃO executa
+  // o corpo (no node:test executava sem falhar o gate); `bun test --todo` os roda.
   const FATIA2: ReadonlyMap<string, string> = new Map([
     ['DANFCOM.pdf', '#388: Identity-H com CMap mas decode sem âncoras'],
     ['DANFCOM (1).pdf', '#388: Identity-H com CMap mas decode sem âncoras'],
@@ -52,8 +49,8 @@ if (pdfs.length === 0) {
     const reader = createNativePdfDocumentReader();
     for (const f of pdfs) {
       const fatia2 = FATIA2.get(f);
-      const opts = fatia2 !== undefined ? { todo: fatia2 } : {};
-      it(`CA4: ${f} → type detectado (não scanned/malformed)`, opts, async () => {
+      const register = fatia2 !== undefined ? it.todo : it;
+      register(`CA4: ${f} → type detectado (não scanned/malformed)`, async () => {
         const bytes = new Uint8Array(readFileSync(join(DIR, f)));
         const r = await reader.read({ bytes });
         assert.equal(r.ok, true, `${f}: reader falhou → ${r.ok ? '' : r.error}`);

@@ -17,7 +17,7 @@
  * `npm run`, `npm test`, `npm ci`, `npx` — que um leitor copia e cola.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';

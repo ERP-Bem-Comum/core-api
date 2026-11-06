@@ -3,7 +3,7 @@
  * Comum a fake e ES256 (jose). NAO executa direto. Setup sync-ou-async. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { TokenIssuer } from '#src/modules/auth/application/ports/token-issuer.ts';

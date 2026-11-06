@@ -12,7 +12,7 @@
  *  CA-T8  type-level smoke test: ContractsModuleEvent cobre os 6 event types
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

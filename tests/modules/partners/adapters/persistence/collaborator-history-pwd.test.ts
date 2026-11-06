@@ -3,7 +3,7 @@
  * PT — no PUT (preenche até completar) e, só ela, ao completar o cadastro (autocadastro ou RH).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';

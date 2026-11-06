@@ -11,7 +11,7 @@
 //
 // GATE: MYSQL_INTEGRATION=1 (lista do runner `financial`).
 
-import { describe, before, after, it } from 'node:test';
+import { describe, beforeAll, afterAll, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 
@@ -49,12 +49,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
     // Pool folgado de propósito: com `poolLimit: 1` as duas chamadas concorrentes seriam
     // serializadas pelo POOL, não pelo InnoDB, e o teste passaria sem provar nada.
-    before(async () => {
+    beforeAll(async () => {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 6 });
       if (!r.ok) throw new Error(`[payable-cas] conexao: ${r.error}`);
       handle = r.value;
     });
-    after(async () => {
+    afterAll(async () => {
       await handle?.close();
     });
 

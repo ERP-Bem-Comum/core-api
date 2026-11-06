@@ -9,7 +9,7 @@
  * Sem MySQL — roda em `pnpm test`.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import type { PartnersEtlStoreError } from '#src/modules/partners/public-api/etl.ts';

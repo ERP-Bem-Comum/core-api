@@ -2,7 +2,7 @@
 //
 // Paridade com o adapter Drizzle (provado contra MySQL em `reconciliation-repository.drizzle-mysql`):
 // uma entry por título, status anterior e seguinte, autor do agregado, motivo no desfazimento.
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';

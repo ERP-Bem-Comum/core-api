@@ -8,7 +8,7 @@
  * Driver memory; fastify.inject (sem Docker). ASCII puro.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';
@@ -89,12 +89,12 @@ describe('AUTH-ROLE-APPROVAL-LIMIT — alcada na borda de papeis (US2)', () => {
   let teardown: () => Promise<void>;
   let token: string;
 
-  before(async () => {
+  beforeAll(async () => {
     ({ app, teardown } = await makeApp());
     token = await login(app, ADMIN);
   });
 
-  after(async () => {
+  afterAll(async () => {
     await teardown();
   });
 

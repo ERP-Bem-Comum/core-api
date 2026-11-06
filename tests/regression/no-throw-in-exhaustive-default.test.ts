@@ -24,7 +24,7 @@
  *     }
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

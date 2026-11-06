@@ -8,7 +8,7 @@
  * GREEN quando o W1 entregar o hardening. CA7 (regressao) fica em bootstrap.test.ts. ASCII puro.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { FastifyPluginAsync } from 'fastify';
 

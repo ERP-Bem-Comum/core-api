@@ -6,7 +6,7 @@
  * o de vencimento mais próximo; sob `createdAt desc`, o último lançado. Cobre CA1/CA2.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import type { preHandlerAsyncHookHandler } from 'fastify';
 
@@ -59,7 +59,7 @@ interface AppHandle {
 
 let handle: AppHandle;
 
-before(async () => {
+beforeAll(async () => {
   const financialDeps = await buildFinancialHttpDeps({ driver: 'memory' });
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({
@@ -87,7 +87,7 @@ before(async () => {
   await post(openBody('OPEN-C', '2026-06-30'));
 });
 
-after(async () => {
+afterAll(async () => {
   await handle.teardown();
 });
 

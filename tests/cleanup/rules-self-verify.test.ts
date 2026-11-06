@@ -28,7 +28,7 @@
  * arbitrária via pull request.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync, globSync } from 'node:fs';
 import { join, sep } from 'node:path';

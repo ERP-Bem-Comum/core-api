@@ -5,7 +5,7 @@
  * RECUSADOS (não ignorados); branco conta como ausente. PJ (CNPJ) continua exigindo os dois.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';

@@ -4,7 +4,7 @@
  * adoção de órfão (janela save→mark de run parcial — W2 issue 1/4).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

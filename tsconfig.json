@@ -7,7 +7,9 @@
 
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["node"],
+    // `bun` traz o módulo `bun:test` (o runner da suíte) — e, num programa só, também o global
+    // `Bun` para `src/`. Na primeira fase da épica o código de produção NÃO usa API do Bun.
+    "types": ["node", "bun"],
 
     "strict": true,
     "noUncheckedIndexedAccess": true,

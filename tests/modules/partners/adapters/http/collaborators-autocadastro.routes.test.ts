@@ -19,7 +19,7 @@
  * Expiração (TTL) é coberta no nível de domínio (`invite-token.test.ts`, já GREEN) + use-case no W1.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { buildApp } from '#src/shared/http/app.ts';

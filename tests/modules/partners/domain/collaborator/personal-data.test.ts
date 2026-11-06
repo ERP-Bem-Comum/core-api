@@ -8,7 +8,7 @@
  * Fixtures sintéticas: RG, datas e CPF de teste, nenhum dado de pessoa real.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { is } from 'drizzle-orm';
 import { MySqlVarChar } from 'drizzle-orm/mysql-core';

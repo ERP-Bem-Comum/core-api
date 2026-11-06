@@ -1,4 +1,4 @@
-import { describe, it, before, after, beforeEach } from 'node:test';
+import { describe, it, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { strict as assert } from 'node:assert';
 import { eq } from 'drizzle-orm';
 
@@ -31,7 +31,7 @@ if (integrationEnabled()) {
   let closePort: (() => Promise<void>) | null = null;
   let provision: ProvisionFn | null = null;
 
-  before(async () => {
+  beforeAll(async () => {
     const opened = await openAuthMysql({ connectionString: VALID_CONN, applyMigrations: true });
     if (!opened.ok) throw new Error(`fixture: openAuthMysql falhou — ${opened.error}`);
     handle = opened.value;
@@ -42,7 +42,7 @@ if (integrationEnabled()) {
     closePort = built.value.close;
   });
 
-  after(async () => {
+  afterAll(async () => {
     if (closePort !== null) await closePort();
     if (handle !== null) await handle.close();
     handle = null;

@@ -15,7 +15,7 @@
  * Driver memory, sem `MYSQL_INTEGRATION`.
  */
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, beforeAll, afterAll } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { ok } from '#src/shared/primitives/result.ts';
@@ -141,10 +141,10 @@ describe('#609 — alçada do CHAMADOR no ato de aprovar (borda HTTP)', () => {
     let app: AppHandle;
     let teardown: () => Promise<void>;
 
-    before(async () => {
+    beforeAll(async () => {
       ({ app, teardown } = await makeApp(50_000)); // alçada 50000 < líquido 100000
     });
-    after(async () => {
+    afterAll(async () => {
       await teardown();
     });
 
@@ -183,10 +183,10 @@ describe('#609 — alçada do CHAMADOR no ato de aprovar (borda HTTP)', () => {
     let app: AppHandle;
     let teardown: () => Promise<void>;
 
-    before(async () => {
+    beforeAll(async () => {
       ({ app, teardown } = await makeApp(999_999_999));
     });
-    after(async () => {
+    afterAll(async () => {
       await teardown();
     });
 
@@ -205,10 +205,10 @@ describe('#609 — alçada do CHAMADOR no ato de aprovar (borda HTTP)', () => {
     let app: AppHandle;
     let teardown: () => Promise<void>;
 
-    before(async () => {
+    beforeAll(async () => {
       ({ app, teardown } = await makeApp(null));
     });
-    after(async () => {
+    afterAll(async () => {
       await teardown();
     });
 

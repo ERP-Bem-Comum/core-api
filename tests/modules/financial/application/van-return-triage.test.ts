@@ -2,7 +2,7 @@
 //
 // A triagem é função pura, então estes testes não simulam bucket nenhum: montam envelopes e objetos
 // e afirmam o balde. O que exige storage é a fatia seguinte (listar, ler, hashear).
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import {

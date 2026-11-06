@@ -8,7 +8,7 @@
  * Cobertura: CA1 (tipo text), CA2 (segue NOT NULL).
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { contracts } from '#src/modules/contracts/adapters/persistence/schemas/mysql.ts';

@@ -6,7 +6,7 @@
  * Plano não-aprovado -> 409; ausente -> 404; year ausente -> 400 (Zod); sem token -> 401.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
 
 import { BOM } from '#src/shared/utils/csv.ts';
