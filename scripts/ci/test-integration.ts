@@ -24,7 +24,7 @@ import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const EX_USAGE = 64; // sysexits.h — uso inválido.
 
-type Suite = Readonly<{
+export type Suite = Readonly<{
   services: readonly ('mysql' | 'minio' | 'mailpit')[];
   secrets: boolean; // cria os secrets de teste do MySQL
   env: Readonly<Record<string, string>>;
@@ -60,7 +60,9 @@ const ETL_DB_ENV: Readonly<Record<string, string>> = {
   ETL_CORE_CONNECTION_STRING: mysqlTestConnectionString({ database: 'core' }),
 };
 
-const SUITES: Readonly<Record<string, Suite>> = {
+// Exportado para `tests/cleanup/integration-orphans.test.ts`, que cruza estes `paths` com todo
+// arquivo de teste dependente de `*_INTEGRATION` — teste fora daqui não roda em lugar nenhum.
+export const SUITES: Readonly<Record<string, Suite>> = {
   contracts: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/contracts/adapters/persistence/migrations/*.test.ts',
     'tests/modules/contracts/adapters/persistence/mysql-driver.test.ts',
@@ -430,4 +432,6 @@ const main = (): number => {
   }
 };
 
-process.exitCode = main();
+// Só executa quando chamado como script: importar o módulo (o gate de órfãos lê `SUITES`) não pode
+// subir Docker nem mexer em secrets. `import.meta.main` existe no Node 24.2+ e no Bun.
+if (import.meta.main) process.exitCode = main();
