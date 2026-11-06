@@ -14,6 +14,7 @@
 
 import { describe, beforeAll, afterAll, beforeEach, it } from 'bun:test';
 import { strict as assert } from 'node:assert';
+import { sql } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
@@ -35,6 +36,8 @@ if (!process.env['MYSQL_INTEGRATION']) {
   // (host local, porta padrão do MySQL, base `core`).
   // O default só é inofensivo enquanto nada escuta a 3306 nesta máquina — no dia em que
   // alguém subir um MySQL local ou outro túnel, o silêncio vira DDL no banco errado.
+  // A suíte `financial` de `scripts/ci/test-integration.ts` passa a URL do banco de teste
+  // explicitamente — e, por vir no `env` da suíte, ela SOBRESCREVE uma que o shell tenha herdado.
   const connectionString = process.env['FINANCIAL_DATABASE_URL'];
   if (connectionString === undefined || connectionString.trim() === '') {
     throw new Error(
@@ -71,6 +74,9 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // `fin_cost_centers`/`fin_categories`, que têm seed e não voltam se apagados.
     beforeEach(async () => {
       const db = handle.db;
+      // Primeiro o único vínculo com FK RESTRICT para `fin_payables`/`fin_documents`: resíduo de
+      // remessa deixado por um vizinho da suíte faria o `delete(finPayables)` estourar 1451.
+      await db.delete(schema.finRemittancePayables);
       await db.delete(schema.finOutbox);
       await db.delete(schema.finTimelineFieldChanges);
       await db.delete(schema.finDocumentTimeline);
@@ -119,6 +125,30 @@ if (!process.env['MYSQL_INTEGRATION']) {
       return r.value;
     };
 
+    // ISS 5000 → 6000: muda a chave de conteúdo da retenção (`taxLikeKey`), então o save não pode
+    // pular as tabelas filhas pelo atalho de conjunto igual (E1) e precisa apagar por PK e reinserir
+    // (E2). É o ajuste que o front faz, pela operação de domínio — não um agregado forjado.
+    const ADJUSTED_ISS_CENTS = 6000;
+    const adjustRetentions = (d: Document.CreateDocumentOutput): Document.AdjustDocumentOutput => {
+      const r = Document.adjust({
+        document: d.document,
+        payables: d.payables,
+        changes: {
+          retentions: [
+            retention('ISS', ADJUSTED_ISS_CENTS),
+            retention('IRRF', 2250),
+            retention('INSS', 11000),
+          ],
+        },
+        heldPayableIds: [],
+      });
+      if (!r.ok) throw new Error(`setup: adjust (${r.error})`);
+      return r.value;
+    };
+
+    // Guarda do E1: regravar o MESMO estado em paralelo. Pelo atalho `sameRowSet`
+    // (`child-rows-diff.ts`), as transações não tocam as tabelas filhas — este caso NÃO exercita o
+    // DELETE por PK; quem o exercita é o caso "que MUDAM as retenções", abaixo.
     it('N saves concorrentes sobre documentos DISTINTOS com retenção concluem sem falha', async () => {
       const repo = createDrizzleDocumentRepository(handle);
       const docs = Array.from({ length: CONCURRENCY }, (_unused, i) =>
@@ -173,6 +203,72 @@ if (!process.env['MYSQL_INTEGRATION']) {
         failed,
         0,
         `${String(failed)} falhas em ${String(ROUNDS * CONCURRENCY)} saves concorrentes.`,
+      );
+    });
+
+    /**
+     * Deadlocks (errno 1213) que o SERVIDOR levantou desde que subiu. O `withDeadlockRetry` do
+     * repositório repete a vítima e devolve `ok` — então "nenhum save falhou" não distingue o fix
+     * da regressão. O contador do servidor distingue: ele conta o deadlock que o retry escondeu.
+     * Global, mas a suíte roda um arquivo por vez (`--isolate`, serial).
+     */
+    const deadlocksSoFar = async (): Promise<number> => {
+      const result = await handle.db.execute(
+        sql`SELECT SUM_ERROR_RAISED AS n FROM performance_schema.events_errors_summary_global_by_error WHERE ERROR_NUMBER = 1213`,
+      );
+      const rows = (Array.isArray(result[0]) ? result[0] : result) as readonly { n?: unknown }[];
+      return Number(rows[0]?.n ?? 0);
+    };
+
+    // Guarda do E2 (#803): N transações concorrentes que de fato REESCREVEM as filhas. Antes do fix,
+    // o `DELETE … WHERE document_id = ?` varria o índice não-único: o gap lock de uma transação
+    // bloqueava o INSERT da outra, e em cruz isso é deadlock (1213). Com o DELETE por PK, não há
+    // faixa a disputar. Afirma-se o CONTADOR de deadlocks, não só o resultado: o retry esconde 1213.
+    it('N saves concorrentes que MUDAM as retenções gravam todas, sem deadlock (E2)', async () => {
+      const repo = createDrizzleDocumentRepository(handle);
+      const ROUNDS = 4;
+      const deadlocksBefore = await deadlocksSoFar();
+
+      for (let round = 0; round < ROUNDS; round += 1) {
+        const docs = Array.from({ length: CONCURRENCY }, (_unused, i) =>
+          makeDocumentWithRetentions(round * CONCURRENCY + i),
+        );
+        for (const d of docs) {
+          const created = await repo.save({ document: d.document, payables: d.payables }, []);
+          assert.equal(isOk(created), true, 'setup: criação sequencial deveria passar');
+        }
+
+        const adjusted = docs.map(adjustRetentions);
+        const results = await Promise.all(
+          adjusted.map((a) => repo.save({ document: a.document, payables: a.payables }, [], 0)),
+        );
+        const failures = results.filter((r) => !isOk(r));
+        assert.equal(
+          failures.length,
+          0,
+          `rodada ${String(round + 1)}: ${String(failures.length)} de ${String(CONCURRENCY)} ` +
+            `ajustes concorrentes falharam (${failures.map((f) => (f.ok ? '' : f.error)).join(', ')})`,
+        );
+
+        // "Não falhou" não basta: o ajuste tem de estar GRAVADO em cada documento.
+        for (const a of adjusted) {
+          const found = await repo.findById(a.document.id);
+          assert.ok(found.ok, 'findById falhou');
+          const iss = found.value.document.retentions.find((x) => x.type === 'ISS');
+          assert.equal(
+            iss?.value.cents,
+            ADJUSTED_ISS_CENTS,
+            `documento ${String(a.document.id)} não gravou o ISS ajustado`,
+          );
+        }
+      }
+
+      const deadlocks = (await deadlocksSoFar()) - deadlocksBefore;
+      assert.equal(
+        deadlocks,
+        0,
+        `${String(deadlocks)} deadlock(s) durante os ajustes concorrentes — o retry os escondeu do ` +
+          'resultado. O DELETE das retenções voltou a varrer o índice document_id (#803)?',
       );
     });
   });

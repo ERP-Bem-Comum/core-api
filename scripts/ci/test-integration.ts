@@ -160,118 +160,126 @@ export const SUITES: Readonly<Record<string, Suite>> = {
     // filtros combinaveis programa/plano/ano/Rede (CA4), plain rows (CA6).
     'tests/modules/budget-plans/public-api/budget-plans-read-port.integration.test.ts',
   ]),
-  financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
-    'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
-    // FIN-DOC-SUBCATEGORY-STAMP (#502 · S1) — coluna subcategory_ref em fin_documents +
-    // fin_payable_view (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
-    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
-    'tests/modules/financial/adapters/persistence/subcategory-ref-stamp.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/supplier-view-store.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/document-supplier-view-join.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',
-    // Alocação de NSA sob concorrência real: prova que o SELECT ... FOR UPDATE serializa e que dois
-    // pedidos simultâneos nunca recebem o mesmo número. NSA repetido = retransmissão para o banco.
-    'tests/modules/financial/adapters/persistence/nsa-allocation.drizzle-mysql.test.ts',
-    // Backfill da migration 0057 (#943, CA4): a sequência de cada convênio nasce em MAX(next_nsa).
-    // ⚠️ Existe porque as migrations rodam contra banco VAZIO no `before` de cada arquivo — um
-    // `INSERT … SELECT` sobre tabela vazia passa sem inserir nada. Em produção ela roda sobre contas
-    // reais, no job de migration, ANTES de o app subir: falhar ali derruba o deploy.
-    'tests/modules/financial/adapters/persistence/convenio-nsa-backfill.drizzle-mysql.test.ts',
-    // Remessa (migration 0044): cabeçalho + vínculos na mesma transação, anti-join de documento
-    // preso no BANCO, e os UNIQUEs de NSA-por-conta e nome de arquivo.
-    'tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts',
-    // Acompanhamento de remessa (#728): listPaged ordena por generatedAt DESC no banco, total real,
-    // documentIds da página em batch (sem N+1), e findById com os vínculos.
-    'tests/modules/financial/adapters/persistence/remittance-read.drizzle-mysql.test.ts',
-    // Quarentena do retorno (#753, migration 0048): o ODKU preserva `first_seen_at` e reabre o
-    // liberado, o CHECK recusa motivo fora da união, e `object_key` compara em collation binária —
-    // chave de S3 é case-sensitive, e `unicode_ci` faria dois objetos distintos colidirem na PK.
-    'tests/modules/financial/adapters/persistence/van-return-quarantine-store.drizzle-mysql.test.ts',
-    // Casamento do retorno (#690): o JOIN que traz o arquivo de remessa, e a UNIQUE de
-    // `your_number` — que é o que torna o casamento uma decisão em vez de heurística.
-    'tests/modules/financial/adapters/persistence/van-return-match-reader.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
-    // M2: reclassificação da taxonomia na conciliação (atomicidade + cascata ao fin_payable_view).
-    'tests/modules/financial/adapters/persistence/reconciliation-reclassify.drizzle-mysql.test.ts',
-    // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
-    // 'PartiallyReconciled' (19 chars). RED por errno 1406 (varchar(16) curta) até o widen p/ varchar(24).
-    'tests/modules/financial/adapters/persistence/payable-status-width.drizzle-mysql.test.ts',
-    // #269 — ExpectedCounterpartStore (fin_expected_counterpart 0034 + outbox na tx)
-    'tests/modules/financial/adapters/persistence/expected-counterpart-store.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/match-suggestion.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/payable-list-view.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/manual-entry.drizzle-mysql.test.ts',
-    // FIN-MANUAL-ENTRY-TAXONOMY (#502 · S2) — colunas budget_plan_ref + subcategory_ref em
-    // fin_manual_entries (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
-    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
-    'tests/modules/financial/adapters/persistence/manual-entry-taxonomy.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/manual-payment.drizzle-mysql.test.ts',
-    // Fatia 1 — concorrência da escrita por título (CAS). Sem MySQL real este arquivo não prova
-    // nada: o que ele mede é o InnoDB sob escrita simultânea, e um fake responderia o que o autor
-    // do fake imaginou.
-    'tests/modules/financial/adapters/persistence/payable-cas-concurrency.drizzle-mysql.test.ts',
-    // `fin_payables_paid_at_chk` recusa Paid sem paid_at (errno 3819) — só o banco recusa. Estava
-    // órfão desde a criação; religado no replanejamento de 06/11/2026.
-    'tests/modules/financial/adapters/persistence/payable-paid-at-check.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/cost-center-read.drizzle-mysql.test.ts',
-    // #127 — outbox transacional do financial (atomicidade estado+evento)
-    'tests/modules/financial/adapters/persistence/fin-outbox-schema.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/document-outbox-atomic.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/reconciliation-outbox-atomic.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/statement-period-outbox-atomic.drizzle-mysql.test.ts',
-    // #146 — PayableDocumentView (JOIN fin_payables × fin_documents para export CSV-Nibo)
-    'tests/modules/financial/adapters/persistence/payable-document-view.drizzle-mysql.test.ts',
-    // #357 — PayableSummaryByIdsView (JOIN fin_payables × fin_documents × fin_supplier_view p/ payables:batch)
-    'tests/modules/financial/adapters/persistence/payable-summary-by-ids-view.drizzle-mysql.test.ts',
-    'tests/modules/financial/adapters/persistence/document-summary-by-ids-view.drizzle-mysql.test.ts',
-    // #323 — searchPaid reflete o status do DOCUMENTO (paridade com o grid Contas a Pagar): documento
-    // Pago traz líquido Paid + retenções Open/Approved; salvaguarda <> 'Reconciled'. Regressão fix.
-    'tests/modules/financial/adapters/persistence/payable-reconciliation-view.drizzle-mysql.test.ts',
-    // #240 REP-2: agregação "fornecedores sem contrato" (fin_payable_view ⟕ fin_supplier_view)
-    'tests/modules/financial/public-api/suppliers-without-contract.drizzle-mysql.test.ts',
-    // #242 DASH-F5: Top-5 "fornecedores sem contrato" do Dashboard (listTop — ORDER BY sum DESC,
-    // supplier_ref ASC LIMIT 5; corte e desempate no SQL). Reusa a agregação do REP-2.
-    'tests/modules/financial/public-api/suppliers-without-contract-top.drizzle-mysql.test.ts',
-    // #241 DASH-F1: KPI "Despesas por Centro de Custo" — dois CASE-SUM sobre paid_at (M-1/M-2) por CC,
-    // WHERE status='Paid', GROUP BY cost_center_ref + LEFT JOIN fin_cost_centers (nome).
-    'tests/modules/financial/public-api/dashboard-cost-centers.drizzle-mysql.test.ts',
-    // #243 REP-4: "posição de pagamentos" (fin_payable_view × cost_center × categoria, 3 baldes)
-    'tests/modules/financial/public-api/payment-position.drizzle-mysql.test.ts',
-    // REP-3 #114: "análise de planejamento" (fin_payable_view por categoria×CC×mês, DATE_FORMAT)
-    'tests/modules/financial/public-api/payables-analysis.drizzle-mysql.test.ts',
-    // REP-6 #442 (Slice A): "relatório geral" — linhas planas paginadas de fin_payable_view com
-    // LEFT JOINs same-module (documento/fornecedor/CC/categoria + self-join subcategoria) + filtros.
-    'tests/modules/financial/public-api/general-report.drizzle-mysql.test.ts',
-    // REP #590 (Slice A): "fluxo de caixa" — fin_payable_view agregado por Categoria × Subcategoria
-    // em 2 baldes (EXPECTED=Σ Open+Approved; REALIZED=Σ Paid; Cancelled fora) + self-join subcategoria.
-    'tests/modules/financial/public-api/cashflow.drizzle-mysql.test.ts',
-    // REP #590 (Slice B): "fluxo de caixa /chart" — série temporal. fin_payable_view agregado por
-    // Categoria × Subcategoria × MÊS (DATE_FORMAT due_date '%Y-%m-01'), 2 baldes, ordenado por mês ASC.
-    'tests/modules/financial/public-api/cashflow-chart.drizzle-mysql.test.ts',
-    // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
-    // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
-    'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
-    // FIN-REALIZED-PROVISIONED-READ (fatia 2/3 REPORTS-REALIZED-VS-PLANNED): realizado + provisionado
-    // por (budget_plan_ref, category_ref, mês). Realizado=Σ reconciled_value_cents Active (mês=reconciled_at);
-    // provisionado=fin_payables Approved sem item Active (mês=due_date). Mesmo JOIN 3-hop do #416.
-    'tests/modules/financial/public-api/realized-provisioned.drizzle-mysql.test.ts',
-    // FIN-REALIZED-SUBCATEGORY-GRAIN (#502 · S5): grão desce a subcategoria (RealizedProvisionedRow
-    // ganha subcategoryRef; realizado+provisionado agrupam por (plano, categoria, subcategoria, mês))
-    // + inclui o realizado dos TÍTULOS MANUAIS (fin_manual_entries → fin_reconciliations Active,
-    // regra: budget_plan_ref IS NOT NULL E type NOT IN Transfer/Investment/Redemption). Não executado
-    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
-    'tests/modules/financial/public-api/realized-provisioned-subcategory.drizzle-mysql.test.ts',
-    'tests/workers/supplier-view-projection/projection.integration.test.ts',
-    // Religados no replanejamento de 06/11/2026 (eram órfãos desde a criação):
-    // projeção do read-model de títulos (claim por consumidor com SKIP LOCKED, anti-join, DLQ que
-    // retém a origem) e o reader SQL do backfill (o filtro `dueDate instanceof Date` depende do
-    // modo de data do Drizzle — um fake não o reproduz).
-    'tests/workers/payable-view-projection/projection.integration.test.ts',
-    'tests/jobs/financial/payable-view-backfill/backfill.integration.test.ts',
-  ]),
+  // `FINANCIAL_DATABASE_URL` explícita: o teste de concorrência a EXIGE (recusa cair no default), e
+  // os demais a preferem — vinda daqui, ela sobrescreve uma URL real que o shell tenha herdado.
+  financial: mysqlSuite(
+    { MYSQL_INTEGRATION: '1', FINANCIAL_DATABASE_URL: mysqlTestConnectionString() },
+    [
+      'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
+      // #803 — saves concorrentes entre documentos distintos: guarda do E1 (conjunto igual) e do E2
+      // (DELETE por PK). Gap lock do InnoDB — nenhum fake o reproduz. Religado em 06/11/2026.
+      'tests/modules/financial/adapters/persistence/document-repository-concurrency.drizzle-mysql.test.ts',
+      // FIN-DOC-SUBCATEGORY-STAMP (#502 · S1) — coluna subcategory_ref em fin_documents +
+      // fin_payable_view (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
+      // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+      'tests/modules/financial/adapters/persistence/subcategory-ref-stamp.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/supplier-view-store.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/document-supplier-view-join.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',
+      // Alocação de NSA sob concorrência real: prova que o SELECT ... FOR UPDATE serializa e que dois
+      // pedidos simultâneos nunca recebem o mesmo número. NSA repetido = retransmissão para o banco.
+      'tests/modules/financial/adapters/persistence/nsa-allocation.drizzle-mysql.test.ts',
+      // Backfill da migration 0057 (#943, CA4): a sequência de cada convênio nasce em MAX(next_nsa).
+      // ⚠️ Existe porque as migrations rodam contra banco VAZIO no `before` de cada arquivo — um
+      // `INSERT … SELECT` sobre tabela vazia passa sem inserir nada. Em produção ela roda sobre contas
+      // reais, no job de migration, ANTES de o app subir: falhar ali derruba o deploy.
+      'tests/modules/financial/adapters/persistence/convenio-nsa-backfill.drizzle-mysql.test.ts',
+      // Remessa (migration 0044): cabeçalho + vínculos na mesma transação, anti-join de documento
+      // preso no BANCO, e os UNIQUEs de NSA-por-conta e nome de arquivo.
+      'tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts',
+      // Acompanhamento de remessa (#728): listPaged ordena por generatedAt DESC no banco, total real,
+      // documentIds da página em batch (sem N+1), e findById com os vínculos.
+      'tests/modules/financial/adapters/persistence/remittance-read.drizzle-mysql.test.ts',
+      // Quarentena do retorno (#753, migration 0048): o ODKU preserva `first_seen_at` e reabre o
+      // liberado, o CHECK recusa motivo fora da união, e `object_key` compara em collation binária —
+      // chave de S3 é case-sensitive, e `unicode_ci` faria dois objetos distintos colidirem na PK.
+      'tests/modules/financial/adapters/persistence/van-return-quarantine-store.drizzle-mysql.test.ts',
+      // Casamento do retorno (#690): o JOIN que traz o arquivo de remessa, e a UNIQUE de
+      // `your_number` — que é o que torna o casamento uma decisão em vez de heurística.
+      'tests/modules/financial/adapters/persistence/van-return-match-reader.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
+      // M2: reclassificação da taxonomia na conciliação (atomicidade + cascata ao fin_payable_view).
+      'tests/modules/financial/adapters/persistence/reconciliation-reclassify.drizzle-mysql.test.ts',
+      // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
+      // 'PartiallyReconciled' (19 chars). RED por errno 1406 (varchar(16) curta) até o widen p/ varchar(24).
+      'tests/modules/financial/adapters/persistence/payable-status-width.drizzle-mysql.test.ts',
+      // #269 — ExpectedCounterpartStore (fin_expected_counterpart 0034 + outbox na tx)
+      'tests/modules/financial/adapters/persistence/expected-counterpart-store.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/match-suggestion.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/payable-list-view.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/manual-entry.drizzle-mysql.test.ts',
+      // FIN-MANUAL-ENTRY-TAXONOMY (#502 · S2) — colunas budget_plan_ref + subcategory_ref em
+      // fin_manual_entries (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
+      // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+      'tests/modules/financial/adapters/persistence/manual-entry-taxonomy.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/manual-payment.drizzle-mysql.test.ts',
+      // Fatia 1 — concorrência da escrita por título (CAS). Sem MySQL real este arquivo não prova
+      // nada: o que ele mede é o InnoDB sob escrita simultânea, e um fake responderia o que o autor
+      // do fake imaginou.
+      'tests/modules/financial/adapters/persistence/payable-cas-concurrency.drizzle-mysql.test.ts',
+      // `fin_payables_paid_at_chk` recusa Paid sem paid_at (errno 3819) — só o banco recusa. Estava
+      // órfão desde a criação; religado no replanejamento de 06/11/2026.
+      'tests/modules/financial/adapters/persistence/payable-paid-at-check.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/cost-center-read.drizzle-mysql.test.ts',
+      // #127 — outbox transacional do financial (atomicidade estado+evento)
+      'tests/modules/financial/adapters/persistence/fin-outbox-schema.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/document-outbox-atomic.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/reconciliation-outbox-atomic.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/statement-period-outbox-atomic.drizzle-mysql.test.ts',
+      // #146 — PayableDocumentView (JOIN fin_payables × fin_documents para export CSV-Nibo)
+      'tests/modules/financial/adapters/persistence/payable-document-view.drizzle-mysql.test.ts',
+      // #357 — PayableSummaryByIdsView (JOIN fin_payables × fin_documents × fin_supplier_view p/ payables:batch)
+      'tests/modules/financial/adapters/persistence/payable-summary-by-ids-view.drizzle-mysql.test.ts',
+      'tests/modules/financial/adapters/persistence/document-summary-by-ids-view.drizzle-mysql.test.ts',
+      // #323 — searchPaid reflete o status do DOCUMENTO (paridade com o grid Contas a Pagar): documento
+      // Pago traz líquido Paid + retenções Open/Approved; salvaguarda <> 'Reconciled'. Regressão fix.
+      'tests/modules/financial/adapters/persistence/payable-reconciliation-view.drizzle-mysql.test.ts',
+      // #240 REP-2: agregação "fornecedores sem contrato" (fin_payable_view ⟕ fin_supplier_view)
+      'tests/modules/financial/public-api/suppliers-without-contract.drizzle-mysql.test.ts',
+      // #242 DASH-F5: Top-5 "fornecedores sem contrato" do Dashboard (listTop — ORDER BY sum DESC,
+      // supplier_ref ASC LIMIT 5; corte e desempate no SQL). Reusa a agregação do REP-2.
+      'tests/modules/financial/public-api/suppliers-without-contract-top.drizzle-mysql.test.ts',
+      // #241 DASH-F1: KPI "Despesas por Centro de Custo" — dois CASE-SUM sobre paid_at (M-1/M-2) por CC,
+      // WHERE status='Paid', GROUP BY cost_center_ref + LEFT JOIN fin_cost_centers (nome).
+      'tests/modules/financial/public-api/dashboard-cost-centers.drizzle-mysql.test.ts',
+      // #243 REP-4: "posição de pagamentos" (fin_payable_view × cost_center × categoria, 3 baldes)
+      'tests/modules/financial/public-api/payment-position.drizzle-mysql.test.ts',
+      // REP-3 #114: "análise de planejamento" (fin_payable_view por categoria×CC×mês, DATE_FORMAT)
+      'tests/modules/financial/public-api/payables-analysis.drizzle-mysql.test.ts',
+      // REP-6 #442 (Slice A): "relatório geral" — linhas planas paginadas de fin_payable_view com
+      // LEFT JOINs same-module (documento/fornecedor/CC/categoria + self-join subcategoria) + filtros.
+      'tests/modules/financial/public-api/general-report.drizzle-mysql.test.ts',
+      // REP #590 (Slice A): "fluxo de caixa" — fin_payable_view agregado por Categoria × Subcategoria
+      // em 2 baldes (EXPECTED=Σ Open+Approved; REALIZED=Σ Paid; Cancelled fora) + self-join subcategoria.
+      'tests/modules/financial/public-api/cashflow.drizzle-mysql.test.ts',
+      // REP #590 (Slice B): "fluxo de caixa /chart" — série temporal. fin_payable_view agregado por
+      // Categoria × Subcategoria × MÊS (DATE_FORMAT due_date '%Y-%m-01'), 2 baldes, ordenado por mês ASC.
+      'tests/modules/financial/public-api/cashflow-chart.drizzle-mysql.test.ts',
+      // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
+      // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
+      'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
+      // FIN-REALIZED-PROVISIONED-READ (fatia 2/3 REPORTS-REALIZED-VS-PLANNED): realizado + provisionado
+      // por (budget_plan_ref, category_ref, mês). Realizado=Σ reconciled_value_cents Active (mês=reconciled_at);
+      // provisionado=fin_payables Approved sem item Active (mês=due_date). Mesmo JOIN 3-hop do #416.
+      'tests/modules/financial/public-api/realized-provisioned.drizzle-mysql.test.ts',
+      // FIN-REALIZED-SUBCATEGORY-GRAIN (#502 · S5): grão desce a subcategoria (RealizedProvisionedRow
+      // ganha subcategoryRef; realizado+provisionado agrupam por (plano, categoria, subcategoria, mês))
+      // + inclui o realizado dos TÍTULOS MANUAIS (fin_manual_entries → fin_reconciliations Active,
+      // regra: budget_plan_ref IS NOT NULL E type NOT IN Transfer/Investment/Redemption). Não executado
+      // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+      'tests/modules/financial/public-api/realized-provisioned-subcategory.drizzle-mysql.test.ts',
+      'tests/workers/supplier-view-projection/projection.integration.test.ts',
+      // Religados no replanejamento de 06/11/2026 (eram órfãos desde a criação):
+      // projeção do read-model de títulos (claim por consumidor com SKIP LOCKED, anti-join, DLQ que
+      // retém a origem) e o reader SQL do backfill (o filtro `dueDate instanceof Date` depende do
+      // modo de data do Drizzle — um fake não o reproduz).
+      'tests/workers/payable-view-projection/projection.integration.test.ts',
+      'tests/jobs/financial/payable-view-backfill/backfill.integration.test.ts',
+    ],
+  ),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
   'etl:contracts': mysqlSuite(ETL_DB_ENV, ['tests/etl/contracts/writer.integration.test.ts']),
   'etl:financial': mysqlSuite(ETL_DB_ENV, ['tests/etl/financial/writer.integration.test.ts']),

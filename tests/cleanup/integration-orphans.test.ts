@@ -44,8 +44,6 @@ const GATE_READ =
  */
 const KNOWN_ORPHANS: Readonly<Record<string, string>> = {
   // financial
-  'tests/modules/financial/adapters/persistence/document-repository-concurrency.drizzle-mysql.test.ts':
-    'religar em `financial`; exige FINANCIAL_DATABASE_URL e a fase 2 virou verde vazio',
   'tests/modules/financial/adapters/http/approve-with-provisioned-role.http.test.ts':
     'religar em `financial`; buildVanStorage lança erro sem VAN_S3_*',
   // auth
