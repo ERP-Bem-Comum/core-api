@@ -96,8 +96,16 @@ if (!integrationEnabled()) {
   // testes exige limpar na entrada toda tabela cujo espaço de chave o arquivo escreve — e a segunda
   // prova (passar duas vezes sem recriar o banco) depende disso. Filhas antes das mães, por causa
   // das FKs. `fin_categories`/`fin_cost_centers` NÃO entram: têm seed de migration, que não volta.
+  // `fin_remittance_payables` vem primeiro: é o único vínculo com FK RESTRICT para `fin_payables` e
+  // `fin_documents`, e resíduo de remessa de um vizinho da suíte faria o DELETE estourar 1451.
   const resetFinancialTables = async (): Promise<void> => {
-    for (const table of ['fin_document_timeline', 'fin_payables', 'fin_documents', 'fin_outbox']) {
+    for (const table of [
+      'fin_remittance_payables',
+      'fin_document_timeline',
+      'fin_payables',
+      'fin_documents',
+      'fin_outbox',
+    ]) {
       await openHandle().db.execute(sql.raw(`DELETE FROM \`${table}\``));
     }
   };

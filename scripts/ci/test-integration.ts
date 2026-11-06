@@ -162,8 +162,23 @@ export const SUITES: Readonly<Record<string, Suite>> = {
   ]),
   // `FINANCIAL_DATABASE_URL` explícita: o teste de concorrência a EXIGE (recusa cair no default), e
   // os demais a preferem — vinda daqui, ela sobrescreve uma URL real que o shell tenha herdado.
+  // `VAN_S3_*` e `S3_*`: as composições HTTP EXIGEM a config de storage e falham cedo sem ela
+  // (ADR-0068 — `buildVanStorage` do financial, `s3-config-aws` do storage de documentos). O teste
+  // HTTP sobe as composições reais. Os endpoints apontam para uma porta local morta: se algum caso
+  // tentasse falar com um bucket, falharia aqui, nunca na AWS.
   financial: mysqlSuite(
-    { MYSQL_INTEGRATION: '1', FINANCIAL_DATABASE_URL: mysqlTestConnectionString() },
+    {
+      MYSQL_INTEGRATION: '1',
+      FINANCIAL_DATABASE_URL: mysqlTestConnectionString(),
+      VAN_S3_REGION: 'us-east-1',
+      VAN_S3_BUCKET: 'van-teste-inexistente',
+      VAN_S3_ENDPOINT: 'http://127.0.0.1:1',
+      VAN_S3_FORCE_PATH_STYLE: 'true',
+      S3_REGION: 'us-east-1',
+      S3_BUCKET: 'documentos-teste-inexistente',
+      S3_ENDPOINT: 'http://127.0.0.1:1',
+      S3_FORCE_PATH_STYLE: 'true',
+    },
     [
       'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
       // #803 — saves concorrentes entre documentos distintos: guarda do E1 (conjunto igual) e do E2
@@ -278,6 +293,10 @@ export const SUITES: Readonly<Record<string, Suite>> = {
       // modo de data do Drizzle — um fake não o reproduz).
       'tests/workers/payable-view-projection/projection.integration.test.ts',
       'tests/jobs/financial/payable-view-backfill/backfill.integration.test.ts',
+      // #881 CA4 — o caminho inteiro por HTTP com RBAC enforced: criar papel, provisionar conta,
+      // ativar, logar e APROVAR; e o controle sem o papel, recusado. Junção auth × financial no
+      // MySQL real. Religado em 06/11/2026 (nunca rodou: faltava a config da VAN na suíte).
+      'tests/modules/financial/adapters/http/approve-with-provisioned-role.http.test.ts',
     ],
   ),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),

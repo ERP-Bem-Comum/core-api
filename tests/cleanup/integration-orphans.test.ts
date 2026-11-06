@@ -44,8 +44,6 @@ const GATE_READ =
  */
 const KNOWN_ORPHANS: Readonly<Record<string, string>> = {
   // financial
-  'tests/modules/financial/adapters/http/approve-with-provisioned-role.http.test.ts':
-    'religar em `financial`; buildVanStorage lança erro sem VAN_S3_*',
   // auth
   'tests/modules/auth/adapters/persistence/reset-lockout.integration.test.ts':
     'religar em `auth`; os irmãos precisam limpar reset/lockout antes de auth_user',
