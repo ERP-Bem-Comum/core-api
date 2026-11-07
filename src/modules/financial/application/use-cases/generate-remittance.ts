@@ -1,3 +1,4 @@
+import { CEDENTE_COMPANY_NAME } from '../../domain/cedente/company-name.ts';
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { CedenteAccountId } from '../../domain/cedente/cedente-account-id.ts';
 import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
@@ -58,7 +59,6 @@ export type GenerateRemittanceInput = Readonly<{
 // repetiria o defeito que esta constante corrige.
 //
 // ⚠️ `alpha()` trunca em 30 posições sem avisar. Este valor tem 20 — mudá-lo pede conferir o novo.
-const CEDENTE_COMPANY_NAME = 'ASSOCIACAO BEM COMUM';
 
 // UM arquivo gerado. Era o retorno inteiro do use case até a partição multi-arquivo (CA4 da #838).
 export type GeneratedRemittanceFile = Readonly<{

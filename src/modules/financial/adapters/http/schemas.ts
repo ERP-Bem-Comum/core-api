@@ -1137,7 +1137,27 @@ export const accountStatementQuerySchema = z.object({
   from: z.iso.date(),
   to: z.iso.date(),
   filter: z.enum(['all', 'in', 'out', 'reconciled', 'pending']).optional(),
+  // Spec 132: traz os títulos de cada transação e o nome da empresa. Sem ele, a resposta não muda.
+  include: z.literal('reconciliation').optional(),
 });
+
+const statementLineReconciliationSchema = z
+  .object({
+    reconciliationId: z.string(),
+    titles: z.array(
+      z
+        .object({
+          payableId: z.string(),
+          documentNumber: z.string().nullable(),
+          payeeName: z.string().nullable(),
+          retentionType: z.string().nullable(),
+          dueDate: z.iso.date().nullable(),
+          reconciledValueCents: z.string(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 
 const statementViewLineSchema = z
   .object({
@@ -1150,6 +1170,7 @@ const statementViewLineSchema = z
     valueCents: z.string(),
     runningBalanceCents: z.string(),
     reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
+    reconciliation: statementLineReconciliationSchema.nullable().optional(),
   })
   .strict();
 
@@ -1175,6 +1196,7 @@ export const accountStatementResponseSchema = z
       pending: z.number().int().min(0),
     }),
     days: z.array(statementViewDaySchema),
+    companyName: z.string().optional(),
   })
   .strict();
 

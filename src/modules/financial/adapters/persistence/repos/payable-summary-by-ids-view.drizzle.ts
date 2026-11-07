@@ -40,6 +40,7 @@ type SelectedRow = Readonly<{
   supplierRef: string | null;
   supplierName: string | null;
   supplierDocument: string | null;
+  retentionType: string | null;
 }>;
 
 // Mapper row → Result (estilo payable-list.mapper.ts). A projeção já casa 1:1 com PayableSummaryRow —
@@ -63,6 +64,7 @@ const toPayableSummaryRow = (
     supplierRef: row.supplierRef,
     supplierName: row.supplierName,
     supplierDocument: row.supplierDocument,
+    retentionType: row.retentionType,
   });
 };
 
@@ -92,6 +94,7 @@ export const createDrizzlePayableSummaryByIdsView = (
             supplierRef: finDocuments.supplierRef,
             supplierName: finSupplierView.name,
             supplierDocument: finSupplierView.document,
+            retentionType: finPayables.retentionType,
           })
           .from(finPayables)
           .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))

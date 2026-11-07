@@ -7,6 +7,7 @@
  * Espelha o padrão de contracts/adapters/http/contract-dto.ts.
  */
 
+import type { TransactionReconciledTitles } from '../../application/use-cases/get-statement-reconciled-titles.ts';
 import type { Document } from '../../domain/document/types.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
 import type { ParseDocumentOutput } from '../../application/use-cases/parse-document.ts';
@@ -476,7 +477,36 @@ export const counterpartSuggestionsToDto = (
 });
 
 /** Serializa o read-model do extrato (#139). Money em string (convenção); datas em ISO. */
-export const accountStatementToDto = (view: StatementView): AccountStatementResponseDto => ({
+// Spec 132: `include` ausente → nenhum campo novo na resposta (o contrato anterior fica intacto).
+export type StatementInclude = Readonly<{
+  companyName: string;
+  titlesByTransaction: ReadonlyMap<string, TransactionReconciledTitles>;
+}>;
+
+type StatementLineReconciliationDto =
+  AccountStatementResponseDto['days'][number]['lines'][number]['reconciliation'];
+
+const lineReconciliationToDto = (
+  found: TransactionReconciledTitles | undefined,
+): StatementLineReconciliationDto =>
+  found === undefined
+    ? null
+    : {
+        reconciliationId: found.reconciliationId,
+        titles: found.titles.map((title) => ({
+          payableId: title.payableId,
+          documentNumber: title.documentNumber,
+          payeeName: title.payeeName,
+          retentionType: title.retentionType,
+          dueDate: title.dueDate === null ? null : title.dueDate.toISOString().slice(0, 10),
+          reconciledValueCents: String(title.reconciledValueCents),
+        })),
+      };
+
+export const accountStatementToDto = (
+  view: StatementView,
+  include?: StatementInclude,
+): AccountStatementResponseDto => ({
   openingBalanceCents: String(view.openingBalanceCents),
   closingBalanceCents: String(view.closingBalanceCents),
   counters: {
@@ -501,8 +531,12 @@ export const accountStatementToDto = (view: StatementView): AccountStatementResp
       valueCents: String(l.valueCents),
       runningBalanceCents: String(l.runningBalanceCents),
       reconciliationStatus: l.reconciliationStatus,
+      ...(include !== undefined
+        ? { reconciliation: lineReconciliationToDto(include.titlesByTransaction.get(l.id)) }
+        : {}),
     })),
   })),
+  ...(include !== undefined ? { companyName: include.companyName } : {}),
 });
 
 /**

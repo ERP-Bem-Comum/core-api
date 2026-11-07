@@ -14,6 +14,7 @@ import type { ReconciliationEvent } from '#src/modules/financial/domain/reconcil
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type {
+  ActiveReconciliationItem,
   ReconciliationReclassification,
   ReconciliationRepository,
   ReconciliationRepositoryError,
@@ -396,6 +397,36 @@ export const createDrizzleReconciliationRepository = (
         return ok(mapped.value);
       } catch (cause) {
         logStore('findActiveByTransaction', cause);
+        return err('reconciliation-repository-failure');
+      }
+    },
+
+    findActiveItemsByTransactions: async (
+      transactionIds: readonly string[],
+    ): Promise<Result<readonly ActiveReconciliationItem[], ReconciliationRepositoryError>> => {
+      if (transactionIds.length === 0) return ok([]);
+      try {
+        const rows = await db
+          .select({
+            transactionId: finReconciliations.transactionId,
+            reconciliationId: finReconciliations.id,
+            payableId: finReconciliationItems.payableId,
+            reconciledValueCents: finReconciliationItems.reconciledValueCents,
+          })
+          .from(finReconciliations)
+          .innerJoin(
+            finReconciliationItems,
+            eq(finReconciliationItems.reconciliationId, finReconciliations.id),
+          )
+          .where(
+            and(
+              inArray(finReconciliations.transactionId, [...transactionIds]),
+              eq(finReconciliations.status, 'Active'),
+            ),
+          );
+        return ok(rows);
+      } catch (cause) {
+        logStore('findActiveItemsByTransactions', cause);
         return err('reconciliation-repository-failure');
       }
     },
