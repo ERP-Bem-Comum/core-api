@@ -34,6 +34,7 @@ export const payableListItemToSummaryRow = (item: PayableListItem): PayableSumma
   supplierRef: item.supplierRef,
   supplierName: null,
   supplierDocument: null,
+  retentionType: item.retentionType,
 });
 
 export const createInMemoryPayableSummaryByIdsView = (

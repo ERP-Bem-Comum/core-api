@@ -27,6 +27,7 @@
  *   422 net-value-not-positive / retention-not-allowed-for-type / document-incomplete
  */
 
+import { CEDENTE_COMPANY_NAME } from '../../domain/cedente/company-name.ts';
 import type { FastifyPluginAsync, FastifyReply, preHandlerAsyncHookHandler } from 'fastify';
 import type {
   FastifyPluginAsyncZodOpenApi,
@@ -2322,7 +2323,27 @@ const financialRoutes =
           ...(req.query.filter !== undefined ? { filter: req.query.filter } : {}),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(accountStatementToDto(result.value)), { ok: 200 });
+        if (req.query.include !== 'reconciliation') {
+          return sendResult(reply, ok(accountStatementToDto(result.value)), { ok: 200 });
+        }
+        // Spec 132: só transação tratada tem conciliação; pendente nem entra na consulta.
+        const reconciledIds = result.value.days.flatMap((day) =>
+          day.lines
+            .filter((line) => line.reconciliationStatus !== 'Pending')
+            .map((line) => line.id),
+        );
+        const titles = await deps.getStatementReconciledTitles(reconciledIds);
+        if (!titles.ok) return sendDomainError(reply, titles.error);
+        return sendResult(
+          reply,
+          ok(
+            accountStatementToDto(result.value, {
+              companyName: CEDENTE_COMPANY_NAME,
+              titlesByTransaction: titles.value,
+            }),
+          ),
+          { ok: 200 },
+        );
       },
     });
 
