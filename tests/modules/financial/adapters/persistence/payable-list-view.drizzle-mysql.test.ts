@@ -173,7 +173,21 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
       assert.equal(inverted.total, 0);
 
-      // AND com dueFrom/dueTo (os dois lados — o adapter Drizzle hoje só aplica vencimento com ambos).
+      // Vencimento: cada extremo vale SOZINHO, como no fake in-memory e no /documents. Antes era
+      // `between` e um lado só era ignorado em silêncio — o /counts divergia do próprio `draft`.
+      const dueFromOnly = await list({ dueFrom: new Date('2026-07-15T00:00:00.000Z') });
+      assert.equal(dueFromOnly.total, 1, 'só dueFrom: due_date >= dueFrom');
+      assert.deepEqual(labels(dueFromOnly.items), ['LATE']);
+      const dueToOnly = await list({ dueTo: new Date('2026-07-15T00:00:00.000Z') });
+      assert.equal(dueToOnly.total, 3, 'só dueTo: due_date <= dueTo');
+      assert.deepEqual(labels(dueToOnly.items), ['EARLY', 'NONE']);
+      const dueCounts = await view.countByStatus({
+        supplierRef,
+        dueFrom: new Date('2026-07-15T00:00:00.000Z'),
+      });
+      assert.equal(dueCounts.ok && dueCounts.value.total, 1, 'counts com só dueFrom == lista');
+
+      // AND com dueFrom/dueTo.
       const andDue = await list({
         issuedFrom: new Date('2026-04-01T00:00:00.000Z'),
         dueFrom: new Date('2026-06-01T00:00:00.000Z'),

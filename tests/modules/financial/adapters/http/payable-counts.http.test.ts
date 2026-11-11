@@ -201,6 +201,41 @@ describe('FIN-PAYABLE-COUNTS — filtro por emissão (issuedFrom/issuedTo)', () 
     }
   });
 
+  // O `draft` recebe o MESMO recorte de emissão que os títulos (vem de listDocuments, com a semântica
+  // do #163): rascunho sem emissão sai quando o filtro está ativo. Fornecedor próprio (SUP_D) para não
+  // alterar o `draft` global que CA2 afirma.
+  it('draft respeita issuedFrom/issuedTo; rascunho sem emissão excluído com o filtro ativo', async () => {
+    const SUP_D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const postDraft = async (documentNumber: string, issueDate?: string) => {
+      const res = await handle.app.inject({
+        method: 'POST',
+        url: '/api/v2/financial/documents',
+        headers: { authorization: `Bearer ${WRITER}` },
+        payload: openBody({
+          documentNumber,
+          supplierRef: SUP_D,
+          asDraft: true,
+          dueDate: undefined,
+          ...(issueDate !== undefined ? { issueDate } : {}),
+        }),
+      });
+      assert.equal(res.statusCode, 201, res.body);
+    };
+    await postDraft('D-MAR', '2026-03-10');
+    await postDraft('D-MAY', '2026-05-20');
+    await postDraft('D-NONE');
+
+    const draftFor = async (query: string): Promise<number> => {
+      const res = await getCounts(`?supplierRef=${SUP_D}${query}`);
+      assert.equal(res.statusCode, 200, res.body);
+      return (res.json() as Counts).draft;
+    };
+    assert.equal(await draftFor(''), 3, 'sem filtro de emissão: todos os rascunhos');
+    assert.equal(await draftFor('&issuedFrom=2026-04-01'), 1, 'só D-MAY');
+    assert.equal(await draftFor('&issuedTo=2026-04-01'), 1, 'só D-MAR');
+    assert.equal(await draftFor('&issuedFrom=2026-03-10&issuedTo=2026-05-20'), 2, 'inclusivo');
+  });
+
   it('issuedFrom/issuedTo em formato inválido → 400', async () => {
     assert.equal((await getCounts('?issuedFrom=2026-13-45')).statusCode, 400);
     assert.equal((await getCounts('?issuedTo=ontem')).statusCode, 400);
