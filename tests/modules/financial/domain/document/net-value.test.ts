@@ -275,3 +275,34 @@ describe('financial/domain/document/financial-data — computeNetValue: regress�
     });
   }
 });
+
+// Domínio não lança: um Money forjado (centavos fora de inteiro seguro) tem de virar Result de erro,
+// nunca a RangeError do `BigInt`. Antes da soma exata em BigInt o líquido devolvia Result nesse caso.
+describe('financial/domain/document/financial-data — computeNetValue com Money forjado', () => {
+  const forged = (cents: number): Money.Money => ({ cents }) as unknown as Money.Money;
+  // Cada parcela é revalidada por Money.fromCents, que dá nome ao defeito (como NonZeroMoney.from).
+  const BAD_CENTS: readonly (readonly [number, string])[] = [
+    [1.5, 'money-non-integer-value'],
+    [Number.NaN, 'money-non-integer-value'],
+    [Number.POSITIVE_INFINITY, 'money-non-integer-value'],
+    [2 ** 53, 'money-exceeds-safe-integer'],
+    [-5, 'money-negative-value'],
+  ];
+
+  for (const [cents, error] of BAD_CENTS) {
+    for (const field of ['grossValue', 'penalty', 'discounts'] as const) {
+      it(`${field} com ${String(cents)} centavos → err('${error}'), sem lançar`, () => {
+        const input = {
+          grossValue: money(100000),
+          sourceDiscounts: money(0),
+          discounts: money(0),
+          penalty: money(0),
+          interest: money(0),
+          retentions: [],
+          [field]: forged(cents),
+        };
+        assert.deepEqual(computeNetValue(input), { ok: false, error });
+      });
+    }
+  }
+});
