@@ -154,6 +154,13 @@ const sanitizeFilename = (name: string): string => {
   return cleaned.length > 0 ? cleaned : 'document.pdf';
 };
 
+const PUBLIC_MESSAGES: Readonly<Record<string, string>> = {
+  ContractValueWouldExceedSafeInteger:
+    'O aditivo elevaria o valor vigente do contrato acima do limite monetário permitido.',
+};
+
+const publicMessage = (code: string): string => PUBLIC_MESSAGES[code] ?? code;
+
 const sendDomainError = (
   reply: FastifyReply,
   error: string | Readonly<{ tag: string }>,
@@ -162,7 +169,7 @@ const sendDomainError = (
   const requestId = currentCorrelationId() ?? reply.request.id;
   return reply
     .code(writeErrorStatus(code))
-    .send(toErrorEnvelope(code, code, requestId)) as unknown as Promise<void>;
+    .send(toErrorEnvelope(code, publicMessage(code), requestId)) as unknown as Promise<void>;
 };
 
 const contractsRoutes =

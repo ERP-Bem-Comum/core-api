@@ -382,10 +382,19 @@ const applyHomologatedAdjustment = (
 
   switch (adjustment.kind) {
     case 'ValueIncrease': {
+      const added = Money.add(contract.currentValue, adjustment.amount);
+      if (!added.ok) {
+        return err(
+          ContractError.contractValueWouldExceedSafeInteger(
+            contract.currentValue,
+            adjustment.amount,
+          ),
+        );
+      }
       // Construção direta de ActiveContract — preserva o subtipo refinado.
       const next: ActiveContract = immutable({
         ...contract,
-        currentValue: Money.add(contract.currentValue, adjustment.amount),
+        currentValue: added.value,
         homologatedAmendmentIds: nextIds,
       });
       return ok({ contract: next, event: stateUpdatedEvent(next, at, adjustment.amendmentId) });

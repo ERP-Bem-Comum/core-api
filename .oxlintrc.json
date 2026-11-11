@@ -417,6 +417,13 @@
         "typescript/no-non-null-assertion": "off",
         "typescript/no-unnecessary-condition": "off",
         "eslint/no-unused-expressions": "off",
+        "typescript/ban-ts-comment": [
+          "error",
+          {
+            "ts-expect-error": false,
+            "minimumDescriptionLength": 10
+          }
+        ],
         "typescript/unbound-method": "off",
         "typescript/strict-boolean-expressions": "off",
         "typescript/promise-function-async": "off",

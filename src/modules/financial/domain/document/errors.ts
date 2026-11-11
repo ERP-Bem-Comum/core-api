@@ -2,6 +2,10 @@
 // Cresce conforme as stories (aprovação, cancelamento, etc.).
 export type DocumentError =
   | 'net-value-not-positive'
+  | 'money-exceeds-safe-integer'
+  // Parcela do líquido com Money forjado (centavos fora de inteiro seguro), revalidada por fromCents.
+  | 'money-non-integer-value'
+  | 'money-negative-value'
   | 'retention-not-allowed-for-type'
   | 'document-incomplete'
   | 'invalid-state-transition'

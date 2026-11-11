@@ -1,45 +1,57 @@
 /**
- * Facade de imutabilidade canônica do projeto.
+ * Congela o objeto raiz in-place com `Object.freeze`, sem copiar, e o tipa como `Readonly<T>`.
  *
- * Origem: handbook/interviews/0001-functional-ddd-domain-refresh.md §Bloco B
- *   - DO B§10: identidade fixa via facade `immutable()` / `deepImmutable()` em `shared/immutable.ts`.
- *   - DON'T B§5: `Object.freeze` direto no código de domínio é proibido — usa as facades.
- *   - CONSIDER B§2: `deepImmutable` para VOs compostos com sub-VOs aninhados.
+ * O congelamento é raso: sub-objetos continuam mutáveis. Em módulo ESM, atribuir propriedade
+ * existente, adicionar propriedade nova ou remover propriedade do objeto devolvido lança
+ * `TypeError`; num array, `push` lança `TypeError`. Num `Map`, só as propriedades do objeto
+ * ficam congeladas — `set` continua funcionando. Objeto já congelado é aceito e devolvido como
+ * está. TypedArray não vazio, inclusive `Buffer`, não é congelável: a chamada lança `TypeError`;
+ * TypedArray vazio é congelado.
  *
- * As facades escondem o mecanismo (`Object.freeze` hoje, Records & Tuples no futuro)
- * e documentam intenção no vocabulário do projeto, não no de implementação.
+ * @typeParam T - Tipo do objeto; qualquer `object` é aceito pelo compilador.
+ * @param value - Objeto a congelar; os valores das propriedades são preservados.
+ * @returns A mesma referência recebida, congelada, tipada como `Readonly<T>` — o compilador
+ *   recusa atribuição a propriedade dela.
+ * @throws `TypeError` quando `value` é TypedArray não vazio, inclusive `Buffer`.
+ * @see {@link deepImmutable} para congelar todos os níveis.
  *
- * Ticket: CTR-SHARED-IMMUTABLE (Frente A — Refactor radical do domínio, folha sem deps).
- */
-
-/**
- * Constante "de verdade" — imutável em compile-time E runtime.
- *
- * Shallow: congela apenas o objeto raiz; sub-objetos permanecem mutáveis.
- * Para congelar recursivamente, use `deepImmutable`.
- *
- * Em ESM (strict mode implícito), tentativa de mutação em propriedade
- * congelada joga `TypeError` em runtime.
- *
- * @param value Objeto a ser congelado.
- * @returns O mesmo objeto, tipado como `Readonly<T>`, congelado in-place.
+ * @example
+ * ```ts
+ * const raw = { id: 1, nested: { inner: 'a' } };
+ * const frozen = immutable(raw);
+ * frozen === raw; // true
+ * Object.isFrozen(frozen.nested); // false
+ * ```
  */
 export const immutable = <T extends object>(value: T): Readonly<T> => Object.freeze(value);
 
 /**
- * Variante recursiva para VOs compostos com sub-objetos aninhados.
+ * Congela recursivamente, in-place e sem copiar, um valor e cada objeto alcançável pelas suas
+ * chaves próprias, enumeráveis e de tipo string (`Object.keys`), inclusive arrays e os objetos
+ * dentro deles.
  *
- * `Object.freeze` é shallow por definição; esta função desce em cada propriedade
- * que seja objeto e aplica `freeze` em profundidade. Primitivos (`number`,
- * `string`, `boolean`, `null`, `undefined`, `bigint`, `symbol`) passam direto
- * sem alteração.
+ * Não desce em chave `symbol`, em propriedade não enumerável nem no protótipo. Função não é
+ * congelada, nem na raiz nem aninhada. `Date` fica `Object.isFrozen`, mas `setTime` continua
+ * mudando o valor interno. Estrutura cíclica lança `RangeError` por estouro de pilha. Propriedade
+ * enumerável com getter é lida uma vez, invocando o getter, e o objeto devolvido nessa leitura é
+ * o que fica congelado. TypedArray não vazio, inclusive `Buffer`, em qualquer posição faz a
+ * chamada lançar `TypeError`; os objetos visitados antes dele ficam congelados e a raiz não. Em
+ * módulo ESM, atribuir, adicionar ou remover propriedade de objeto congelado, na raiz ou
+ * aninhado, lança `TypeError`.
  *
- * Nota de tipo: o retorno preserva `T` (não há `DeepReadonly<T>` no projeto).
- * O ganho "deep" é puramente comportamental em runtime, complementando a
- * marcação `Readonly` que o autor do tipo já aplicou na definição do VO.
+ * @typeParam T - Tipo do valor; o retorno tem exatamente o tipo `T`, sem `Readonly`.
+ * @param value - Objeto ou array a congelar em profundidade, ou primitivo (`number`, `string`,
+ *   `boolean`, `null`, `undefined`, `bigint`, `symbol`), devolvido sem alteração.
+ * @returns A mesma referência recebida, tipada como `T` — o compilador aceita atribuição a
+ *   propriedade, que só falha em runtime com `TypeError`.
+ * @throws `TypeError` quando um TypedArray não vazio, inclusive `Buffer`, é alcançado.
+ * @see {@link immutable} para congelar só a raiz com tipo `Readonly<T>`.
  *
- * @param value Valor a ser congelado recursivamente (ou primitivo, devolvido como é).
- * @returns O mesmo valor, congelado em todos os níveis se for objeto.
+ * @example
+ * ```ts
+ * const frozen = deepImmutable({ a: { b: { c: 1 } } });
+ * Object.isFrozen(frozen.a.b); // true
+ * ```
  */
 export const deepImmutable = <T>(value: T): T => {
   if (value === null || typeof value !== 'object') return value;

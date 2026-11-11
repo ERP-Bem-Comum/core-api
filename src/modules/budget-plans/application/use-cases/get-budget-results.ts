@@ -1,8 +1,9 @@
-import { type Result, ok } from '../../../../shared/primitives/result.ts';
-import * as Money from '../../../../shared/kernel/money.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type * as Money from '../../../../shared/kernel/money.ts';
 import * as BudgetId from '../../domain/shared/budget-id.ts';
 import * as ExerciseMonth from '../../domain/shared/exercise-month.ts';
 import type { BudgetResult } from '../../domain/budget-result/budget-result.ts';
+import { sumMoney } from '../read-models/plan-total.ts';
 import type {
   BudgetResultRepository,
   BudgetResultRepositoryError,
@@ -11,7 +12,8 @@ import type {
 export type GetBudgetResultsError =
   | BudgetId.BudgetIdError
   | ExerciseMonth.ExerciseMonthError
-  | BudgetResultRepositoryError;
+  | BudgetResultRepositoryError
+  | 'budget-results-total-exceeds-safe-integer';
 
 export type GetBudgetResultsView = Readonly<{
   items: readonly BudgetResult[];
@@ -50,6 +52,7 @@ export const getBudgetResults =
 
     const items = month === undefined ? list.value : list.value.filter((r) => r.month === month);
 
-    const total = items.reduce((acc, r) => Money.add(acc, r.value), Money.ZERO);
-    return ok({ items, total });
+    const total = sumMoney(items.map((r) => r.value));
+    if (!total.ok) return err('budget-results-total-exceeds-safe-integer');
+    return ok({ items, total: total.value });
   };
