@@ -15,6 +15,10 @@ export type PayableListFilter = Readonly<{
   supplierRef?: string;
   dueFrom?: Date;
   dueTo?: Date; // janela inclusiva
+  // Emissão do DOCUMENTO (todos os títulos dele herdam). Cada extremo vale sozinho e é inclusivo;
+  // com qualquer um ativo, documento sem emissão fica de fora.
+  issuedFrom?: Date;
+  issuedTo?: Date;
 }>;
 
 export type PayableListItem = Readonly<{

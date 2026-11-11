@@ -1266,6 +1266,9 @@ export const listPayablesQuerySchema = z.object({
   supplierRef: uuidV4().optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
+  // Emissão do documento (CAS-43): cada extremo vale sozinho, inclusivo; sem emissão fica de fora.
+  issuedFrom: z.iso.date().optional(),
+  issuedTo: z.iso.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -1315,6 +1318,8 @@ export const payableCountsQuerySchema = z.object({
   supplierRef: uuidV4().optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
+  issuedFrom: z.iso.date().optional(),
+  issuedTo: z.iso.date().optional(),
 });
 
 export type PayableCountsQuery = z.infer<typeof payableCountsQuerySchema>;
