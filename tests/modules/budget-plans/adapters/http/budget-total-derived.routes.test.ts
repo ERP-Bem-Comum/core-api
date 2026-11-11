@@ -957,6 +957,98 @@ describe('totais derivados — overflow vira 422, nunca 500', () => {
     }
   });
 
+  // A cópia (cenário, calibração, importação) grava tudo numa operação só (#1092). Cada Rede cabe no
+  // limite e só o TOTAL do plano estoura: estes casos travam que o total é verificado ANTES do
+  // planCloneWriter.write — verificado depois, a resposta seria a mesma 422, mas a cópia já gravada.
+  const seedTwoBudgets = async (app: App, token: string, planId: string) => ({
+    b1: await addBudget(app, token, planId, 'CE'),
+    b2: await addBudget(app, token, planId, 'PI'),
+    subId: await seedTree(app, token, planId, 'DESPESAS_LOGISTICAS'),
+  });
+  const launchFiveE15InEach = async (
+    app: App,
+    token: string,
+    { b1, b2, subId }: Readonly<{ b1: string; b2: string; subId: string }>,
+  ) => {
+    assert.equal(await launchLogistics(app, token, b1, subId, 1, FIVE_E15), 5e15);
+    assert.equal(await launchLogistics(app, token, b2, subId, 1, FIVE_E15), 5e15);
+  };
+  const assertNoChildren = async (app: App, token: string, planId: string) => {
+    const children = await call(app, token, 'GET', `/budget-plans/${planId}/children`);
+    assert.equal(children.statusCode, 200, children.body);
+    assert.deepEqual(children.json(), { items: [] });
+  };
+
+  it('scenery de pai com duas Redes de 5e15 → 422 de total do plano e nenhum filho gravado', async () => {
+    const { app, teardown } = await makeApp();
+    try {
+      const token = await login(app);
+      const planId = await createPlan(app, token);
+      await launchFiveE15InEach(app, token, await seedTwoBudgets(app, token, planId));
+
+      assertOverflow(
+        await call(app, token, 'POST', `/budget-plans/${planId}/scenery`, { name: 'X' }),
+        PLAN_OVERFLOW,
+      );
+
+      await assertNoChildren(app, token, planId);
+    } finally {
+      await teardown();
+    }
+  });
+
+  it('start-calibration de aprovado com duas Redes de 5e15 → 422 de total do plano e nenhum filho gravado', async () => {
+    const { app, teardown } = await makeApp();
+    try {
+      const token = await login(app);
+      const planId = await createPlan(app, token);
+      const seeded = await seedTwoBudgets(app, token, planId);
+      assert.equal(
+        (await call(app, token, 'POST', `/budget-plans/${planId}/approve`)).statusCode,
+        200,
+      );
+      await launchFiveE15InEach(app, token, seeded);
+
+      assertOverflow(
+        await call(app, token, 'POST', `/budget-plans/${planId}/start-calibration`),
+        PLAN_OVERFLOW,
+      );
+
+      await assertNoChildren(app, token, planId);
+    } finally {
+      await teardown();
+    }
+  });
+
+  it('importFromYear de aprovado com duas Redes de 5e15 → 422 de total do plano e nenhum plano gravado no ano novo', async () => {
+    const { app, teardown } = await makeApp();
+    try {
+      const token = await login(app);
+      const sourceId = await createPlan(app, token, 2025);
+      const seeded = await seedTwoBudgets(app, token, sourceId);
+      assert.equal(
+        (await call(app, token, 'POST', `/budget-plans/${sourceId}/approve`)).statusCode,
+        200,
+      );
+      await launchFiveE15InEach(app, token, seeded);
+
+      assertOverflow(
+        await call(app, token, 'POST', '/budget-plans', {
+          year: 2026,
+          programRef: PROGRAM_ETI,
+          importFromYear: 2025,
+        }),
+        PLAN_OVERFLOW,
+      );
+
+      const list2026 = await call(app, token, 'GET', '/budget-plans?year=2026');
+      assert.equal(list2026.statusCode, 200, list2026.body);
+      assert.deepEqual((list2026.json() as { items: unknown[] }).items, []);
+    } finally {
+      await teardown();
+    }
+  });
+
   it('duas Redes de 5e15 no mesmo plano: lista, detalhe e insights → 422 de total do plano', async () => {
     const { app, teardown } = await makeApp();
     try {
