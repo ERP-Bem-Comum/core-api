@@ -45,6 +45,11 @@ const matchesFilter = (it: PayableListItem, f: PayableListFilter): boolean => {
   if (f.supplierRef !== undefined && it.supplierRef !== f.supplierRef) return false;
   if (f.dueFrom !== undefined && it.dueDate < f.dueFrom) return false;
   if (f.dueTo !== undefined && it.dueDate > f.dueTo) return false;
+  // Espelha o SQL: `NULL >= x` é desconhecido e a linha cai — aqui a exclusão precisa ser explícita.
+  if (f.issuedFrom !== undefined && (it.issueDate === null || it.issueDate < f.issuedFrom))
+    return false;
+  if (f.issuedTo !== undefined && (it.issueDate === null || it.issueDate > f.issuedTo))
+    return false;
   return true;
 };
 

@@ -1095,6 +1095,8 @@ const financialRoutes =
           ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
           ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
           ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
+          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
         };
         const counts = await deps.countPayableTitles(payableFilter);
         if (!counts.ok) return sendDomainError(reply, counts.error);
@@ -1107,6 +1109,8 @@ const financialRoutes =
           ...(q.documentType !== undefined ? { type: q.documentType } : {}),
           ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
           ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
+          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
         };
         const drafts = await deps.listDocuments(draftFilter, 1, 1);
         if (!drafts.ok) return sendDomainError(reply, drafts.error);
@@ -1141,6 +1145,8 @@ const financialRoutes =
           ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
           ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
           ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
+          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
         };
         const result = await deps.listPayables(filter, q.page, q.pageSize);
         if (!result.ok) return sendDomainError(reply, result.error);

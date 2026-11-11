@@ -2,7 +2,7 @@
 // INNER JOIN fin_documents` (cada título é uma linha; filhos de retenção viram linhas próprias).
 // Boundary: try/catch → Result (.claude/rules/adapters.md).
 
-import { and, between, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, between, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -39,6 +39,10 @@ export const createDrizzlePayableListView = (
       conds.push(eq(finDocuments.supplierRef, filter.supplierRef));
     if (filter.dueFrom !== undefined && filter.dueTo !== undefined)
       conds.push(between(finPayables.dueDate, filter.dueFrom, filter.dueTo));
+    // Emissão: cada extremo sozinho (não `between`). `issue_date` NULL cai pela semântica do SQL.
+    // Índice `fin_documents_issue_date_idx` (#163) cobre o predicado.
+    if (filter.issuedFrom !== undefined) conds.push(gte(finDocuments.issueDate, filter.issuedFrom));
+    if (filter.issuedTo !== undefined) conds.push(lte(finDocuments.issueDate, filter.issuedTo));
     return conds.length > 0 ? and(...conds) : undefined;
   };
 

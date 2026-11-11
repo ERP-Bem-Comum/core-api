@@ -143,3 +143,66 @@ describe('FIN-PAYABLE-COUNTS — GET /payable-titles/counts (#536)', () => {
     assert.equal(noPerm.statusCode, 403);
   });
 });
+
+// Filtro pela data de EMISSÃO (`issuedFrom`/`issuedTo`): `counts.total` tem de concordar com o
+// `total` da lista para o mesmo filtro. Fornecedor próprio (SUP_C), semeado DENTRO do caso, para não
+// alterar os totais globais que CA1/CA2 acima afirmam.
+const SUP_C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+describe('FIN-PAYABLE-COUNTS — filtro por emissão (issuedFrom/issuedTo)', () => {
+  it('counts.total == total da lista com o mesmo filtro; sem emissão (NULL) excluído', async () => {
+    const post = async (body: Record<string, unknown>) => {
+      const res = await handle.app.inject({
+        method: 'POST',
+        url: '/api/v2/financial/documents',
+        headers: { authorization: `Bearer ${WRITER}` },
+        payload: body,
+      });
+      assert.equal(res.statusCode, 201, res.body);
+    };
+    // EARLY: emitido 2026-03-10, com ISS → 2 títulos; LATE: 2026-05-20 → 1; NONE: sem emissão → 1.
+    await post(
+      openBody({
+        documentNumber: 'C-EARLY',
+        supplierRef: SUP_C,
+        issueDate: '2026-03-10',
+        grossValueCents: '1000000',
+        retentions: [{ type: 'ISS', baseCents: '350000', rateBps: 1000, valueCents: '35000' }],
+      }),
+    );
+    await post(openBody({ documentNumber: 'C-LATE', supplierRef: SUP_C, issueDate: '2026-05-20' }));
+    await post(openBody({ documentNumber: 'C-NONE', supplierRef: SUP_C }));
+
+    const listTotal = async (query: string): Promise<number> => {
+      const res = await handle.app.inject({
+        method: 'GET',
+        url: `/api/v2/financial/payable-titles${query}`,
+        headers: { authorization: `Bearer ${WRITER}` },
+      });
+      assert.equal(res.statusCode, 200, res.body);
+      return (res.json() as { total: number }).total;
+    };
+
+    const cases: readonly [string, number][] = [
+      [`?supplierRef=${SUP_C}`, 4], // sem filtro de emissão: NONE aparece
+      [`?supplierRef=${SUP_C}&issuedFrom=2026-04-01`, 1], // só LATE
+      [`?supplierRef=${SUP_C}&issuedTo=2026-04-01`, 2], // EARLY pai + filho ISS
+      [`?supplierRef=${SUP_C}&issuedFrom=2026-03-10&issuedTo=2026-05-20`, 3], // inclusivo
+      [`?supplierRef=${SUP_C}&issuedFrom=2026-06-01&issuedTo=2026-01-01`, 0], // invertido → vazio
+    ];
+    for (const [query, expected] of cases) {
+      const res = await getCounts(query);
+      assert.equal(res.statusCode, 200, res.body);
+      const c = res.json() as Counts;
+      assert.equal(c.total, expected, `counts.total para ${query}`);
+      assert.equal(c.total, await listTotal(query), `counts.total == lista.total para ${query}`);
+      const sum = Object.values(c.byStatus).reduce((a, b) => a + b, 0);
+      assert.equal(sum, c.total, `byStatus soma para total em ${query}`);
+    }
+  });
+
+  it('issuedFrom/issuedTo em formato inválido → 400', async () => {
+    assert.equal((await getCounts('?issuedFrom=2026-13-45')).statusCode, 400);
+    assert.equal((await getCounts('?issuedTo=ontem')).statusCode, 400);
+  });
+});
