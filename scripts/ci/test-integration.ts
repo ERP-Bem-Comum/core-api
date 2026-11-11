@@ -421,9 +421,30 @@ const INTEGRATION_TIMEOUT_MS = 300_000;
  * Expande os padrões da suíte em caminhos `./…`. O `bun test` trata argumento posicional como
  * FILTRO de substring, não glob (`test/discovery`): `migrations/*.test.ts` entre aspas casaria
  * zero arquivos. O prefixo `./` faz o Bun ler o argumento como caminho exato.
+ *
+ * Caminho LITERAL que não casa nada é acusado em `missing`: o `globSync` o devolveria vazio, e o
+ * teste renomeado sumiria da suíte sem aviso — o `node --test` de antes falhava nesse caso.
+ * Curinga que casa zero não é erro aqui: "zero ou mais" é o contrato do glob, e a suíte inteira
+ * vazia continua barrada no `main`.
  */
-const expandPaths = (patterns: readonly string[]): string[] =>
-  patterns.flatMap((p) => globSync(p).sort()).map((p) => `./${p}`);
+export type ExpandedPaths =
+  | Readonly<{ ok: true; paths: readonly string[] }>
+  | Readonly<{ ok: false; missing: readonly string[] }>;
+
+const GLOB_CHARS = /[*?[{]/;
+
+export const expandPaths = (patterns: readonly string[], cwd = process.cwd()): ExpandedPaths => {
+  const matched = patterns.map((pattern) => [pattern, globSync(pattern, { cwd }).sort()] as const);
+  const missing = matched
+    .filter(([pattern, files]) => files.length === 0 && !GLOB_CHARS.test(pattern))
+    .map(([pattern]) => pattern);
+  if (missing.length > 0) return { ok: false, missing };
+  return { ok: true, paths: matched.flatMap(([, files]) => files.map((file) => `./${file}`)) };
+};
+
+export const missingPathsMessage = (suite: string, missing: readonly string[]): string =>
+  `a suíte "${suite}" lista caminho(s) que não existe(m) — renomeado ou digitado errado?\n` +
+  missing.map((path) => `  - ${path}\n`).join('');
 
 const runBunTest = (suite: Suite, paths: readonly string[]): number => {
   // `--no-env-file`: o Bun carrega `.env` sozinho, e um `.env` esquecido satisfaria a validação
@@ -478,7 +499,12 @@ const main = (): number => {
     );
     return EX_USAGE;
   }
-  const paths = expandPaths(suite.paths);
+  const expanded = expandPaths(suite.paths);
+  if (!expanded.ok) {
+    process.stderr.write(missingPathsMessage(name ?? '', expanded.missing));
+    return 1;
+  }
+  const { paths } = expanded;
   if (paths.length === 0) {
     process.stderr.write(`nenhum arquivo casou os caminhos da suíte: ${suite.paths.join(', ')}\n`);
     return 1;
