@@ -5,8 +5,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { citedTestPaths, formatFinding, scanPaths, scopeOf } from '../support/comment-scan.ts';
+import {
+  formatFinding,
+  isCitableTestPath,
+  scanPaths,
+  scanTestCitations,
+  scopeOf,
+} from '../support/comment-scan.ts';
 import type { CommentRule, LocatedCommentFinding } from '../support/comment-scan.ts';
+import { gitFixtureEnv } from '../support/git-fixture.ts';
 import { PROJECT_ROOT } from '../support/source-scan.ts';
 
 const SANITIZED_ROOTS: readonly string[] = [
@@ -119,6 +126,15 @@ const FIXTURES: readonly Fixture[] = [
       ' * @see tests/a/b.ts',
       ' * @see {@link b}',
       ' * @see tests/a/b.test.ts',
+      ' * @see {@link Brand} https://example.com',
+      ' * @see tests/a.test.ts ver ADR-0020',
+      ' * @see tests/./x.test.ts',
+      ' * @see tests/../src/x.test.ts',
+      ' * @see {@link b | rótulo}',
+      ' * @see tests/a/b.test.tsx',
+      ' * @see',
+      ' *   tests/quebrada.test.ts',
+      ' * @see tests/c.test.ts   ',
       ' */',
       'export const a = 1;',
       '',
@@ -127,6 +143,11 @@ const FIXTURES: readonly Fixture[] = [
       ['see-target-not-allowed', 3],
       ['see-target-not-allowed', 4],
       ['see-target-not-allowed', 5],
+      ['see-target-not-allowed', 8],
+      ['see-target-not-allowed', 9],
+      ['see-target-not-allowed', 10],
+      ['see-target-not-allowed', 11],
+      ['see-target-not-allowed', 13],
     ],
   },
   {
@@ -383,48 +404,169 @@ describe('scanComments devolve, na ordem do arquivo, a regra e a linha de cada v
   });
 });
 
-const missingCitations = (
-  files: readonly string[],
-  read: (file: string) => string,
-  versioned: ReadonlySet<string>,
-): readonly string[] =>
-  files.flatMap((file) =>
-    citedTestPaths(read(file))
-      .filter((cited) => !versioned.has(cited))
-      .map((cited) => `${file}: @see ${cited}`),
+const missingCitationsIn = (root: string): readonly string[] => {
+  const versioned = execFileSync('git', ['ls-files', '--', '*.ts'], {
+    cwd: root,
+    encoding: 'utf8',
+    env: gitFixtureEnv(),
+  })
+    .split('\n')
+    .filter((p) => p.length > 0);
+  const known = new Set(versioned);
+  const citing = versioned.filter((f) => readFileSync(join(root, f), 'utf8').includes('@see'));
+  const { citations, unparsed } = scanTestCitations(root, citing);
+  return [
+    ...unparsed.map((file) => `${file}: não entregue pelo compilador`),
+    ...citations
+      .filter((c) => !isCitableTestPath(c.target) || !known.has(c.target))
+      .map((c) => `${c.file}: @see ${c.target}`),
+  ];
+};
+
+const withRepo = <R>(
+  files: Readonly<Record<string, string>>,
+  staged: readonly string[],
+  use: (root: string) => R,
+): R => {
+  const root = mkdtempSync(join(tmpdir(), 'see-citations-'));
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: root, env: gitFixtureEnv() });
+    for (const [file, code] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, file)), { recursive: true });
+      writeFileSync(join(root, file), code);
+    }
+    if (staged.length > 0) {
+      execFileSync('git', ['add', '--', ...staged], { cwd: root, env: gitFixtureEnv() });
+    }
+    return use(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+};
+
+const citing = (...seeLines: readonly string[]): string =>
+  ['/**', ' * Valor.', ...seeLines.map((l) => ` * ${l}`), ' */', 'export const a = 1;', ''].join(
+    '\n',
   );
 
-describe('@see tests/... em src/ cita um arquivo de teste versionado', () => {
-  it('todo @see tests/... de src/ aponta para um .test.ts versionado', () => {
-    const all = tracked();
-    const versioned = new Set(all);
-    const sources = all.filter((f) => f.startsWith('src/'));
-    const missing = missingCitations(
-      sources,
-      (f) => readFileSync(join(PROJECT_ROOT, f), 'utf8'),
-      versioned,
-    );
+describe('@see tests/... cita um arquivo de teste versionado', () => {
+  it('todo @see tests/... de arquivo versionado aponta para um .test.ts versionado', () => {
+    const missing = missingCitationsIn(PROJECT_ROOT);
     assert.deepEqual(missing, [], `Citação para teste inexistente:\n${missing.join('\n')}`);
   });
 
-  it('contraprova: um @see para teste que não existe é acusado com arquivo e caminho', () => {
-    const missing = missingCitations(
-      ['src/a.ts'],
-      () => ' * @see tests/existe.test.ts\n * @see tests/sumiu.test.ts\n',
-      new Set(['tests/existe.test.ts']),
+  it('contraprova: citação a teste versionado passa, e a teste ausente é acusada com arquivo e caminho', () => {
+    const missing = withRepo(
+      {
+        'src/a.ts': citing('@see tests/existe.test.ts', '@see tests/sumiu.test.ts'),
+        'tests/existe.test.ts': '',
+      },
+      ['src/a.ts', 'tests/existe.test.ts'],
+      missingCitationsIn,
     );
     assert.deepEqual(missing, ['src/a.ts: @see tests/sumiu.test.ts']);
   });
 
-  it('citedTestPaths devolve, na ordem e com repetição, só os caminhos tests/...test.ts após @see', () => {
-    const text = [
-      ' * @see tests/b.test.ts',
-      ' * @see {@link x}',
-      ' * tests/solto.test.ts',
-      ' * @see tests/a.ts',
-      ' * @see tests/b.test.ts',
+  it('citação a teste presente no disco mas não adicionado ao git é acusada', () => {
+    const missing = withRepo(
+      { 'src/a.ts': citing('@see tests/x.test.ts'), 'tests/x.test.ts': '' },
+      ['src/a.ts'],
+      missingCitationsIn,
+    );
+    assert.deepEqual(missing, ['src/a.ts: @see tests/x.test.ts']);
+  });
+
+  it('citação em arquivo versionado de tests/ e de scripts/ também é conferida', () => {
+    const missing = withRepo(
+      {
+        'tests/b.test.ts': citing('@see tests/sumiu.test.ts'),
+        'scripts/c.ts': citing('@see tests/sumiu.test.ts'),
+      },
+      ['tests/b.test.ts', 'scripts/c.ts'],
+      missingCitationsIn,
+    );
+    assert.deepEqual(missing, [
+      'scripts/c.ts: @see tests/sumiu.test.ts',
+      'tests/b.test.ts: @see tests/sumiu.test.ts',
+    ]);
+  });
+
+  it('a citação é o conteúdo inteiro da tag: .test.tsx e .test.ts.snap são acusados por inteiro', () => {
+    const missing = withRepo(
+      { 'src/a.ts': citing('@see tests/a/b.test.tsx', '@see tests/a/b.test.ts.snap') },
+      ['src/a.ts'],
+      missingCitationsIn,
+    );
+    assert.deepEqual(missing, [
+      'src/a.ts: @see tests/a/b.test.tsx',
+      'src/a.ts: @see tests/a/b.test.ts.snap',
+    ]);
+  });
+
+  it('só @see de TSDoc conta: string, comentário // e template são ignorados, e a tag quebrada em duas linhas é lida', () => {
+    const code = [
+      "export const s = '@see tests/string.test.ts';",
+      '// @see tests/linha.test.ts',
+      'export const t = `@see tests/template.test.ts`;',
+      '/**',
+      ' * Valor.',
+      ' * @see',
+      ' *   tests/quebrada.test.ts',
+      ' */',
+      'export const a = 1;',
+      '',
     ].join('\n');
-    assert.deepEqual(citedTestPaths(text), ['tests/b.test.ts', 'tests/b.test.ts']);
+    const missing = withRepo({ 'src/a.ts': code }, ['src/a.ts'], missingCitationsIn);
+    assert.deepEqual(missing, ['src/a.ts: @see tests/quebrada.test.ts']);
+  });
+
+  it('isCitableTestPath aceita só tests/…/x.test.ts inteiro, sem segmento . ou ..', () => {
+    const verdicts = [
+      'tests/a.test.ts',
+      'tests/a/b-c/d.e.test.ts',
+      'tests/a.test.tsx',
+      'tests/a.test.ts.snap',
+      'tests/a.test.ts ver ADR-0020',
+      'tests/./a.test.ts',
+      'tests/../src/a.test.ts',
+      'tests/a/../b.test.ts',
+      'src/a.test.ts',
+    ].map((t) => [t, isCitableTestPath(t)]);
+    assert.deepEqual(verdicts, [
+      ['tests/a.test.ts', true],
+      ['tests/a/b-c/d.e.test.ts', true],
+      ['tests/a.test.tsx', false],
+      ['tests/a.test.ts.snap', false],
+      ['tests/a.test.ts ver ADR-0020', false],
+      ['tests/./a.test.ts', false],
+      ['tests/../src/a.test.ts', false],
+      ['tests/a/../b.test.ts', false],
+      ['src/a.test.ts', false],
+    ]);
+  });
+
+  it('scanTestCitations devolve em unparsed o caminho que o compilador não entregou', () => {
+    const { citations, unparsed } = scanTestCitations(PROJECT_ROOT, [
+      'tests/support/nao-existe.ts',
+    ]);
+    assert.deepEqual(unparsed, ['tests/support/nao-existe.ts']);
+    assert.deepEqual(citations, []);
+  });
+
+  it('caminho com segmento . ou .. é acusado mesmo que o arquivo normalizado exista', () => {
+    const missing = withRepo(
+      {
+        'src/a.ts': citing('@see tests/./x.test.ts', '@see tests/../src/x.test.ts'),
+        'tests/x.test.ts': '',
+        'src/x.test.ts': '',
+      },
+      ['src/a.ts', 'tests/x.test.ts', 'src/x.test.ts'],
+      missingCitationsIn,
+    );
+    assert.deepEqual(missing, [
+      'src/a.ts: @see tests/./x.test.ts',
+      'src/a.ts: @see tests/../src/x.test.ts',
+    ]);
   });
 });
 

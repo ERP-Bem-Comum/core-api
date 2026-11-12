@@ -36,7 +36,7 @@ Proibido: `//`, `/* */`, e `/** */` solto — cabeçalho de arquivo, entre state
 | `@throws` | datas, "medido em", narrativa |
 | no máximo **um** `@example` | um segundo `@example` |
 | `@defaultValue`, `@deprecated` | tag fora desta coluna |
-| `@see {@link Simbolo}` — para declaração do código; `@see tests/…/x.test.ts` — para o teste que prova a frase | `@see` para documento, URL ou pessoa |
+| `@see {@link Simbolo}` ou `@see {@link Simbolo \| rótulo}` — para declaração do código; `@see tests/…/x.test.ts` — para o teste que prova a frase. O alvo é o conteúdo inteiro da tag | `@see` para documento, URL ou pessoa; texto depois do alvo |
 
 Se o bloco tem algum `@param`, todo parâmetro da assinatura tem o seu (idem `@typeParam`). Parâmetro desestruturado é documentado por posição, com o nome que melhor o descreve.
 
@@ -52,7 +52,7 @@ Guard, early return ou exceção de allowlist sem explicação parece código mo
 2. Se um gate existente já falha sem a decisão (ex.: a allowlist de nomes de `tests/cleanup/lint-gaps.test.ts`), ele é o teste — não escreva outro.
 3. O TSDoc da declaração descreve o comportamento que o guard garante (o quê, R2) e cita o teste com `@see tests/…/x.test.ts`.
 
-O scanner aceita no `@see` só `{@link Simbolo}` ou um caminho `tests/**/*.test.ts` (`see-target-not-allowed`), e `tests/cleanup/comments.test.ts` recusa citação em `src/` para arquivo de teste não versionado.
+O scanner aceita como conteúdo inteiro do `@see` só `{@link Simbolo}`, `{@link Simbolo | rótulo}` ou um caminho `tests/**/*.test.ts` sem segmento `.` ou `..` (`see-target-not-allowed`). `tests/cleanup/comments.test.ts` lê os `@see tests/…` dos blocos TSDoc de todo `.ts` versionado e recusa o que não aponta para um teste versionado no git.
 
 ## R4 — diretivas: conjunto fechado
 
