@@ -80,7 +80,7 @@ export type BudgetPlansHttpHooks = Readonly<{
 }>;
 
 // Erro de escrita/leitura -> status. Default 422 (invariante de domínio/formato de ref).
-const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
+const WRITE_ERROR_STATUS: Readonly<Partial<Record<BudgetPlansErrorCode, number>>> = {
   'budget-plan-ref-invalid': 422,
   'budget-plan-id-invalid': 422,
   'budget-plan-invalid-year': 422,
@@ -114,7 +114,6 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'subcategory-not-in-budget-plan': 422,
   'budget-id-invalid': 422,
   'subcategory-id-invalid': 422,
-  'budget-plan-invalid-money': 422,
   'budget-results-total-exceeds-safe-integer': 422,
   'budget-result-sum-exceeds-safe-integer': 422,
   'budget-plan-total-exceeds-safe-integer': 422,
