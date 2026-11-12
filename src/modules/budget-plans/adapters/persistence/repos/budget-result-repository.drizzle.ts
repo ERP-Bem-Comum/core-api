@@ -29,6 +29,13 @@ const safe = async <T>(
   }
 };
 
+/**
+ * Repositório de lançamentos sobre o `db` do handle. Com lista de ids vazia, `sumByBudgetIds` e
+ * `listByBudgetIds` devolvem vazio sem consultar o banco.
+ *
+ * @param handle - Conexão MySQL do módulo.
+ * @see tests/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.test.ts
+ */
 export const createDrizzleBudgetResultRepository = (
   handle: BudgetPlansMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
 ): BudgetResultRepository => {
