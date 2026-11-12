@@ -23,10 +23,16 @@ import type {
 import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
+import {
+  GENERIC_PUBLIC_MESSAGES,
+  publicErrorClassOf,
+  publicMessageResolver,
+} from '#src/shared/http/public-message.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ListBudgetPlansInput } from '../../application/use-cases/list-budget-plans.ts';
 import type { BudgetPlansHttpDeps } from './composition.ts';
+import { BUDGET_PLANS_PUBLIC_MESSAGES, type BudgetPlansErrorCode } from './error-messages.ts';
 import {
   createBudgetPlanToDto,
   budgetPlanListItemToDto,
@@ -150,20 +156,12 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
 
-const PUBLIC_MESSAGES: Readonly<Record<string, string>> = {
-  'budget-results-total-exceeds-safe-integer':
-    'A soma dos lançamentos deste orçamento excede o limite monetário permitido.',
-  'budget-result-sum-exceeds-safe-integer':
-    'A soma dos lançamentos de um orçamento excede o limite monetário permitido.',
-  'budget-plan-total-exceeds-safe-integer':
-    'A soma dos lançamentos de um plano excede o limite monetário permitido.',
-  'consolidated-total-exceeds-safe-integer':
-    'A soma dos planos consolidados excede o limite monetário permitido.',
-};
+const publicMessage = publicMessageResolver(
+  BUDGET_PLANS_PUBLIC_MESSAGES,
+  (code) => GENERIC_PUBLIC_MESSAGES[publicErrorClassOf(writeErrorStatus(code))],
+);
 
-const publicMessage = (code: string): string => PUBLIC_MESSAGES[code] ?? code;
-
-const sendWriteError = (reply: FastifyReply, code: string): Promise<void> => {
+const sendWriteError = (reply: FastifyReply, code: BudgetPlansErrorCode): Promise<void> => {
   const requestId = currentCorrelationId() ?? reply.request.id;
   return reply
     .code(writeErrorStatus(code))

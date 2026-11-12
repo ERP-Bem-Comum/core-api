@@ -804,13 +804,13 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts/:id/amendments', (
       impactValueCents: 0,
       status: 422,
       code: 'AmendmentImpactValueZero',
-      message: 'AmendmentImpactValueZero',
+      message: 'O valor de impacto do aditivo não pode ser zero.',
     },
     {
       impactValueCents: -5,
       status: 422,
       code: 'money-negative-value',
-      message: 'money-negative-value',
+      message: 'Valores monetários não podem ser negativos.',
     },
     {
       impactValueCents: 1.5,
@@ -978,7 +978,7 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /:id/amendments/:amendmentId/
     await teardown();
   });
 
-  it('regressão: erro existente (aditivo de outro contrato) mantém o envelope com o slug como mensagem', async () => {
+  it('aditivo de outro contrato -> 409 com o código no envelope e mensagem PT-BR', async () => {
     const { app, teardown } = await makeApp();
     const token = await loginSeeded(app, WRITER_EMAIL);
     const res = await app.inject({
@@ -990,7 +990,7 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /:id/amendments/:amendmentId/
     assert.equal(res.statusCode, 409);
     const body = res.json() as { error: { code: string; message: string } };
     assert.equal(body.error.code, 'amendment-contract-mismatch');
-    assert.equal(body.error.message, 'amendment-contract-mismatch');
+    assert.equal(body.error.message, 'O aditivo informado não pertence a este contrato.');
     await teardown();
   });
 

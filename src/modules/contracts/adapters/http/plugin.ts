@@ -22,9 +22,19 @@ import type {
 import { ok, err } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
+import {
+  GENERIC_PUBLIC_MESSAGES,
+  publicErrorClassOf,
+  publicMessageResolver,
+} from '#src/shared/http/public-message.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ContractsHttpDeps } from './composition.ts';
+import {
+  CONTRACTS_PUBLIC_MESSAGES,
+  type ContractsErrorCode,
+  type ContractsHttpError,
+} from './error-messages.ts';
 import type { ContractorId } from '../../domain/shared/contractor.ts';
 import { contractToListItem, contractToDetailDto } from './contract-dto.ts';
 import { programBlockFromSnapshots } from './program-composition.ts';
@@ -67,7 +77,7 @@ export type ContractsHttpHooks = Readonly<{
 
 // Os error unions misturam string literals e tagged records `{tag,...}`
 // (CTR-DOMAIN-TAGGED-ERRORS); a borda HTTP precisa de um code string para o envelope.
-const toErrorCode = (e: string | Readonly<{ tag: string }>): string =>
+const toErrorCode = (e: ContractsHttpError): ContractsErrorCode =>
   typeof e === 'string' ? e : e.tag;
 
 // Id malformado → 400. A borda Zod (`uuidV4()`) já barra não-v4 antes do handler; o mapa é a
@@ -154,17 +164,12 @@ const sanitizeFilename = (name: string): string => {
   return cleaned.length > 0 ? cleaned : 'document.pdf';
 };
 
-const PUBLIC_MESSAGES: Readonly<Record<string, string>> = {
-  ContractValueWouldExceedSafeInteger:
-    'O aditivo elevaria o valor vigente do contrato acima do limite monetário permitido.',
-};
+const publicMessage = publicMessageResolver(
+  CONTRACTS_PUBLIC_MESSAGES,
+  (code) => GENERIC_PUBLIC_MESSAGES[publicErrorClassOf(writeErrorStatus(code))],
+);
 
-const publicMessage = (code: string): string => PUBLIC_MESSAGES[code] ?? code;
-
-const sendDomainError = (
-  reply: FastifyReply,
-  error: string | Readonly<{ tag: string }>,
-): Promise<void> => {
+const sendDomainError = (reply: FastifyReply, error: ContractsHttpError): Promise<void> => {
   const code = toErrorCode(error);
   const requestId = currentCorrelationId() ?? reply.request.id;
   return reply
