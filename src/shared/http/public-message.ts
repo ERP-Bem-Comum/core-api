@@ -73,13 +73,24 @@ export const publicMessageResolver =
   };
 
 /**
+ * Mantém cada literal de `T` e troca por `'non-literal-error-code'` o membro que não é literal
+ * (`string` ou padrão de template literal), que de outro modo colapsaria a união e deixaria um
+ * `Record<código, string>` aceitar qualquer objeto.
+ */
+type LiteralCode<T extends string> = T extends string
+  ? Record<never, never> extends Record<T, unknown>
+    ? 'non-literal-error-code'
+    : T
+  : never;
+
+/**
  * Código de um erro de domínio: a própria string literal, ou o `tag` da variante registro
- * `{ tag, ... }`.
+ * `{ tag, ... }`. Membro ou `tag` não literal vira `'non-literal-error-code'`.
  */
 export type ErrorCodeOf<E> = E extends string
-  ? E
+  ? LiteralCode<E>
   : E extends Readonly<{ tag: infer T extends string }>
-    ? T
+    ? LiteralCode<T>
     : never;
 
 /**

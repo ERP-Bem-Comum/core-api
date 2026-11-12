@@ -95,4 +95,25 @@ describe('ErrorCodeOf / UseCaseErrorOf', () => {
     > = true;
     assert.equal(typed, true);
   });
+
+  it('tag não literal não colapsa a união: a tabela sem a entrada sentinela deixa de compilar', () => {
+    const table = {
+      'a-code': 'Mensagem A.',
+      // @ts-expect-error -- a união carrega 'non-literal-error-code', que a tabela não tem.
+    } satisfies Readonly<Record<ErrorCodeOf<'a-code' | Readonly<{ tag: string }>>, string>>;
+    assert.equal(table['a-code'], 'Mensagem A.');
+  });
+
+  it('membro `string` puro também vira a sentinela', () => {
+    const typed: Equals<ErrorCodeOf<string>, 'non-literal-error-code'> = true;
+    assert.equal(typed, true);
+  });
+
+  it('padrão de template literal também vira a sentinela, e literal comum passa intacto', () => {
+    const typed: Equals<
+      ErrorCodeOf<`prefix-${string}` | Readonly<{ tag: 'Literal' }>>,
+      'non-literal-error-code' | 'Literal'
+    > = true;
+    assert.equal(typed, true);
+  });
 });
