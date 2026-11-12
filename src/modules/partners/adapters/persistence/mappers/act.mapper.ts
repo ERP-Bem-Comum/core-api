@@ -21,15 +21,28 @@ import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/pa
 import type { Act as ActEntity } from '#src/modules/partners/domain/act/types.ts';
 import type { ActRow, NewActRow } from '../schemas/mysql.ts';
 
+// Coluna de vigência que o banco devolveu como `Date` inválido. Mesmo formato do
+// `ContractMapperInvalidDate` (tag + coluna + reason do kernel), para a causa ser filtrável igual.
+export type ActMapperInvalidDate = Readonly<{
+  tag: 'ActMapperInvalidDate';
+  column: 'validityStart' | 'validityEnd';
+  reason: PlainDate.PlainDateFromDateError;
+}>;
+
 export type ActMapperError =
   | 'act-mapper-invalid-id'
   | 'act-mapper-invalid-act-number'
   | 'act-mapper-invalid-cnpj'
   | 'act-mapper-invalid-enum'
   | 'act-mapper-invalid-validity'
-  | PlainDate.PlainDateFromDateError
+  | ActMapperInvalidDate
   | 'act-mapper-invalid-payment-target'
   | 'act-mapper-invalid-state';
+
+const actMapperInvalidDate = (
+  column: ActMapperInvalidDate['column'],
+  reason: PlainDate.PlainDateFromDateError,
+): ActMapperInvalidDate => ({ tag: 'ActMapperInvalidDate', column, reason });
 
 // PlainDate → `Date` à meia-noite UTC (coluna `date`). Espelha contracts/period.mapper.
 const toUTCDate = (d: PlainDate.PlainDate): Date => new Date(Date.UTC(d.year, d.month - 1, d.day));
@@ -103,9 +116,9 @@ export const actFromRow = (row: Readonly<ActRow>): Result<ActEntity, ActMapperEr
   if (!occupationArea.ok) return err('act-mapper-invalid-enum');
 
   const validityStart = PlainDate.fromDate(row.validityStart);
-  if (!validityStart.ok) return validityStart;
+  if (!validityStart.ok) return err(actMapperInvalidDate('validityStart', validityStart.error));
   const validityEnd = PlainDate.fromDate(row.validityEnd);
-  if (!validityEnd.ok) return validityEnd;
+  if (!validityEnd.ok) return err(actMapperInvalidDate('validityEnd', validityEnd.error));
   const validity = Period.create(validityStart.value, validityEnd.value);
   if (!validity.ok) return err('act-mapper-invalid-validity');
 

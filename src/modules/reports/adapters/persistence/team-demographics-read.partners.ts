@@ -18,7 +18,13 @@ export const TeamDemographicsReadFromPartners = (
 ): TeamDemographicsReadPort => ({
   list: async () => {
     const listed = await listDemographics();
-    if (!listed.ok) return err<TeamDemographicsReadError>('team-demographics-read-unavailable');
+    if (!listed.ok) {
+      return err<TeamDemographicsReadError>(
+        listed.error === 'team-demographics-invalid-reference-date'
+          ? 'team-demographics-invalid-reference-date'
+          : 'team-demographics-read-unavailable',
+      );
+    }
     return ok(listed.value);
   },
 });

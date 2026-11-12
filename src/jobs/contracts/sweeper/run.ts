@@ -13,6 +13,7 @@
 //
 // Exit codes (sysexits.h):
 //   0  — sucesso (mesmo que expired=0: é resultado válido, não erro)
+//   65 — EX_DATAERR: houve contrato pulado por linha corrompida; os demais FORAM processados
 //   78 — EX_CONFIG: config inválida (env ausente ou mal-formada)
 //   1  — erro de runtime (conexão, I/O, repositório)
 
@@ -22,7 +23,7 @@ import { withNewCorrelation } from '#src/shared/observability/correlation.ts';
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts';
 import { claimJobRun } from '#src/modules/contracts/adapters/persistence/repos/job-run.drizzle.ts';
-import { runSweep } from './sweeper.ts';
+import { runSweep, sweepExit } from './sweeper.ts';
 import { readJobConfig } from './config.ts';
 import { ClockSaoPaulo } from './clock-sao-paulo.ts';
 
@@ -74,18 +75,11 @@ const main = async (): Promise<number> => {
       runSweep({ contractRepo, clock }, { batchSize: config.batchSize }),
     );
 
-    if (!result.ok) {
-      const detail = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
-      process.stderr.write(`[contracts-sweeper] erro no sweep: ${detail}\n`);
-      return 1;
-    }
-
-    // Linha de resultado consumível — stdout para pipes/observabilidade.
-    const { expired, scanned, skipped } = result.value;
-    process.stdout.write(
-      `[contracts-sweeper] expired=${expired} scanned=${scanned} skipped=${skipped}\n`,
-    );
-    return 0;
+    // Linha de resultado consumível no stdout; aviso de erro/linha pulada no stderr.
+    const exit = sweepExit(result);
+    if (exit.stdout !== null) process.stdout.write(exit.stdout);
+    if (exit.stderr !== null) process.stderr.write(exit.stderr);
+    return exit.code;
   } catch (cause) {
     // Defesa em profundidade: `runSweep` não deve lançar (converte para Result),
     // mas um bug inesperado não pode deixar o pool aberto.

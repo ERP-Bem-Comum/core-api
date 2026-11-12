@@ -30,9 +30,10 @@ export type AmendmentInsert = typeof amendmentsTable.$inferInsert;
 // Case constructors são free functions (DO D§22 — module-as-namespace).
 // `AmendmentMapperImpossibleShape` cobre shapes impossíveis do DB (campos
 // obrigatórios ausentes para o status dado) — `reason` descreve o contexto.
-// `AmendmentMapperInvalidDate` reservado para futura validação de campos Date;
-// casos de campos numéricos/referência ausentes para um dado kind/status são
-// cobertos por `AmendmentMapperImpossibleShape`.
+// `AmendmentMapperInvalidDate` cobre campo de data que o driver devolveu como `Date`
+// inválido (hoje o `newEndDate` do TermChange), com `reason` igual ao erro do kernel;
+// campos numéricos/referência ausentes para um dado kind/status são cobertos por
+// `AmendmentMapperImpossibleShape`.
 
 export type AmendmentMapperInvalidId = Readonly<{
   tag: 'AmendmentMapperInvalidId';

@@ -55,7 +55,13 @@ export const openCollaboratorDemographicsReader = async (
           })
           .from(parCollaborators);
 
-        return aggregateTeamDemographics(rows, { referenceDate: opts.clock.now() });
+        const summary = aggregateTeamDemographics(rows, { referenceDate: opts.clock.now() });
+        if (!summary.ok) {
+          process.stderr.write(
+            `[partners-collaborator-demographics:list] data de referência inválida: ${summary.error}\n`,
+          );
+        }
+        return summary;
       } catch (cause) {
         process.stderr.write(`[partners-collaborator-demographics:list] ${String(cause)}\n`);
         return err('collaborator-demographics-read-failure');

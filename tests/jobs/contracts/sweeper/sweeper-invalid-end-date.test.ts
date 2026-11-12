@@ -2,78 +2,55 @@ import { describe, it, mock } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { err, ok } from '#src/shared/primitives/result.ts';
-import * as schema from '#src/modules/contracts/adapters/persistence/schemas/mysql.ts';
-import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
-import type { ContractRow } from '#src/modules/contracts/adapters/persistence/mappers/contract.mapper.ts';
 import { contractFromRow } from '#src/modules/contracts/adapters/persistence/mappers/contract.mapper.ts';
 import { createDrizzleContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts';
 import type { Contract } from '#src/modules/contracts/domain/contract/types.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
-import { runSweep } from '#src/jobs/contracts/sweeper/sweeper.ts';
+import { EX_DATAERR, runSweep, sweepExit } from '#src/jobs/contracts/sweeper/sweeper.ts';
+import {
+  corruptRow,
+  stubHandle,
+  validRow,
+} from '../../../modules/contracts/adapters/persistence/repos/corrupt-rows-fixtures.ts';
 
 const VALID_ID = '22222222-2222-4222-8222-222222222222';
-const CORRUPT_ID = '11111111-1111-4111-8111-111111111111';
+const CORRUPT_IDS = [
+  '11111111-1111-4111-8111-111111111111',
+  '33333333-3333-4333-8333-333333333333',
+] as const;
+const AT = new Date('2027-06-01T03:00:00.000Z');
 
-/** Linha `Active` + `Fixed` vencida em 2026-12-31, com o `id` e o fim de vigência dados. */
-const activeRow = (id: string, currentPeriodEnd: Date): ContractRow => ({
-  id,
-  sequentialNumber: `${id.slice(0, 3)}/2026`,
-  title: 'Contrato vencido',
-  objective: 'Objeto',
-  signedAt: new Date('2026-01-15T00:00:00.000Z'),
-  originalValueCents: 10_000_000,
-  originalPeriodKind: 'Fixed',
-  originalPeriodStart: new Date('2026-01-15T00:00:00.000Z'),
-  originalPeriodEnd: new Date('2026-12-31T00:00:00.000Z'),
-  currentValueCents: 10_000_000,
-  currentPeriodKind: 'Fixed',
-  currentPeriodStart: new Date('2026-01-15T00:00:00.000Z'),
-  currentPeriodEnd,
-  status: 'Active',
-  endedAt: null,
-  terminationReason: null,
-  contractorType: 'supplier',
-  contractorId: '55555555-5555-4555-8555-555555555555',
-  classification: 'CT',
-  programId: null,
-  budgetPlanId: null,
-  categorizacao: null,
-  centroDeCusto: null,
-  costCenterRef: null,
-  categoryRef: null,
-  subcategoryRef: null,
-  observations: null,
-  email: null,
-  telephone: null,
-});
-
-const corruptRow = (): ContractRow => activeRow(CORRUPT_ID, new Date('invalid'));
-const validRow = (): ContractRow => activeRow(VALID_ID, new Date('2026-12-31T00:00:00.000Z'));
-
-/** Query encadeável do Drizzle que resolve para `rows` quando aguardada. */
-const query = (rows: readonly unknown[]): Record<string, unknown> => {
-  const builder: Record<string, unknown> = {};
-  for (const step of ['from', 'where', 'orderBy', 'limit']) builder[step] = () => builder;
-  builder['then'] = (resolve: (v: readonly unknown[]) => unknown) => resolve(rows);
-  return builder;
-};
-
-/** `MysqlHandle` com `db` falso: o primeiro `select` devolve `contractRows`, os demais nada. */
-const stubHandle = (contractRows: readonly ContractRow[]): MysqlHandle => {
-  let selects = 0;
-  const db = {
-    select: () => {
-      selects += 1;
-      return query(selects === 1 ? contractRows : []);
-    },
-  };
-  return { db, schema } as unknown as MysqlHandle;
+/** Roda o sweep com o `findExpirable` real (db falso) e um `save` que só registra. */
+const sweepWith = async (pages: Parameters<typeof stubHandle>[0], batchSize: number) => {
+  const saved: Contract[] = [];
+  const { handle, seen } = stubHandle(pages);
+  const repo = createDrizzleContractRepository(handle);
+  const stderr = mock.method(process.stderr, 'write', () => true);
+  try {
+    const result = await runSweep(
+      {
+        contractRepo: {
+          findExpirable: repo.findExpirable,
+          save: (contract) => {
+            saved.push(contract);
+            return Promise.resolve(ok(undefined));
+          },
+        },
+        clock: ClockFixed(AT),
+      },
+      { batchSize },
+    );
+    const logs = stderr.mock.calls.map((c) => String(c.arguments[0]));
+    return { result, saved, seen, logs };
+  } finally {
+    stderr.mock.restore();
+  }
 };
 
 describe('sweeper — contrato cujo fim de vigência veio inválido do banco', () => {
   it('o mapper recusa a linha, nomeando a coluna e a causa plain-date-invalid-date', () => {
     assert.deepEqual(
-      contractFromRow(corruptRow(), []),
+      contractFromRow(corruptRow(CORRUPT_IDS[0]), []),
       err({
         tag: 'ContractMapperInvalidDate',
         column: 'currentPeriodEnd',
@@ -83,27 +60,11 @@ describe('sweeper — contrato cujo fim de vigência veio inválido do banco', (
   });
 
   it('pula só a linha corrompida, expira a válida e informa a pulada no resultado', async () => {
-    const saved: Contract[] = [];
-    const repo = createDrizzleContractRepository(stubHandle([corruptRow(), validRow()]));
-    const stderr = mock.method(process.stderr, 'write', () => true);
-    try {
-      const r = await runSweep(
-        {
-          contractRepo: {
-            findExpirable: repo.findExpirable,
-            save: (contract) => {
-              saved.push(contract);
-              return Promise.resolve(ok(undefined));
-            },
-          },
-          clock: ClockFixed(new Date('2027-06-01T03:00:00.000Z')),
-        },
-        { batchSize: 100 },
-      );
-      assert.deepEqual(r, ok({ expired: 1, scanned: 1, skipped: 1 }));
-    } finally {
-      stderr.mock.restore();
-    }
+    const { result, saved } = await sweepWith(
+      [[corruptRow(CORRUPT_IDS[0]), validRow(VALID_ID)]],
+      100,
+    );
+    assert.deepEqual(result, ok({ expired: 1, scanned: 1, skipped: 1 }));
     assert.deepEqual(
       saved.map((c) => [String(c.id), c.status]),
       [[VALID_ID, 'Expired']],
@@ -111,18 +72,57 @@ describe('sweeper — contrato cujo fim de vigência veio inválido do banco', (
   });
 
   it('registra no stderr o id do contrato pulado, a coluna e a causa', async () => {
-    const repo = createDrizzleContractRepository(stubHandle([corruptRow(), validRow()]));
-    const stderr = mock.method(process.stderr, 'write', () => true);
-    try {
-      await repo.findExpirable(ClockFixed(new Date('2027-06-01T03:00:00.000Z')).today(), 100);
-      const lines = stderr.mock.calls.map((c) => String(c.arguments[0]));
-      const line = lines.find((l) => l.includes(CORRUPT_ID));
-      assert.ok(line, `nenhuma linha de log cita ${CORRUPT_ID}: ${JSON.stringify(lines)}`);
-      assert.match(line, /linha corrompida/);
-      assert.match(line, /currentPeriodEnd/);
-      assert.match(line, /plain-date-invalid-date/);
-    } finally {
-      stderr.mock.restore();
-    }
+    const { logs } = await sweepWith([[corruptRow(CORRUPT_IDS[0]), validRow(VALID_ID)]], 100);
+    const line = logs.find((l) => l.includes(CORRUPT_IDS[0]));
+    assert.ok(line, `nenhuma linha de log cita ${CORRUPT_IDS[0]}: ${JSON.stringify(logs)}`);
+    assert.match(line, /linha corrompida/);
+    assert.match(line, /currentPeriodEnd/);
+    assert.match(line, /plain-date-invalid-date/);
+  });
+
+  it('sem inanição: batchSize linhas corrompidas na frente não impedem a válida de expirar', async () => {
+    const { result, saved, seen } = await sweepWith(
+      [CORRUPT_IDS.map(corruptRow), [validRow(VALID_ID)]],
+      CORRUPT_IDS.length,
+    );
+    assert.deepEqual(result, ok({ expired: 1, scanned: 1, skipped: 2 }));
+    assert.deepEqual(
+      saved.map((c) => String(c.id)),
+      [VALID_ID],
+    );
+    const retry = seen[1];
+    assert.ok(retry, 'esperava uma segunda leitura além das linhas ilegíveis');
+    assert.match(retry.sql, /not in/);
+    assert.deepEqual(
+      retry.params.filter((p) => typeof p === 'string' && p.includes('-4')),
+      [...CORRUPT_IDS],
+    );
+  });
+});
+
+describe('sweepExit — código de saída do job', () => {
+  it('sucesso sem linha pulada sai com 0 e imprime o resultado no stdout', () => {
+    assert.deepEqual(sweepExit(ok({ expired: 2, scanned: 2, skipped: 0 })), {
+      code: 0,
+      stdout: '[contracts-sweeper] expired=2 scanned=2 skipped=0\n',
+      stderr: null,
+    });
+  });
+
+  it('com linha pulada processa o resto, mas sai com EX_DATAERR (65) e avisa no stderr', () => {
+    const exit = sweepExit(ok({ expired: 1, scanned: 1, skipped: 2 }));
+    assert.equal(exit.code, EX_DATAERR);
+    assert.equal(EX_DATAERR, 65);
+    assert.equal(exit.stdout, '[contracts-sweeper] expired=1 scanned=1 skipped=2\n');
+    assert.match(exit.stderr ?? '', /2 contrato\(s\) ignorado\(s\)/);
+    assert.match(exit.stderr ?? '', /linha corrompida/);
+  });
+
+  it('erro de repositório sai com 1, distinto do 65 de dado corrompido', () => {
+    assert.deepEqual(sweepExit(err('contract-repo-unavailable')), {
+      code: 1,
+      stdout: null,
+      stderr: '[contracts-sweeper] erro no sweep: contract-repo-unavailable\n',
+    });
   });
 });

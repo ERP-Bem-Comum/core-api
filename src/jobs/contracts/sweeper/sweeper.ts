@@ -67,3 +67,32 @@ export const runSweep = async (
     skipped: found.value.unreadable.length,
   });
 };
+
+/** sysexits.h — dado de entrada incorreto: linha corrompida no banco. */
+export const EX_DATAERR = 65;
+
+/** Código de saída e mensagens do processo para o resultado de um sweep. */
+export type SweepExit = Readonly<{ code: number; stdout: string | null; stderr: string | null }>;
+
+/**
+ * Traduz o resultado do sweep em código de saída. Linha pulada NÃO interrompe a expiração (os
+ * legíveis já foram processados), mas sai com `EX_DATAERR` para o cron alertar — distinto do `1` de
+ * erro de infraestrutura, para o alerta dizer qual dos dois aconteceu.
+ */
+export const sweepExit = (result: Result<SweepResult, ContractRepositoryError>): SweepExit => {
+  if (!result.ok) {
+    const detail = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+    return { code: 1, stdout: null, stderr: `[contracts-sweeper] erro no sweep: ${detail}\n` };
+  }
+  const { expired, scanned, skipped } = result.value;
+  const stdout = `[contracts-sweeper] expired=${expired} scanned=${scanned} skipped=${skipped}\n`;
+  if (skipped === 0) return { code: 0, stdout, stderr: null };
+  return {
+    code: EX_DATAERR,
+    stdout,
+    stderr:
+      `[contracts-sweeper] ${skipped} contrato(s) ignorado(s) por linha corrompida no banco; ` +
+      'os demais foram processados. Corrija os dados: o id e a coluna de cada um estão no log ' +
+      '[contract-repo:findExpirable].\n',
+  };
+};

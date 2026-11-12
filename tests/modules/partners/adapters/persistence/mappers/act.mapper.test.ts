@@ -40,17 +40,25 @@ describe('actFromRow — vigência', () => {
     assert.equal(actFromRow(validRow()).ok, true);
   });
 
-  it("fim de vigência com Date inválido devolve err('plain-date-invalid-date')", () => {
+  it('fim de vigência com Date inválido nomeia a coluna validityEnd e a causa plain-date-invalid-date', () => {
     assert.deepEqual(
       actFromRow({ ...validRow(), validityEnd: new Date('invalid') }),
-      err('plain-date-invalid-date'),
+      err({
+        tag: 'ActMapperInvalidDate',
+        column: 'validityEnd',
+        reason: 'plain-date-invalid-date',
+      }),
     );
   });
 
-  it("início de vigência com Date inválido devolve err('plain-date-invalid-date')", () => {
+  it('início de vigência com Date inválido nomeia a coluna validityStart', () => {
     assert.deepEqual(
       actFromRow({ ...validRow(), validityStart: new Date('invalid') }),
-      err('plain-date-invalid-date'),
+      err({
+        tag: 'ActMapperInvalidDate',
+        column: 'validityStart',
+        reason: 'plain-date-invalid-date',
+      }),
     );
   });
 

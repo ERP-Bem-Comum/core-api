@@ -32,14 +32,15 @@ export const periodToColumns = (p: Period.Period): PeriodColumns => {
   }
 };
 
-// ─── Tagged error variant (Padrão D — DO D§22) ───────────────────────────────
+// ─── Tagged error variants (Padrão D — DO D§22) ──────────────────────────────
 //
-// `PeriodMapperFixedMissingEnd` é o único erro próprio do mapper — ocorre quando
-// uma row com kind='Fixed' tem `end` null no DB (estado corrompido).
-// `PeriodMapperError` é union heterogênea: PeriodError (string literal — VO puro)
-// | PeriodMapperFixedMissingEnd (tagged record — mapper). Pragmatismo aceito:
-// migração do VO string literal para tagged é escopo de ticket dedicado (Bloco B).
-// Consumidores que precisam distinguir os dois ramos: `typeof e === 'string'`.
+// Dois erros próprios do mapper, ambos de estado corrompido no DB:
+//   - `PeriodMapperFixedMissingEnd`: row com kind='Fixed' e `end` null;
+//   - `PeriodMapperInvalidDate`: coluna `start`/`end` que o driver devolveu como `Date` inválido.
+// `PeriodMapperError` é union heterogênea de 3 membros: PeriodError (string literal — VO puro)
+// | os dois tagged records do mapper. Pragmatismo aceito: migração do VO string literal para
+// tagged é escopo de ticket dedicado (Bloco B). Para distinguir: `typeof e === 'string'` separa o
+// erro do VO, e `e.tag` separa os dois do mapper.
 
 export type PeriodMapperFixedMissingEnd = Readonly<{
   tag: 'PeriodMapperFixedMissingEnd';

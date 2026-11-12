@@ -6,14 +6,15 @@ import { utcCalendarDayOf } from './utc-calendar-day.ts';
  * no boot ou no setup do teste, e nunca dentro de um use case que chame `today()`.
  *
  * @param at - Instante fixo.
- * @returns O `Clock` em que `now()` devolve `at` e `today()` devolve o dia UTC de `at`, calculado
- * uma vez na construção.
+ * @returns O `Clock` em que `now()` devolve uma cópia do instante e `today()` o dia UTC dele, os
+ * dois fixados na construção: mutar o `Date` do chamador ou o devolvido não os desalinha.
  * @throws {RangeError} Quando `at` é um `Date` inválido.
  */
 export const ClockFixed = (at: Date): Clock => {
-  const today = utcCalendarDayOf(at);
+  const instant = at.getTime();
+  const today = utcCalendarDayOf(new Date(instant));
   return {
-    now: () => at,
+    now: () => new Date(instant),
     today: () => today,
   };
 };

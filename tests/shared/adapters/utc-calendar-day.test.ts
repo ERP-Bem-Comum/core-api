@@ -24,6 +24,19 @@ describe('ClockFixed valida o instante na construção', () => {
     assert.throws(() => ClockFixed(new Date('invalid')), RangeError);
   });
 
+  it('now() não se desalinha de today(): mutar o Date do chamador não muda o instante', () => {
+    const at = new Date('2026-05-26T12:00:00.000Z');
+    const clock = ClockFixed(at);
+    at.setTime(Number.NaN);
+    assert.equal(clock.now().toISOString(), '2026-05-26T12:00:00.000Z');
+  });
+
+  it('now() devolve cópia: mutar o Date devolvido não muda o próximo now()', () => {
+    const clock = ClockFixed(new Date('2026-05-26T12:00:00.000Z'));
+    clock.now().setTime(0);
+    assert.equal(clock.now().toISOString(), '2026-05-26T12:00:00.000Z');
+  });
+
   it('today() não relê o instante: mutar o Date depois da construção não muda o dia', () => {
     const at = new Date('2026-05-26T12:00:00.000Z');
     const clock = ClockFixed(at);

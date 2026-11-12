@@ -230,7 +230,10 @@ const reportsRoutes =
         const result = await deps.listTeamDemographics();
         if (!result.ok) {
           return sendResult(reply, result, {
-            errors: { 'team-demographics-read-unavailable': 503 },
+            errors: {
+              'team-demographics-read-unavailable': 503,
+              'team-demographics-invalid-reference-date': 500,
+            },
           });
         }
         return sendResult(reply, ok(teamDemographicsToDto(result.value)), { ok: 200 });

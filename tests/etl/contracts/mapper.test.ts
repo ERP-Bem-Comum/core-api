@@ -185,7 +185,7 @@ describe('mapLegacyContractRow — quarentenas', () => {
     assert.ok(r.error.some((e) => e.tag === 'RequiredFieldMissing' && e.field === 'contractor'));
   });
 
-  it('início de vigência inválido (Date NaN) → DateInvalid contract_period_start com o valor bruto', () => {
+  it('início de vigência inválido (Date NaN) → DateInvalid contract_period_start com a causa', () => {
     const r = mapLegacyContractRow(
       baseContract({ contractPeriodStart: new Date('invalid') }),
       refs(),
@@ -193,11 +193,17 @@ describe('mapLegacyContractRow — quarentenas', () => {
     assert.ok(!r.ok);
     assert.deepEqual(
       r.error.filter((e) => e.tag === 'DateInvalid'),
-      [{ tag: 'DateInvalid', field: 'contract_period_start', attempted: 'Invalid Date' }],
+      [
+        {
+          tag: 'DateInvalid',
+          field: 'contract_period_start',
+          attempted: 'plain-date-invalid-date',
+        },
+      ],
     );
   });
 
-  it('fim de vigência inválido (Date NaN) → DateInvalid contract_period_end com o valor bruto', () => {
+  it('fim de vigência inválido (Date NaN) → DateInvalid contract_period_end com a causa', () => {
     const r = mapLegacyContractRow(
       baseContract({ contractPeriodEnd: new Date('invalid') }),
       refs(),
@@ -205,7 +211,7 @@ describe('mapLegacyContractRow — quarentenas', () => {
     assert.ok(!r.ok);
     assert.deepEqual(
       r.error.filter((e) => e.tag === 'DateInvalid'),
-      [{ tag: 'DateInvalid', field: 'contract_period_end', attempted: 'Invalid Date' }],
+      [{ tag: 'DateInvalid', field: 'contract_period_end', attempted: 'plain-date-invalid-date' }],
     );
   });
 

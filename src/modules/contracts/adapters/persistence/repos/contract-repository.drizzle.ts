@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, like, lt, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, like, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type {
@@ -176,6 +176,52 @@ export const createDrizzleContractRepository = (
     return buildContract(row, homologatedRows);
   };
 
+  // Ponto ÚNICO de leitura de lote de linhas (list, listPaged, findExpirable): carrega a junção
+  // de aditivos homologados (1+1 queries, sem N+1) e reidrata cada linha. Linha que o mapper
+  // recusa (ex.: data zerada) NÃO derruba a leitura: é pulada, logada com id + coluna + causa, e
+  // devolvida em `unreadable` — mesma política em todos os caminhos de listagem.
+  const readContracts = async (
+    ctx: string,
+    rows: readonly Readonly<ContractRow>[],
+  ): Promise<Readonly<{ contracts: Contract[]; unreadable: UnreadableContract[] }>> => {
+    const contracts: Contract[] = [];
+    const unreadable: UnreadableContract[] = [];
+    if (rows.length === 0) return { contracts, unreadable };
+
+    const links = await db
+      .select({
+        contractId: schema.contractHomologatedAmendments.contractId,
+        amendmentId: schema.contractHomologatedAmendments.amendmentId,
+      })
+      .from(schema.contractHomologatedAmendments)
+      .where(
+        inArray(
+          schema.contractHomologatedAmendments.contractId,
+          rows.map((r) => r.id),
+        ),
+      );
+    const byContract = new Map<string, string[]>();
+    for (const link of links) {
+      const arr = byContract.get(link.contractId) ?? [];
+      arr.push(link.amendmentId);
+      byContract.set(link.contractId, arr);
+    }
+
+    for (const row of rows) {
+      const r = contractFromRow(row, byContract.get(row.id) ?? []);
+      if (r.ok) {
+        contracts.push(r.value);
+        continue;
+      }
+      const cause = JSON.stringify(r.error);
+      process.stderr.write(
+        `[contract-repo:${ctx}] contrato ${row.id} ignorado: linha corrompida no banco — ${cause}\n`,
+      );
+      unreadable.push({ contractId: row.id, cause });
+    }
+    return { contracts, unreadable };
+  };
+
   // CTR-HTTP-CONTRACT-LIST-FILTERS — predicado WHERE da listagem paginada.
   // search → LIKE %term% em title/objective/sequential_number (collation
   // utf8mb4_unicode_ci já é case-insensitive; ADR-0020 permite LIKE). Escapa
@@ -288,34 +334,8 @@ export const createDrizzleContractRepository = (
         // os agregados no app. O(M+N) memória, sem cartesiano (preferido a
         // leftJoin que duplicaria contract rows).
         const rows = await db.select().from(schema.contracts);
-        if (rows.length === 0) return [] as readonly Contract[];
-
-        const contractIds = rows.map((r) => r.id);
-        const links = await db
-          .select({
-            contractId: schema.contractHomologatedAmendments.contractId,
-            amendmentId: schema.contractHomologatedAmendments.amendmentId,
-          })
-          .from(schema.contractHomologatedAmendments)
-          .where(inArray(schema.contractHomologatedAmendments.contractId, contractIds));
-
-        const byContract = new Map<string, string[]>();
-        for (const link of links) {
-          const arr = byContract.get(link.contractId) ?? [];
-          arr.push(link.amendmentId);
-          byContract.set(link.contractId, arr);
-        }
-
-        const results: Contract[] = [];
-        for (const row of rows) {
-          const homologatedIds = (byContract.get(row.id) ?? []).map((amendmentId) => ({
-            amendmentId,
-          }));
-          const r = buildContract(row, homologatedIds);
-          if (!r.ok) throw new Error(JSON.stringify(r.error));
-          results.push(r.value);
-        }
-        return results as readonly Contract[];
+        const { contracts } = await readContracts('list', rows);
+        return contracts as readonly Contract[];
       }),
 
     // CTR-HTTP-CONTRACT-LIST-FILTERS — listagem filtrada/paginada NO BANCO.
@@ -346,36 +366,11 @@ export const createDrizzleContractRepository = (
           .limit(query.limit)
           .offset(offset);
 
-        if (rows.length === 0) {
-          return { items: [] as readonly Contract[], total };
-        }
-
-        const pageIds = rows.map((r) => r.id);
-        const links = await db
-          .select({
-            contractId: schema.contractHomologatedAmendments.contractId,
-            amendmentId: schema.contractHomologatedAmendments.amendmentId,
-          })
-          .from(schema.contractHomologatedAmendments)
-          .where(inArray(schema.contractHomologatedAmendments.contractId, pageIds));
-
-        const byContract = new Map<string, string[]>();
-        for (const link of links) {
-          const arr = byContract.get(link.contractId) ?? [];
-          arr.push(link.amendmentId);
-          byContract.set(link.contractId, arr);
-        }
-
-        const items: Contract[] = [];
-        for (const row of rows) {
-          const homologatedIds = (byContract.get(row.id) ?? []).map((amendmentId) => ({
-            amendmentId,
-          }));
-          const r = buildContract(row, homologatedIds);
-          if (!r.ok) throw new Error(JSON.stringify(r.error));
-          items.push(r.value);
-        }
-        return { items: items as readonly Contract[], total };
+        // `total` segue sendo o COUNT do banco, inclusive linhas corrompidas: elas existem e o
+        // número precisa bater com o banco; a página que contiver uma linha pulada vem com menos
+        // itens que `limit` (a linha aparece no log, não some em silêncio).
+        const { contracts } = await readContracts('listPaged', rows);
+        return { items: contracts as readonly Contract[], total };
       }),
 
     // CA-3: save(contract, events) abre UMA transação que persiste state + outbox atomicamente.
@@ -427,66 +422,52 @@ export const createDrizzleContractRepository = (
         // Converter PlainDate → Date UTC (meia-noite) para comparação com coluna `date`.
         const cutoffDate = new Date(Date.UTC(cutoff.year, cutoff.month - 1, cutoff.day));
 
-        const rows = await db
-          .select()
-          .from(schema.contracts)
-          .where(
-            and(
-              eq(schema.contracts.status, 'Active'),
-              eq(schema.contracts.currentPeriodKind, 'Fixed'),
-              lt(schema.contracts.currentPeriodEnd, cutoffDate),
-            ),
-          )
-          // Ordena por (current_period_end ASC, id ASC): contratos mais antigos primeiro;
-          // id como tie-break determinístico (consistente com o InMemory adapter).
-          .orderBy(asc(schema.contracts.currentPeriodEnd), asc(schema.contracts.id))
-          .limit(limit);
-
-        if (rows.length === 0) return { contracts: [], unreadable: [] } satisfies ExpirableBatch;
-
-        // Todos os contratos elegíveis são Active + Fixed → sem homologatedAmendmentIds
-        // ainda carregados. Precisamos da junction table para reconstituir o agregado completo.
-        const contractIds = rows.map((r) => r.id);
-        const links = await db
-          .select({
-            contractId: schema.contractHomologatedAmendments.contractId,
-            amendmentId: schema.contractHomologatedAmendments.amendmentId,
-          })
-          .from(schema.contractHomologatedAmendments)
-          .where(inArray(schema.contractHomologatedAmendments.contractId, contractIds));
-
-        const byContract = new Map<string, string[]>();
-        for (const link of links) {
-          const arr = byContract.get(link.contractId) ?? [];
-          arr.push(link.amendmentId);
-          byContract.set(link.contractId, arr);
-        }
-
-        const active: ActiveContract[] = [];
+        // Sem inanição: data zerada ordena PRIMEIRO no ORDER BY current_period_end, então um lote
+        // inteiro de linhas ilegíveis voltaria em todo run e nenhum contrato válido expiraria. A
+        // leitura repete excluindo os ids já sabidamente ilegíveis até uma página não trazer
+        // ilegível novo (ou acabar). Keyset por (current_period_end, id) não serve: o cursor
+        // precisaria do valor da data da última linha, e é justamente esse valor que o driver
+        // devolve como Date inválido. Cada repetição descobre ao menos um ilegível novo, então o
+        // número de leituras é limitado pelo número de linhas corrompidas.
         const unreadable: UnreadableContract[] = [];
-        const skip = (contractId: string, cause: string): void => {
-          // Linha corrompida não derruba o lote: registra id + causa e segue com os demais.
-          process.stderr.write(
-            `[contract-repo:findExpirable] contrato ${contractId} ignorado: linha corrompida no banco — ${cause}\n`,
-          );
-          unreadable.push({ contractId, cause });
-        };
-        for (const row of rows) {
-          const r = contractFromRow(row, byContract.get(row.id) ?? []);
-          if (!r.ok) {
-            skip(row.id, JSON.stringify(r.error));
-            continue;
-          }
-          // Narrowing seguro: a query WHERE status='Active' garante o subtipo; o mapper
-          // também valida (contractMapperInvalidEndedAt protege se o DB estiver corrompido).
-          if (r.value.status !== 'Active') {
-            skip(row.id, `status=${r.value.status} inesperado`);
-            continue;
-          }
-          active.push(r.value);
-        }
+        for (;;) {
+          const knownBad = unreadable.map((u) => u.contractId);
+          const rows = await db
+            .select()
+            .from(schema.contracts)
+            .where(
+              and(
+                eq(schema.contracts.status, 'Active'),
+                eq(schema.contracts.currentPeriodKind, 'Fixed'),
+                lt(schema.contracts.currentPeriodEnd, cutoffDate),
+                knownBad.length > 0 ? notInArray(schema.contracts.id, knownBad) : undefined,
+              ),
+            )
+            // Ordena por (current_period_end ASC, id ASC): contratos mais antigos primeiro;
+            // id como tie-break determinístico (consistente com o InMemory adapter).
+            .orderBy(asc(schema.contracts.currentPeriodEnd), asc(schema.contracts.id))
+            .limit(limit);
 
-        return { contracts: active, unreadable } satisfies ExpirableBatch;
+          const page = await readContracts('findExpirable', rows);
+          const active: ActiveContract[] = [];
+          for (const c of page.contracts) {
+            // A query WHERE status='Active' garante o subtipo; status diferente é corrupção (CHECK
+            // violado) e segue a mesma política de linha ilegível.
+            if (c.status === 'Active') {
+              active.push(c);
+              continue;
+            }
+            const cause = `status=${c.status} inesperado`;
+            process.stderr.write(
+              `[contract-repo:findExpirable] contrato ${String(c.id)} ignorado: linha corrompida no banco — ${cause}\n`,
+            );
+            page.unreadable.push({ contractId: String(c.id), cause });
+          }
+          unreadable.push(...page.unreadable);
+          if (page.unreadable.length === 0 || rows.length < limit) {
+            return { contracts: active, unreadable } satisfies ExpirableBatch;
+          }
+        }
       }),
   };
 };
