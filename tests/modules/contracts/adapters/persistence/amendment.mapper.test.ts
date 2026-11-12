@@ -416,3 +416,21 @@ describe('amendmentFromRow — DB corrompido: kind inválido (CA6 — tagged pay
     }
   });
 });
+
+describe('amendmentFromRow — DB corrompido: newEndDate inválido em TermChange', () => {
+  it("TermChange com newEndDate inválido → err({ tag: 'AmendmentMapperImpossibleShape' })", () => {
+    const row: AmendmentRow = {
+      ...pendingWithoutDocRow(),
+      kind: 'TermChange',
+      impactValueCents: null,
+      newEndDate: new Date('invalid'),
+    };
+    assert.deepEqual(amendmentFromRow(row), {
+      ok: false,
+      error: {
+        tag: 'AmendmentMapperImpossibleShape',
+        reason: 'invalid-new-end-date-for-term-change',
+      },
+    });
+  });
+});

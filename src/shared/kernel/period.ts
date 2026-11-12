@@ -37,23 +37,20 @@ export type Period = Brand<PeriodShape, 'Period'>;
 export type PeriodError = 'period-end-before-start' | 'period-zero-duration';
 
 /**
- * Cria um período `Fixed` congelado, guardando início e fim como `PlainDate`. Valida só a ordem entre as datas e confia no `PlainDate` recebido, sem
- * revalidar o calendário nem o limite de ano 2000: um `PlainDate` de ano anterior a 2000 (de
- * `PlainDate.fromDate`) é aceito, e um `PlainDate` com campos `NaN` (de `PlainDate.fromDate` sobre
- * `Date` inválido) em qualquer dos lados resulta em `ok`, mesmo quando `start` e `end` são a mesma
- * referência.
+ * Cria um período `Fixed` congelado, guardando início e fim como `PlainDate`. Valida só a ordem
+ * entre as datas e confia no `PlainDate` recebido, sem revalidar o calendário nem o limite de ano
+ * 2000: um `PlainDate` de ano anterior a 2000 (de `PlainDate.fromDate`) é aceito.
  *
  * @param start - Primeiro dia do período.
- * @param end - Último dia do período; com campos numéricos finitos nas duas datas, precisa ser ao
- * menos um dia depois de `start`.
- * @returns Com campos numéricos finitos nas duas datas: `ok` com o período `Fixed` quando `end` é
- * posterior a `start`; `err('period-end-before-start')` quando `end` é anterior a `start`;
- * `err('period-zero-duration')` quando `end` é igual a `start`. Com campos `NaN` em qualquer
- * das datas: `ok`.
+ * @param end - Último dia do período; precisa ser ao menos um dia depois de `start`.
+ * @returns `ok` com o período `Fixed` quando `end` é posterior a `start`;
+ * `err('period-end-before-start')` quando `end` é anterior a `start`;
+ * `err('period-zero-duration')` quando `end` é igual a `start`.
  * @example
  * ```ts
  * const start = PlainDate.fromDate(new Date('2026-03-10T00:00:00Z'));
- * const r = Period.create(start, PlainDate.fromDate(new Date('2026-03-11T00:00:00Z')));
+ * const end = PlainDate.fromDate(new Date('2026-03-11T00:00:00Z'));
+ * const r = start.ok && end.ok ? Period.create(start.value, end.value) : undefined;
  * ```
  */
 export const create = (
@@ -88,13 +85,15 @@ export const createIndefinite = (start: PlainDate.PlainDate): Period =>
  * inválido (`NaN`).
  */
 export const contains = (p: Period, instant: Date): boolean => {
-  if (Number.isNaN(instant.getTime())) return false;
   const utcDay = PlainDate.fromDate(instant);
+  if (!utcDay.ok) return false;
   switch (p.kind) {
     case 'Fixed':
-      return PlainDate.compare(utcDay, p.start) >= 0 && PlainDate.compare(utcDay, p.end) <= 0;
+      return (
+        PlainDate.compare(utcDay.value, p.start) >= 0 && PlainDate.compare(utcDay.value, p.end) <= 0
+      );
     case 'Indefinite':
-      return PlainDate.compare(utcDay, p.start) >= 0;
+      return PlainDate.compare(utcDay.value, p.start) >= 0;
   }
 };
 
@@ -105,7 +104,7 @@ export const contains = (p: Period, instant: Date): boolean => {
  * @param b - Segundo período.
  * @returns `true` quando ambos são `Fixed` com mesmo início e mesmo fim, ou ambos `Indefinite`
  * com mesmo início; `false` quando o início, o fim ou o `kind` diferem, em qualquer ordem dos
- * argumentos. Um período com datas de campos `NaN` não é igual a nenhum, nem a si mesmo.
+ * argumentos.
  */
 export const equals = (a: Period, b: Period): boolean => {
   if (a.kind !== b.kind) return false;

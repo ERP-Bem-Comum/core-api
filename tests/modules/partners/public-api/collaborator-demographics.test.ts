@@ -156,6 +156,17 @@ describe('partners/demographics - N/A vs PREFIRO_NAO_RESPONDER (CA4)', () => {
     assert.equal(countOf(out.ageRange, NOT_AVAILABLE_ID), 5, 'sem data de nascimento -> N/A');
     assert.equal(countOf(out.ageRange, 'DE_40_A_49'), 5);
   });
+
+  it('data de nascimento invalida (Date NaN) cai em N/A, nunca em 60+', () => {
+    const out = aggregate(many(3, { dateOfBirth: new Date('invalid') }));
+    assert.equal(countOf(out.ageRange, NOT_AVAILABLE_ID), 3);
+    assert.equal(countOf(out.ageRange, 'MAIS_60'), 0);
+  });
+
+  it('data de referencia invalida (Date NaN) poe todos em N/A', () => {
+    const out = aggregateTeamDemographics(many(2), { referenceDate: new Date('invalid') });
+    assert.equal(countOf(out.ageRange, NOT_AVAILABLE_ID), 2);
+  });
 });
 
 describe('partners/demographics - invariante soma = total (CA4)', () => {

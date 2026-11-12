@@ -99,8 +99,12 @@ export const AGE_RANGE_CATEGORIES: readonly CategoryCount[] = [
 
 const ageRangeIdOf = (birth: Date | null, reference: Date): string => {
   if (birth === null) return NOT_AVAILABLE_ID;
+  const birthDate = PlainDate.fromDate(birth);
+  const referenceDate = PlainDate.fromDate(reference);
+  // `Date` invalido (de nascimento ou de referencia) nao tem idade: cai em N/A, como o nulo.
+  if (!birthDate.ok || !referenceDate.ok) return NOT_AVAILABLE_ID;
   // Regra de idade compartilhada com `toTeamProjection` (uma unica fonte - ver completed-years.ts).
-  const age = completedYears(PlainDate.fromDate(birth), PlainDate.fromDate(reference));
+  const age = completedYears(birthDate.value, referenceDate.value);
   if (age <= 29) return 'ATE_29';
   if (age <= 39) return 'DE_30_A_39';
   if (age <= 49) return 'DE_40_A_49';

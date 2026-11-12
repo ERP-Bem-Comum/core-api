@@ -246,7 +246,10 @@ const variantFromRow = (
     case 'TermChange': {
       if (newEndDate === null)
         return err(amendmentMapperImpossibleShape('missing-new-end-date-for-term-change'));
-      return ok({ kind: 'TermChange' as const, newEndDate: PlainDate.fromDate(newEndDate) });
+      const parsed = PlainDate.fromDate(newEndDate);
+      if (!parsed.ok)
+        return err(amendmentMapperImpossibleShape('invalid-new-end-date-for-term-change'));
+      return ok({ kind: 'TermChange' as const, newEndDate: parsed.value });
     }
     case 'Misc':
       return ok({ kind: 'Misc' as const });

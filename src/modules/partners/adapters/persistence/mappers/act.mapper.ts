@@ -101,10 +101,10 @@ export const actFromRow = (row: Readonly<ActRow>): Result<ActEntity, ActMapperEr
   const occupationArea = OccupationArea.parse(row.occupationArea);
   if (!occupationArea.ok) return err('act-mapper-invalid-enum');
 
-  const validity = Period.create(
-    PlainDate.fromDate(row.validityStart),
-    PlainDate.fromDate(row.validityEnd),
-  );
+  const validityStart = PlainDate.fromDate(row.validityStart);
+  const validityEnd = PlainDate.fromDate(row.validityEnd);
+  if (!validityStart.ok || !validityEnd.ok) return err('act-mapper-invalid-validity');
+  const validity = Period.create(validityStart.value, validityEnd.value);
   if (!validity.ok) return err('act-mapper-invalid-validity');
 
   const bank = bankFromRow(row);

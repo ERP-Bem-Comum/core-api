@@ -2,7 +2,7 @@ import { describe, it, mock } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import type { BrandOf } from '#src/shared/primitives/brand.ts';
-import { ok } from '#src/shared/primitives/result.ts';
+import { err, ok } from '#src/shared/primitives/result.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
@@ -30,6 +30,13 @@ interface CalendarFields {
 const mk = (iso: string): PlainDate.PlainDate => {
   const r = PlainDate.from(iso);
   assert.ok(r.ok, `esperava sucesso para ${JSON.stringify(iso)}`);
+  return r.value;
+};
+
+/** Constrói um `PlainDate` por `fromDate`, falhando o teste se o instante for recusado. */
+const instant = (d: Date): PlainDate.PlainDate => {
+  const r = PlainDate.fromDate(d);
+  assert.ok(r.ok, `esperava sucesso para ${String(d)}`);
   return r.value;
 };
 
@@ -146,10 +153,10 @@ describe('PlainDate.from', () => {
     assert.equal(errorOf('1999-02-30'), 'plain-date-year-out-of-range');
   });
 
-  it('exemplo do TSDoc: from("2026-05-26") é ok do fromDate da meia-noite UTC do mesmo dia', () => {
+  it('exemplo do TSDoc: from("2026-05-26") é igual ao fromDate da meia-noite UTC do mesmo dia', () => {
     assert.deepEqual(
       PlainDate.from('2026-05-26'),
-      ok(PlainDate.fromDate(new Date('2026-05-26T00:00:00Z'))),
+      PlainDate.fromDate(new Date('2026-05-26T00:00:00Z')),
     );
   });
 });
@@ -172,64 +179,68 @@ describe('PlainDate — superfície pública sem factory que recebe ano, mês e 
   });
 
   it('fromDate de um instante de 30 de fevereiro devolve dia existente, que from aceita', () => {
-    const d = PlainDate.fromDate(new Date(Date.UTC(2026, 1, 30)));
+    const d = instant(new Date(Date.UTC(2026, 1, 30)));
     assert.deepEqual(PlainDate.from(PlainDate.toISOString(d)), ok(d));
   });
 });
 
 describe('PlainDate.fromDate', () => {
   it('devolve um valor congelado', () => {
-    assert.ok(Object.isFrozen(PlainDate.fromDate(new Date('2026-05-26T12:00:00Z'))));
+    assert.ok(Object.isFrozen(instant(new Date('2026-05-26T12:00:00Z'))));
   });
 
   it('normaliza pelo Date: Date.UTC de 30 de fevereiro vira 2 de março, um dia existente', () => {
-    const d = PlainDate.fromDate(new Date(Date.UTC(2026, 1, 30)));
+    const d = instant(new Date(Date.UTC(2026, 1, 30)));
     assert.equal(PlainDate.toISOString(d), '2026-03-02');
     assert.ok(PlainDate.from(PlainDate.toISOString(d)).ok);
   });
 
   it('extrai os campos de calendário UTC do instante', () => {
     assert.equal(
-      PlainDate.toISOString(PlainDate.fromDate(new Date('2026-05-26T23:30:00.000Z'))),
+      PlainDate.toISOString(instant(new Date('2026-05-26T23:30:00.000Z'))),
       '2026-05-26',
     );
   });
 
   it('usa a data em UTC, não a do fuso do instante escrito', () => {
     assert.equal(
-      PlainDate.toISOString(PlainDate.fromDate(new Date('2026-05-27T00:30:00.000+03:00'))),
+      PlainDate.toISOString(instant(new Date('2026-05-27T00:30:00.000+03:00'))),
       '2026-05-26',
     );
     assert.equal(
-      PlainDate.toISOString(PlainDate.fromDate(new Date('2026-05-26T22:00:00.000-03:00'))),
+      PlainDate.toISOString(instant(new Date('2026-05-26T22:00:00.000-03:00'))),
       '2026-05-27',
     );
   });
 
   it('converte o mês de base zero do Date para mês de 1 a 12', () => {
-    assert.equal(PlainDate.fromDate(new Date('2026-01-15T12:00:00Z')).month, 1);
-    assert.equal(PlainDate.fromDate(new Date('2026-12-15T12:00:00Z')).month, 12);
+    assert.equal(instant(new Date('2026-01-15T12:00:00Z')).month, 1);
+    assert.equal(instant(new Date('2026-12-15T12:00:00Z')).month, 12);
   });
 
   it('não aplica o limite de ano 2000', () => {
-    assert.equal(PlainDate.fromDate(new Date('1990-06-01T00:00:00Z')).year, 1990);
+    assert.equal(instant(new Date('1990-06-01T00:00:00Z')).year, 1990);
   });
 
-  it('com Date inválido produz campos NaN', () => {
-    const d = PlainDate.fromDate(new Date('invalid'));
-    assert.ok(Number.isNaN(d.year) && Number.isNaN(d.month) && Number.isNaN(d.day));
+  it("com Date inválido devolve err('plain-date-invalid-date')", () => {
+    assert.deepEqual(PlainDate.fromDate(new Date('invalid')), err('plain-date-invalid-date'));
+    assert.deepEqual(PlainDate.fromDate(new Date(NaN)), err('plain-date-invalid-date'));
+  });
+
+  it('com Date válido devolve ok com o PlainDate do dia UTC', () => {
+    assert.deepEqual(PlainDate.fromDate(new Date('2026-05-26T12:00:00Z')), ok(mk('2026-05-26')));
   });
 
   it('é o que ClockFixed.today devolve para o instante fixado', () => {
     const at = new Date('2026-05-26T23:30:00.000Z');
-    assert.ok(PlainDate.equals(ClockFixed(at).today(), PlainDate.fromDate(at)));
+    assert.ok(PlainDate.equals(ClockFixed(at).today(), instant(at)));
   });
 
   it('é o que ClockReal.today devolve, com o relógio do Date congelado num instante fixo', () => {
     const at = new Date('2026-05-26T23:30:00.000Z');
     mock.timers.enable({ apis: ['Date'], now: at });
     try {
-      assert.deepEqual(ClockReal().today(), PlainDate.fromDate(at));
+      assert.deepEqual(ClockReal().today(), instant(at));
       assert.equal(PlainDate.toISOString(ClockReal().today()), '2026-05-26');
     } finally {
       mock.timers.reset();
@@ -263,10 +274,9 @@ describe('PlainDate.compare', () => {
     assert.deepEqual(sorted, ['2026-05-25', '2026-05-26', '2027-01-01']);
   });
 
-  it('devolve 1 quando algum campo é NaN, inclusive de uma data consigo mesma', () => {
-    const nan = PlainDate.fromDate(new Date('invalid'));
-    assert.equal(PlainDate.compare(nan, nan), 1);
-    assert.equal(PlainDate.compare(mk('2026-05-26'), nan), 1);
+  it('devolve 0 ao comparar uma data consigo mesma', () => {
+    const d = mk('2026-05-26');
+    assert.equal(PlainDate.compare(d, d), 0);
   });
 });
 
@@ -291,13 +301,11 @@ describe('PlainDate.isBefore / isAfter / equals', () => {
     assert.ok(!PlainDate.equals(a, mk('2026-05-27')));
   });
 
-  it('com campos NaN, isAfter é verdadeiro e isBefore e equals são falsos, mesmo com a mesma data', () => {
-    const nan = PlainDate.fromDate(new Date('invalid'));
-    assert.ok(PlainDate.isAfter(nan, nan));
-    assert.ok(!PlainDate.isBefore(nan, nan));
-    assert.ok(!PlainDate.equals(nan, nan));
-    assert.ok(!PlainDate.isBefore(mk('2026-05-26'), nan));
-    assert.ok(PlainDate.isAfter(mk('2026-05-26'), nan));
+  it('com a mesma data, equals é verdadeiro e isAfter e isBefore são falsos', () => {
+    const d = mk('2026-05-26');
+    assert.ok(PlainDate.equals(d, d));
+    assert.ok(!PlainDate.isAfter(d, d));
+    assert.ok(!PlainDate.isBefore(d, d));
   });
 });
 
@@ -313,25 +321,18 @@ describe('PlainDate.toISOString', () => {
   });
 
   it('completa o ano com zeros à esquerda até quatro dígitos', () => {
-    assert.equal(
-      PlainDate.toISOString(PlainDate.fromDate(new Date('0999-01-01T00:00:00Z'))),
-      '0999-01-01',
-    );
+    assert.equal(PlainDate.toISOString(instant(new Date('0999-01-01T00:00:00Z'))), '0999-01-01');
   });
 
   it('não trunca ano com mais de quatro dígitos', () => {
     assert.equal(
-      PlainDate.toISOString(PlainDate.fromDate(new Date('+012026-01-01T00:00:00Z'))),
+      PlainDate.toISOString(instant(new Date('+012026-01-01T00:00:00Z'))),
       '12026-01-01',
     );
   });
 
   it('completa o texto do ano negativo, sinal incluído: ano -1 vira 00-1', () => {
-    const d = PlainDate.fromDate(new Date('-000001-06-01T00:00:00Z'));
+    const d = instant(new Date('-000001-06-01T00:00:00Z'));
     assert.equal(PlainDate.toISOString(d), '00-1-06-01');
-  });
-
-  it('com campos NaN produz 0NaN-NaN-NaN', () => {
-    assert.equal(PlainDate.toISOString(PlainDate.fromDate(new Date('invalid'))), '0NaN-NaN-NaN');
   });
 });

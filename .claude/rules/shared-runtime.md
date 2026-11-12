@@ -12,6 +12,7 @@ verify:
     expect:
       - 'src/shared/adapters/clock-fixed.ts'
       - 'src/shared/adapters/clock-real.ts'
+      - 'src/shared/adapters/utc-calendar-day.ts'
       - 'src/shared/observability/correlation.ts'
       - 'src/shared/ports/clock.ts'
       - 'src/shared/runtime/env-echo.ts'

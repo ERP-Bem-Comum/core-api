@@ -184,6 +184,31 @@ describe('mapLegacyContractRow — quarentenas', () => {
     assert.ok(!r.ok);
     assert.ok(r.error.some((e) => e.tag === 'RequiredFieldMissing' && e.field === 'contractor'));
   });
+
+  it('início de vigência inválido (Date NaN) → DateInvalid contract_period_start', () => {
+    const r = mapLegacyContractRow(
+      baseContract({ contractPeriodStart: new Date('invalid') }),
+      refs(),
+    );
+    assert.ok(!r.ok);
+    assert.ok(
+      r.error.some(
+        (e) =>
+          e.tag === 'DateInvalid' &&
+          e.field === 'contract_period_start' &&
+          e.attempted === 'plain-date-invalid-date',
+      ),
+    );
+  });
+
+  it('fim de vigência inválido (Date NaN) → DateInvalid contract_period_end', () => {
+    const r = mapLegacyContractRow(
+      baseContract({ contractPeriodEnd: new Date('invalid') }),
+      refs(),
+    );
+    assert.ok(!r.ok);
+    assert.ok(r.error.some((e) => e.tag === 'DateInvalid' && e.field === 'contract_period_end'));
+  });
 });
 
 describe('mapLegacyProgramRow', () => {

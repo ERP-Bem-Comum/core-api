@@ -1,7 +1,7 @@
 import type { Clock } from '../ports/clock.ts';
-import * as PlainDate from '../kernel/plain-date.ts';
+import { utcCalendarDayOf } from './utc-calendar-day.ts';
 
 export const ClockFixed = (at: Date): Clock => ({
   now: () => at,
-  today: () => PlainDate.fromDate(at),
+  today: () => utcCalendarDayOf(at),
 });

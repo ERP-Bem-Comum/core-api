@@ -67,6 +67,13 @@ export type CollaboratorProjectionReader = Readonly<{
   close: () => Promise<void>;
 }>;
 
+/** Anos completos em `today`; `null` sem data de nascimento ou com `Date` invalido. */
+const ageAt = (birth: Date | null, today: PlainDateType): number | null => {
+  if (birth === null) return null;
+  const birthDate = PlainDate.fromDate(birth);
+  return birthDate.ok ? completedYears(birthDate.value, today) : null;
+};
+
 /**
  * Mapper PURO do agregado para a projecao "Equipe ABC". A data de referencia da idade entra por
  * parametro (vem de `Clock.today()` na composicao) - nunca `Date.now()` aqui.
@@ -87,7 +94,7 @@ export const toTeamProjection = (
   experienceInPublicSector: c.experienceInThePublicSector,
   genderIdentity: c.genderIdentity,
   race: c.race,
-  age: c.dateOfBirth === null ? null : completedYears(PlainDate.fromDate(c.dateOfBirth), today),
+  age: ageAt(c.dateOfBirth, today),
   // Geracao independe do `today`: so do ano de nascimento (ver `generation.ts`).
   generation: generationIdOf(c.dateOfBirth),
   pwdAnswer: c.pwd?.answer ?? null,

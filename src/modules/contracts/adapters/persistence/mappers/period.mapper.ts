@@ -49,18 +49,25 @@ export const periodMapperFixedMissingEnd = (): PeriodMapperFixedMissingEnd => ({
   tag: 'PeriodMapperFixedMissingEnd',
 });
 
-export type PeriodMapperError = PeriodError | PeriodMapperFixedMissingEnd;
+export type PeriodMapperError =
+  | PeriodError
+  | PlainDate.PlainDateFromDateError
+  | PeriodMapperFixedMissingEnd;
 
 export const periodFromColumns = (
   cols: PeriodColumns,
 ): Result<Period.Period, PeriodMapperError> => {
+  const start = PlainDate.fromDate(cols.start);
+  if (!start.ok) return start;
   switch (cols.kind) {
     case 'Fixed': {
       if (cols.end === null) return err(periodMapperFixedMissingEnd());
-      return Period.create(PlainDate.fromDate(cols.start), PlainDate.fromDate(cols.end));
+      const end = PlainDate.fromDate(cols.end);
+      if (!end.ok) return end;
+      return Period.create(start.value, end.value);
     }
     case 'Indefinite':
-      return ok(Period.createIndefinite(PlainDate.fromDate(cols.start)));
+      return ok(Period.createIndefinite(start.value));
     default: {
       const _exhaustive: never = cols.kind;
       return _exhaustive;

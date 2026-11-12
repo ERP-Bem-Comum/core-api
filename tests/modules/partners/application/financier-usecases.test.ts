@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { makeInMemoryFinancierStore } from '#src/modules/partners/adapters/persistence/repos/financier-repository.in-memory.ts';
 import type { FinancierRepository } from '#src/modules/partners/domain/financier/repository.ts';
 import { registerFinancier } from '#src/modules/partners/application/use-cases/register-financier.ts';
@@ -13,7 +13,7 @@ import { listFinanciers } from '#src/modules/partners/application/use-cases/list
 import { findFinancierByCnpj } from '#src/modules/partners/application/use-cases/find-financier-by-cnpj.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 
 let repo: FinancierRepository;
 let store: ReturnType<typeof makeInMemoryFinancierStore>;
