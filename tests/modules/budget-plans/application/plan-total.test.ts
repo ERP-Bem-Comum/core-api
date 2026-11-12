@@ -9,10 +9,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
-import {
-  planTotal,
-  sumMoney,
-} from '#src/modules/budget-plans/application/read-models/plan-total.ts';
+import { planTotal } from '#src/modules/budget-plans/application/read-models/plan-total.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import { BudgetPlan } from '#src/modules/budget-plans/domain/budget-plan/budget-plan.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
@@ -131,25 +128,6 @@ describe('planTotal — soma dos lançamentos dos orçamentos do plano (#458)', 
     assert.deepEqual(planTotal(plan, sums), {
       ok: false,
       error: 'budget-plan-total-exceeds-safe-integer',
-    });
-  });
-});
-
-describe('sumMoney — soma por Money.add', () => {
-  it('sem parcelas devolve Money.ZERO', () => {
-    assert.deepEqual(sumMoney([]), { ok: true, value: Money.ZERO });
-  });
-
-  it('soma as parcelas', () => {
-    const r = sumMoney([money(5_000_000_000_000_000), money(4_007_199_254_740_991)]);
-    assert.ok(isOk(r));
-    assert.equal(r.value.cents, MAX);
-  });
-
-  it('soma acima de MAX_SAFE_INTEGER → money-exceeds-safe-integer', () => {
-    assert.deepEqual(sumMoney([money(5_000_000_000_000_000), money(5_000_000_000_000_000)]), {
-      ok: false,
-      error: 'money-exceeds-safe-integer',
     });
   });
 });

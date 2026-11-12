@@ -19,12 +19,18 @@ import type {
   FastifyZodOpenApiTypeProvider,
 } from 'fastify-zod-openapi';
 
-import { ok, err } from '#src/shared/primitives/result.ts';
-import { sendResult } from '#src/shared/http/reply.ts';
+import { ok, err, type Result } from '#src/shared/primitives/result.ts';
+import { sendResult, type SendResultOptions } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
+import { publicMessageResolver } from '#src/shared/http/public-message.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ContractsHttpDeps } from './composition.ts';
+import {
+  CONTRACTS_PUBLIC_MESSAGES,
+  type ContractsErrorCode,
+  type ContractsHttpError,
+} from './error-messages.ts';
 import type { ContractorId } from '../../domain/shared/contractor.ts';
 import { contractToListItem, contractToDetailDto } from './contract-dto.ts';
 import { programBlockFromSnapshots } from './program-composition.ts';
@@ -67,7 +73,7 @@ export type ContractsHttpHooks = Readonly<{
 
 // Os error unions misturam string literals e tagged records `{tag,...}`
 // (CTR-DOMAIN-TAGGED-ERRORS); a borda HTTP precisa de um code string para o envelope.
-const toErrorCode = (e: string | Readonly<{ tag: string }>): string =>
+const toErrorCode = (e: ContractsHttpError): ContractsErrorCode =>
   typeof e === 'string' ? e : e.tag;
 
 // Id malformado → 400. A borda Zod (`uuidV4()`) já barra não-v4 antes do handler; o mapa é a
@@ -154,22 +160,24 @@ const sanitizeFilename = (name: string): string => {
   return cleaned.length > 0 ? cleaned : 'document.pdf';
 };
 
-const PUBLIC_MESSAGES: Readonly<Record<string, string>> = {
-  ContractValueWouldExceedSafeInteger:
-    'O aditivo elevaria o valor vigente do contrato acima do limite monetário permitido.',
-};
+const publicMessage = publicMessageResolver(CONTRACTS_PUBLIC_MESSAGES);
 
-const publicMessage = (code: string): string => PUBLIC_MESSAGES[code] ?? code;
-
-const sendDomainError = (
+/** `sendResult` com a mensagem pública da tabela do contracts nas respostas de erro. */
+const sendContractsResult = <T, E extends ContractsErrorCode>(
   reply: FastifyReply,
-  error: string | Readonly<{ tag: string }>,
-): Promise<void> => {
+  result: Result<T, E>,
+  opts: Omit<SendResultOptions<E>, 'publicMessage'> = {},
+): Promise<void> => sendResult(reply, result, { ...opts, publicMessage });
+
+const sendDomainError = (reply: FastifyReply, error: ContractsHttpError): Promise<void> => {
   const code = toErrorCode(error);
   const requestId = currentCorrelationId() ?? reply.request.id;
+  const status = writeErrorStatus(code);
   return reply
-    .code(writeErrorStatus(code))
-    .send(toErrorEnvelope(code, publicMessage(code), requestId)) as unknown as Promise<void>;
+    .code(status)
+    .send(
+      toErrorEnvelope(code, publicMessage(code, status), requestId),
+    ) as unknown as Promise<void>;
 };
 
 const contractsRoutes =
@@ -205,7 +213,7 @@ const contractsRoutes =
           ...(q.contractorType !== undefined ? { contractorType: q.contractorType } : {}),
         });
         if (!result.ok) {
-          return sendResult(reply, err(toErrorCode(result.error)), {
+          return sendContractsResult(reply, err(toErrorCode(result.error)), {
             errors: { 'contract-repo-unavailable': 503 },
           });
         }
@@ -213,7 +221,7 @@ const contractsRoutes =
         // ProgramReadPort por página, sem N+1). `programId` null/programa indisponível → snapshot null.
         const { items } = result.value;
         const snapshots = await deps.getProgramSnapshots(items.map((c) => c.programId));
-        return sendResult(
+        return sendContractsResult(
           reply,
           ok({
             items: items.map((c) =>
@@ -238,7 +246,7 @@ const contractsRoutes =
         // CSV exporta TODOS os contratos (sem filtro/paginação) — reusa list() direto.
         const result = await deps.listAllContracts();
         if (!result.ok) {
-          return sendResult(reply, err(toErrorCode(result.error)), {
+          return sendContractsResult(reply, err(toErrorCode(result.error)), {
             errors: { 'contract-repo-unavailable': 503 },
           });
         }
@@ -264,7 +272,7 @@ const contractsRoutes =
       handler: async (req, reply) => {
         const result = await deps.getContractDetail({ contractId: req.params.id });
         if (!result.ok) {
-          return sendResult(reply, err(toErrorCode(result.error)), {
+          return sendContractsResult(reply, err(toErrorCode(result.error)), {
             errors: {
               'contract-id-invalid': 400,
               'contract-not-found': 404,
@@ -280,9 +288,13 @@ const contractsRoutes =
         const program = await deps.getProgramBlock(result.value.contract.programId);
         reply.header('Deprecation', 'true');
         reply.header('Sunset', 'quando o BFF v2 assumir a composição do contratado');
-        return sendResult(reply, ok(contractToDetailDto(result.value, contractor, program)), {
-          ok: 200,
-        });
+        return sendContractsResult(
+          reply,
+          ok(contractToDetailDto(result.value, contractor, program)),
+          {
+            ok: 200,
+          },
+        );
       },
     });
 
@@ -308,7 +320,7 @@ const contractsRoutes =
           patch: req.body as ContractMetadataPatch,
         });
         if (!updated.ok) {
-          return sendResult(reply, err(toErrorCode(updated.error)), {
+          return sendContractsResult(reply, err(toErrorCode(updated.error)), {
             errors: {
               'contract-id-invalid': 400,
               'contract-not-found': 404,
@@ -319,7 +331,7 @@ const contractsRoutes =
         // Recompõe o detalhe (children + contratado) para refletir o estado pós-patch.
         const detail = await deps.getContractDetail({ contractId: req.params.id });
         if (!detail.ok) {
-          return sendResult(reply, err(toErrorCode(detail.error)), {
+          return sendContractsResult(reply, err(toErrorCode(detail.error)), {
             errors: {
               'contract-id-invalid': 400,
               'contract-not-found': 404,
@@ -333,9 +345,13 @@ const contractsRoutes =
         const program = await deps.getProgramBlock(detail.value.contract.programId);
         reply.header('Deprecation', 'true');
         reply.header('Sunset', 'quando o BFF v2 assumir a composição do contratado');
-        return sendResult(reply, ok(contractToDetailDto(detail.value, contractor, program)), {
-          ok: 200,
-        });
+        return sendContractsResult(
+          reply,
+          ok(contractToDetailDto(detail.value, contractor, program)),
+          {
+            ok: 200,
+          },
+        );
       },
     });
 
@@ -353,7 +369,9 @@ const contractsRoutes =
       handler: async (req, reply) => {
         const result = await deps.cancelContract({ contractId: req.params.id });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
+        return sendContractsResult(reply, ok(await listItemWithProgram(result.value.contract)), {
+          ok: 200,
+        });
       },
     });
 
@@ -370,7 +388,7 @@ const contractsRoutes =
         // (read-model), então a existência é checada via `getContract`.
         const exists = await deps.getContract({ contractId: req.params.id });
         if (!exists.ok) {
-          return sendResult(reply, err(toErrorCode(exists.error)), {
+          return sendContractsResult(reply, err(toErrorCode(exists.error)), {
             errors: {
               'contract-id-invalid': 400,
               'contract-not-found': 404,
@@ -380,11 +398,11 @@ const contractsRoutes =
         }
         const result = await deps.getContractTimeline({ contractId: req.params.id });
         if (!result.ok) {
-          return sendResult(reply, err(toErrorCode(result.error)), {
+          return sendContractsResult(reply, err(toErrorCode(result.error)), {
             errors: { 'timeline-repo-unavailable': 503 },
           });
         }
-        return sendResult(reply, ok(result.value.map(timelineEntryToDto)), { ok: 200 });
+        return sendContractsResult(reply, ok(result.value.map(timelineEntryToDto)), { ok: 200 });
       },
     });
 
@@ -428,7 +446,7 @@ const contractsRoutes =
           // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
           // `{id,...}` (list-item) é preservado para compat com o front atual.
           reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
-          return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), {
+          return sendContractsResult(reply, ok(await listItemWithProgram(result.value.contract)), {
             ok: 201,
           });
         }
@@ -463,7 +481,9 @@ const contractsRoutes =
         // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
         // `{id,...}` (list-item) é preservado para compat com o front atual.
         reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
-        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 201 });
+        return sendContractsResult(reply, ok(await listItemWithProgram(result.value.contract)), {
+          ok: 201,
+        });
       },
     });
 
@@ -482,7 +502,9 @@ const contractsRoutes =
           signedAt: req.body.signedAt,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
+        return sendContractsResult(reply, ok(await listItemWithProgram(result.value.contract)), {
+          ok: 200,
+        });
       },
     });
 
@@ -510,7 +532,9 @@ const contractsRoutes =
             : { contractId: req.params.id, kind: body.kind };
         const result = await deps.endContract(command);
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
+        return sendContractsResult(reply, ok(await listItemWithProgram(result.value.contract)), {
+          ok: 200,
+        });
       },
     });
 
@@ -538,7 +562,7 @@ const contractsRoutes =
               : { ...base, kind: body.kind, impactValueCents: body.impactValueCents };
         const result = await deps.createAmendment(command);
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(amendmentToDto(result.value.amendment)), { ok: 201 });
+        return sendContractsResult(reply, ok(amendmentToDto(result.value.amendment)), { ok: 201 });
       },
     });
 
@@ -558,7 +582,9 @@ const contractsRoutes =
           homologatedBy: req.body.homologatedBy,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
+        return sendContractsResult(reply, ok(await listItemWithProgram(result.value.contract)), {
+          ok: 200,
+        });
       },
     });
 
@@ -615,7 +641,7 @@ const contractsRoutes =
             storageKeyPrefix: deps.documentKeyPrefix,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
-          return sendResult(reply, ok(documentToDto(result.value.document)), { ok: 201 });
+          return sendContractsResult(reply, ok(documentToDto(result.value.document)), { ok: 201 });
         },
       });
 
@@ -663,7 +689,9 @@ const contractsRoutes =
             signedAt: q.signedAt,
           });
           if (!attached.ok) return sendDomainError(reply, attached.error);
-          return sendResult(reply, ok(documentToDto(uploaded.value.document)), { ok: 201 });
+          return sendContractsResult(reply, ok(documentToDto(uploaded.value.document)), {
+            ok: 201,
+          });
         },
       });
 
@@ -699,7 +727,7 @@ const contractsRoutes =
             supersededBy: req.userId,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
-          return sendResult(reply, ok(documentToDto(result.value.document)), { ok: 200 });
+          return sendContractsResult(reply, ok(documentToDto(result.value.document)), { ok: 200 });
         },
       });
     });
@@ -742,7 +770,7 @@ const contractsRoutes =
         // SPEC do ticket: já-excluído / já-superseded → 404 (recurso não mais excluível),
         // diferente do 409 padrão das demais rotas de documento.
         const mapped = result.ok ? ok(undefined) : err(toErrorCode(result.error));
-        return sendResult(reply, mapped, {
+        return sendContractsResult(reply, mapped, {
           ok: 204,
           errors: {
             'document-id-invalid': 400,

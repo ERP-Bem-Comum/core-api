@@ -42,8 +42,6 @@ export const todayInSaoPauloAt = (instant: Date): PlainDateType => {
   );
 };
 
-const todayInSaoPaulo = (): PlainDateType => todayInSaoPauloAt(new Date());
-
 /**
  * Relógio do job `contracts-sweeper` cujo `today` é a data de calendário em `America/Sao_Paulo`.
  *
@@ -55,5 +53,3 @@ export const ClockSaoPaulo = (readNow: () => Date = () => new Date()): Clock => 
   now: readNow,
   today: () => todayInSaoPauloAt(readNow()),
 });
-
-export { todayInSaoPaulo as _todayInSaoPauloForTest };

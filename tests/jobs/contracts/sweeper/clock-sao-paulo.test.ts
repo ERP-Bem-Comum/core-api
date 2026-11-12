@@ -2,11 +2,8 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
-import {
-  ClockSaoPaulo,
-  _todayInSaoPauloForTest,
-  todayInSaoPauloAt,
-} from '#src/jobs/contracts/sweeper/clock-sao-paulo.ts';
+import * as ClockModule from '#src/jobs/contracts/sweeper/clock-sao-paulo.ts';
+import { ClockSaoPaulo, todayInSaoPauloAt } from '#src/jobs/contracts/sweeper/clock-sao-paulo.ts';
 
 /** Data `YYYY-MM-DD` que `todayInSaoPauloAt` devolve para o instante ISO dado. */
 const saoPauloDayOf = (iso: string): string =>
@@ -120,7 +117,21 @@ describe('ClockSaoPaulo', () => {
     const clock = ClockSaoPaulo();
     assert.equal(typeof clock.now, 'function');
     assert.equal(typeof clock.today, 'function');
-    assert.equal(typeof _todayInSaoPauloForTest, 'function');
-    assert.equal(_todayInSaoPauloForTest.length, 0);
+  });
+
+  it('sem argumento, today() é todayInSaoPauloAt do instante atual', () => {
+    const before = todayInSaoPauloAt(new Date());
+    const today = ClockSaoPaulo().today();
+    const after = todayInSaoPauloAt(new Date());
+    assert.ok(
+      PlainDate.toISOString(today) === PlainDate.toISOString(before) ||
+        PlainDate.toISOString(today) === PlainDate.toISOString(after),
+    );
+  });
+});
+
+describe('clock-sao-paulo — superfície do módulo', () => {
+  it('exporta exatamente ClockSaoPaulo e todayInSaoPauloAt', () => {
+    assert.deepEqual(Object.keys(ClockModule), ['ClockSaoPaulo', 'todayInSaoPauloAt']);
   });
 });

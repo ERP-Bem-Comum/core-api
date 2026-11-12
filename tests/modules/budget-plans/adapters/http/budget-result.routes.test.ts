@@ -459,7 +459,7 @@ describe('GET /budget-plans/budget-results/by-budget/:budgetId', () => {
     await teardown();
   });
 
-  it('regressão: o 422 de lançamento individual acima do limite mantém código e mensagem de antes', async () => {
+  it('o 422 de lançamento individual acima do limite mantém o código e mostra mensagem PT-BR', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const res = await app.inject({
@@ -471,7 +471,7 @@ describe('GET /budget-plans/budget-results/by-budget/:budgetId', () => {
     assert.equal(res.statusCode, 422, res.body);
     const body = res.json() as { error: { code: string; message: string } };
     assert.equal(body.error.code, 'money-exceeds-safe-integer');
-    assert.equal(body.error.message, 'money-exceeds-safe-integer');
+    assert.equal(body.error.message, 'Valor monetário excede o limite permitido.');
     await teardown();
   });
 

@@ -1,26 +1,7 @@
-import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import { type Result, err } from '../../../../shared/primitives/result.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
 import type { BudgetPlan } from '../../domain/budget-plan/types.ts';
 import type { BudgetId } from '../../domain/shared/budget-id.ts';
-
-/**
- * Soma valores monetários por {@link Money.add}.
- *
- * @param values - Parcelas.
- * @returns A soma, {@link Money.ZERO} sem parcelas; `'money-exceeds-safe-integer'` quando a soma
- *   passa de `Number.MAX_SAFE_INTEGER`.
- */
-export const sumMoney = (
-  values: Iterable<Money.Money>,
-): Result<Money.Money, 'money-exceeds-safe-integer'> => {
-  let total: Money.Money = Money.ZERO;
-  for (const value of values) {
-    const next = Money.add(total, value);
-    if (!next.ok) return next;
-    total = next.value;
-  }
-  return ok(total);
-};
 
 /** Erro de {@link planTotal}. */
 export type PlanTotalError = 'budget-plan-total-exceeds-safe-integer';
@@ -38,7 +19,7 @@ export const planTotal = (
   plan: BudgetPlan,
   sumsByBudget: ReadonlyMap<string, Money.Money>,
 ): Result<Money.Money, PlanTotalError> => {
-  const total = sumMoney(plan.budgets.map((b) => sumsByBudget.get(String(b.id)) ?? Money.ZERO));
+  const total = Money.sum(plan.budgets.map((b) => sumsByBudget.get(String(b.id)) ?? Money.ZERO));
   return total.ok ? total : err('budget-plan-total-exceeds-safe-integer');
 };
 

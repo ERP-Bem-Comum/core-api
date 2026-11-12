@@ -1,5 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
-import type * as Money from '../../../../shared/kernel/money.ts';
+import * as Money from '../../../../shared/kernel/money.ts';
 import { selectCurrentApprovedByFamily } from '../../domain/budget-plan/current-approved.ts';
 import { ProgramRef } from '../../domain/shared/refs.ts';
 import type { BudgetPlanRefError } from '../../domain/shared/refs.ts';
@@ -12,12 +12,7 @@ import type {
   BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
 import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-catalog.ts';
-import {
-  planTotal,
-  budgetIdsOf,
-  sumMoney,
-  type PlanTotalError,
-} from '../read-models/plan-total.ts';
+import { planTotal, budgetIdsOf, type PlanTotalError } from '../read-models/plan-total.ts';
 
 // CA1 — Consolidado ABC (JSON): agrega as raízes aprovadas por Ano × Programa, em centavos. Resumo
 // (total + por-plano); o detalhe (breakdown por centro de custo) vive no CSV. `totalCents` = Σ dos
@@ -92,7 +87,7 @@ export const getConsolidatedResult =
       });
     }
 
-    const totalCents = sumMoney(planTotals);
+    const totalCents = Money.sum(planTotals);
     if (!totalCents.ok) return err('consolidated-total-exceeds-safe-integer');
 
     return ok({ year: query.year, totalCents: totalCents.value.cents, plans });
