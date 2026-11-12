@@ -173,7 +173,7 @@ describe('Shared Kernel — tipos reexportados pelo barrel', () => {
 });
 
 describe('Shared Kernel — consumo por namespace direto do módulo', () => {
-  it('`import * as Money` de `money.ts` expõe `ZERO`, `add`, `equals`, `fromCents`, `greaterThan` e `subtract`', () => {
+  it('`import * as Money` de `money.ts` expõe `ZERO`, `add`, `equals`, `fromCents`, `greaterThan`, `subtract` e `sum`', () => {
     assert.deepEqual(Object.keys(MoneyModule), [
       'ZERO',
       'add',
@@ -181,6 +181,7 @@ describe('Shared Kernel — consumo por namespace direto do módulo', () => {
       'fromCents',
       'greaterThan',
       'subtract',
+      'sum',
     ]);
   });
 

@@ -11,7 +11,7 @@ export type Money = Brand<{ readonly cents: number }, 'Money'>;
 /**
  * União exata das variantes de erro do módulo: `'money-negative-value'`,
  * `'money-non-integer-value'` e `'money-exceeds-safe-integer'` vêm de {@link fromCents};
- * `'money-exceeds-safe-integer'` vem também de {@link add}; `'money-negative-result'` vem de
+ * `'money-exceeds-safe-integer'` vem também de {@link add} e de {@link sum}; `'money-negative-result'` vem de
  * {@link subtract}.
  */
 export type MoneyError =
@@ -72,6 +72,26 @@ export const add = (a: Money, b: Money): Result<Money, 'money-exceeds-safe-integ
   const sum = a.cents + b.cents;
   if (sum > Number.MAX_SAFE_INTEGER) return err('money-exceeds-safe-integer');
   return ok(frozenMoney(sum));
+};
+
+/**
+ * Soma as parcelas encadeando {@link add} a partir de {@link ZERO}, com o mesmo veredito de
+ * encadear {@link add} sobre elas.
+ *
+ * @param values - Parcelas; qualquer `Iterable`, não só array.
+ * @returns `{ ok: true, value }` com a soma, num objeto congelado, sem alterar as parcelas, quando
+ *   ela vai até `Number.MAX_SAFE_INTEGER`, inclusive; o próprio {@link ZERO} sem parcelas;
+ *   `'money-exceeds-safe-integer'` quando a soma passa de `Number.MAX_SAFE_INTEGER`. O tipo do erro
+ *   é só `'money-exceeds-safe-integer'`.
+ */
+export const sum = (values: Iterable<Money>): Result<Money, 'money-exceeds-safe-integer'> => {
+  let total: Money = ZERO;
+  for (const value of values) {
+    const next = add(total, value);
+    if (!next.ok) return next;
+    total = next.value;
+  }
+  return ok(total);
 };
 
 /**

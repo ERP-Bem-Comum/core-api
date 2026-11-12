@@ -125,7 +125,8 @@ export const clonePlanContent =
     const results: BudgetResult.BudgetResult[] = [];
     const sums = new Map<string, Money.Money>();
     for (const { sourceId, newId } of budgetPairs) {
-      for (const result of resultsBySourceBudget.get(sourceId) ?? []) {
+      const group = resultsBySourceBudget.get(sourceId) ?? [];
+      for (const result of group) {
         const newSubcategoryId = cloned.subcategoryIdMap.get(String(result.subcategoryId));
         if (newSubcategoryId === undefined) return err('budget-result-orphan-subcategory');
         results.push(
@@ -135,12 +136,11 @@ export const clonePlanContent =
             subcategoryId: newSubcategoryId,
           }),
         );
-        const key = String(newId);
-        // Money.add recusa estouro: a soma de uma rede é verificada aqui, antes de gravar.
-        const summed = Money.add(sums.get(key) ?? Money.ZERO, result.value);
-        if (!summed.ok) return err('budget-result-sum-exceeds-safe-integer');
-        sums.set(key, summed.value);
       }
+      // Money.sum recusa estouro: a soma de uma rede é verificada aqui, antes de gravar.
+      const summed = Money.sum(group.map((r) => r.value));
+      if (!summed.ok) return err('budget-result-sum-exceeds-safe-integer');
+      sums.set(String(newId), summed.value);
     }
 
     // #458 — o total da response é a soma dos lançamentos copiados, não 0: lista e detalhe mostram

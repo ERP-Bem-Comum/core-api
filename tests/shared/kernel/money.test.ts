@@ -19,7 +19,7 @@ const money = (cents: number): Money.Money => {
 };
 
 describe('Money — módulo como namespace', () => {
-  it('importado com `import * as Money`, expõe em runtime exatamente ZERO, add, equals, fromCents, greaterThan e subtract', () => {
+  it('importado com `import * as Money`, expõe em runtime exatamente ZERO, add, equals, fromCents, greaterThan, subtract e sum', () => {
     assert.deepEqual(Object.keys(Money), [
       'ZERO',
       'add',
@@ -27,6 +27,7 @@ describe('Money — módulo como namespace', () => {
       'fromCents',
       'greaterThan',
       'subtract',
+      'sum',
     ]);
   });
 });
@@ -300,6 +301,92 @@ describe('Money.add', () => {
   it("o tipo do erro é só 'money-exceeds-safe-integer'", () => {
     const typed: Equals<
       ReturnType<typeof Money.add>,
+      Result<Money.Money, 'money-exceeds-safe-integer'>
+    > = true;
+    assert.equal(typed, true);
+  });
+});
+
+describe('Money.sum', () => {
+  it('soma as parcelas de uma lista', () => {
+    assert.deepEqual(Money.sum([money(104500), money(30000), money(1)]), {
+      ok: true,
+      value: { cents: 134501 },
+    });
+  });
+
+  it('lista vazia devolve ZERO', () => {
+    const r = Money.sum([]);
+    assert.equal(r.ok, true);
+    assert.equal((r as { ok: true; value: Money.Money }).value, Money.ZERO);
+  });
+
+  it('aceita qualquer Iterable, não só array', () => {
+    function* parcels(): Generator<Money.Money> {
+      yield money(2);
+      yield money(3);
+    }
+    assert.deepEqual(Money.sum(parcels()), { ok: true, value: { cents: 5 } });
+  });
+
+  it('aceita soma igual a Number.MAX_SAFE_INTEGER, inclusive', () => {
+    assert.deepEqual(Money.sum([money(5_000_000_000_000_000), money(4_007_199_254_740_991)]), {
+      ok: true,
+      value: { cents: MAX },
+    });
+  });
+
+  it("recusa soma acima de Number.MAX_SAFE_INTEGER com 'money-exceeds-safe-integer'", () => {
+    assert.deepEqual(Money.sum([money(MAX), money(1)]), {
+      ok: false,
+      error: 'money-exceeds-safe-integer',
+    });
+  });
+
+  it('recusa o estouro mesmo quando parcelas posteriores são zero', () => {
+    assert.deepEqual(Money.sum([money(MAX), money(1), Money.ZERO]), {
+      ok: false,
+      error: 'money-exceeds-safe-integer',
+    });
+  });
+
+  it('dá o mesmo veredito que encadear Money.add sobre as parcelas', () => {
+    const lists: readonly (readonly number[])[] = [
+      [1, 2, 3],
+      [MAX - 1, 1],
+      [MAX, 1],
+      [MAX, 0, 1],
+    ];
+    for (const cents of lists) {
+      let viaAdd: Result<Money.Money, 'money-exceeds-safe-integer'> = {
+        ok: true,
+        value: Money.ZERO,
+      };
+      for (const c of cents) {
+        if (!viaAdd.ok) break;
+        viaAdd = Money.add(viaAdd.value, money(c));
+      }
+      assert.deepEqual(Money.sum(cents.map(money)), viaAdd, `sum(${cents.join(', ')})`);
+    }
+  });
+
+  it('valor negativo não é Money: fromCents o recusa, então sum nunca o recebe por construção', () => {
+    assert.deepEqual(Money.fromCents(-1), { ok: false, error: 'money-negative-value' });
+  });
+
+  it('devolve um objeto congelado, sem alterar as parcelas', () => {
+    const a = money(1);
+    const b = money(2);
+    const r = Money.sum([a, b]);
+    assert.equal(r.ok, true);
+    assert.equal(Object.isFrozen((r as { ok: true; value: Money.Money }).value), true);
+    assert.equal(a.cents, 1);
+    assert.equal(b.cents, 2);
+  });
+
+  it("o tipo do erro é só 'money-exceeds-safe-integer'", () => {
+    const typed: Equals<
+      ReturnType<typeof Money.sum>,
       Result<Money.Money, 'money-exceeds-safe-integer'>
     > = true;
     assert.equal(typed, true);

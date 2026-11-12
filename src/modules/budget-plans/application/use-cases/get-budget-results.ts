@@ -1,9 +1,8 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
-import type * as Money from '../../../../shared/kernel/money.ts';
+import * as Money from '../../../../shared/kernel/money.ts';
 import * as BudgetId from '../../domain/shared/budget-id.ts';
 import * as ExerciseMonth from '../../domain/shared/exercise-month.ts';
 import type { BudgetResult } from '../../domain/budget-result/budget-result.ts';
-import { sumMoney } from '../read-models/plan-total.ts';
 import type {
   BudgetResultRepository,
   BudgetResultRepositoryError,
@@ -23,7 +22,7 @@ export type GetBudgetResultsView = Readonly<{
 export type GetBudgetResultsDeps = Readonly<{ budgetResultRepo: BudgetResultRepository }>;
 
 // CA3: lançamentos calculados de um orçamento + total (alimenta "Calculando Gastos"). A soma vive
-// aqui (Money.add), não na borda — mesmo padrão de BudgetPlan.total; evita `+` cru sobre DTOs.
+// aqui (Money.sum), não na borda — mesmo padrão de BudgetPlan.total; evita `+` cru sobre DTOs.
 // Filtros por categoria/subcategoria e ano-anterior ficam para follow-up.
 //
 // #413 — `month` é OPCIONAL: ausente devolve o ano inteiro (o grid carrega os 12 meses numa ida; o
@@ -52,7 +51,7 @@ export const getBudgetResults =
 
     const items = month === undefined ? list.value : list.value.filter((r) => r.month === month);
 
-    const total = sumMoney(items.map((r) => r.value));
+    const total = Money.sum(items.map((r) => r.value));
     if (!total.ok) return err('budget-results-total-exceeds-safe-integer');
     return ok({ items, total: total.value });
   };

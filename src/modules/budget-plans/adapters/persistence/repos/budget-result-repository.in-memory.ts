@@ -46,13 +46,19 @@ export const InMemoryBudgetResultRepository = (): InMemoryBudgetResultRepository
 
     sumByBudgetIds: async (budgetIds: readonly BudgetId[]) => {
       const wanted = new Set(budgetIds.map((id) => String(id)));
-      const sums = new Map<string, Money.Money>();
+      const valuesByBudget = new Map<string, Money.Money[]>();
       for (const r of store) {
         const key = String(r.budgetId);
         if (!wanted.has(key)) continue;
-        const next = Money.add(sums.get(key) ?? Money.ZERO, r.value);
-        if (!next.ok) return err('budget-result-sum-exceeds-safe-integer');
-        sums.set(key, next.value);
+        const values = valuesByBudget.get(key) ?? [];
+        values.push(r.value);
+        valuesByBudget.set(key, values);
+      }
+      const sums = new Map<string, Money.Money>();
+      for (const [key, values] of valuesByBudget) {
+        const total = Money.sum(values);
+        if (!total.ok) return err('budget-result-sum-exceeds-safe-integer');
+        sums.set(key, total.value);
       }
       return ok(sums);
     },
