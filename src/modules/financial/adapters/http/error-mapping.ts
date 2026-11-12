@@ -8,6 +8,7 @@
 
 import {
   KERNEL_PUBLIC_MESSAGES,
+  publicErrorClassOf,
   publicMessageResolver,
   type PublicErrorClass,
 } from '#src/shared/http/public-message.ts';
@@ -222,14 +223,14 @@ export const writeErrorStatus = (code: string): number => {
   return 422;
 };
 
-/** Colapsa o slug interno num `code` público estável (não revela o mecanismo interno). */
-export const toPublicCode = (code: string): PublicErrorClass => {
-  if (UNAVAILABLE_CODES.has(code)) return 'internal';
-  if (NOT_FOUND_CODES.has(code)) return 'not-found';
-  if (CONFLICT_CODES.has(code)) return 'conflict';
-  if (BAD_REQUEST_CODES.has(code) || PAYLOAD_TOO_LARGE_CODES.has(code)) return 'bad-request';
-  return 'unprocessable';
-};
+/**
+ * Colapsa o slug interno num `code` público estável (não revela o mecanismo interno).
+ *
+ * @param code - Slug interno do erro.
+ * @returns A classe pública do status que {@link writeErrorStatus} dá ao slug.
+ */
+export const toPublicCode = (code: string): PublicErrorClass =>
+  publicErrorClassOf(writeErrorStatus(code));
 
 const SLUG_MESSAGES: Readonly<Record<string, string>> = {
   ...KERNEL_PUBLIC_MESSAGES,
