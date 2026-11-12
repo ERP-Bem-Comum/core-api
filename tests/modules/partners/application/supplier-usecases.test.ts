@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { makeInMemorySupplierStore } from '#src/modules/partners/adapters/persistence/repos/supplier-repository.in-memory.ts';
 import type { SupplierRepository } from '#src/modules/partners/domain/supplier/repository.ts';
 import { registerSupplier } from '#src/modules/partners/application/use-cases/register-supplier.ts';
@@ -13,7 +13,7 @@ import { listSuppliers } from '#src/modules/partners/application/use-cases/list-
 import { findSupplierByDocument } from '#src/modules/partners/application/use-cases/find-supplier-by-document.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 
 let repo: SupplierRepository;
 let store: ReturnType<typeof makeInMemorySupplierStore>;

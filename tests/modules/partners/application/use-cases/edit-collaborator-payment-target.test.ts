@@ -10,7 +10,7 @@ import { describe, it, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { makeInMemoryCollaboratorStore } from '#src/modules/partners/adapters/persistence/repos/collaborator-repository.in-memory.ts';
 import { makeInMemoryCollaboratorHistory } from '#src/modules/partners/adapters/persistence/repos/collaborator-history-repository.in-memory.ts';
 import { registerCollaborator } from '#src/modules/partners/application/use-cases/register-collaborator.ts';
@@ -20,7 +20,7 @@ import type { UserNameReader } from '#src/modules/partners/application/ports/use
 import type { CollaboratorRepository } from '#src/modules/partners/domain/collaborator/repository.ts';
 
 const NOW = new Date('2026-10-07T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 
 const EDITOR_ID = '6f1c2b3a-4d5e-4f60-8a7b-9c0d1e2f3a4b';
 const BANK = { bank: '237', agency: '1234', accountNumber: '56789', checkDigit: '0' };

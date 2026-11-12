@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as Cpf from '#src/shared/kernel/cpf.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
@@ -15,7 +15,7 @@ import { checkFirstThreeNumbersCpf } from '#src/modules/partners/application/use
 import { completeCollaboratorRegistrationPublic } from '#src/modules/partners/application/use-cases/complete-collaborator-registration-public.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 
 const CPF = '111.444.777-35'; // prefixo '111'
 const MISSING_ID = '7f3a1234-5678-4abc-9def-fedcba987654';

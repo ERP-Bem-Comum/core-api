@@ -153,10 +153,19 @@ export const mapLegacyContractRow = (
     errors.push({ tag: 'DateInvalid', field: 'contract_period_start', attempted: 'null' });
   } else {
     const start = PlainDate.fromDate(row.contractPeriodStart);
-    if (row.contractPeriodEnd === null) {
-      period = Period.createIndefinite(start);
-    } else {
-      const created = Period.create(start, PlainDate.fromDate(row.contractPeriodEnd));
+    const end = row.contractPeriodEnd === null ? null : PlainDate.fromDate(row.contractPeriodEnd);
+    // Sem valor bruto aqui: o decoder já converteu a coluna em `Date` (e registra o bruto no
+    // próprio DateInvalid dele). O mapper registra a coluna e a causa do kernel.
+    if (!start.ok) {
+      errors.push({ tag: 'DateInvalid', field: 'contract_period_start', attempted: start.error });
+    }
+    if (end !== null && !end.ok) {
+      errors.push({ tag: 'DateInvalid', field: 'contract_period_end', attempted: end.error });
+    }
+    if (start.ok && end === null) {
+      period = Period.createIndefinite(start.value);
+    } else if (start.ok && end?.ok === true) {
+      const created = Period.create(start.value, end.value);
       if (created.ok) period = created.value;
       else errors.push({ tag: 'DateInvalid', field: 'contract_period', attempted: created.error });
     }
