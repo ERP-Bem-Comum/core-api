@@ -85,6 +85,7 @@ import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
 import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 import type { FinancialHttpDeps } from './composition.ts';
+import { DATE_WINDOW_QUERY_FIELDS, dateWindowFromQuery } from './date-window-query.ts';
 import {
   createDocumentBodySchema,
   adjustDocumentBodySchema,
@@ -1050,10 +1051,7 @@ const financialRoutes =
           ...(q.status !== undefined ? { status: q.status } : {}),
           ...supplierFilter,
           ...typeFilter,
-          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
-          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
-          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
-          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
+          ...dateWindowFromQuery(q, DATE_WINDOW_QUERY_FIELDS),
           ...(q.q !== undefined ? { q: q.q } : {}), // #167: busca textual (já trimada pelo schema)
           ...(q.contractRef !== undefined ? { contractRef: q.contractRef } : {}),
           ...(q.programRef !== undefined ? { programRef: q.programRef } : {}),
@@ -1093,10 +1091,7 @@ const financialRoutes =
         const payableFilter: PayableListFilter = {
           ...(q.documentType !== undefined ? { documentType: q.documentType } : {}),
           ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
-          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
-          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
-          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
-          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
+          ...dateWindowFromQuery(q, DATE_WINDOW_QUERY_FIELDS),
         };
         const counts = await deps.countPayableTitles(payableFilter);
         if (!counts.ok) return sendDomainError(reply, counts.error);
@@ -1107,10 +1102,7 @@ const financialRoutes =
           status: 'Draft',
           ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
           ...(q.documentType !== undefined ? { type: q.documentType } : {}),
-          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
-          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
-          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
-          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
+          ...dateWindowFromQuery(q, DATE_WINDOW_QUERY_FIELDS),
         };
         const drafts = await deps.listDocuments(draftFilter, 1, 1);
         if (!drafts.ok) return sendDomainError(reply, drafts.error);
@@ -1143,10 +1135,7 @@ const financialRoutes =
           ...(q.status !== undefined ? { status: q.status } : {}),
           ...(q.documentType !== undefined ? { documentType: q.documentType } : {}),
           ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
-          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
-          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
-          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
-          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
+          ...dateWindowFromQuery(q, DATE_WINDOW_QUERY_FIELDS),
         };
         const result = await deps.listPayables(filter, q.page, q.pageSize);
         if (!result.ok) return sendDomainError(reply, result.error);

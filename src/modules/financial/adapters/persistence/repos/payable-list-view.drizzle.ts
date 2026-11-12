@@ -2,7 +2,7 @@
 // INNER JOIN fin_documents` (cada título é uma linha; filhos de retenção viram linhas próprias).
 // Boundary: try/catch → Result (.claude/rules/adapters.md).
 
-import { and, desc, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -20,6 +20,7 @@ import type { DocumentStatus } from '#src/modules/financial/domain/document/type
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finDocuments, finPayables } from '../schemas/mysql.ts';
 import { rowToPayableListItem } from '../mappers/payable-list.mapper.ts';
+import { dateWindowPredicates } from './date-window-predicates.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-payable-list-view] ${op} failed: ${String(cause)}\n`);
@@ -37,14 +38,10 @@ export const createDrizzlePayableListView = (
     if (filter.documentType !== undefined) conds.push(eq(finDocuments.type, filter.documentType));
     if (filter.supplierRef !== undefined)
       conds.push(eq(finDocuments.supplierRef, filter.supplierRef));
-    // Janelas de data: cada extremo vale SOZINHO e é inclusivo — mesma semântica do fake in-memory e
-    // do /documents. Era `between` com os dois obrigatórios, e um lado só era ignorado em silêncio.
-    if (filter.dueFrom !== undefined) conds.push(gte(finPayables.dueDate, filter.dueFrom));
-    if (filter.dueTo !== undefined) conds.push(lte(finPayables.dueDate, filter.dueTo));
-    // Emissão do documento: `issue_date` NULL cai pela semântica do SQL. Índice
-    // `fin_documents_issue_date_idx` (#163) cobre o predicado.
-    if (filter.issuedFrom !== undefined) conds.push(gte(finDocuments.issueDate, filter.issuedFrom));
-    if (filter.issuedTo !== undefined) conds.push(lte(finDocuments.issueDate, filter.issuedTo));
+    conds.push(
+      ...dateWindowPredicates(finPayables.dueDate, filter.dueFrom, filter.dueTo),
+      ...dateWindowPredicates(finDocuments.issueDate, filter.issuedFrom, filter.issuedTo),
+    );
     return conds.length > 0 ? and(...conds) : undefined;
   };
 
