@@ -59,10 +59,12 @@ export type AmendmentMapperInvalidMoney = Readonly<{
   attemptedCents: number;
 }>;
 
-// Reservado para futura validação de campos Date (ex.: datas impossíveis no DB).
+// Campo de data que o banco devolveu como `Date` inválido; `reason` é o erro do kernel, o mesmo
+// nome que o period.mapper usa, para a causa-raiz ser filtrável igual nos dois.
 export type AmendmentMapperInvalidDate = Readonly<{
   tag: 'AmendmentMapperInvalidDate';
   field: string;
+  reason: PlainDate.PlainDateFromDateError;
 }>;
 
 export type AmendmentMapperInvalidDocumentId = Readonly<{
@@ -126,9 +128,13 @@ export const amendmentMapperInvalidMoney = (
   attemptedCents,
 });
 
-export const amendmentMapperInvalidDate = (field: string): AmendmentMapperInvalidDate => ({
+export const amendmentMapperInvalidDate = (
+  field: string,
+  reason: PlainDate.PlainDateFromDateError,
+): AmendmentMapperInvalidDate => ({
   tag: 'AmendmentMapperInvalidDate',
   field,
+  reason,
 });
 
 export const amendmentMapperInvalidDocumentId = (
@@ -247,8 +253,7 @@ const variantFromRow = (
       if (newEndDate === null)
         return err(amendmentMapperImpossibleShape('missing-new-end-date-for-term-change'));
       const parsed = PlainDate.fromDate(newEndDate);
-      if (!parsed.ok)
-        return err(amendmentMapperImpossibleShape('invalid-new-end-date-for-term-change'));
+      if (!parsed.ok) return err(amendmentMapperInvalidDate('newEndDate', parsed.error));
       return ok({ kind: 'TermChange' as const, newEndDate: parsed.value });
     }
     case 'Misc':

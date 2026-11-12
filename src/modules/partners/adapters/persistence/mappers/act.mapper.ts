@@ -27,6 +27,7 @@ export type ActMapperError =
   | 'act-mapper-invalid-cnpj'
   | 'act-mapper-invalid-enum'
   | 'act-mapper-invalid-validity'
+  | PlainDate.PlainDateFromDateError
   | 'act-mapper-invalid-payment-target'
   | 'act-mapper-invalid-state';
 
@@ -102,8 +103,9 @@ export const actFromRow = (row: Readonly<ActRow>): Result<ActEntity, ActMapperEr
   if (!occupationArea.ok) return err('act-mapper-invalid-enum');
 
   const validityStart = PlainDate.fromDate(row.validityStart);
+  if (!validityStart.ok) return validityStart;
   const validityEnd = PlainDate.fromDate(row.validityEnd);
-  if (!validityStart.ok || !validityEnd.ok) return err('act-mapper-invalid-validity');
+  if (!validityEnd.ok) return validityEnd;
   const validity = Period.create(validityStart.value, validityEnd.value);
   if (!validity.ok) return err('act-mapper-invalid-validity');
 

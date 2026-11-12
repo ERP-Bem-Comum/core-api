@@ -19,6 +19,7 @@
  * Invariante: a soma das fatias de cada dimensao == `totalActive`.
  */
 
+import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { completedYears } from './completed-years.ts';
 
@@ -97,14 +98,16 @@ export const AGE_RANGE_CATEGORIES: readonly CategoryCount[] = [
   notAvailable,
 ];
 
-const ageRangeIdOf = (birth: Date | null, reference: Date): string => {
+/** Motivo de recusa de {@link aggregateTeamDemographics}: a data de referência é inválida. */
+export type TeamDemographicsError = 'team-demographics-invalid-reference-date';
+
+const ageRangeIdOf = (birth: Date | null, reference: PlainDate.PlainDate): string => {
   if (birth === null) return NOT_AVAILABLE_ID;
   const birthDate = PlainDate.fromDate(birth);
-  const referenceDate = PlainDate.fromDate(reference);
-  // `Date` invalido (de nascimento ou de referencia) nao tem idade: cai em N/A, como o nulo.
-  if (!birthDate.ok || !referenceDate.ok) return NOT_AVAILABLE_ID;
+  // Nascimento com `Date` inválido não tem idade: cai em N/A, como o nulo.
+  if (!birthDate.ok) return NOT_AVAILABLE_ID;
   // Regra de idade compartilhada com `toTeamProjection` (uma unica fonte - ver completed-years.ts).
-  const age = completedYears(birthDate.value, referenceDate.value);
+  const age = completedYears(birthDate.value, reference);
   if (age <= 29) return 'ATE_29';
   if (age <= 39) return 'DE_30_A_39';
   if (age <= 49) return 'DE_40_A_49';
@@ -141,10 +144,13 @@ const distribute = (
 export const aggregateTeamDemographics = (
   records: readonly CollaboratorDemographicsRecord[],
   options: Readonly<{ referenceDate: Date }>,
-): TeamDemographicsSummary => {
+): Result<TeamDemographicsSummary, TeamDemographicsError> => {
+  // A referência vale para o relatório inteiro: inválida, ela é erro explícito, não N/A em massa.
+  const reference = PlainDate.fromDate(options.referenceDate);
+  if (!reference.ok) return err('team-demographics-invalid-reference-date');
   // CA3: universo = so `active` (soft-delete fora).
   const actives = records.filter((record) => record.active);
-  return {
+  return ok({
     totalActive: actives.length,
     gender: distribute(
       GENDER_CATEGORIES,
@@ -152,11 +158,11 @@ export const aggregateTeamDemographics = (
     ),
     ageRange: distribute(
       AGE_RANGE_CATEGORIES,
-      actives.map((record) => ageRangeIdOf(record.dateOfBirth, options.referenceDate)),
+      actives.map((record) => ageRangeIdOf(record.dateOfBirth, reference.value)),
     ),
     race: distribute(
       RACE_CATEGORIES,
       actives.map((record) => record.race),
     ),
-  };
+  });
 };

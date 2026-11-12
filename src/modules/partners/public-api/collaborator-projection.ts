@@ -67,7 +67,7 @@ export type CollaboratorProjectionReader = Readonly<{
   close: () => Promise<void>;
 }>;
 
-/** Anos completos em `today`; `null` sem data de nascimento ou com `Date` invalido. */
+/** Anos completos em `today`; `null` sem data de nascimento ou com `Date` inválido. */
 const ageAt = (birth: Date | null, today: PlainDateType): number | null => {
   if (birth === null) return null;
   const birthDate = PlainDate.fromDate(birth);

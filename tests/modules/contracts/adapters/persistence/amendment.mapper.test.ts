@@ -418,7 +418,7 @@ describe('amendmentFromRow — DB corrompido: kind inválido (CA6 — tagged pay
 });
 
 describe('amendmentFromRow — DB corrompido: newEndDate inválido em TermChange', () => {
-  it("TermChange com newEndDate inválido → err({ tag: 'AmendmentMapperImpossibleShape' })", () => {
+  it('TermChange com newEndDate inválido → AmendmentMapperInvalidDate no campo newEndDate, causa plain-date-invalid-date', () => {
     const row: AmendmentRow = {
       ...pendingWithoutDocRow(),
       kind: 'TermChange',
@@ -428,8 +428,9 @@ describe('amendmentFromRow — DB corrompido: newEndDate inválido em TermChange
     assert.deepEqual(amendmentFromRow(row), {
       ok: false,
       error: {
-        tag: 'AmendmentMapperImpossibleShape',
-        reason: 'invalid-new-end-date-for-term-change',
+        tag: 'AmendmentMapperInvalidDate',
+        field: 'newEndDate',
+        reason: 'plain-date-invalid-date',
       },
     });
   });

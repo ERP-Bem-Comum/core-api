@@ -4,7 +4,9 @@ import { type Result, ok, err } from '../../../../../shared/primitives/result.ts
 import type {
   ContractRepository,
   ContractRepositoryError,
+  ExpirableBatch,
   ListContractsQuery,
+  UnreadableContract,
 } from '../../../domain/contract/repository.ts';
 import type { Contract, ActiveContract } from '../../../domain/contract/types.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
@@ -440,7 +442,7 @@ export const createDrizzleContractRepository = (
           .orderBy(asc(schema.contracts.currentPeriodEnd), asc(schema.contracts.id))
           .limit(limit);
 
-        if (rows.length === 0) return [] as readonly ActiveContract[];
+        if (rows.length === 0) return { contracts: [], unreadable: [] } satisfies ExpirableBatch;
 
         // Todos os contratos elegíveis são Active + Fixed → sem homologatedAmendmentIds
         // ainda carregados. Precisamos da junction table para reconstituir o agregado completo.
@@ -461,28 +463,30 @@ export const createDrizzleContractRepository = (
         }
 
         const active: ActiveContract[] = [];
+        const unreadable: UnreadableContract[] = [];
+        const skip = (contractId: string, cause: string): void => {
+          // Linha corrompida não derruba o lote: registra id + causa e segue com os demais.
+          process.stderr.write(
+            `[contract-repo:findExpirable] contrato ${contractId} ignorado: linha corrompida no banco — ${cause}\n`,
+          );
+          unreadable.push({ contractId, cause });
+        };
         for (const row of rows) {
-          const homologatedIds = (byContract.get(row.id) ?? []).map((amendmentId) => ({
-            amendmentId,
-          }));
-          const r = buildContract(row, homologatedIds);
-          if (!r.ok) throw new Error(JSON.stringify(r.error));
-          // Narrowing seguro: a query WHERE status='Active' garante o subtipo.
-          // buildContract retorna Contract; o status === 'Active' no WHERE garante
-          // que a row que chegou aqui é Active. O mapper também valida isso
-          // (contractMapperInvalidEndedAt protege se o DB estiver corrompido).
-          if (r.value.status !== 'Active') {
-            // Estado corrompido no DB (CHECK violado); buildContract não lança →
-            // logamos e pulamos para não derrubar o lote inteiro.
-            process.stderr.write(
-              `[contract-repo:findExpirable] row ${row.id} retornou status=${r.value.status} inesperado\n`,
-            );
+          const r = contractFromRow(row, byContract.get(row.id) ?? []);
+          if (!r.ok) {
+            skip(row.id, JSON.stringify(r.error));
             continue;
           }
-          active.push(r.value as ActiveContract);
+          // Narrowing seguro: a query WHERE status='Active' garante o subtipo; o mapper
+          // também valida (contractMapperInvalidEndedAt protege se o DB estiver corrompido).
+          if (r.value.status !== 'Active') {
+            skip(row.id, `status=${r.value.status} inesperado`);
+            continue;
+          }
+          active.push(r.value);
         }
 
-        return active as readonly ActiveContract[];
+        return { contracts: active, unreadable } satisfies ExpirableBatch;
       }),
   };
 };

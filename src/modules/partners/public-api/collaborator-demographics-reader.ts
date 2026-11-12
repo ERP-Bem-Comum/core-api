@@ -55,7 +55,7 @@ export const openCollaboratorDemographicsReader = async (
           })
           .from(parCollaborators);
 
-        return ok(aggregateTeamDemographics(rows, { referenceDate: opts.clock.now() }));
+        return aggregateTeamDemographics(rows, { referenceDate: opts.clock.now() });
       } catch (cause) {
         process.stderr.write(`[partners-collaborator-demographics:list] ${String(cause)}\n`);
         return err('collaborator-demographics-read-failure');

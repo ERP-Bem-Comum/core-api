@@ -8,24 +8,24 @@ const VALID = new Date('2026-01-15T00:00:00.000Z');
 const INVALID = new Date('invalid');
 
 describe('periodFromColumns — Date inválido vindo do banco', () => {
-  it("Fixed com fim inválido devolve err('plain-date-invalid-date')", () => {
+  it('Fixed com fim inválido nomeia a coluna end e a causa plain-date-invalid-date', () => {
     assert.deepEqual(
       periodFromColumns({ kind: 'Fixed', start: VALID, end: INVALID }),
-      err('plain-date-invalid-date'),
+      err({ tag: 'PeriodMapperInvalidDate', column: 'end', reason: 'plain-date-invalid-date' }),
     );
   });
 
-  it("Fixed com início inválido devolve err('plain-date-invalid-date')", () => {
+  it('Fixed com início inválido nomeia a coluna start', () => {
     assert.deepEqual(
       periodFromColumns({ kind: 'Fixed', start: INVALID, end: VALID }),
-      err('plain-date-invalid-date'),
+      err({ tag: 'PeriodMapperInvalidDate', column: 'start', reason: 'plain-date-invalid-date' }),
     );
   });
 
-  it("Indefinite com início inválido devolve err('plain-date-invalid-date')", () => {
+  it('Indefinite com início inválido nomeia a coluna start', () => {
     assert.deepEqual(
       periodFromColumns({ kind: 'Indefinite', start: INVALID, end: null }),
-      err('plain-date-invalid-date'),
+      err({ tag: 'PeriodMapperInvalidDate', column: 'start', reason: 'plain-date-invalid-date' }),
     );
   });
 

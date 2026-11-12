@@ -155,12 +155,16 @@ export const mapLegacyContractRow = (
     const start = PlainDate.fromDate(row.contractPeriodStart);
     const end = row.contractPeriodEnd === null ? null : PlainDate.fromDate(row.contractPeriodEnd);
     if (!start.ok) {
-      errors.push({ tag: 'DateInvalid', field: 'contract_period_start', attempted: start.error });
-    } else if (end === null) {
+      const attempted = String(row.contractPeriodStart);
+      errors.push({ tag: 'DateInvalid', field: 'contract_period_start', attempted });
+    }
+    if (end !== null && !end.ok) {
+      const attempted = String(row.contractPeriodEnd);
+      errors.push({ tag: 'DateInvalid', field: 'contract_period_end', attempted });
+    }
+    if (start.ok && end === null) {
       period = Period.createIndefinite(start.value);
-    } else if (!end.ok) {
-      errors.push({ tag: 'DateInvalid', field: 'contract_period_end', attempted: end.error });
-    } else {
+    } else if (start.ok && end?.ok === true) {
       const created = Period.create(start.value, end.value);
       if (created.ok) period = created.value;
       else errors.push({ tag: 'DateInvalid', field: 'contract_period', attempted: created.error });

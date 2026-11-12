@@ -134,7 +134,11 @@ export const InMemoryContractRepository = (
         if (cmpEnd !== 0) return cmpEnd;
         return String(a.id).localeCompare(String(b.id));
       });
-      return ok(activeFixed.slice(0, limit) as readonly ActiveContract[]);
+      // Em memória o agregado já está reidratado: não há linha corrompida para pular.
+      return ok({
+        contracts: activeFixed.slice(0, limit) as readonly ActiveContract[],
+        unreadable: [],
+      });
     },
   };
 

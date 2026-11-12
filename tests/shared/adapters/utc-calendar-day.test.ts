@@ -19,13 +19,15 @@ describe('utcCalendarDayOf', () => {
   });
 });
 
-describe('ClockFixed com Date inválido', () => {
-  it('today() lança RangeError em vez de devolver PlainDate com campos NaN', () => {
-    assert.throws(() => ClockFixed(new Date('invalid')).today(), RangeError);
+describe('ClockFixed valida o instante na construção', () => {
+  it('lança RangeError ao ser construído com Date inválido, antes de qualquer today()', () => {
+    assert.throws(() => ClockFixed(new Date('invalid')), RangeError);
   });
 
-  it('now() segue devolvendo o instante fixado', () => {
-    const at = new Date('invalid');
-    assert.equal(ClockFixed(at).now(), at);
+  it('today() não relê o instante: mutar o Date depois da construção não muda o dia', () => {
+    const at = new Date('2026-05-26T12:00:00.000Z');
+    const clock = ClockFixed(at);
+    at.setTime(Number.NaN);
+    assert.equal(PlainDate.toISOString(clock.today()), '2026-05-26');
   });
 });

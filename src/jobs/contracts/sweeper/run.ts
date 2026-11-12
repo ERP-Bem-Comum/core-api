@@ -81,8 +81,10 @@ const main = async (): Promise<number> => {
     }
 
     // Linha de resultado consumível — stdout para pipes/observabilidade.
-    const { expired, scanned } = result.value;
-    process.stdout.write(`[contracts-sweeper] expired=${expired} scanned=${scanned}\n`);
+    const { expired, scanned, skipped } = result.value;
+    process.stdout.write(
+      `[contracts-sweeper] expired=${expired} scanned=${scanned} skipped=${skipped}\n`,
+    );
     return 0;
   } catch (cause) {
     // Defesa em profundidade: `runSweep` não deve lançar (converte para Result),

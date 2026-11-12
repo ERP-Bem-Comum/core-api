@@ -25,6 +25,8 @@ export type SweepResult = Readonly<{
   expired: number;
   /** Contratos lidos do `findExpirable` (elegíveis pré-guarda). */
   scanned: number;
+  /** Linhas elegíveis puladas por estarem corrompidas no banco (o adapter loga id e causa). */
+  skipped: number;
 }>;
 
 /**
@@ -49,7 +51,7 @@ export const runSweep = async (
 
   const at = deps.clock.now();
   let expired = 0;
-  for (const active of found.value) {
+  for (const active of found.value.contracts) {
     const transition = Contract.expire(active, at);
     // Corrida benigna: um elegível que um aditivo de prazo homologado estendeu entre o SELECT e
     // o `expire` cai na guarda D+1 — pula sem derrubar o lote (idempotência — Newman).
@@ -59,5 +61,9 @@ export const runSweep = async (
     expired += 1;
   }
 
-  return ok({ expired, scanned: found.value.length });
+  return ok({
+    expired,
+    scanned: found.value.contracts.length,
+    skipped: found.value.unreadable.length,
+  });
 };
