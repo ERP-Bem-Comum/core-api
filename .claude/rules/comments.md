@@ -36,13 +36,23 @@ Proibido: `//`, `/* */`, e `/** */` solto — cabeçalho de arquivo, entre state
 | `@throws` | datas, "medido em", narrativa |
 | no máximo **um** `@example` | um segundo `@example` |
 | `@defaultValue`, `@deprecated` | tag fora desta coluna |
-| `@see {@link Simbolo}` — só para declaração do código | `@see` para documento, URL ou pessoa |
+| `@see {@link Simbolo}` ou `@see {@link Simbolo \| rótulo}` — para declaração do código; `@see tests/…/x.test.ts` — para o teste que prova a frase. O alvo é o conteúdo inteiro da tag | `@see` para documento, URL ou pessoa; texto depois do alvo |
 
 Se o bloco tem algum `@param`, todo parâmetro da assinatura tem o seu (idem `@typeParam`). Parâmetro desestruturado é documentado por posição, com o nome que melhor o descreve.
 
 ## R3 — toda frase tem teste
 
 Cada frase do TSDoc está provada por um teste que **passa** e cujo nome descreve aquele comportamento. Frase sem teste não se escreve — o TSDoc encolhe até caber no que está provado.
+
+## Como registrar o porquê de um guard
+
+Guard, early return ou exceção de allowlist sem explicação parece código morto, e a próxima limpeza o remove. O porquê não volta como prosa: vira **um teste que falha quando o guard é removido**.
+
+1. Escreva o teste e prove o vermelho aplicando a mutação "remover o guard". Se o teste passa sem o guard, ele não prova o porquê (ex.: `inArray(col, [])` vira `WHERE false` e devolve vazio do mesmo jeito; o que o guard evita é a consulta, e é isso que o teste mede).
+2. Se um gate existente já falha sem a decisão (ex.: a allowlist de nomes de `tests/cleanup/lint-gaps.test.ts`), ele é o teste — não escreva outro.
+3. O TSDoc da declaração descreve o comportamento que o guard garante (o quê, R2) e cita o teste com `@see tests/…/x.test.ts`.
+
+O scanner aceita como conteúdo inteiro do `@see` só `{@link Simbolo}`, `{@link Simbolo | rótulo}` ou um caminho `tests/**/*.test.ts` sem segmento `.` ou `..` (`see-target-not-allowed`). `tests/cleanup/comments.test.ts` lê os `@see tests/…` dos blocos TSDoc de todo `.ts` versionado e recusa o que não aponta para um teste versionado no git.
 
 ## R4 — diretivas: conjunto fechado
 

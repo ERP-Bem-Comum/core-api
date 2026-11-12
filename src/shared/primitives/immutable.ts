@@ -13,7 +13,7 @@
  * @returns A mesma referência recebida, congelada, tipada como `Readonly<T>` — o compilador
  *   recusa atribuição a propriedade dela.
  * @throws `TypeError` quando `value` é TypedArray não vazio, inclusive `Buffer`.
- * @see {@link deepImmutable} para congelar todos os níveis.
+ * @see {@link deepImmutable | deepImmutable, para congelar todos os níveis}
  *
  * @example
  * ```ts
@@ -45,7 +45,7 @@ export const immutable = <T extends object>(value: T): Readonly<T> => Object.fre
  * @returns A mesma referência recebida, tipada como `T` — o compilador aceita atribuição a
  *   propriedade, que só falha em runtime com `TypeError`.
  * @throws `TypeError` quando um TypedArray não vazio, inclusive `Buffer`, é alcançado.
- * @see {@link immutable} para congelar só a raiz com tipo `Readonly<T>`.
+ * @see {@link immutable | immutable, para congelar só a raiz com tipo `Readonly<T>`}
  *
  * @example
  * ```ts

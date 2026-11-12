@@ -14,7 +14,8 @@ export type CommentRule =
   | 'param-missing'
   | 'type-param-unknown'
   | 'type-param-missing'
-  | 'directive-not-allowed';
+  | 'directive-not-allowed'
+  | 'see-target-not-allowed';
 
 /** Uma violação: a regra, a linha (1-based) e a mensagem. */
 export type CommentFinding = Readonly<{
@@ -64,6 +65,25 @@ const ALLOWED_TAGS: ReadonlySet<string> = new Set([
 ]);
 
 const ALLOWED_TAG_LIST = [...ALLOWED_TAGS].map((t) => `@${t}`).join(', ');
+
+const PATH_SEGMENT = String.raw`[\w-][\w.-]*`;
+
+const TEST_PATH = String.raw`tests/(?:${PATH_SEGMENT}/)*${PATH_SEGMENT}\.test\.ts`;
+
+const LINK = String.raw`\{@link\s+[^\s|}]+(?:\s*\|\s*[^\s}][^}]*)?\}`;
+
+const SEE_TARGET = new RegExp(`^(?:${LINK}|${TEST_PATH})$`);
+
+const CITABLE_TEST_PATH = new RegExp(`^${TEST_PATH}$`);
+
+/**
+ * Diz se o alvo de um `@see` é, por inteiro, o caminho de um arquivo de teste citável.
+ *
+ * @param target - Conteúdo da tag, sem espaço nas pontas.
+ * @returns `true` para `tests/…/x.test.ts` sem segmento `.` ou `..`; `false` para qualquer outro
+ *   texto, inclusive `.test.tsx`, `.test.ts.snap` e caminho seguido de prosa.
+ */
+export const isCitableTestPath = (target: string): boolean => CITABLE_TEST_PATH.test(target);
 
 const DIRECTIVE_SHAPE =
   /^(?:@ts-|(?:es|ox|ts)lint[-:]|prettier-ignore|istanbul\s|c8\s|v8\s|#(?:end)?region\b|global\s|jshint|biome-ignore|deno-)/;
@@ -342,6 +362,28 @@ const tsdocBodyLines = (text: string): readonly string[] =>
     .split('\n')
     .map((l) => l.replace(/\r$/, '').replace(/^\s*\*?\s?/, ''));
 
+type TsdocTag = Readonly<{ tag: string; content: string; offset: number }>;
+
+const tsdocTags = (text: string): readonly TsdocTag[] => {
+  const tags: { tag: string; parts: string[]; offset: number }[] = [];
+  let insideFence = false;
+  tsdocBodyLines(text).forEach((raw, offset) => {
+    const content = raw.trim();
+    if (content.startsWith('```')) insideFence = !insideFence;
+    const tag = insideFence ? undefined : /^@(\w+)/.exec(content)?.[1];
+    if (tag !== undefined) {
+      tags.push({ tag, parts: [content.slice(tag.length + 1).trim()], offset });
+    } else {
+      tags.at(-1)?.parts.push(content);
+    }
+  });
+  return tags.map(({ tag, parts, offset }) => ({
+    tag,
+    content: parts.filter((p) => p.length > 0).join(' '),
+    offset,
+  }));
+};
+
 const documentedName = (rest: string): string => {
   const afterType = rest.startsWith('{') ? rest.slice(rest.indexOf('}') + 1).trim() : rest;
   const match = /^\[?([\w$]+)/.exec(afterType);
@@ -402,14 +444,8 @@ const tagFindings = (
   const params: DocumentedName[] = [];
   const typeParams: DocumentedName[] = [];
   let examples = 0;
-  let insideFence = false;
-  tsdocBodyLines(text).forEach((raw, index) => {
-    const content = raw.trim();
-    const line = docLine + index;
-    if (content.startsWith('```')) insideFence = !insideFence;
-    const tag = insideFence ? undefined : /^@(\w+)/.exec(content)?.[1];
-    if (tag === undefined) return;
-    const rest = content.slice(tag.length + 1).trim();
+  for (const { tag, content: rest, offset } of tsdocTags(text)) {
+    const line = docLine + offset;
     if (!ALLOWED_TAGS.has(tag)) {
       out.push({
         rule: 'tag-not-allowed',
@@ -425,12 +461,20 @@ const tagFindings = (
           detail: 'mais de um `@example` no mesmo TSDoc',
         });
       }
+    } else if (tag === 'see' && !SEE_TARGET.test(rest)) {
+      out.push({
+        rule: 'see-target-not-allowed',
+        line,
+        detail:
+          '`@see` aponta só para `{@link Simbolo}` do código ou para o caminho de um ' +
+          '`tests/**/*.test.ts` que prova a frase',
+      });
     } else if (tag === 'param') {
       params.push({ name: documentedName(rest), line });
     } else if (tag === 'typeParam') {
       typeParams.push({ name: documentedName(rest), line });
     }
-  });
+  }
   const signature = signatureOf(declaration);
   return [
     ...out,
@@ -561,6 +605,52 @@ export const scanPaths = (
         for (const f of scanComments(sf, scopeOf(file))) findings.push({ ...f, file });
       }
       return { findings, unparsed };
+    },
+  );
+
+/** Um `@see` de TSDoc cujo alvo começa por `tests/`, com o arquivo e a linha da tag. */
+export type TestCitation = Readonly<{ file: string; line: number; target: string }>;
+
+const testCitationsOf = (sf: SourceFile): readonly Omit<TestCitation, 'file'>[] =>
+  lexemesOf(sf)
+    .filter((l) => l.kind === SyntaxKind.MultiLineCommentTrivia)
+    .flatMap((l) => {
+      const text = sf.text.slice(l.pos, l.end);
+      if (!isTsdoc(text)) return [];
+      const docLine = lineAt(sf, l.pos);
+      return tsdocTags(text)
+        .filter((t) => t.tag === 'see' && t.content.startsWith('tests/'))
+        .map((t) => ({ line: docLine + t.offset, target: t.content }));
+    });
+
+/**
+ * Lê, dos blocos TSDoc dos arquivos dados, os `@see` cujo alvo começa por `tests/`. String,
+ * template e comentário `//` não contam; a tag cujo alvo continua na linha seguinte conta, com o
+ * alvo inteiro.
+ *
+ * @param root - Diretório absoluto ao qual os caminhos são relativos.
+ * @param relPaths - Caminhos dos arquivos a ler.
+ * @returns As citações na ordem dos arquivos e, dentro de cada um, na ordem do texto; e, em
+ * `unparsed`, os caminhos que o compilador não entregou.
+ */
+export const scanTestCitations = (
+  root: string,
+  relPaths: readonly string[],
+): Readonly<{ citations: readonly TestCitation[]; unparsed: readonly string[] }> =>
+  withSourceFiles(
+    relPaths.map((p) => join(root, p)),
+    (files) => {
+      const citations: TestCitation[] = [];
+      const unparsed: string[] = [];
+      for (const file of relPaths) {
+        const sf = files.get(join(root, file));
+        if (sf === undefined) {
+          unparsed.push(file);
+          continue;
+        }
+        for (const c of testCitationsOf(sf)) citations.push({ ...c, file });
+      }
+      return { citations, unparsed };
     },
   );
 

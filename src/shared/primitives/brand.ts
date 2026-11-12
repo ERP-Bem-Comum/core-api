@@ -1,7 +1,10 @@
 /**
  * Chave da marca nominal de {@link Brand}. Uma propriedade de chave textual `"__brand"` não a
  * reproduz: `string & { readonly __brand: 'ContractId' }` não satisfaz
- * `Brand<string, 'ContractId'>`.
+ * `Brand<string, 'ContractId'>`. O duplo underscore do nome é exceção declarada da convenção de
+ * nomes.
+ *
+ * @see tests/cleanup/lint-gaps.test.ts
  */
 declare const __brand: unique symbol;
 
