@@ -15,7 +15,10 @@ import { type Money, type MoneyError, fromCents } from './money.ts';
  * `Money` não é atribuível a `NonZeroMoney`.
  *
  * O membro `__nonZeroMoney` existe só no tipo: é `readonly`, tem o tipo `true` e não está
- * presente no valor em runtime.
+ * presente no valor em runtime. O duplo underscore do nome é exceção declarada da convenção de
+ * nomes.
+ *
+ * @see tests/cleanup/lint-gaps.test.ts
  */
 export type NonZeroMoney = Money & { readonly __nonZeroMoney: true };
 

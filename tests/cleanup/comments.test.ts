@@ -1,11 +1,11 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { formatFinding, scanPaths, scopeOf } from '../support/comment-scan.ts';
+import { citedTestPaths, formatFinding, scanPaths, scopeOf } from '../support/comment-scan.ts';
 import type { CommentRule, LocatedCommentFinding } from '../support/comment-scan.ts';
 import { PROJECT_ROOT } from '../support/source-scan.ts';
 
@@ -30,6 +30,7 @@ const SANITIZED_ROOTS: readonly string[] = [
   'src/jobs/contracts/sweeper/clock-sao-paulo.ts',
   'tests/jobs/contracts/sweeper/clock-sao-paulo.test.ts',
   'tests/cleanup/brand-cast-ownership.test.ts',
+  'tests/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.test.ts',
 ];
 
 type Fixture = Readonly<{
@@ -106,6 +107,26 @@ const FIXTURES: readonly Fixture[] = [
     expected: [
       ['loose-tsdoc', 1],
       ['line-comment', 2],
+    ],
+  },
+  {
+    file: 'src/see-target.ts',
+    code: [
+      '/**',
+      ' * Valor.',
+      ' * @see ADR-0020',
+      ' * @see https://example.com',
+      ' * @see tests/a/b.ts',
+      ' * @see {@link b}',
+      ' * @see tests/a/b.test.ts',
+      ' */',
+      'export const a = 1;',
+      '',
+    ].join('\n'),
+    expected: [
+      ['see-target-not-allowed', 3],
+      ['see-target-not-allowed', 4],
+      ['see-target-not-allowed', 5],
     ],
   },
   {
@@ -336,6 +357,7 @@ describe('scanComments devolve, na ordem do arquivo, a regra e a linha de cada v
       'type-param-unknown',
       'type-param-missing',
       'directive-not-allowed',
+      'see-target-not-allowed',
     ];
     const covered = new Set(FIXTURES.flatMap((f) => f.expected.map(([rule]) => rule)));
     assert.deepEqual(
@@ -358,6 +380,51 @@ describe('scanComments devolve, na ordem do arquivo, a regra e a linha de cada v
       findings.filter((f) => f.file === 'src/clean.ts'),
       [],
     );
+  });
+});
+
+const missingCitations = (
+  files: readonly string[],
+  read: (file: string) => string,
+  versioned: ReadonlySet<string>,
+): readonly string[] =>
+  files.flatMap((file) =>
+    citedTestPaths(read(file))
+      .filter((cited) => !versioned.has(cited))
+      .map((cited) => `${file}: @see ${cited}`),
+  );
+
+describe('@see tests/... em src/ cita um arquivo de teste versionado', () => {
+  it('todo @see tests/... de src/ aponta para um .test.ts versionado', () => {
+    const all = tracked();
+    const versioned = new Set(all);
+    const sources = all.filter((f) => f.startsWith('src/'));
+    const missing = missingCitations(
+      sources,
+      (f) => readFileSync(join(PROJECT_ROOT, f), 'utf8'),
+      versioned,
+    );
+    assert.deepEqual(missing, [], `Citação para teste inexistente:\n${missing.join('\n')}`);
+  });
+
+  it('contraprova: um @see para teste que não existe é acusado com arquivo e caminho', () => {
+    const missing = missingCitations(
+      ['src/a.ts'],
+      () => ' * @see tests/existe.test.ts\n * @see tests/sumiu.test.ts\n',
+      new Set(['tests/existe.test.ts']),
+    );
+    assert.deepEqual(missing, ['src/a.ts: @see tests/sumiu.test.ts']);
+  });
+
+  it('citedTestPaths devolve, na ordem e com repetição, só os caminhos tests/...test.ts após @see', () => {
+    const text = [
+      ' * @see tests/b.test.ts',
+      ' * @see {@link x}',
+      ' * tests/solto.test.ts',
+      ' * @see tests/a.ts',
+      ' * @see tests/b.test.ts',
+    ].join('\n');
+    assert.deepEqual(citedTestPaths(text), ['tests/b.test.ts', 'tests/b.test.ts']);
   });
 });
 

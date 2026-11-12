@@ -14,7 +14,8 @@ export type CommentRule =
   | 'param-missing'
   | 'type-param-unknown'
   | 'type-param-missing'
-  | 'directive-not-allowed';
+  | 'directive-not-allowed'
+  | 'see-target-not-allowed';
 
 /** Uma violação: a regra, a linha (1-based) e a mensagem. */
 export type CommentFinding = Readonly<{
@@ -64,6 +65,17 @@ const ALLOWED_TAGS: ReadonlySet<string> = new Set([
 ]);
 
 const ALLOWED_TAG_LIST = [...ALLOWED_TAGS].map((t) => `@${t}`).join(', ');
+
+const SEE_TARGET = /^(?:\{@link\s+[^}\s]+\}|tests\/[\w./-]+\.test\.ts)(?:\s|$)/;
+
+/**
+ * Caminho de arquivo de teste citado por `@see` num texto: `tests/...test.ts` logo após a tag.
+ *
+ * @param text - Texto do arquivo-fonte.
+ * @returns Os caminhos citados, na ordem do texto, com repetição.
+ */
+export const citedTestPaths = (text: string): readonly string[] =>
+  [...text.matchAll(/@see\s+(tests\/[\w./-]+\.test\.ts)/g)].map((m) => m[1] ?? '');
 
 const DIRECTIVE_SHAPE =
   /^(?:@ts-|(?:es|ox|ts)lint[-:]|prettier-ignore|istanbul\s|c8\s|v8\s|#(?:end)?region\b|global\s|jshint|biome-ignore|deno-)/;
@@ -425,6 +437,14 @@ const tagFindings = (
           detail: 'mais de um `@example` no mesmo TSDoc',
         });
       }
+    } else if (tag === 'see' && !SEE_TARGET.test(rest)) {
+      out.push({
+        rule: 'see-target-not-allowed',
+        line,
+        detail:
+          '`@see` aponta só para `{@link Simbolo}` do código ou para o caminho de um ' +
+          '`tests/**/*.test.ts` que prova a frase',
+      });
     } else if (tag === 'param') {
       params.push({ name: documentedName(rest), line });
     } else if (tag === 'typeParam') {
