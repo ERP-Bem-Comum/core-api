@@ -13,23 +13,33 @@ import {
 type Equals<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
 describe('publicMessageResolver', () => {
-  const resolve = publicMessageResolver<'a-code' | 'b-code'>(
-    { 'a-code': 'Mensagem A.', 'b-code': 'Mensagem B.' },
-    (code) => `fallback:${code}`,
-  );
-
-  it('devolve a mensagem da tabela para um código presente nela', () => {
-    assert.equal(resolve('a-code'), 'Mensagem A.');
-    assert.equal(resolve('b-code'), 'Mensagem B.');
+  const resolve = publicMessageResolver<'a-code' | 'b-code'>({
+    'a-code': 'Mensagem A.',
+    'b-code': 'Mensagem B.',
   });
 
-  it('devolve o fallback para código ausente da tabela', () => {
-    assert.equal(resolve('unknown-code'), 'fallback:unknown-code');
+  it('com status abaixo de 500, devolve a mensagem da tabela para um código presente nela', () => {
+    assert.equal(resolve('a-code', 404), 'Mensagem A.');
+    assert.equal(resolve('b-code', 422), 'Mensagem B.');
+  });
+
+  it('código ausente da tabela recebe a frase genérica da classe do status', () => {
+    assert.equal(resolve('unknown-code', 404), GENERIC_PUBLIC_MESSAGES['not-found']);
+    assert.equal(resolve('unknown-code', 409), GENERIC_PUBLIC_MESSAGES.conflict);
+    assert.equal(resolve('unknown-code', 400), GENERIC_PUBLIC_MESSAGES['bad-request']);
+    assert.equal(resolve('unknown-code', 422), GENERIC_PUBLIC_MESSAGES.unprocessable);
+  });
+
+  it('com status 500 ou mais, devolve a frase genérica interna mesmo para código da tabela', () => {
+    for (const status of [500, 502, 503]) {
+      assert.equal(resolve('a-code', status), GENERIC_PUBLIC_MESSAGES.internal, String(status));
+      assert.equal(resolve('unknown-code', status), GENERIC_PUBLIC_MESSAGES.internal);
+    }
   });
 
   it('nome herdado do protótipo de Object não conta como presente na tabela', () => {
-    assert.equal(resolve('constructor'), 'fallback:constructor');
-    assert.equal(resolve('toString'), 'fallback:toString');
+    assert.equal(resolve('constructor', 422), GENERIC_PUBLIC_MESSAGES.unprocessable);
+    assert.equal(resolve('toString', 404), GENERIC_PUBLIC_MESSAGES['not-found']);
   });
 });
 

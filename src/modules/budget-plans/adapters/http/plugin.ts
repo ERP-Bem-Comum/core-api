@@ -23,11 +23,7 @@ import type {
 import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
-import {
-  GENERIC_PUBLIC_MESSAGES,
-  publicErrorClassOf,
-  publicMessageResolver,
-} from '#src/shared/http/public-message.ts';
+import { publicMessageResolver } from '#src/shared/http/public-message.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ListBudgetPlansInput } from '../../application/use-cases/list-budget-plans.ts';
@@ -154,18 +150,18 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'realized-by-plan-read-unavailable': 503,
 };
 
-const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
+const writeErrorStatus = (code: BudgetPlansErrorCode): number => WRITE_ERROR_STATUS[code] ?? 422;
 
-const publicMessage = publicMessageResolver(
-  BUDGET_PLANS_PUBLIC_MESSAGES,
-  (code) => GENERIC_PUBLIC_MESSAGES[publicErrorClassOf(writeErrorStatus(code))],
-);
+const publicMessage = publicMessageResolver(BUDGET_PLANS_PUBLIC_MESSAGES);
 
 const sendWriteError = (reply: FastifyReply, code: BudgetPlansErrorCode): Promise<void> => {
   const requestId = currentCorrelationId() ?? reply.request.id;
+  const status = writeErrorStatus(code);
   return reply
-    .code(writeErrorStatus(code))
-    .send(toErrorEnvelope(code, publicMessage(code), requestId)) as unknown as Promise<void>;
+    .code(status)
+    .send(
+      toErrorEnvelope(code, publicMessage(code, status), requestId),
+    ) as unknown as Promise<void>;
 };
 
 // CSV inline (US5): download síncrono na própria response (sem e-mail/FS, ≠ legado). A string já

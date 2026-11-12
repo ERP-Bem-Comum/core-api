@@ -49,24 +49,27 @@ export const KERNEL_PUBLIC_MESSAGES: Readonly<Record<MoneyError | UserRefError, 
   'user-ref-invalid': 'Identificador de usuário inválido.',
 };
 
+/** Mensagem pública de um código de erro na resposta com o status dado. */
+export type PublicMessage = (code: string, status: number) => string;
+
+const isOwnKey = <C extends string>(table: Readonly<Record<C, string>>, key: string): key is C =>
+  Object.hasOwn(table, key);
+
 /**
  * Monta a consulta código → mensagem pública sobre a tabela de um módulo.
  *
  * @param messages - Tabela do módulo, código interno → frase PT-BR.
- * @param fallback - Frase para código ausente da tabela.
- * @returns Função que devolve a frase da tabela quando o código é chave própria dela, e
- *   `fallback(code)` quando não é; nome herdado do protótipo de `Object`, como `constructor`, não
- *   conta como chave da tabela.
+ * @returns Função que, com status 500 ou mais, devolve a frase genérica `internal` mesmo para
+ *   código da tabela; abaixo de 500, devolve a frase da tabela quando o código é chave própria
+ *   dela e, quando não é, a frase genérica da classe do status. Nome herdado do protótipo de
+ *   `Object`, como `constructor`, não conta como chave da tabela.
  */
 export const publicMessageResolver =
-  <C extends string>(
-    messages: Readonly<Record<C, string>>,
-    fallback: (code: string) => string,
-  ): ((code: string) => string) =>
-  (code) => {
-    if (!Object.hasOwn(messages, code)) return fallback(code);
-    const table: Readonly<Record<string, string | undefined>> = messages;
-    return table[code] ?? fallback(code);
+  <C extends string>(messages: Readonly<Record<C, string>>): PublicMessage =>
+  (code, status) => {
+    if (status >= 500) return GENERIC_PUBLIC_MESSAGES.internal;
+    if (isOwnKey(messages, code)) return messages[code];
+    return GENERIC_PUBLIC_MESSAGES[publicErrorClassOf(status)];
   };
 
 /**

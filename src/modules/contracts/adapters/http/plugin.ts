@@ -22,11 +22,7 @@ import type {
 import { ok, err } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
-import {
-  GENERIC_PUBLIC_MESSAGES,
-  publicErrorClassOf,
-  publicMessageResolver,
-} from '#src/shared/http/public-message.ts';
+import { publicMessageResolver } from '#src/shared/http/public-message.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ContractsHttpDeps } from './composition.ts';
@@ -164,17 +160,17 @@ const sanitizeFilename = (name: string): string => {
   return cleaned.length > 0 ? cleaned : 'document.pdf';
 };
 
-const publicMessage = publicMessageResolver(
-  CONTRACTS_PUBLIC_MESSAGES,
-  (code) => GENERIC_PUBLIC_MESSAGES[publicErrorClassOf(writeErrorStatus(code))],
-);
+const publicMessage = publicMessageResolver(CONTRACTS_PUBLIC_MESSAGES);
 
 const sendDomainError = (reply: FastifyReply, error: ContractsHttpError): Promise<void> => {
   const code = toErrorCode(error);
   const requestId = currentCorrelationId() ?? reply.request.id;
+  const status = writeErrorStatus(code);
   return reply
-    .code(writeErrorStatus(code))
-    .send(toErrorEnvelope(code, publicMessage(code), requestId)) as unknown as Promise<void>;
+    .code(status)
+    .send(
+      toErrorEnvelope(code, publicMessage(code, status), requestId),
+    ) as unknown as Promise<void>;
 };
 
 const contractsRoutes =

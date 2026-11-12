@@ -7,7 +7,6 @@
  */
 
 import {
-  GENERIC_PUBLIC_MESSAGES,
   KERNEL_PUBLIC_MESSAGES,
   publicMessageResolver,
   type PublicErrorClass,
@@ -444,8 +443,8 @@ const SLUG_MESSAGES: Readonly<Record<string, string>> = {
   'payable-summary-by-ids-view-failure': 'Erro ao consultar resumo de títulos em lote.',
 };
 
+const resolvePublicMessage = publicMessageResolver(SLUG_MESSAGES);
+
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */
-export const toPublicMessage = publicMessageResolver(
-  SLUG_MESSAGES,
-  (code) => GENERIC_PUBLIC_MESSAGES[toPublicCode(code)],
-);
+export const toPublicMessage = (code: string): string =>
+  resolvePublicMessage(code, writeErrorStatus(code));
