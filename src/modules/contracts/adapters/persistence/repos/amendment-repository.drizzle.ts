@@ -74,7 +74,7 @@ export const createDrizzleAmendmentRepository = (
         const row = rows[0];
         if (row === undefined) return null;
         const r = amendmentFromRow(row);
-        if (!r.ok) throw new Error(r.error.tag);
+        if (!r.ok) throw new Error(JSON.stringify(r.error));
         return r.value as Amendment | null;
       }),
 
@@ -90,7 +90,7 @@ export const createDrizzleAmendmentRepository = (
         const amendments: Amendment[] = [];
         for (const row of rows) {
           const r = amendmentFromRow(row);
-          if (!r.ok) throw new Error(r.error.tag);
+          if (!r.ok) throw new Error(JSON.stringify(r.error));
           amendments.push(r.value);
         }
         return amendments as readonly Amendment[];

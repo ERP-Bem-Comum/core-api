@@ -10,6 +10,12 @@ const date = (iso: string): PlainDate.PlainDate => {
   return r.value;
 };
 
+const instant = (d: Date): PlainDate.PlainDate => {
+  const r = PlainDate.fromDate(d);
+  assert.ok(r.ok, `instante de teste inválido: ${String(d)}`);
+  return r.value;
+};
+
 const fixed = (startIso: string, endIso: string): Period.Period => {
   const r = Period.create(date(startIso), date(endIso));
   assert.ok(r.ok, `período de teste inválido: ${startIso}..${endIso}`);
@@ -51,8 +57,8 @@ describe('Period.create', () => {
   });
 
   it('valida só a ordem e confia no PlainDate recebido: aceita ano anterior a 2000 vindo de fromDate', () => {
-    const start = PlainDate.fromDate(new Date('1999-02-28T00:00:00Z'));
-    const end = PlainDate.fromDate(new Date('1999-03-01T00:00:00Z'));
+    const start = instant(new Date('1999-02-28T00:00:00Z'));
+    const end = instant(new Date('1999-03-01T00:00:00Z'));
     assert.equal(PlainDate.from('1999-02-28').ok, false);
     const r = Period.create(start, end);
     assert.ok(r.ok);
@@ -61,8 +67,9 @@ describe('Period.create', () => {
 
   it('exemplo do TSDoc: dois dias consecutivos vindos de fromDate formam período ok', () => {
     const start = PlainDate.fromDate(new Date('2026-03-10T00:00:00Z'));
-    const r = Period.create(start, PlainDate.fromDate(new Date('2026-03-11T00:00:00Z')));
-    assert.ok(r.ok);
+    const end = PlainDate.fromDate(new Date('2026-03-11T00:00:00Z'));
+    const r = start.ok && end.ok ? Period.create(start.value, end.value) : undefined;
+    assert.ok(r?.ok);
   });
 
   it('devolve um período congelado', () => {
@@ -81,12 +88,11 @@ describe('Period.create', () => {
     assert.equal(Object.isFrozen(rawIndefinite), false);
   });
 
-  it('aceita PlainDate com campos NaN em qualquer lado, inclusive a mesma referência nos dois', () => {
-    const nan = PlainDate.fromDate(new Date(NaN));
-    const valid = date('2026-01-10');
-    assert.equal(Period.create(nan, nan).ok, true);
-    assert.equal(Period.create(valid, nan).ok, true);
-    assert.equal(Period.create(nan, valid).ok, true);
+  it("Date inválido não forma período: fromDate devolve err('plain-date-invalid-date') antes de create", () => {
+    const start = PlainDate.fromDate(new Date('2026-01-10T00:00:00Z'));
+    const end = PlainDate.fromDate(new Date(NaN));
+    assert.ok(start.ok);
+    assert.deepEqual(end, { ok: false, error: 'plain-date-invalid-date' });
   });
 });
 
@@ -185,16 +191,11 @@ describe('Period.equals', () => {
     assert.equal(Period.equals(b, a), false);
   });
 
-  it('considera um período com datas NaN diferente de qualquer outro e de si mesmo', () => {
-    const nan = PlainDate.fromDate(new Date(NaN));
-    const r = Period.create(nan, nan);
-    assert.ok(r.ok);
-    const nanFixed = r.value;
-    const nanIndefinite = Period.createIndefinite(nan);
-    assert.equal(Period.equals(nanFixed, nanFixed), false);
-    assert.equal(Period.equals(nanIndefinite, nanIndefinite), false);
-    assert.equal(Period.equals(nanFixed, fixed('2026-01-01', '2026-06-30')), false);
-    assert.equal(Period.equals(fixed('2026-01-01', '2026-06-30'), nanFixed), false);
+  it('considera um período igual a si mesmo', () => {
+    const p = fixed('2026-01-01', '2026-06-30');
+    const open = Period.createIndefinite(date('2026-01-01'));
+    assert.equal(Period.equals(p, p), true);
+    assert.equal(Period.equals(open, open), true);
   });
 
   it('considera iguais dois Indefinite com mesmo início', () => {

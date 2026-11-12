@@ -42,7 +42,9 @@ describe('todayInSaoPauloAt', () => {
 
   it('usa o dia em São Paulo, não o dia UTC: 02:59:59Z ainda é o dia anterior', () => {
     const instant = new Date('2026-06-15T02:59:59Z');
-    assert.equal(PlainDate.toISOString(PlainDate.fromDate(instant)), '2026-06-15');
+    const utcDay = PlainDate.fromDate(instant);
+    assert.ok(utcDay.ok);
+    assert.equal(PlainDate.toISOString(utcDay.value), '2026-06-15');
     assert.equal(PlainDate.toISOString(todayInSaoPauloAt(instant)), '2026-06-14');
   });
 

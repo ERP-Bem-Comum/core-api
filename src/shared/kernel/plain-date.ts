@@ -56,7 +56,7 @@ const existsInCalendar = (year: number, month: number, day: number): boolean => 
  * `2026-13-01` ou `2026-02-29`.
  * @example
  * ```ts
- * assert.deepEqual(PlainDate.from('2026-05-26'), ok(PlainDate.fromDate(new Date('2026-05-26T00:00:00Z'))));
+ * assert.deepEqual(PlainDate.from('2026-05-26'), PlainDate.fromDate(new Date('2026-05-26T00:00:00Z')));
  * ```
  */
 export const from = (iso: string): Result<PlainDate, PlainDateError> => {
@@ -73,30 +73,36 @@ export const from = (iso: string): Result<PlainDate, PlainDateError> => {
   return ok(immutable({ year, month, day }) as PlainDate);
 };
 
+/** Motivo de recusa de {@link fromDate}: o `Date` recebido é inválido. */
+export type PlainDateFromDateError = 'plain-date-invalid-date';
+
 /**
  * Extrai a data de calendário UTC de um instante, ignorando o fuso em que ele foi escrito e
  * convertendo o mês de base zero do `Date` para 1 a 12. Não aplica o limite de ano 2000. É o que
  * `ClockFixed.today` e `ClockReal.today` devolvem.
  *
  * @param d - Instante de origem.
- * @returns O `PlainDate` do dia UTC de `d`, congelado; com `Date` inválido, `year`, `month` e
- * `day` são `NaN`.
+ * @returns `ok` com o `PlainDate` do dia UTC de `d`, congelado; `err('plain-date-invalid-date')`
+ * quando `d` é um `Date` inválido.
  */
-export const fromDate = (d: Date): PlainDate =>
-  immutable({
-    year: d.getUTCFullYear(),
-    month: d.getUTCMonth() + 1,
-    day: d.getUTCDate(),
-  }) as PlainDate;
+export const fromDate = (d: Date): Result<PlainDate, PlainDateFromDateError> => {
+  if (Number.isNaN(d.getTime())) return err('plain-date-invalid-date');
+  return ok(
+    immutable({
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
+      day: d.getUTCDate(),
+    }) as PlainDate,
+  );
+};
 
 /**
  * Compara duas datas em ordem cronológica: primeiro o ano, depois o mês, depois o dia. Serve de
- * comparador para `Array.prototype.sort` de datas sem campo `NaN`.
+ * comparador para `Array.prototype.sort`.
  *
  * @param a - Primeira data.
  * @param b - Segunda data.
- * @returns `-1` quando `a` vem antes de `b`; `0` quando são iguais; `1` quando `a` vem depois ou
- * quando algum dos campos comparados é `NaN`, inclusive ao comparar uma data consigo mesma.
+ * @returns `-1` quando `a` vem antes de `b`; `0` quando são iguais; `1` quando `a` vem depois.
  */
 export const compare = (a: PlainDate, b: PlainDate): -1 | 0 | 1 => {
   if (a.year !== b.year) return a.year < b.year ? -1 : 1;
@@ -110,8 +116,8 @@ export const compare = (a: PlainDate, b: PlainDate): -1 | 0 | 1 => {
  *
  * @param a - Data testada.
  * @param b - Data de referência.
- * @returns `true` quando `a` é anterior a `b`; `false` quando são iguais, quando `a` é posterior
- * ou quando algum dos campos comparados é `NaN`.
+ * @returns `true` quando `a` é anterior a `b`; `false` quando são iguais ou quando `a` é
+ * posterior.
  */
 export const isBefore = (a: PlainDate, b: PlainDate): boolean => compare(a, b) < 0;
 
@@ -120,8 +126,7 @@ export const isBefore = (a: PlainDate, b: PlainDate): boolean => compare(a, b) <
  *
  * @param a - Data testada.
  * @param b - Data de referência.
- * @returns `true` quando `a` é posterior a `b` ou quando algum dos campos comparados é `NaN`,
- * inclusive ao comparar uma data consigo mesma; `false` quando são iguais ou `a` é anterior.
+ * @returns `true` quando `a` é posterior a `b`; `false` quando são iguais ou `a` é anterior.
  */
 export const isAfter = (a: PlainDate, b: PlainDate): boolean => compare(a, b) > 0;
 
@@ -131,7 +136,7 @@ export const isAfter = (a: PlainDate, b: PlainDate): boolean => compare(a, b) > 
  * @param a - Primeira data.
  * @param b - Segunda data.
  * @returns `true` quando ano, mês e dia coincidem, mesmo em instâncias distintas; `false` caso
- * contrário e quando algum dos campos é `NaN`, inclusive ao comparar uma data consigo mesma.
+ * contrário.
  */
 export const equals = (a: PlainDate, b: PlainDate): boolean => compare(a, b) === 0;
 
@@ -142,8 +147,7 @@ export const equals = (a: PlainDate, b: PlainDate): boolean => compare(a, b) ===
  *
  * @param d - Data a formatar.
  * @returns A string formatada, como `'2026-01-02'`; `'0999-01-01'` para o ano 999;
- * `'12026-01-01'` para o ano 12026; `'00-1-06-01'` para o ano -1; `'0NaN-NaN-NaN'` para campos
- * `NaN`.
+ * `'12026-01-01'` para o ano 12026; `'00-1-06-01'` para o ano -1.
  */
 export const toISOString = (d: PlainDate): string =>
   `${String(d.year).padStart(4, '0')}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;

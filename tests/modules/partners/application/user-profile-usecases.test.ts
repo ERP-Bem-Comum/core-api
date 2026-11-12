@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import { makeInMemoryUserProfileStore } from '#src/modules/partners/adapters/persistence/repos/user-profile-repository.in-memory.ts';
 import type { UserProfileRepository } from '#src/modules/partners/domain/user-profile/repository.ts';
@@ -14,7 +14,7 @@ import { getUserProfile } from '#src/modules/partners/application/use-cases/get-
 import { findUserProfileByCpf } from '#src/modules/partners/application/use-cases/find-user-profile-by-cpf.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 
 const REF_A = '7f3a1234-5678-4abc-9def-fedcba987654';
 const REF_B = '00000000-0000-4000-8000-000000000000';

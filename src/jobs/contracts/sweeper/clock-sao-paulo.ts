@@ -1,6 +1,6 @@
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import type { PlainDate as PlainDateType } from '#src/shared/kernel/plain-date.ts';
+import { utcCalendarDayOf } from '#src/shared/adapters/utc-calendar-day.ts';
 
 /** Formatador cujas partes numéricas `year`, `month` e `day` dão a data no fuso `America/Sao_Paulo`. */
 const SAO_PAULO_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
@@ -33,7 +33,7 @@ const utcMidnightOf = (year: number, month: number, day: number): Date => {
  */
 export const todayInSaoPauloAt = (instant: Date): PlainDateType => {
   const parts = SAO_PAULO_DATE_FORMAT.formatToParts(instant);
-  return PlainDate.fromDate(
+  return utcCalendarDayOf(
     utcMidnightOf(
       numericPart(parts, 'year'),
       numericPart(parts, 'month'),

@@ -159,6 +159,43 @@ describe('mapLegacyAccountRow — accounts → plano de conta-cedente', () => {
   });
 });
 
+describe('mapLegacyPayableRow — instante legado inválido vai para a quarentena antes do ClockFixed', () => {
+  const dateInvalid = (r: ReturnType<typeof mapLegacyPayableRow>) =>
+    r.ok ? [] : r.error.filter((e) => e.tag === 'DateInvalid');
+
+  it('createdAt inválido → só aquela linha quarentena com DateInvalid created_at; a boa migra', () => {
+    const bad = mapLegacyPayableRow(
+      basePayable({ id: 30, createdAt: new Date('invalid') }),
+      refs(),
+    );
+    const good = mapLegacyPayableRow(basePayable({ id: 31 }), refs());
+    assert.deepEqual(dateInvalid(bad), [
+      { tag: 'DateInvalid', field: 'created_at', attempted: 'plain-date-invalid-date' },
+    ]);
+    assert.ok(good.ok, 'a linha boa segue migrando');
+  });
+
+  it('APROVADO cujo instante de aprovação é inválido → DateInvalid approved_at', () => {
+    const bad = mapLegacyPayableRow(
+      basePayable({ id: 32, updatedAt: new Date('invalid') }),
+      refs(),
+    );
+    assert.deepEqual(dateInvalid(bad), [
+      { tag: 'DateInvalid', field: 'approved_at', attempted: 'plain-date-invalid-date' },
+    ]);
+  });
+
+  it('aprovação registrada com instante inválido → DateInvalid approved_at', () => {
+    const bad = mapLegacyPayableRow(
+      basePayable(),
+      refs({ approvedAtByPayableId: new Map([[20, new Date('invalid')]]) }),
+    );
+    assert.deepEqual(dateInvalid(bad), [
+      { tag: 'DateInvalid', field: 'approved_at', attempted: 'plain-date-invalid-date' },
+    ]);
+  });
+});
+
 describe('mapLegacyPayableRow — vocabulário (D7) e refs', () => {
   it('APROVADO com registro de aprovação → kind approved com approvedAt histórico', () => {
     const r = mapLegacyPayableRow(basePayable(), refs());

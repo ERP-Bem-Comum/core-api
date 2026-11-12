@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { makeInMemoryCollaboratorStore } from '#src/modules/partners/adapters/persistence/repos/collaborator-repository.in-memory.ts';
 import type { CollaboratorRepository } from '#src/modules/partners/domain/collaborator/repository.ts';
 import { registerCollaborator } from '#src/modules/partners/application/use-cases/register-collaborator.ts';
@@ -15,7 +15,7 @@ import { findCollaboratorByCpf } from '#src/modules/partners/application/use-cas
 import { makeInMemoryCollaboratorHistory } from '#src/modules/partners/adapters/persistence/repos/collaborator-history-repository.in-memory.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 const history = makeInMemoryCollaboratorHistory();
 
 const CPF_A = '111.444.777-35';

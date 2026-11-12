@@ -12,7 +12,7 @@ import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { InMemoryProgramRepository } from '#src/modules/programs/adapters/persistence/repos/program-repository.in-memory.ts';
 import { createProgram } from '#src/modules/programs/application/use-cases/create-program.ts';
 import { uploadProgramLogo } from '#src/modules/programs/application/use-cases/upload-program-logo.ts';
@@ -21,7 +21,7 @@ import type { LogoStorage } from '#src/modules/programs/application/ports/logo-s
 import type { ProgramRepository } from '#src/modules/programs/domain/program/repository.ts';
 
 const NOW = new Date('2026-06-09T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02]);
 const ABSENT_ID = '00000000-0000-4000-8000-000000000000';
 

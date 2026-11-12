@@ -5,7 +5,8 @@
  * RED por inexistencia de `src/modules/partners/public-api/collaborator-demographics.ts`.
  *
  * Contrato exercitado aqui (o W1 deve implementar exatamente isto):
- *   aggregateTeamDemographics(records, { referenceDate }): TeamDemographicsSummary
+ *   aggregateTeamDemographics(records, { referenceDate }): Result<TeamDemographicsSummary, …>
+ *   - referenceDate inválida → err('team-demographics-invalid-reference-date');
  *   - records: linha crua por colaborador (active, genderIdentity, race, dateOfBirth);
  *   - saida: SO contagem por categoria (`CategoryCount = { id, label, count }`), nunca linha.
  *
@@ -47,8 +48,11 @@ const record = (
 const many = (n: number, over: Partial<CollaboratorDemographicsRecord> = {}) =>
   Array.from({ length: n }, () => record(over));
 
-const aggregate = (records: readonly CollaboratorDemographicsRecord[]): TeamDemographicsSummary =>
-  aggregateTeamDemographics(records, { referenceDate: REFERENCE });
+const aggregate = (records: readonly CollaboratorDemographicsRecord[]): TeamDemographicsSummary => {
+  const r = aggregateTeamDemographics(records, { referenceDate: REFERENCE });
+  assert.ok(r.ok, 'a referencia fixa do teste e valida');
+  return r.value;
+};
 
 const idsOf = (buckets: readonly CategoryCount[]): readonly string[] => buckets.map((b) => b.id);
 
@@ -155,6 +159,19 @@ describe('partners/demographics - N/A vs PREFIRO_NAO_RESPONDER (CA4)', () => {
     assert.equal(countOf(out.race, 'PREFIRO_NAO_RESPONDER'), 5);
     assert.equal(countOf(out.ageRange, NOT_AVAILABLE_ID), 5, 'sem data de nascimento -> N/A');
     assert.equal(countOf(out.ageRange, 'DE_40_A_49'), 5);
+  });
+
+  it('data de nascimento invalida (Date NaN) cai em N/A, nunca em 60+', () => {
+    const out = aggregate(many(3, { dateOfBirth: new Date('invalid') }));
+    assert.equal(countOf(out.ageRange, NOT_AVAILABLE_ID), 3);
+    assert.equal(countOf(out.ageRange, 'MAIS_60'), 0);
+  });
+
+  it('data de referencia invalida (Date NaN) e erro do relatorio, nao N/A em silencio', () => {
+    assert.deepEqual(aggregateTeamDemographics(many(2), { referenceDate: new Date('invalid') }), {
+      ok: false,
+      error: 'team-demographics-invalid-reference-date',
+    });
   });
 });
 
