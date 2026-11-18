@@ -2,7 +2,7 @@
 
 # ADR-0042: Dead-man's switch redundante (S3/R2 ⟂ GitHub Actions, JSONL append-only) para detecção de jobs mortos
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0062](./0062-deadman-switch-decommissioned-supersedes-0042.md) em 2026-08-21 (status refletido aqui em 2026-11-18, quando a [Inquiry-0030](../../inquiries/0030-deadman-switch-nunca-vigiou.md) fechou sem substituto)
 - **Date:** 2026-06-16
 - **Deciders:** Gabriel (tech lead / arquiteto). Origem do desenho: P.O.; revisão de arquitetura: agente assistente.
 - **Origem:** SPIKE [#66](https://github.com/ERP-Bem-Comum/core-api/issues/66) — fecha a única camada de confiabilidade ainda aberta do `contracts-sweeper` (issues [#50](https://github.com/ERP-Bem-Comum/core-api/issues/50)/[#39](https://github.com/ERP-Bem-Comum/core-api/issues/39)): **"o scheduler morre e nunca dispara"**.

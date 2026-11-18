@@ -4,7 +4,7 @@ Automação de **desenvolvimento, CI e operações** do core-api — TypeScript 
 Node 24 (`node arquivo.ts`; o type stripping é default, sem flag) e bash. **Não** é código de
 produção (esse vive em `src/`).
 
-> Programas auxiliares **compilados** (ex.: o dead-man's switch em Go) ficam em
+> Programas auxiliares **compilados** (Go, por exemplo; hoje não há nenhum) ficam em
 > [`../tools/`](../tools/README.md), não aqui. A distinção: `scripts/` = automação **interpretada**
 > do projeto (TS/bash); `tools/` = programas **compilados/deployáveis** (Go).
 

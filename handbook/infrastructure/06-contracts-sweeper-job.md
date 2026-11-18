@@ -131,18 +131,19 @@ idempotente — o próximo disparo bem-sucedido expira todos os contratos penden
 
 ---
 
-## Dead-man's switch — detecção de AUSÊNCIA de execução (pendente — SPIKE #66)
+## Detecção de AUSÊNCIA de execução — sem cobertura
 
 A tabela de exit codes acima cobre apenas **falha de execução** (o job rodou e deu erro). O
 ponto cego é o **scheduler/daemon morrer e nunca disparar**: "sem execução = sem erro = sem
-alerta". A defesa é um **dead-man's switch** — um heartbeat a cada sucesso; se o monitor não
-recebe o ping na janela esperada, **ele alerta**.
+alerta".
 
-**Decisão do P.O.:** a solução será **in-house** (sem SaaS tipo healthchecks.io). O *como*
-está em investigação no **SPIKE [#66](https://github.com/ERP-Bem-Comum/core-api/issues/66)**
-(monitor próprio Node/TS vs. self-host vs. daemon Go/Zig vs. via outbox/Prometheus). O envio
-do ping será um `ExecStartPost` no systemd service (dispara **só** em sucesso, mantendo o job
-puro — ADR-0041); o **alvo** do ping é o que o SPIKE define.
+**Não há defesa para isso hoje, e não há uma planejada.** O dead-man's switch do
+[ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md) (SPIKE #66, épico #67) foi
+construído, nunca recebeu um sinal, saiu do código em 2026-08-17 e foi superado pelo
+[ADR-0062](../architecture/adr/0062-deadman-switch-decommissioned-supersedes-0042.md). Em
+2026-11-18 a [Inquiry-0030](../inquiries/0030-deadman-switch-nunca-vigiou.md) fechou sem
+substituto. Se o ponto cego voltar a importar, o ponto de partida são os cinco requisitos da §5
+daquela inquiry.
 
 ### Camadas de confiabilidade (estado atual)
 
@@ -151,7 +152,7 @@ puro — ADR-0041); o **alvo** do ping é o que o SPIKE define.
 | Job roda e dá erro (exit 1/78) | exit code → alerta imediato | ✅ |
 | Disparo perdido (máquina down no horário) | `Persistent=true` (catch-up no boot) + convergência D+1 do job | ✅ |
 | Job morto no meio (SIGTERM) | rollback da tx → próximo disparo refaz (idempotente — ADR-0041) | ✅ |
-| **Scheduler/daemon morto (nunca dispara)** | **dead-man's switch (in-house)** | ⏳ SPIKE #66 |
+| **Scheduler/daemon morto (nunca dispara)** | **ninguém** (dead-man's switch removido — ADR-0062) | ❌ sem cobertura |
 
 ---
 
