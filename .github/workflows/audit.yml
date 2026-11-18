@@ -65,13 +65,15 @@ jobs:
         if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEADMAN_DISCORD_WEBHOOK: ${{ secrets.DEADMAN_DISCORD_WEBHOOK }}
+          # O secret ainda se chama DEADMAN_* por herança do dead-man's switch (removido, ADR-0062).
+          # Renomear exige recriá-lo nas configurações do repositório; o nome local já é neutro.
+          DISCORD_WEBHOOK: ${{ secrets.DEADMAN_DISCORD_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -uo pipefail
           # Marcador ESTÁVEL no título: é a chave de dedup. `gh issue create` NÃO é idempotente —
-          # cada chamada abre uma issue nova, e foi assim que o #368 gerou 14 issues idênticas
-          # (ver a nota longa em `deadman-audit.yml`). Aqui a defesa é buscar antes de criar.
+          # cada chamada abre uma issue nova, e foi assim que o #368 gerou 14 issues idênticas.
+          # Aqui a defesa é buscar antes de criar.
           MARKER='[audit-prod] advisories high em dependência de produção'
           PKGS=$(grep -oE '^│ (high|critical) +│ [^│]+' /tmp/audit.txt 2>/dev/null \
                  | sed -E 's/.*│ +//' | sort -u | head -20)
@@ -93,10 +95,10 @@ jobs:
               --label "seguranca,needs-triage" || echo "::warning::falha ao abrir a issue"
           fi
 
-          # Discord é BEST-EFFORT, mesma semântica do `deadman-audit.yml`: a issue é o registro
-          # auditável; o webhook é o empurrão. Falha dele não suprime nem retenta a issue.
-          if [ -n "${DEADMAN_DISCORD_WEBHOOK:-}" ]; then
-            curl -fsS -X POST "$DEADMAN_DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
+          # Discord é BEST-EFFORT: a issue é o registro auditável; o webhook é o empurrão. Falha
+          # dele não suprime nem retenta a issue.
+          if [ -n "${DISCORD_WEBHOOK:-}" ]; then
+            curl -fsS -X POST "$DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
               -d "$(jq -nc --arg c "🔴 audit --prod vermelho na main — ${RUN_URL}" '{content:$c}')" \
               >/dev/null || echo "::warning::Discord não notificado (best-effort)"
           fi

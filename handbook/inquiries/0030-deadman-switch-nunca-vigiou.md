@@ -1,15 +1,34 @@
 ---
 inquiry: 0030
 title: "O dead-man's switch que nunca vigiou — o ADR-0042 sai do código sem ser superado"
-state: open
+state: decided
 opened: 2026-08-17
-decided:
-last_reviewed: 2026-08-17
+decided: 2026-11-18
+last_reviewed: 2026-11-18
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
 
 # Inquiry-0030: O dead-man's switch que nunca vigiou — o ADR-0042 sai do código sem ser superado
+
+> ✅ **Decidida em 2026-11-18 pelo tech lead: o dead-man's switch sai de vez, e a busca por um
+> substituto termina aqui.** Não há desenho novo a esperar. O mecanismo já estava fora do código
+> (2026-08-17) e superado pelo [ADR-0062](../architecture/adr/0062-deadman-switch-decommissioned-supersedes-0042.md)
+> (2026-08-21); o que faltava era fechar a pergunta que esta inquiry mantinha aberta.
+>
+> - **O ponto cego continua real** (um job agendado morre e ninguém percebe), mas deixa de ser
+>   pendência deste repositório. Se ele voltar a doer, abre-se inquiry **nova**, a partir dos
+>   cinco requisitos da §5, que seguem válidos como ponto de partida.
+> - **O [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md) passa a `Superseded by
+>   ADR-0062`**, que é o estado que o 0062 já declarava e o índice de ADRs não refletia.
+> - **Saídas da §7:** a substituição não será desenhada; as issues do épico #67 (#70, #71, #72) e
+>   o #368 já estavam fechadas.
+> - **O que sobrou nos documentos vivos** (`06-contracts-sweeper-job.md`,
+>   `07-async-messaging-strategy.md`, `scripts/README.md`, o comentário do `projection-health.ts`
+>   e os nomes do `audit.yml`) foi atualizado junto com esta decisão. Os registros datados listados
+>   na §6 seguem sem reescrita.
+>
+> O texto abaixo é o registro de 2026-08-17, preservado como estava.
 
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** verificação própria — estado do repositório, histórico de runs do Actions e o registro de aferição do ADR
@@ -167,7 +186,7 @@ declarado correto — ADR aceito não se edita.
 
 ## 7. Saídas pendentes
 
-- [ ] Desenhar a substituição atendendo aos cinco requisitos da §5 — **sem dono e sem prazo**; o
-      ponto cego (job que morre em silêncio) fica descoberto até lá.
-- [ ] Decidir o destino das issues abertas do épico #67 que descreviam o mecanismo removido
-      (#70, #71, #72 e o #368 dos 14 falsos positivos).
+- [x] ~~Desenhar a substituição atendendo aos cinco requisitos da §5~~ — **não será desenhada**
+      (decisão de 2026-11-18). Se o ponto cego voltar a importar, nasce inquiry nova.
+- [x] ~~Decidir o destino das issues abertas do épico #67~~ — #67, #70, #71, #72 e #368 já estavam
+      fechadas (verificado em 2026-11-18).

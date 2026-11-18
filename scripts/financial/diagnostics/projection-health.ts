@@ -18,8 +18,9 @@
  * faz é **declarar a ambiguidade em vez de escondê-la**, cruzando a fila com a idade da última
  * escrita na view para dizer o que dá e o que não dá para concluir.
  *
- * A cura definitiva é heartbeat no `runLoop` — o padrão que o [ADR-0042](../../../handbook/architecture/adr/0042-deadman-switch-redundant.md)
- * já definiu para o scheduler do auto-expire e que os workers de projeção nunca adotaram.
+ * A cura definitiva seria heartbeat no `runLoop`. O [ADR-0042](../../../handbook/architecture/adr/0042-deadman-switch-redundant.md)
+ * tentou isso para o scheduler do auto-expire, nunca vigiou nada e foi superado pelo ADR-0062, sem
+ * substituto (Inquiry-0030, fechada em 2026-11-18). Até lá, este diagnóstico é o que existe.
  *
  * ## Escopo
  *

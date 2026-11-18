@@ -34,7 +34,7 @@ Tratar os dois como um só leva à conclusão errada (adotar broker para resolve
 - **Jobs one-shot:** `src/jobs/contracts/sweeper/run.ts` (auto-expire D+1, cron externo — ADR-0041).
 - **Tabelas outbox:** `ctr_outbox`/`par_outbox` (+ `_dead_letter`) + `eventos_processados (consumer_id, event_id)`. `financial` e `programs` têm schema mas **ainda sem worker** → a 014 ia adicionar o 3º worker copiado.
 - **Consumo:** port `EventDelivery`; impls `LoggerEventDelivery`, `TimelineProjectionDelivery` (read-model do contracts — ADR-0022), in-memory.
-- **Go:** vive em `tools/deadman-emitter/` (épico #67, ADR-0042) — ferramenta **externa**, I/O puro, **não toca o domínio** nem o banco do core.
+- **Go:** nenhum programa hoje. O único, `tools/deadman-emitter/` (épico #67, ADR-0042), foi removido em 2026-08-17 junto com o dead-man's switch (ADR-0062; Inquiry-0030 fechada sem substituto em 2026-11-18).
 - **Escala/SLA:** nenhum SLA documentado; single-instance; sem SRE dedicado.
 
 **Pontos de dor objetivos:** (1) duplicação de worker; (2) financial/programs sem worker; (3) cada novo consumer cross-módulo tende a virar mais um worker copiado.
