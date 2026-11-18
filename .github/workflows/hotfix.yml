@@ -1,0 +1,128 @@
+name: hotfix
+
+# Fluxo de hotfix (Gitflow):
+#
+#   main ──► hotfix/xxx ──PR──► dev (HML) ──► validado ──PR (mesma branch)──► main (produção)
+#
+# O hotfix nasce da `main` para que o PR na `main` leve SÓ a correção, e nunca as features que
+# estão na `dev` esperando release. Feature espera a release; hotfix ganha PR próprio na `main`.
+#
+#   1. `origem`: em todo PR de `hotfix/*` (para `dev` ou `main`), falha se a branch carrega commit
+#      que pertence a OUTRO PR. É o sinal de que ela nasceu da `dev`, e o PR na `main` levaria
+#      features junto. Roda já no PR para a `dev`, antes de chegar à HML.
+#   2. `lembrete`: quando o hotfix entra na `dev`, comenta no PR com o link pronto do PR na `main`.
+#      A Action NÃO abre esse PR: o repositório não deixa o `GITHUB_TOKEN` criar PR, e um PR
+#      aberto por ele não dispararia o CI. Quem abre é uma pessoa, depois de validar na HML.
+#
+# `pull_request`, e não `pull_request_target`: só age em branch do próprio repositório (o `if`
+# pula PR de fork). Nenhum texto do PR é interpolado em shell; nome de branch e números vão por
+# env. Actions pinadas por SHA (ADR-0011) e runner pinado (#1105).
+
+on:
+  pull_request:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hotfix-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  origem:
+    name: hotfix (nasceu da main)
+    if: >-
+      startsWith(github.head_ref, 'hotfix/')
+      && github.event.action != 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Confere que a branch só tem commits do próprio hotfix
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Hotfix é pequeno. Mais que isso já indica branch criada da `dev`, sem consultar a API.
+          LIMITE: '20'
+        run: |
+          set -euo pipefail
+          commits=$(git rev-list "origin/main..$HEAD_SHA")
+          total=$(printf '%s\n' "$commits" | grep -c . || true)
+          echo "Commits do hotfix que não estão na main: $total"
+          if [ "$total" -gt "$LIMITE" ]; then
+            echo "::error::$total commits fora da main (limite $LIMITE). A branch provavelmente nasceu da dev. Recrie a partir da main: git switch -c hotfix/<nome> origin/main e traga só a correção (cherry-pick)."
+            exit 1
+          fi
+          intrusos=""
+          for sha in $commits; do
+            # Onde o commit NASCEU: o PR mais antigo que o contém. Não basta "aparece em outro PR":
+            # depois que o hotfix entra na dev, toda feature que atualiza a branch com a dev passa a
+            # conter os commits dele, e isso não o torna intruso. Commit sem PR nenhum foi push
+            # direto na dev, e também não é deste hotfix.
+            outros=$(gh api "repos/$REPO/commits/$sha/pulls?per_page=100" --jq '
+              (sort_by(.created_at) | .[0]) as $origem
+              | if $origem == null then "push direto, sem PR"
+                elif $origem.head.ref != env.HEAD_REF then "nasceu no #\($origem.number) (\($origem.head.ref))"
+                else empty end')
+            if [ -n "$outros" ]; then
+              intrusos="$intrusos
+            $(git log -1 --format='%h %s' "$sha")  ←  $outros"
+            fi
+          done
+          if [ -n "$intrusos" ]; then
+            echo "::error::A branch $HEAD_REF carrega commits de outros PRs. Ela nasceu da dev, e o PR na main levaria essas mudanças para produção."
+            printf 'Commits que não são deste hotfix:%s\n' "$intrusos"
+            echo "Recrie a partir da main: git switch -c hotfix/<nome> origin/main e faça cherry-pick só da correção."
+            exit 1
+          fi
+          echo "OK: a branch só tem commits do próprio hotfix."
+
+  lembrete:
+    name: hotfix (lembrete do PR na main)
+    if: >-
+      github.event.action == 'closed'
+      && github.event.pull_request.merged == true
+      && github.event.pull_request.base.ref == 'dev'
+      && startsWith(github.head_ref, 'hotfix/')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Comenta com o link do PR na main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          existente=$(gh pr list -R "$REPO" --head "$HEAD_REF" --base main --state all \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$existente" ]; then
+            corpo="O PR deste hotfix na \`main\` já existe: #$existente. Merge só depois da validação na HML."
+          else
+            link="https://github.com/$REPO/compare/main...$HEAD_REF?expand=1&template=hotfix.md"
+            corpo=$(printf '%s\n' \
+              "Hotfix na \`dev\`: o deploy vai para a **HML**." \
+              "" \
+              "Depois de validar lá, abra o PR para a \`main\` a partir da **mesma branch**:" \
+              "" \
+              "➡️ [Abrir PR \`$HEAD_REF\` → \`main\`]($link)" \
+              "" \
+              "Preencha a seção *Validação na HML* do template antes de pedir revisão.")
+          fi
+          gh pr comment "$PR_NUMBER" -R "$REPO" --body "$corpo"
