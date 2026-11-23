@@ -193,9 +193,12 @@ describe('CTR-CLEANUP-SQLITE — CA-14..17: CLI/Config', () => {
     assert.doesNotMatch(dbGen, /drizzle\.mysql\.config\.ts/);
   });
 
-  it('CA-17: .npmrc mantém dedupe-peer-dependents, removeu public-hoist-pattern do drizzle-orm', () => {
-    const npmrc = readFileSync(join(PROJECT_ROOT, '.npmrc'), 'utf-8');
-    assert.match(npmrc, /dedupe-peer-dependents\s*=\s*true/);
+  it('CA-17: dedupePeerDependents vive no pnpm-workspace.yaml, e o .npmrc não tem public-hoist-pattern do drizzle-orm', () => {
+    const workspace = readFileSync(join(PROJECT_ROOT, 'pnpm-workspace.yaml'), 'utf-8');
+    assert.match(workspace, /^dedupePeerDependents:\s*true$/m);
+    const npmrc = existsSync(join(PROJECT_ROOT, '.npmrc'))
+      ? readFileSync(join(PROJECT_ROOT, '.npmrc'), 'utf-8')
+      : '';
     assert.doesNotMatch(
       npmrc,
       /public-hoist-pattern\[\]\s*=\s*drizzle-orm/,

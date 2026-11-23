@@ -3,7 +3,6 @@ paths:
   - 'package.json'
   - 'pnpm-workspace.yaml'
   - 'Dockerfile*'
-  - '.npmrc'
   - 'compose*.yaml'
 verify:
   - claim: 'os composes da raiz são três, e a rule carrega em todos'
