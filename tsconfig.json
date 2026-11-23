@@ -1,9 +1,20 @@
 {
   "compilerOptions": {
-    "target": "ES2024",
+    "target": "ES2025",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2024"],
+    // ES2025 inteiro + só as fatias de ESNext que o runtime do `.nvmrc` implementa. `ESNext` em bloco
+    // tiparia o que o Node ainda não tem (ex.: `Math.sumPrecise`, ausente no 26.13) — o typecheck
+    // aprovaria e o processo morreria com TypeError. Cada fatia é cobrada contra o runtime por
+    // tests/cleanup/tsconfig-lib-matches-runtime.test.ts.
+    "lib": [
+      "ES2025",
+      "ESNext.Collection",
+      "ESNext.Disposable",
+      "ESNext.Error",
+      "ESNext.Temporal",
+      "ESNext.TypedArrays"
+    ],
 
     "noEmit": true,
     "allowImportingTsExtensions": true,
