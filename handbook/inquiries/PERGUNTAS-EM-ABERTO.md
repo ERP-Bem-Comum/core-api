@@ -12,7 +12,7 @@
 <!-- BEGIN:generated -->
 
 - **Inquiries cobertas:** 5 de 38 — [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0038](./0038-fim-do-compose-como-modelo-de-execucao.md)
-- **Total de perguntas em aberto:** **18**
+- **Total de perguntas em aberto:** **17**
 
 As demais 33 estão `decided` (25), `deferred` (5, com gatilho declarado) ou `superseded` (3) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -26,7 +26,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | Inquiry | Estado | Aguardando | Bloqueia | # |
 | :--- | :--- | :--- | :--- | ---: |
 | [0026](#inquiry-0026--assíncrono-human-in-the-loop-drizzle-10-e-bruno--ts) | `open` | Gatilho declarado — só (c) é medível hoje | Épico de aprovação por e-mail; major do ORM; possível supersede do ADR-0038 | 4 |
-| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu em 02/09 e revisou em 23/11 (nada se edita em Transmitido; saída futura = "destransmitir"); restam as 4 saídas, que são execução, e o desenho do "destransmitir" com a P.O. | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 6 |
+| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu em 02/09 e revisou em 23/11 (nada se edita em Transmitido; saída futura = "destransmitir"); restam as 4 saídas, que são execução, e o desenho do "destransmitir" com a P.O. | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 5 |
 | [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
 | [0036](#inquiry-0036--onde-a-documentação-deve-viver) | `open` | Dono do repo + o MCP `acdg-skills` de volta ao ar, para inventariar o que já indexa | Nada de código — decide o layout do repositório: 1.442 arquivos (84 % do volume) e 707 citações do harness | 2 |
 | [0038](#inquiry-0038--o-fim-do-composeyaml-como-modelo-de-execução) | `open` | Dono do repo em (a); em (b), olhar o `ERP-INFRA` | Remoção dos serviços do `compose.yaml` — hoje o único caminho local de integração, usado pelos 4 scripts de e2e; e a direção `compose → taskdef` que três artefatos afirmam e o [ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md) nega | 2 |
@@ -77,7 +77,8 @@ campos não-financeiros~~. Texto integral em `0032-…md` §3 e na discussion #9
 
 ✅ **[23/11] A P.O. revisou o caminho de escape:** por enquanto **nada se edita** em documento com título
 Transmitido, nem campo não-financeiro. O status segue Transmitido → Pago, como existe. A saída futura é
-**"destransmitir", nunca "retransmitir"**, num fluxo que a P.O. vai desenhar. Texto em `0032-…md` §3.
+**"destransmitir", nunca "retransmitir"**, num fluxo que a P.O. vai desenhar. **Sem mensagem de recusa:** o
+status e os campos travados bastam (supera a mensagem nomeando título e remessa de 02/09). Texto em `0032-…md` §3.
 O encanamento de erro nomeado no front entrou em 02/09 (web-app#396). A decisão de base de 23/08 — a Fatia B esperar o
 merge do PR #814, para não resolver conflito à mão na região onde a ordem dos locks se decide — **deixa de
 valer nesta branch**, onde o #814 já está integrado.
@@ -100,8 +101,6 @@ valer nesta branch**, onde o #814 já está integrado.
 - [ ] **S4.** `withDeadlockRetry` no `remittance-repository` — rede, não correção. ⚠️ A política atual é
       `maxAttempts: 3` **sem jitter**: duas transações que colidiram no mesmo instante voltam juntas.
 - [ ] **S5.** Desenhar o fluxo **"destransmitir"** (nunca "retransmitir") — **P.O.** (decisão de 23/11).
-- [ ] **S6.** Mensagem de recusa no drawer do Transmitido: trocar o genérico "Somente consulta" por
-      uma que nomeie o título e a remessa (item 2 de 02/09) — redação com a P.O.
 
 ---
 

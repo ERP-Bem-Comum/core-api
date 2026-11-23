@@ -516,8 +516,8 @@ revisão de 23/11:
    título volta do estado Transmitido para um estado editável. Um título destransmitido não volta a
    ser remetido. Até esse desenho existir, não há caminho de correção.
 
-Os itens 1, 2 e 4 de 02/09 continuam valendo: a recusa acontece antes do clique, a mensagem nomeia
-o título e a remessa, e o `1451` não chega ao operador.
+Os itens 1 e 4 de 02/09 continuam valendo: a recusa acontece antes do clique (campos travados), e o
+`1451` não chega ao operador. O item 2 (mensagem nomeando título e remessa) foi superado — ver abaixo.
 
 **Conferido no código em 23/11 — o que já se editava em Transmitido: nada.** Os três caminhos de
 `adjust-document.ts` exigem outro status:
@@ -532,9 +532,10 @@ O front espelha isso: fora de Aberto e do Aprovado editável, o drawer abre em s
 (`editLocksFor` / `isApprovedEditable`). Logo, a decisão de 23/11 **não muda comportamento**: só
 deixa de prometer o caminho de escape que o item 3 de 02/09 previa e que nunca foi construído.
 
-**Pendente: a mensagem de recusa.** Hoje o drawer mostra o genérico "Somente consulta · este
-documento não pode ser editado", sem dizer por quê. O item 2 de 02/09 (nomear o título e a remessa)
-continua valendo e ainda não foi feito; a redação está sendo estruturada com a P.O.
+**Sem mensagem de recusa (P.O., 23/11).** Os campos já abrem travados, e o status **Transmitido**
+basta para o usuário saber por quê: a regra foi ensinada no treinamento. Vale também para **Pago** e
+**Conciliado**. Isso **supera o item 2 de 02/09** (mensagem nomeando o título e a remessa), que não
+será construído. O drawer continua com o "Somente consulta" de hoje.
 
 ---
 
@@ -870,8 +871,8 @@ sessão — reportar, nunca alterar.
 - [ ] Desenho do fluxo "destransmitir" (nunca "retransmitir") — **com a P.O.** (§3, 23/11).
 - [x] ~~Confirmar se o `editMetadata` aceita documento com título Transmitido~~ — **conferido em
       23/11: não aceita** (exige `Open`), nem os outros dois caminhos (§3, tabela).
-- [ ] Mensagem de recusa no drawer do Transmitido: trocar o genérico "Somente consulta" por uma
-      que nomeie o título e a remessa (item 2 de 02/09) — redação com a P.O.
+- [x] ~~Mensagem de recusa no drawer do Transmitido~~ — **descartada pela P.O. em 23/11**: o status
+      e os campos travados bastam; vale também para Pago e Conciliado (§3).
 - [ ] Contagem `1213` vs `1205` no ambiente real — fecha a lacuna do laudo de infra.
 - [ ] Abrir `document-repository-concurrency.drizzle-mysql.test.ts` — **lacuna declarada** pelo
       `drizzle-orm-expert`: é onde mudança de padrão de lock quebra em silêncio.
