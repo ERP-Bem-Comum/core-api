@@ -29,6 +29,20 @@ export type ContractPage = Readonly<{
   total: number;
 }>;
 
+/** Contrato elegível que o adapter não conseguiu reidratar: a linha está corrompida no banco. */
+export type UnreadableContract = Readonly<{
+  /** Id da linha, como gravado. */
+  contractId: string;
+  /** Causa legível por máquina: o erro do mapper, com coluna e motivo. */
+  cause: string;
+}>;
+
+/** Lote do `findExpirable`: os elegíveis reidratados e os que foram pulados por corrupção. */
+export type ExpirableBatch = Readonly<{
+  contracts: readonly ActiveContract[];
+  unreadable: readonly UnreadableContract[];
+}>;
+
 // Port do repositório de Contract — posicionado em domain/ pelo Critério H2 (§3.H.2 DO H§34):
 // este port é ditado pelas invariâncias e ciclo-de-vida do agregado Contract.
 
@@ -70,8 +84,11 @@ export type ContractRepository = Readonly<{
   // simples — **sem** `FOR UPDATE`: o lock não persistiria entre `findExpirable` (tx A) e `save`
   // (tx B), então coordenação multi-instância é F-Plus via `GET_LOCK`/`UNIQUE(job_name, run_date)`
   // (ADR-0041). `cutoff` = "hoje" na timezone do negócio (America/Sao_Paulo).
+  // Linha elegível que não reidrata (ex.: data zerada) NÃO derruba o lote: vai para `unreadable`
+  // com id e causa, e os demais seguem — decisão do dono do produto, para um dado corrompido não
+  // travar a expiração de todo o resto.
   findExpirable: (
     cutoff: PlainDate,
     limit: number,
-  ) => Promise<Result<readonly ActiveContract[], ContractRepositoryError>>;
+  ) => Promise<Result<ExpirableBatch, ContractRepositoryError>>;
 }>;

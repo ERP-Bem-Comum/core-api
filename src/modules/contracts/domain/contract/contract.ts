@@ -248,18 +248,17 @@ const expire = (
   contract: ActiveContract,
   at: Date,
 ): Result<{ contract: ExpiredContract; event: ContractEvent }, ContractError.ContractError> => {
-  const atCheck = assertValidEventDate(at);
-  if (!atCheck.ok) return atCheck;
+  const atDate = PlainDate.fromDate(at);
+  if (!atDate.ok) return err(ContractError.contractInvalidEventDate());
 
   if (contract.currentPeriod.kind === 'Indefinite') {
     return err(ContractError.contractCannotExpireIndefinitePeriod());
   }
 
-  const atDate = PlainDate.fromDate(at);
   // D+1 (CTR-AUTO-EXPIRE / issue #39): o último dia da vigência conta INTEIRO — o contrato
   // só expira quando `at` é POSTERIOR ao fim (zero hora do dia seguinte). Rejeita `at <= end`.
-  if (!PlainDate.isAfter(atDate, contract.currentPeriod.end)) {
-    return err(ContractError.contractCannotExpireYet(contract.currentPeriod.end, atDate));
+  if (!PlainDate.isAfter(atDate.value, contract.currentPeriod.end)) {
+    return err(ContractError.contractCannotExpireYet(contract.currentPeriod.end, atDate.value));
   }
 
   // Construção direta de ExpiredContract — sem `updateContract` (que retorna
@@ -382,10 +381,19 @@ const applyHomologatedAdjustment = (
 
   switch (adjustment.kind) {
     case 'ValueIncrease': {
+      const added = Money.add(contract.currentValue, adjustment.amount);
+      if (!added.ok) {
+        return err(
+          ContractError.contractValueWouldExceedSafeInteger(
+            contract.currentValue,
+            adjustment.amount,
+          ),
+        );
+      }
       // Construção direta de ActiveContract — preserva o subtipo refinado.
       const next: ActiveContract = immutable({
         ...contract,
-        currentValue: Money.add(contract.currentValue, adjustment.amount),
+        currentValue: added.value,
         homologatedAmendmentIds: nextIds,
       });
       return ok({ contract: next, event: stateUpdatedEvent(next, at, adjustment.amendmentId) });

@@ -19,6 +19,7 @@ import type { SupplierViewStore } from '#src/modules/financial/application/ports
 import type { FinancialOutbox } from '#src/modules/financial/application/ports/outbox.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { TimelineStore } from './timeline-repository.in-memory.ts';
+import { inDateWindow } from './in-date-window.ts';
 
 // Resolve fornecedor (nome/CNPJ) pelo read-model local — espelha o LEFT JOIN do adapter Drizzle
 // (#47/US2). Sem store ou supplierRef ausente no read-model → mantém null (consistência eventual).
@@ -45,12 +46,8 @@ const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
   if (f.supplierRefs === undefined && f.supplierRef !== undefined) {
     if (doc.supplier === null || String(doc.supplier) !== f.supplierRef) return false;
   }
-  if (f.dueFrom !== undefined && (doc.dueDate === null || doc.dueDate < f.dueFrom)) return false;
-  if (f.dueTo !== undefined && (doc.dueDate === null || doc.dueDate > f.dueTo)) return false;
-  if (f.issuedFrom !== undefined && (doc.issueDate === null || doc.issueDate < f.issuedFrom))
-    return false;
-  if (f.issuedTo !== undefined && (doc.issueDate === null || doc.issueDate > f.issuedTo))
-    return false;
+  if (!inDateWindow(doc.dueDate, f.dueFrom, f.dueTo)) return false;
+  if (!inDateWindow(doc.issueDate, f.issuedFrom, f.issuedTo)) return false;
   // #167: busca textual — contains case-insensitive. No driver memory o fornecedor só é resolvido
   // (enrichWithSupplierView) na página, após o filtro, então aqui casa apenas por documentNumber;
   // o match por nome/CNPJ é servido pelo adapter Drizzle (validado no x99).

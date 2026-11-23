@@ -1,4 +1,5 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
+import type { Money } from '../../../../shared/kernel/money.ts';
 import type { BudgetId } from '../shared/budget-id.ts';
 import type { BudgetResult } from './budget-result.ts';
 
@@ -6,6 +7,15 @@ import type { BudgetResult } from './budget-result.ts';
 export type BudgetResultRepositoryError =
   | 'budget-result-repo-unavailable'
   | 'budget-result-corrupt';
+
+/**
+ * Erros de {@link BudgetResultRepository.sumByBudgetIds}: os do repositório mais
+ * `'budget-result-sum-exceeds-safe-integer'`, quando a soma de um orçamento passa de
+ * `Number.MAX_SAFE_INTEGER`.
+ */
+export type BudgetResultSumError =
+  | BudgetResultRepositoryError
+  | 'budget-result-sum-exceeds-safe-integer';
 
 export type BudgetResultRepository = Readonly<{
   // Upsert por (budgetId, subcategoryId, month) — #413. Recalcular o mesmo mês ATUALIZA o valor;
@@ -20,17 +30,26 @@ export type BudgetResultRepository = Readonly<{
   listByBudgetId: (
     budgetId: BudgetId,
   ) => Promise<Result<readonly BudgetResult[], BudgetResultRepositoryError>>;
-  // #1092 (F9 da revisão) — os lançamentos de VÁRIOS orçamentos numa consulta só (IN), para a cópia
-  // de plano não fazer uma ida ao banco por rede. Lista vazia → vazio, sem tocar o banco.
+  /**
+   * Lançamentos de vários orçamentos numa consulta só.
+   *
+   * @param budgetIds - Orçamentos a ler.
+   * @returns Os lançamentos dos orçamentos pedidos; lista vazia devolve lista vazia.
+   */
   listByBudgetIds: (
     budgetIds: readonly BudgetId[],
   ) => Promise<Result<readonly BudgetResult[], BudgetResultRepositoryError>>;
-  // #458 — soma value_cents por orçamento, EM LOTE (SUM ... GROUP BY budget_id). É o total derivado
-  // por Rede, e a entrada do total do plano. Uma query para a página inteira da lista (evita N+1).
-  // Orçamento sem lançamento NÃO aparece no mapa; lista vazia → mapa vazio (sem `IN ()` degenerado).
+  /**
+   * Soma os lançamentos de cada orçamento pedido, de todos os meses.
+   *
+   * @param budgetIds - Orçamentos a somar.
+   * @returns Mapa id do orçamento → soma; orçamento sem lançamento não aparece no mapa, e lista
+   *   vazia devolve mapa vazio. `'budget-result-sum-exceeds-safe-integer'` quando a soma de um
+   *   orçamento passa de `Number.MAX_SAFE_INTEGER`.
+   */
   sumByBudgetIds: (
     budgetIds: readonly BudgetId[],
-  ) => Promise<Result<ReadonlyMap<string, number>, BudgetResultRepositoryError>>;
+  ) => Promise<Result<ReadonlyMap<string, Money>, BudgetResultSumError>>;
   // CA4: apagar o orçamento remove seus resultados (delete explícito, D2 — sem FK cascade).
   deleteByBudgetId: (budgetId: BudgetId) => Promise<Result<void, BudgetResultRepositoryError>>;
 }>;

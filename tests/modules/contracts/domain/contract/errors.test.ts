@@ -118,6 +118,18 @@ describe('ContractError variants — tagged records (DO D§22 + D24)', () => {
     assert.equal(e.attemptedDecrease.cents, 10000001);
   });
 
+  it('contractValueWouldExceedSafeInteger cria { tag, currentValue, attemptedIncrease } (D23)', () => {
+    const e = ContractError.contractValueWouldExceedSafeInteger(
+      money(Number.MAX_SAFE_INTEGER),
+      money(1),
+    );
+    assert.deepEqual(e, {
+      tag: 'ContractValueWouldExceedSafeInteger',
+      currentValue: { cents: Number.MAX_SAFE_INTEGER },
+      attemptedIncrease: { cents: 1 },
+    });
+  });
+
   it('contractPeriodExtensionNotAfterCurrentEnd cria { tag, currentEnd, attemptedEnd } (D23)', () => {
     // Arrange
     const currentEnd = pd('2026-12-31');
@@ -253,6 +265,10 @@ describe('ContractError — tag value matches PascalCase do nome do construtor (
       [
         'ContractValueWouldGoNegative',
         () => ContractError.contractValueWouldGoNegative(money(100), money(200)),
+      ],
+      [
+        'ContractValueWouldExceedSafeInteger',
+        () => ContractError.contractValueWouldExceedSafeInteger(money(100), money(200)),
       ],
       [
         'ContractPeriodExtensionNotAfterCurrentEnd',

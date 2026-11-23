@@ -328,6 +328,19 @@ describe('createBudgetPlan — importFromYear (#1092)', () => {
     await assertNoPlanIn2026(deps);
   });
 
+  it('soma de uma rede acima de MAX_SAFE_INTEGER -> budget-result-sum-exceeds-safe-integer, nada gravado', async () => {
+    const deps = makeDeps();
+    const source = await seedApprovedSource(deps);
+    // A rede já tem 1.350 centavos; um lançamento de MAX_SAFE_INTEGER faz a soma da rede estourar.
+    const huge = ipcaResult(source.budgetId, source.subA, 3, Number.MAX_SAFE_INTEGER);
+    assert.ok(isOk(await deps.budgetResultRepo.save(huge)));
+
+    const r = await importInto2026(deps);
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'budget-result-sum-exceeds-safe-integer');
+    await assertNoPlanIn2026(deps);
+  });
+
   it('sem importFromYear continua igual: plano vazio, total 0', async () => {
     const deps = makeDeps();
     await seedApprovedSource(deps);

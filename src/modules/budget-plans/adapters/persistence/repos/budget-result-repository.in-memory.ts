@@ -1,4 +1,5 @@
-import { ok } from '../../../../../shared/primitives/result.ts';
+import { ok, err } from '../../../../../shared/primitives/result.ts';
+import * as Money from '../../../../../shared/kernel/money.ts';
 import type { BudgetId } from '../../../domain/shared/budget-id.ts';
 import type { BudgetResult } from '../../../domain/budget-result/budget-result.ts';
 import type { BudgetResultRepository } from '../../../domain/budget-result/repository.ts';
@@ -43,15 +44,21 @@ export const InMemoryBudgetResultRepository = (): InMemoryBudgetResultRepository
       return ok(store.filter((r) => wanted.has(String(r.budgetId))));
     },
 
-    // #458 — soma por orçamento (paridade do GROUP BY do drizzle). Só entra no mapa quem tem
-    // lançamento; ids sem resultado ficam ausentes (o caller trata como 0). Lista vazia → mapa vazio.
     sumByBudgetIds: async (budgetIds: readonly BudgetId[]) => {
       const wanted = new Set(budgetIds.map((id) => String(id)));
-      const sums = new Map<string, number>();
+      const valuesByBudget = new Map<string, Money.Money[]>();
       for (const r of store) {
         const key = String(r.budgetId);
         if (!wanted.has(key)) continue;
-        sums.set(key, (sums.get(key) ?? 0) + r.value.cents);
+        const values = valuesByBudget.get(key) ?? [];
+        values.push(r.value);
+        valuesByBudget.set(key, values);
+      }
+      const sums = new Map<string, Money.Money>();
+      for (const [key, values] of valuesByBudget) {
+        const total = Money.sum(values);
+        if (!total.ok) return err('budget-result-sum-exceeds-safe-integer');
+        sums.set(key, total.value);
       }
       return ok(sums);
     },

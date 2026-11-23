@@ -207,6 +207,15 @@ describe('partners/public-api — toTeamProjection (REPORTS-TEAM-DEMOGRAPHIC-COL
     assert.equal(p.age, null);
   });
 
+  it('date_of_birth inválido (Date NaN) → age null, nunca NaN', () => {
+    const fromCorruptRow: CollaboratorType = {
+      ...makeComplete(),
+      dateOfBirth: new Date('invalid'),
+    };
+    const p = Projection.toTeamProjection(fromCorruptRow, today('2026-06-01'));
+    assert.equal(p.age, null);
+  });
+
   it('CA2: a data de referência é INJETADA — mudar o "hoje" muda a idade', () => {
     // Arrange
     const collaborator = makeComplete();

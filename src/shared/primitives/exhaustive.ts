@@ -1,42 +1,36 @@
 /**
- * Helpers de exhaustividade ao nível de tipo.
+ * Resolve para `Tuple` quando todo membro da união `U` aparece em `Tuple`, e para `never`
+ * quando falta algum, o que torna inválido o argumento de {@link exhaustiveStringUnion}.
  *
- * Motivação: `[...] as const satisfies readonly U[]` só garante "no extra" — cada
- * literal é atribuível à union `U`. NÃO garante "no missing": se um novo membro for
- * adicionado à union, a tupla pode ficar incompleta SEM erro de compilação. Este
- * helper fecha o gap, exigindo cobertura EXATA da union (no extra AND no missing).
- *
- * Referência canônica: handbook/reference/typescript/Type Manipulation/Conditional Types.md
- *   — "When the type on the left of the `extends` is assignable to the one on the right,
- *     then you'll get the type in the first branch [...]; otherwise [...] the latter."
- *   O guard `[U] extends [Tuple[number]]` testa "todo membro de U está presente na tupla".
- *   O wrap em `[...]` evita distributividade (queremos a union inteira, não membro a membro).
- */
-
-/**
- * `IsExhaustive<Tuple, U>` — resolve para `Tuple` apenas se a tupla cobrir TODOS os
- * membros da union `U`; caso contrário resolve para `never` (que invalida o argumento
- * no `exhaustiveStringUnion`, quebrando o typecheck). Garante "no missing".
+ * @typeParam Tuple - tupla de literais recebida por {@link exhaustiveStringUnion}.
+ * @typeParam U - união de literais string que a tupla precisa cobrir.
  */
 type IsExhaustive<Tuple extends readonly string[], U extends string> = [U] extends [Tuple[number]]
   ? Tuple
   : never;
 
 /**
- * `exhaustiveStringUnion<U>()(tuple)` — identidade em runtime, mas com dupla garantia
- * de compilação sobre a tupla literal passada:
+ * Fábrica curried que verifica em compilação se uma tupla de literais cobre exatamente os
+ * membros da união `U` e a devolve sem alteração em runtime.
  *
- *   - **no extra**: a constraint `Tuple extends readonly [U, ...U[]]` rejeita qualquer
- *     literal fora de `U`.
- *   - **no missing**: `IsExhaustive<Tuple, U>` rejeita a tupla se faltar algum membro de `U`.
+ * Recusa em compilação, com ou sem `as const` no argumento, a tupla de literais à qual
+ * falta um membro da união, a tupla de literais com literal fora da união e a tupla vazia.
+ * Aceita os membros em qualquer ordem e aceita membro repetido desde que todos os membros
+ * estejam presentes. Aceita a tupla anotada com a própria união, como `[U]` ou
+ * `readonly [U, ...U[]]`, ainda que em runtime ela não contenha todos os membros.
  *
- * O retorno preserva os literais (`Tuple`), tornando-o utilizável diretamente como
- * input de `z.enum([...tupla])` (que exige `readonly [string, ...string[]]`).
+ * @typeParam U - união de literais string a cobrir; com `U = string`, toda tupla de
+ *   literais é recusada.
+ * @returns Função que recebe a tupla e devolve a mesma referência, com conteúdo e ordem
+ *   intactos, tipada como a tupla de literais na ordem passada: `readonly` com `as const`,
+ *   mutável sem ele.
  *
  * @example
- *   type Color = 'red' | 'green' | 'blue';
- *   const COLORS = exhaustiveStringUnion<Color>()(['red', 'green', 'blue'] as const);
- *   //                                              ^ remover 'blue' => erro de compilação
+ * ```ts
+ * type Color = 'red' | 'green' | 'blue';
+ * const COLORS = exhaustiveStringUnion<Color>()(['red', 'green', 'blue'] as const);
+ * const ColorSchema = z.enum(COLORS);
+ * ```
  */
 export const exhaustiveStringUnion =
   <U extends string>() =>

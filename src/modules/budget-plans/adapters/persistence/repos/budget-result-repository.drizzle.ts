@@ -9,7 +9,12 @@ import type {
 } from '#src/modules/budget-plans/domain/budget-result/repository.ts';
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
-import { budgetResultToInsert, budgetResultFromRow } from '../mappers/budget-result.mapper.ts';
+import type { Money } from '#src/shared/kernel/money.ts';
+import {
+  budgetResultToInsert,
+  budgetResultFromRow,
+  budgetSumsFromRows,
+} from '../mappers/budget-result.mapper.ts';
 import { describeDbError } from './plan-writes-in-tx.drizzle.ts';
 
 const safe = async <T>(
@@ -24,6 +29,13 @@ const safe = async <T>(
   }
 };
 
+/**
+ * Repositório de lançamentos sobre o `db` do handle. Com lista de ids vazia, `sumByBudgetIds` e
+ * `listByBudgetIds` devolvem vazio sem consultar o banco.
+ *
+ * @param handle - Conexão MySQL do módulo.
+ * @see tests/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.test.ts
+ */
 export const createDrizzleBudgetResultRepository = (
   handle: BudgetPlansMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
 ): BudgetResultRepository => {
@@ -133,17 +145,12 @@ export const createDrizzleBudgetResultRepository = (
           .where(eq(schema.budgetResults.budgetId, budgetId as unknown as string));
       }),
 
-    // #458 — SUM(value_cents) GROUP BY budget_id, para a página inteira numa query (evita N+1).
-    // Lista vazia → mapa vazio SEM tocar o banco: `inArray(col, [])` viraria `WHERE false` e ainda
-    // custaria um round-trip; pior, alguns dialetos tratam `IN ()` como erro de sintaxe.
     sumByBudgetIds: async (budgetIds: readonly BudgetId[]) => {
-      if (budgetIds.length === 0) return ok(new Map<string, number>());
-      return safe('sumByBudgetIds', async () => {
-        const rows = await db
+      if (budgetIds.length === 0) return ok(new Map<string, Money>());
+      const rows = await safe('sumByBudgetIds', async () =>
+        db
           .select({
             budgetId: schema.budgetResults.budgetId,
-            // `sql<string>`: mysql2 devolve SUM (agregado sobre BIGINT) como string — a anotação é
-            // honesta com o runtime, e o Number() abaixo reconstrói o cents sem cast redundante.
             sumCents: sql<string>`sum(${schema.budgetResults.valueCents})`,
           })
           .from(schema.budgetResults)
@@ -153,14 +160,10 @@ export const createDrizzleBudgetResultRepository = (
               budgetIds.map((id) => id as unknown as string),
             ),
           )
-          .groupBy(schema.budgetResults.budgetId);
-
-        const sums = new Map<string, number>();
-        for (const row of rows) {
-          sums.set(row.budgetId, Number(row.sumCents));
-        }
-        return sums;
-      });
+          .groupBy(schema.budgetResults.budgetId),
+      );
+      if (!rows.ok) return rows;
+      return budgetSumsFromRows(rows.value);
     },
   };
 };

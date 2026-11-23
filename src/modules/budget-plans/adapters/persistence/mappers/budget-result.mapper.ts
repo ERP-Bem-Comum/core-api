@@ -24,6 +24,36 @@ export const budgetResultToInsert = (result: BudgetResult): NewBudgetResultRow =
   valueCents: result.value.cents,
 });
 
+/**
+ * Converte as linhas de `SUM(value_cents) ... GROUP BY budget_id`, que o mysql2 entrega como string,
+ * no mapa id do orçamento → soma.
+ *
+ * @param rows - Uma linha por orçamento, com a soma em texto decimal.
+ * @returns O mapa, com uma entrada por linha; `'budget-result-sum-exceeds-safe-integer'` quando uma
+ *   soma passa de `Number.MAX_SAFE_INTEGER`; `'budget-result-corrupt'` quando uma soma é negativa ou
+ *   não é inteira.
+ */
+export const budgetSumsFromRows = (
+  rows: readonly Readonly<{ budgetId: string; sumCents: string }>[],
+): Result<
+  ReadonlyMap<string, Money.Money>,
+  'budget-result-sum-exceeds-safe-integer' | BudgetResultMapperError
+> => {
+  const sums = new Map<string, Money.Money>();
+  for (const row of rows) {
+    const sum = Money.fromCents(Number(row.sumCents));
+    if (!sum.ok) {
+      return err(
+        sum.error === 'money-exceeds-safe-integer'
+          ? 'budget-result-sum-exceeds-safe-integer'
+          : 'budget-result-corrupt',
+      );
+    }
+    sums.set(row.budgetId, sum.value);
+  }
+  return ok(sums);
+};
+
 export const budgetResultFromRow = (
   row: Readonly<BudgetResultRow>,
 ): Result<BudgetResult, BudgetResultMapperError> => {

@@ -325,3 +325,50 @@ describe('FIN-LISTAGEM-TIMELINE — GET /api/v2/financial/documents (listagem re
     );
   });
 });
+
+describe('FIN-LISTAGEM-TIMELINE — janela de datas em GET /documents (vencimento e emissão)', () => {
+  const SUP = newUuidLike('da');
+
+  before(async () => {
+    const seeds: readonly Record<string, unknown>[] = [
+      { documentNumber: 'WIN-EARLY', dueDate: '2026-03-10', issueDate: '2026-03-01' },
+      { documentNumber: 'WIN-LATE', dueDate: '2026-05-20', issueDate: '2026-05-01' },
+      { documentNumber: 'WIN-NONE', dueDate: '2026-07-01' },
+    ];
+    for (const seed of seeds) {
+      const res = await post(nfseBody({ supplierRef: SUP, ...seed }));
+      assert.equal(res.statusCode, 201, res.body);
+    }
+  });
+
+  const numbersFor = async (query: string): Promise<string[]> => {
+    const res = await list(`?supplierRef=${SUP}&pageSize=100${query}`);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { documentNumber: string | null }[] };
+    return body.items.map((i) => i.documentNumber ?? '').sort();
+  };
+
+  it('cada extremo de vencimento vale sozinho e é inclusivo', async () => {
+    assert.deepEqual(await numbersFor(''), ['WIN-EARLY', 'WIN-LATE', 'WIN-NONE']);
+    assert.deepEqual(await numbersFor('&dueFrom=2026-05-20'), ['WIN-LATE', 'WIN-NONE']);
+    assert.deepEqual(await numbersFor('&dueTo=2026-03-10'), ['WIN-EARLY']);
+    assert.deepEqual(await numbersFor('&dueFrom=2026-03-10&dueTo=2026-05-20'), [
+      'WIN-EARLY',
+      'WIN-LATE',
+    ]);
+  });
+
+  it('extremo de emissão sozinho exclui documento sem emissão', async () => {
+    assert.deepEqual(await numbersFor('&issuedFrom=2026-05-01'), ['WIN-LATE']);
+    assert.deepEqual(await numbersFor('&issuedTo=2026-03-01'), ['WIN-EARLY']);
+    assert.deepEqual(await numbersFor('&issuedFrom=2026-03-01&issuedTo=2026-05-01'), [
+      'WIN-EARLY',
+      'WIN-LATE',
+    ]);
+  });
+
+  it('data de vencimento ou emissão em formato inválido → 400', async () => {
+    assert.equal((await list('?dueFrom=2026-02-30x')).statusCode, 400);
+    assert.equal((await list('?issuedTo=ontem')).statusCode, 400);
+  });
+});

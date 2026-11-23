@@ -45,7 +45,7 @@ const logRepo = (scope: string, cause: unknown): void => {
 const reconstruct = (row: Readonly<ActRow>): Result<Act, ActRepositoryError> => {
   const mapped = actFromRow(row);
   if (mapped.ok) return mapped;
-  logRepo('mapper', mapped.error satisfies ActMapperError);
+  logRepo('mapper', JSON.stringify(mapped.error satisfies ActMapperError));
   return err('act-repo-unavailable');
 };
 

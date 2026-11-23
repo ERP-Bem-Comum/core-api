@@ -425,6 +425,55 @@ describe('homologateAmendment — domain rule propagation', () => {
 // Side-effect isolation on error
 // ============================================================================
 
+describe('homologateAmendment — Addition acima do limite monetário seguro', () => {
+  it('propaga ContractValueWouldExceedSafeInteger e não grava aditivo, contrato nem evento', async () => {
+    const world = await setupWorld({
+      contractValueCents: Number.MAX_SAFE_INTEGER,
+      amendmentImpactCents: 1,
+    });
+    const useCase = homologateAmendment(deps(world));
+    const r = await useCase({
+      amendmentId: world.amendment.id as unknown as string,
+      contractId: world.contract.id as unknown as string,
+      homologatedBy: VALID_USER_UUID,
+    });
+    assert.deepEqual(r, {
+      ok: false,
+      error: {
+        tag: 'ContractValueWouldExceedSafeInteger',
+        currentValue: { cents: Number.MAX_SAFE_INTEGER },
+        attemptedIncrease: { cents: 1 },
+      },
+    });
+    assert.equal(world.outbox.all().length, 0);
+    const storedContract = await world.contractRepo.repo.findById(world.contract.id);
+    assert.equal(storedContract.ok, true);
+    const stored = storedContract.ok ? storedContract.value : null;
+    assert.equal(stored?.status, 'Active');
+    assert.equal(
+      stored?.status === 'Active' ? stored.currentValue.cents : null,
+      Number.MAX_SAFE_INTEGER,
+    );
+    const storedAmendment = await world.amendmentRepo.repo.findById(world.amendment.id);
+    assert.equal(storedAmendment.ok && storedAmendment.value?.status, 'Pending');
+  });
+
+  it('vizinha válida: MAX_SAFE − 1 + 1 homologa com valor vigente MAX_SAFE', async () => {
+    const world = await setupWorld({
+      contractValueCents: Number.MAX_SAFE_INTEGER - 1,
+      amendmentImpactCents: 1,
+    });
+    const r = await homologateAmendment(deps(world))({
+      amendmentId: world.amendment.id as unknown as string,
+      contractId: world.contract.id as unknown as string,
+      homologatedBy: VALID_USER_UUID,
+    });
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.equal(r.value.contract.currentValue.cents, Number.MAX_SAFE_INTEGER);
+  });
+});
+
 describe('homologateAmendment — side effects on error', () => {
   it('does not append events to outbox when domain rule rejects', async () => {
     const world = await setupWorld({ contractIsExpired: true });

@@ -13,8 +13,9 @@
  * `dateOfBirth`: geração é conta de CALENDÁRIO, não de instante — extrair o ano no fuso local
  * jogaria um nascido em 31/12 para o ano seguinte (ou anterior) conforme a máquina.
  *
- * Recortes (Pew): Boomer 1946–1964, X 1965–1980, Millennial 1981–1996, Z 1997–2012. Sem data →
- * `NA`. Fora dos recortes (≤1945 ou ≥2013) → `OUTROS` (balde residual, nunca estica Boomer nem Z).
+ * Recortes (Pew): Boomer 1946–1964, X 1965–1980, Millennial 1981–1996, Z 1997–2012. Sem data, ou
+ * `Date` inválido → `NA`. Fora dos recortes (≤1945 ou ≥2013) → `OUTROS` (balde residual, nunca
+ * estica Boomer nem Z).
  * `NA`/`OUTROS` reusam os ids canônicos de `collaborator-demographics.ts` — fonte única.
  */
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
@@ -44,7 +45,9 @@ export const GENERATION_CATEGORIES: readonly CategoryCount[] = [
  */
 export const generationIdOf = (birth: Date | null): string => {
   if (birth === null) return NOT_AVAILABLE_ID;
-  const year = PlainDate.fromDate(birth).year;
+  const birthDate = PlainDate.fromDate(birth);
+  if (!birthDate.ok) return NOT_AVAILABLE_ID;
+  const { year } = birthDate.value;
   if (year >= 1946 && year <= 1964) return 'BOOMER';
   if (year >= 1965 && year <= 1980) return 'GEN_X';
   if (year >= 1981 && year <= 1996) return 'MILLENNIAL';

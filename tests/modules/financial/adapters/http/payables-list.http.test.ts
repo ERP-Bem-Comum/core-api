@@ -158,3 +158,101 @@ describe('financial/http — GET /financial/payables (#222)', () => {
     assert.equal(parent['dueDate'], '2026-12-31'); // date-only, não ISO datetime
   });
 });
+
+// Filtro pela data de EMISSÃO (`issuedFrom`/`issuedTo`). Fornecedor próprio isola a massa dos casos
+// acima (mesmo app/driver memory). Massa:
+//   ISS-EARLY — emitido 2026-03-10, vence 2026-07-01, ISS → 2 títulos (pai + filho)
+//   ISS-LATE  — emitido 2026-05-20, vence 2026-08-01, sem retenção → 1 título
+//   ISS-NONE  — sem emissão, vence 2026-07-01, sem retenção → 1 título
+const SUP_ISSUED = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+describe('financial/http — GET /payable-titles — filtro por emissão (issuedFrom/issuedTo)', () => {
+  before(async () => {
+    const post = async (overrides: Record<string, unknown>) => {
+      const res = await handle.app.inject({
+        method: 'POST',
+        url: '/api/v2/financial/documents',
+        headers: { authorization: `Bearer ${TOKEN}` },
+        payload: { ...openNfseBody(), supplierRef: SUP_ISSUED, ...overrides },
+      });
+      assert.equal(res.statusCode, 201, res.body);
+    };
+    await post({ documentNumber: 'ISS-EARLY', issueDate: '2026-03-10', dueDate: '2026-07-01' });
+    await post({
+      documentNumber: 'ISS-LATE',
+      issueDate: '2026-05-20',
+      dueDate: '2026-08-01',
+      retentions: [],
+    });
+    await post({ documentNumber: 'ISS-NONE', dueDate: '2026-07-01', retentions: [] });
+  });
+
+  const list = async (query: string) => {
+    const res = await handle.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/payable-titles?supplierRef=${SUP_ISSUED}${query}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    return res;
+  };
+  const docs = (body: { items: readonly PayableRow[] }): string[] =>
+    [...new Set(body.items.map((i) => i.documentNumber ?? '∅'))].sort();
+
+  it('sem filtro de emissão: o documento sem issueDate continua na lista', async () => {
+    const res = await list('');
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: readonly PayableRow[]; total: number };
+    assert.equal(body.total, 4);
+    assert.deepEqual(docs(body), ['ISS-EARLY', 'ISS-LATE', 'ISS-NONE']);
+  });
+
+  it('só issuedFrom → issue_date >= issuedFrom', async () => {
+    const res = await list('&issuedFrom=2026-04-01');
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: readonly PayableRow[]; total: number };
+    assert.equal(body.total, 1);
+    assert.deepEqual(docs(body), ['ISS-LATE']);
+  });
+
+  it('só issuedTo → issue_date <= issuedTo; o filho ISS herda a emissão do documento', async () => {
+    const res = await list('&issuedTo=2026-04-01');
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: readonly PayableRow[]; total: number };
+    assert.equal(body.total, 2);
+    assert.deepEqual(docs(body), ['ISS-EARLY']);
+    assert.ok(body.items.some((i) => i.kind === 'Child' && i.retentionType === 'ISS'));
+  });
+
+  it('ambos → intervalo inclusivo nos dois extremos; sem emissão fica de fora', async () => {
+    const res = await list('&issuedFrom=2026-03-10&issuedTo=2026-05-20');
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: readonly PayableRow[]; total: number };
+    assert.equal(body.total, 3);
+    assert.deepEqual(docs(body), ['ISS-EARLY', 'ISS-LATE']);
+  });
+
+  it('issuedFrom posterior a issuedTo → 200 com lista vazia (borda não valida a ordem, como dueFrom/dueTo)', async () => {
+    const res = await list('&issuedFrom=2026-06-01&issuedTo=2026-01-01');
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { total: number };
+    assert.equal(body.total, 0);
+  });
+
+  it('issuedFrom em formato inválido → 400 (mesmo contrato de data de dueFrom)', async () => {
+    const res = await list('&issuedFrom=2026-13-45');
+    assert.equal(res.statusCode, 400, res.body);
+    const resTo = await list('&issuedTo=ontem');
+    assert.equal(resTo.statusCode, 400, resTo.body);
+  });
+
+  it('combina em AND com dueFrom/dueTo e status', async () => {
+    // ISS-LATE passa na emissão mas vence fora; ISS-EARLY vence dentro mas foi emitido antes.
+    const res = await list('&issuedFrom=2026-04-01&dueFrom=2026-06-01&dueTo=2026-07-15');
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal((res.json() as { total: number }).total, 0);
+
+    const paid = await list('&issuedTo=2026-04-01&status=Paid');
+    assert.equal(paid.statusCode, 200, paid.body);
+    assert.equal((paid.json() as { total: number }).total, 0);
+  });
+});

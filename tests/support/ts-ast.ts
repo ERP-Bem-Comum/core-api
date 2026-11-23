@@ -12,13 +12,13 @@
  * trabalho sobre a AST acontece DENTRO do callback: o nó não é garantido depois do `close()`.
  */
 
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { getTokenPosOfNode } from 'typescript/unstable/ast';
 import type { Node, SourceFile } from 'typescript/unstable/ast';
 import { API } from 'typescript/unstable/sync';
 
-export { SyntaxKind } from 'typescript/unstable/ast';
+export { SyntaxKind, createScanner, getTokenPosOfNode } from 'typescript/unstable/ast';
 export type { Node, SourceFile } from 'typescript/unstable/ast';
 
 /**
@@ -48,6 +48,50 @@ export const withProject = <R>(
       .filter(select)
       .map((name) => project.program.getSourceFile(name))
       .filter((sf): sf is SourceFile => sf !== undefined);
+    return use(files);
+  } finally {
+    api.close();
+  }
+};
+
+const SYNTHETIC_TSCONFIG_NAME = '.ts-ast-synthetic.tsconfig.json';
+
+const SYNTHETIC_COMPILER_OPTIONS = {
+  noResolve: true,
+  noLib: true,
+  noEmit: true,
+  types: [],
+  allowImportingTsExtensions: true,
+} as const;
+
+export const withSourceFiles = <R>(
+  absPaths: readonly string[],
+  use: (files: ReadonlyMap<string, SourceFile>) => R,
+): R => {
+  if (absPaths.length === 0) return use(new Map());
+  const cwd = dirname(absPaths[0] ?? '.');
+  const tsconfigPath = join(cwd, SYNTHETIC_TSCONFIG_NAME);
+  const tsconfigText = JSON.stringify({
+    compilerOptions: SYNTHETIC_COMPILER_OPTIONS,
+    files: absPaths,
+  });
+  const api = new API({
+    cwd,
+    fs: {
+      readFile: (name) => (name === tsconfigPath ? tsconfigText : undefined),
+      fileExists: (name) => (name === tsconfigPath ? true : undefined),
+    },
+  });
+  try {
+    const project = api.updateSnapshot({ openProjects: [tsconfigPath] }).getProjects()[0];
+    if (project === undefined) {
+      throw new Error(`a API do TypeScript não abriu o projeto sintético ${tsconfigPath}`);
+    }
+    const files = new Map<string, SourceFile>();
+    for (const absPath of absPaths) {
+      const sf = project.program.getSourceFile(absPath);
+      if (sf !== undefined) files.set(absPath, sf);
+    }
     return use(files);
   } finally {
     api.close();

@@ -16,6 +16,12 @@ export type SendResultOptions<E extends string> = Readonly<{
   ok?: number;
   /** Mapa de error-code → status HTTP para os casos err. */
   errors?: Readonly<Partial<Record<E, number>>>;
+  /**
+   * Mensagem pública do erro para o status da resposta. Ausente, o 4xx leva o próprio código como
+   * mensagem e o 5xx leva `'An internal error occurred'`; presente, ela dá a mensagem dos dois. O
+   * campo `code` do envelope não depende dela.
+   */
+  publicMessage?: (code: E, status: number) => string;
 }>;
 
 export const sendResult = <T, E extends string>(
@@ -37,14 +43,14 @@ export const sendResult = <T, E extends string>(
   // 4xx mantem o code (erro do cliente, informativo e seguro). Alinha com o handler central (errors.ts).
   if (status >= 500) {
     reply.request.log.error({ errorCode, status, requestId }, 'sendResult-server-error');
+    const message = opts.publicMessage?.(errorCode, status) ?? 'An internal error occurred';
     return reply
       .code(status)
-      .send(
-        toErrorEnvelope('internal', 'An internal error occurred', requestId),
-      ) as unknown as Promise<void>;
+      .send(toErrorEnvelope('internal', message, requestId)) as unknown as Promise<void>;
   }
 
+  const message = opts.publicMessage?.(errorCode, status) ?? errorCode;
   return reply
     .code(status)
-    .send(toErrorEnvelope(errorCode, errorCode, requestId)) as unknown as Promise<void>;
+    .send(toErrorEnvelope(errorCode, message, requestId)) as unknown as Promise<void>;
 };

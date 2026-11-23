@@ -25,7 +25,11 @@ export type TeamDemographics = Readonly<{
   race: readonly CategoryCount[];
 }>;
 
-export type TeamDemographicsReadError = 'team-demographics-read-unavailable';
+// `invalid-reference-date`: o relógio entregou uma data de referência inválida. Não é banco fora
+// do ar, é defeito do servidor — por isso tem nome próprio e não cai no 503 de indisponibilidade.
+export type TeamDemographicsReadError =
+  | 'team-demographics-read-unavailable'
+  | 'team-demographics-invalid-reference-date';
 
 export type TeamDemographicsReadPort = Readonly<{
   list: () => Promise<Result<TeamDemographics, TeamDemographicsReadError>>;

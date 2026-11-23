@@ -2,7 +2,7 @@
 // INNER JOIN fin_documents` (cada título é uma linha; filhos de retenção viram linhas próprias).
 // Boundary: try/catch → Result (.claude/rules/adapters.md).
 
-import { and, between, desc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -20,6 +20,7 @@ import type { DocumentStatus } from '#src/modules/financial/domain/document/type
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finDocuments, finPayables } from '../schemas/mysql.ts';
 import { rowToPayableListItem } from '../mappers/payable-list.mapper.ts';
+import { dateWindowPredicates } from './date-window-predicates.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-payable-list-view] ${op} failed: ${String(cause)}\n`);
@@ -37,8 +38,10 @@ export const createDrizzlePayableListView = (
     if (filter.documentType !== undefined) conds.push(eq(finDocuments.type, filter.documentType));
     if (filter.supplierRef !== undefined)
       conds.push(eq(finDocuments.supplierRef, filter.supplierRef));
-    if (filter.dueFrom !== undefined && filter.dueTo !== undefined)
-      conds.push(between(finPayables.dueDate, filter.dueFrom, filter.dueTo));
+    conds.push(
+      ...dateWindowPredicates(finPayables.dueDate, filter.dueFrom, filter.dueTo),
+      ...dateWindowPredicates(finDocuments.issueDate, filter.issuedFrom, filter.issuedTo),
+    );
     return conds.length > 0 ? and(...conds) : undefined;
   };
 

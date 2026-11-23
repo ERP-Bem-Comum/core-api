@@ -19,7 +19,7 @@
 # stage `deps` não precisa de toolchain C++.
 #
 # Camadas:
-#   1. base    — pin do node:24.21-bookworm-slim por digest (ADR-0011 supply chain)
+#   1. base    — pin do node:24.22-bookworm-slim por digest (ADR-0011 supply chain)
 #   2. deps    — instala dependências (sem toolchain C++)
 #   3. runtime — imagem final mínima, non-root, signal-safe
 #
@@ -44,15 +44,16 @@
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 1 — base
 # Pin: digest do índice multi-arch (amd64 + arm64), Debian 12 Bookworm Slim.
-# Para atualizar: `docker buildx imagetools inspect node:24.21-bookworm-slim --format '{{.Manifest.Digest}}'`
-# Digest atual (2026-10-06): sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20
+# Para atualizar: `docker buildx imagetools inspect node:24.22-bookworm-slim --format '{{.Manifest.Digest}}'`
+# Digest atual (2026-11-12, Node 24.22.3 — remove a confiança nas CAs eMudhra comprometidas, SGM #110338):
+# sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
 #
 # A major.minor desta tag é cobrada contra o `.nvmrc` por
 # `tests/cleanup/node-version-single-source.test.ts` — subir aqui sem subir lá (ou vice-versa) fica
 # vermelho no gate. O digest em si o teste NÃO cobra: a tag é reconstruída upstream a cada patch
 # de Debian, e digest errado já falha o build com `manifest unknown`.
 # ────────────────────────────────────────────────────────────────────────────
-FROM node:24.21-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS base
+FROM node:24.22-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS base
 
 # tini é o init mínimo (PID 1) para reaping de zumbis e forward de SIGTERM/SIGINT.
 # Disponível via apt em Debian — equivalente ao `apk add tini` do Alpine anterior.
@@ -103,7 +104,7 @@ LABEL org.opencontainers.image.title="core-api" \
       org.opencontainers.image.vendor="Envolve / Bem Comum" \
       org.opencontainers.image.source="https://github.com/envolve/bem-comum-core-api" \
       org.opencontainers.image.licenses="proprietary" \
-      org.opencontainers.image.base.name="docker.io/library/node:24.21-bookworm-slim"
+      org.opencontainers.image.base.name="docker.io/library/node:24.22-bookworm-slim"
 
 # Variáveis de runtime.
 # - NODE_ENV=production: stripping de warnings, otimizações.

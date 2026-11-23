@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { isOk } from '#src/shared/index.ts';
 import { InMemoryBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.in-memory.ts';
 import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
@@ -18,7 +18,7 @@ import { createBudgetPlan } from '#src/modules/budget-plans/application/use-case
 
 export const NOW = new Date('2026-07-02T12:00:00.000Z');
 
-export const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+export const clock: Clock = ClockFixed(NOW);
 
 export const PROGRAM_ETI_REF = '11111111-1111-4111-8111-111111111111';
 export const PROGRAM_PARC_REF = '22222222-2222-4222-8222-222222222222';

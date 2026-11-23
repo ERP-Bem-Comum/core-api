@@ -16,7 +16,13 @@ import * as ContractId from '../../../domain/shared/contract-id.ts';
 import * as ContractorRef from '../../../domain/shared/contractor.ts';
 import type { AmendmentId as AmendmentIdType } from '../../../domain/shared/amendment-id.ts';
 import { moneyFromCents } from './money.mapper.ts';
-import { periodFromColumns, periodToColumns, type PeriodKindRaw } from './period.mapper.ts';
+import {
+  periodFromColumns,
+  periodToColumns,
+  type PeriodKindRaw,
+  type PeriodMapperError,
+} from './period.mapper.ts';
+import type { PlainDateFromDateError } from '../../../../../shared/kernel/plain-date.ts';
 import type { contracts as contractsTable } from '../schemas/mysql.ts';
 
 export type ContractRow = typeof contractsTable.$inferSelect;
@@ -56,6 +62,13 @@ export type ContractMapperInvalidPeriod = Readonly<{
   reason: string;
 }>;
 
+// Coluna de vigência que o banco devolveu como `Date` inválido; `reason` é o erro do kernel.
+export type ContractMapperInvalidDate = Readonly<{
+  tag: 'ContractMapperInvalidDate';
+  column: 'originalPeriodStart' | 'originalPeriodEnd' | 'currentPeriodStart' | 'currentPeriodEnd';
+  reason: PlainDateFromDateError;
+}>;
+
 export type ContractMapperInvalidAmendmentId = Readonly<{
   tag: 'ContractMapperInvalidAmendmentId';
   attemptedValue: string;
@@ -90,6 +103,7 @@ export type ContractMapperError =
   | ContractMapperInvalidClassification
   | ContractMapperInvalidMoney
   | ContractMapperInvalidPeriod
+  | ContractMapperInvalidDate
   | ContractMapperInvalidAmendmentId
   | ContractMapperInvalidEndedAt
   | ContractMapperInvalidPendingShape
@@ -179,10 +193,23 @@ const isStatus = (v: string): v is (typeof KNOWN_STATUSES)[number] =>
 
 const isPeriodKind = (v: string): v is PeriodKindRaw => v === 'Fixed' || v === 'Indefinite';
 
-// Extrai string de reason a partir de PeriodMapperError heterogêneo
-// (PeriodError = string literal | PeriodMapperFixedMissingEnd = { tag: string }).
-const periodErrorReason = (e: unknown): string =>
-  typeof e === 'string' ? e : (e as { tag: string }).tag;
+// Traduz o PeriodMapperError heterogêneo para o erro do contrato: data inválida vira
+// `ContractMapperInvalidDate` com o nome da coluna da row; o resto vira
+// `ContractMapperInvalidPeriod` com o literal (PeriodError) ou a tag (erro tagged) como reason.
+const periodMapperErrorToContract = (
+  field: 'originalPeriod' | 'currentPeriod',
+  e: PeriodMapperError,
+): ContractMapperInvalidPeriod | ContractMapperInvalidDate => {
+  if (typeof e === 'string') return contractMapperInvalidPeriod(field, e);
+  if (e.tag === 'PeriodMapperInvalidDate') {
+    return {
+      tag: 'ContractMapperInvalidDate',
+      column: `${field}${e.column === 'start' ? 'Start' : 'End'}`,
+      reason: e.reason,
+    };
+  }
+  return contractMapperInvalidPeriod(field, e.tag);
+};
 
 export const contractToInsert = (
   c: Contract,
@@ -290,8 +317,7 @@ export const contractFromRow = (
     start: row.originalPeriodStart,
     end: row.originalPeriodEnd,
   });
-  if (!origPeriod.ok)
-    return err(contractMapperInvalidPeriod('originalPeriod', periodErrorReason(origPeriod.error)));
+  if (!origPeriod.ok) return err(periodMapperErrorToContract('originalPeriod', origPeriod.error));
 
   // Contratado — reidrata e valida (rejeita estado inválido vindo do banco).
   const contractorR = ContractorRef.make(row.contractorType, row.contractorId);
@@ -373,8 +399,7 @@ export const contractFromRow = (
     start: row.currentPeriodStart,
     end: row.currentPeriodEnd,
   });
-  if (!currPeriod.ok)
-    return err(contractMapperInvalidPeriod('currentPeriod', periodErrorReason(currPeriod.error)));
+  if (!currPeriod.ok) return err(periodMapperErrorToContract('currentPeriod', currPeriod.error));
 
   const homologatedIds: AmendmentIdType[] = [];
   for (const raw of homologatedAmendmentIdsRaw) {

@@ -66,6 +66,7 @@ import { describeDriverError } from '../../../../../shared/persistence/driver-er
 import { withDeadlockRetry } from '../../../../../shared/persistence/retry-on-deadlock.ts';
 import { sameIdSet, sameRowSet, taxLikeKey, payableKey } from './child-rows-diff.ts';
 import { makeVersionConflict, isVersionConflict } from './version-conflict.ts';
+import { dateWindowPredicates } from './date-window-predicates.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
 
 // Wrapper de segurança: captura qualquer exceção de I/O ou violação de
@@ -574,12 +575,8 @@ export const createDrizzleDocumentRepository = (
           : undefined,
         filter.valorMin !== undefined ? gte(finDocuments.netValue, filter.valorMin) : undefined,
         filter.valorMax !== undefined ? lte(finDocuments.netValue, filter.valorMax) : undefined,
-        filter.dueFrom !== undefined ? gte(finDocuments.dueDate, filter.dueFrom) : undefined,
-        filter.dueTo !== undefined ? lte(finDocuments.dueDate, filter.dueTo) : undefined,
-        filter.issuedFrom !== undefined
-          ? gte(finDocuments.issueDate, filter.issuedFrom)
-          : undefined,
-        filter.issuedTo !== undefined ? lte(finDocuments.issueDate, filter.issuedTo) : undefined,
+        ...dateWindowPredicates(finDocuments.dueDate, filter.dueFrom, filter.dueTo),
+        ...dateWindowPredicates(finDocuments.issueDate, filter.issuedFrom, filter.issuedTo),
         // #167: busca textual (OR entre nº documento + nome/CNPJ do fornecedor). Requer o LEFT JOIN
         // fin_supplier_view também na query de COUNT (adicionado abaixo).
         filter.q !== undefined

@@ -17,10 +17,10 @@ import { makeInMemoryCollaboratorHistory } from '#src/modules/partners/adapters/
 import { completeCollaboratorRegistration } from '#src/modules/partners/application/use-cases/complete-collaborator-registration.ts';
 import type { Collaborator as CollaboratorEntity } from '#src/modules/partners/domain/collaborator/types.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 
 const NOW = new Date('2026-10-23T12:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 const RH_USER = '9b1f0c2e-4a3d-4e5f-8a7b-6c5d4e3f2a1b';
 
 const preRegistered = (): CollaboratorEntity => {

@@ -12,7 +12,7 @@ import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { runOnce, runLoop } from '#src/shared/outbox/index.ts';
 import type {
   OutboxRow,
@@ -25,7 +25,7 @@ import type {
 import { deliveryUnavailable } from '#src/shared/outbox/index.ts';
 
 const NOW = new Date('2026-06-16T21:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 
 const CONFIG: WorkerConfig = { batchSize: 10, maxAttempts: 5, pollIntervalMs: 1, idleSleepMs: 1 };
 

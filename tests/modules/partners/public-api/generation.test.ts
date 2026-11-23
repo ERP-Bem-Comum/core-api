@@ -48,6 +48,10 @@ describe('partners/public-api — generationIdOf (recorte Pew por ano de nascime
     assert.notEqual(g, null, 'o contrato é string; sem data → código NA');
   });
 
+  it('data de nascimento inválida (Date NaN) → NA, como sem data', () => {
+    assert.equal(generationIdOf(new Date('invalid')), 'NA');
+  });
+
   it('o ano é extraído em UTC — 31/12 23:59Z continua no mesmo ano', () => {
     // 1980-12-31T23:59:59Z ainda é 1980 em UTC → GEN_X (não 1981/Millennial).
     assert.equal(generationIdOf(new Date('1980-12-31T23:59:59.000Z')), 'GEN_X');

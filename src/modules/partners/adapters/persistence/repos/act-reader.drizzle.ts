@@ -33,7 +33,7 @@ export const createDrizzleActReader = (
       if (row === undefined) return ok(null);
       const mapped = actFromRow(row);
       if (!mapped.ok) {
-        process.stderr.write(`[partners-act-reader:mapper] ${mapped.error}\n`);
+        process.stderr.write(`[partners-act-reader:mapper] ${JSON.stringify(mapped.error)}\n`);
         return err('act-read-unavailable');
       }
       return ok({
@@ -55,7 +55,9 @@ export const createDrizzleActReader = (
       for (const row of rows) {
         const mapped = actFromRow(row);
         if (!mapped.ok) {
-          process.stderr.write(`[partners-act-reader:list-mapper] ${mapped.error}\n`);
+          process.stderr.write(
+            `[partners-act-reader:list-mapper] ${JSON.stringify(mapped.error)}\n`,
+          );
           return err('act-read-unavailable');
         }
         records.push({

@@ -16,7 +16,7 @@ import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { makeInMemorySupplierStore } from '#src/modules/partners/adapters/persistence/repos/supplier-repository.in-memory.ts';
 import { InMemoryOutbox } from '#src/modules/partners/adapters/outbox/outbox.in-memory.ts';
 import { registerSupplier } from '#src/modules/partners/application/use-cases/register-supplier.ts';
@@ -25,7 +25,7 @@ import { deactivateSupplier } from '#src/modules/partners/application/use-cases/
 import { reactivateSupplier } from '#src/modules/partners/application/use-cases/reactivate-supplier.ts';
 
 const NOW = new Date('2026-06-16T21:00:00.000Z');
-const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const clock: Clock = ClockFixed(NOW);
 
 let outbox: ReturnType<typeof InMemoryOutbox>;
 let store: ReturnType<typeof makeInMemorySupplierStore>;

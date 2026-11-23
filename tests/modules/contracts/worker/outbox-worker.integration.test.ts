@@ -147,8 +147,12 @@ if (integrationEnabled()) {
       try {
         const repo1 = createDrizzleOutboxRepository(handle);
         const repo2 = createDrizzleOutboxRepository(handle2);
-        const delivery1 = InMemoryEventDelivery('worker-1');
-        const delivery2 = InMemoryEventDelivery('worker-2');
+        // Duas RÉPLICAS do mesmo consumidor: a pendência é por consumidor (ADR-0064), então só
+        // com o mesmo consumerId o SKIP LOCKED particiona. Com ids diferentes seriam dois
+        // consumidores de fanout, e o "0 pendentes" dependeria de qual worker ganhou os locks.
+        const consumerId = 'worker-replicas';
+        const delivery1 = InMemoryEventDelivery(consumerId);
+        const delivery2 = InMemoryEventDelivery(consumerId);
         const clock = ClockFixed(FIXED_NOW);
 
         // Inserir 6 eventos na outbox
@@ -180,8 +184,8 @@ if (integrationEnabled()) {
           assert.ok(!ids2.has(id), `evento ${id} não deve ser entregue por ambos workers`);
         }
 
-        // Verificar que não restam pendentes para o consumidor do worker 1 (#800/#824).
-        const pendingAfter = await repo1.findPendingForUpdate('worker-1', 20);
+        // Verificar que não restam pendentes para o consumidor das réplicas (#800/#824).
+        const pendingAfter = await repo1.findPendingForUpdate(consumerId, 20);
         assert.ok(pendingAfter.ok);
         assert.equal(pendingAfter.value.length, 0, 'não deve restar eventos pendentes');
       } finally {

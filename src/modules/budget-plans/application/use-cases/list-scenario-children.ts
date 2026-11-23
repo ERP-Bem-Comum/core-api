@@ -15,9 +15,9 @@ import type {
 } from '../../domain/budget-plan/repository.ts';
 import type {
   BudgetResultRepository,
-  BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
-import { planTotalCents, budgetIdsOf } from '../read-models/plan-total.ts';
+import { planTotal, budgetIdsOf, type PlanTotalError } from '../read-models/plan-total.ts';
 
 export type BudgetPlanChildView = Readonly<{
   id: string;
@@ -36,22 +36,20 @@ export type ListScenarioChildrenError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-not-found'
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError;
+  | BudgetResultSumError
+  | PlanTotalError;
 
 export type ListScenarioChildrenDeps = Readonly<{
   planRepo: BudgetPlanRepository;
   budgetResultRepo: BudgetResultRepository;
 }>;
 
-const toChildView = (
-  plan: BudgetPlanEntity,
-  sums: ReadonlyMap<string, number>,
-): BudgetPlanChildView => ({
+const toChildView = (plan: BudgetPlanEntity, totalInCents: number): BudgetPlanChildView => ({
   id: String(plan.id),
   version: PlanVersion.format(plan.version),
   scenarioName: plan.scenarioName,
   status: plan.status,
-  totalInCents: planTotalCents(plan, sums),
+  totalInCents,
   updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
 });
 
@@ -78,7 +76,11 @@ export const listScenarioChildren =
     const sums = await deps.budgetResultRepo.sumByBudgetIds(budgetIdsOf(children.value));
     if (!sums.ok) return sums;
 
-    return ok({
-      items: [...children.value].sort(byVersionAscending).map((c) => toChildView(c, sums.value)),
-    });
+    const items: BudgetPlanChildView[] = [];
+    for (const child of [...children.value].sort(byVersionAscending)) {
+      const total = planTotal(child, sums.value);
+      if (!total.ok) return total;
+      items.push(toChildView(child, total.value.cents));
+    }
+    return ok({ items });
   };

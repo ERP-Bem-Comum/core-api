@@ -23,10 +23,12 @@ import type {
 import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
+import { publicMessageResolver } from '#src/shared/http/public-message.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ListBudgetPlansInput } from '../../application/use-cases/list-budget-plans.ts';
 import type { BudgetPlansHttpDeps } from './composition.ts';
+import { BUDGET_PLANS_PUBLIC_MESSAGES, type BudgetPlansErrorCode } from './error-messages.ts';
 import {
   createBudgetPlanToDto,
   budgetPlanListItemToDto,
@@ -78,7 +80,7 @@ export type BudgetPlansHttpHooks = Readonly<{
 }>;
 
 // Erro de escrita/leitura -> status. Default 422 (invariante de domínio/formato de ref).
-const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
+const WRITE_ERROR_STATUS: Readonly<Partial<Record<BudgetPlansErrorCode, number>>> = {
   'budget-plan-ref-invalid': 422,
   'budget-plan-id-invalid': 422,
   'budget-plan-invalid-year': 422,
@@ -112,7 +114,10 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'subcategory-not-in-budget-plan': 422,
   'budget-id-invalid': 422,
   'subcategory-id-invalid': 422,
-  'budget-plan-invalid-money': 422,
+  'budget-results-total-exceeds-safe-integer': 422,
+  'budget-result-sum-exceeds-safe-integer': 422,
+  'budget-plan-total-exceeds-safe-integer': 422,
+  'consolidated-total-exceeds-safe-integer': 422,
   'budget-result-repo-unavailable': 503,
   'budget-result-corrupt': 503,
   'subcategory-reader-unavailable': 503,
@@ -144,13 +149,18 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'realized-by-plan-read-unavailable': 503,
 };
 
-const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
+const writeErrorStatus = (code: BudgetPlansErrorCode): number => WRITE_ERROR_STATUS[code] ?? 422;
 
-const sendWriteError = (reply: FastifyReply, code: string): Promise<void> => {
+const publicMessage = publicMessageResolver(BUDGET_PLANS_PUBLIC_MESSAGES);
+
+const sendWriteError = (reply: FastifyReply, code: BudgetPlansErrorCode): Promise<void> => {
   const requestId = currentCorrelationId() ?? reply.request.id;
+  const status = writeErrorStatus(code);
   return reply
-    .code(writeErrorStatus(code))
-    .send(toErrorEnvelope(code, code, requestId)) as unknown as Promise<void>;
+    .code(status)
+    .send(
+      toErrorEnvelope(code, publicMessage(code, status), requestId),
+    ) as unknown as Promise<void>;
 };
 
 // CSV inline (US5): download síncrono na própria response (sem e-mail/FS, ≠ legado). A string já

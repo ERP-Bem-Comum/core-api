@@ -118,7 +118,7 @@ export const createDrizzleContractorReadStore = (
       if (row === undefined) return ok(null);
       const mapped = actFromRow(row);
       if (!mapped.ok) {
-        logRead('act-mapper', mapped.error);
+        logRead('act-mapper', JSON.stringify(mapped.error));
         return err('contractor-read-unavailable');
       }
       return ok(actToView(mapped.value, row.updatedAt));

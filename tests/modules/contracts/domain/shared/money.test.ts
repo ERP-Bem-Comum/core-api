@@ -163,12 +163,18 @@ describe('Money — add', () => {
     return r.value;
   };
 
+  const sum = (a: Money.Money, b: Money.Money): Money.Money => {
+    const r = Money.add(a, b);
+    if (!r.ok) throw new Error(`test fixture broken: ${r.error}`);
+    return r.value;
+  };
+
   it('adds values correctly', () => {
     // Arrange
     const a = c(100);
     const b = c(50);
     // Act
-    const result = Money.add(a, b);
+    const result = sum(a, b);
     // Assert
     assert.equal(result.cents, 150);
   });
@@ -178,7 +184,7 @@ describe('Money — add', () => {
     const a = c(100);
     const b = c(50);
     // Act
-    const result = Money.add(a, b);
+    const result = sum(a, b);
     // Assert
     assert.equal(Object.isFrozen(result), true);
   });
@@ -200,8 +206,8 @@ describe('Money — add', () => {
     const b = c(27);
     const ccc = c(40);
     // Act
-    const left = Money.add(Money.add(a, b), ccc);
-    const right = Money.add(a, Money.add(b, ccc));
+    const left = sum(sum(a, b), ccc);
+    const right = sum(a, sum(b, ccc));
     // Assert
     assert.equal(left.cents, right.cents);
     assert.equal(left.cents, 80);
@@ -211,7 +217,7 @@ describe('Money — add', () => {
     // Arrange
     const a = c(742);
     // Act
-    const result = Money.add(a, Money.ZERO);
+    const result = sum(a, Money.ZERO);
     // Assert
     assert.equal(result.cents, a.cents);
   });

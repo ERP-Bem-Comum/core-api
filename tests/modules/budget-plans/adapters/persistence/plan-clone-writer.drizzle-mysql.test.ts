@@ -182,7 +182,7 @@ if (integrationEnabled()) {
       content.budgetId,
     ]);
     assert.ok(isOk(sums));
-    assert.equal(sums.value.get(String(content.budgetId)), 600 * 100);
+    assert.equal(sums.value.get(String(content.budgetId))?.cents, 600 * 100);
   });
 
   it('falha no último passo -> ROLLBACK: nada de plano, árvore ou lançamento', async () => {

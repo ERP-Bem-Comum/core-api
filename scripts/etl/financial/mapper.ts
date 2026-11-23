@@ -11,6 +11,7 @@
  */
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import type { DocumentType, PaymentMethod } from '#src/modules/financial/domain/document/types.ts';
 import { splitCheckDigit } from '#src/modules/financial/domain/payout/payee-account.ts';
 import type { LegacyAccountRow, LegacyPayableRow } from '../legacy/rows.ts';
@@ -232,6 +233,17 @@ export const mapLegacyPayableRow = (
       field: 'payment_method',
       attempted: row.paymentMethod ?? '(null)',
     });
+  }
+
+  // Os instantes legados viram `ClockFixed` no orquestrador, que recusa `Date` inválido na
+  // construção. Validados AQUI, a linha ruim vai para a quarentena e o loop segue com as demais.
+  const checkClockInstant = (field: string, instant: Date): void => {
+    const day = PlainDate.fromDate(instant);
+    if (!day.ok) errors.push({ tag: 'DateInvalid', field, attempted: day.error });
+  };
+  checkClockInstant('created_at', row.createdAt);
+  if (statusKind === 'approved') {
+    checkClockInstant('approved_at', refs.approvedAtByPayableId.get(row.id) ?? row.updatedAt);
   }
 
   let supplierRef: string | null = null;

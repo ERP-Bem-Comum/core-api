@@ -107,9 +107,9 @@ if (integrationEnabled()) {
 
       // Assert
       assert.ok(found.ok, `findExpirable falhou: ${JSON.stringify(found)}`);
-      assert.equal(found.value.length, 1);
-      assert.equal(found.value[0]?.id, contract.id, 'id do contrato deve bater');
-      assert.equal(found.value[0]?.status, 'Active');
+      assert.equal(found.value.contracts.length, 1);
+      assert.equal(found.value.contracts[0]?.id, contract.id, 'id do contrato deve bater');
+      assert.equal(found.value.contracts[0]?.status, 'Active');
     });
   });
 
@@ -135,7 +135,7 @@ if (integrationEnabled()) {
 
       // Assert: lista vazia
       assert.ok(found.ok, `findExpirable falhou: ${JSON.stringify(found)}`);
-      assert.equal(found.value.length, 0, 'contrato vigente não deve aparecer');
+      assert.equal(found.value.contracts.length, 0, 'contrato vigente não deve aparecer');
     });
   });
 
@@ -160,7 +160,7 @@ if (integrationEnabled()) {
 
       // Assert
       assert.ok(found.ok, `findExpirable falhou: ${JSON.stringify(found)}`);
-      assert.equal(found.value.length, 0, 'contrato Indefinite não deve aparecer');
+      assert.equal(found.value.contracts.length, 0, 'contrato Indefinite não deve aparecer');
     });
   });
 
@@ -189,7 +189,7 @@ if (integrationEnabled()) {
 
       // Assert: status=Expired → WHERE status='Active' exclui
       assert.ok(found.ok, `findExpirable falhou: ${JSON.stringify(found)}`);
-      assert.equal(found.value.length, 0, 'contrato Expired não deve aparecer');
+      assert.equal(found.value.contracts.length, 0, 'contrato Expired não deve aparecer');
     });
   });
 
@@ -232,11 +232,11 @@ if (integrationEnabled()) {
 
       // Assert: apenas 2 contratos, os de end mais antigo
       assert.ok(found.ok, `findExpirable falhou: ${JSON.stringify(found)}`);
-      assert.equal(found.value.length, 2, 'limit=2 deve retornar exatamente 2 contratos');
+      assert.equal(found.value.contracts.length, 2, 'limit=2 deve retornar exatamente 2 contratos');
 
       // Verifica ordenação (end ASC): c1 (2026-02-28) antes de c2 (2026-03-31)
-      assert.equal(found.value[0]?.id, c1.id, 'primeiro deve ser o de end mais antigo');
-      assert.equal(found.value[1]?.id, c2.id, 'segundo deve ser o de end intermediário');
+      assert.equal(found.value.contracts[0]?.id, c1.id, 'primeiro deve ser o de end mais antigo');
+      assert.equal(found.value.contracts[1]?.id, c2.id, 'segundo deve ser o de end intermediário');
     });
   });
 
@@ -285,8 +285,8 @@ if (integrationEnabled()) {
 
       // Assert: apenas o elegível
       assert.ok(found.ok, `findExpirable falhou: ${JSON.stringify(found)}`);
-      assert.equal(found.value.length, 1, 'apenas 1 contrato elegível no conjunto');
-      assert.equal(found.value[0]?.id, elegivel.id);
+      assert.equal(found.value.contracts.length, 1, 'apenas 1 contrato elegível no conjunto');
+      assert.equal(found.value.contracts[0]?.id, elegivel.id);
     });
   });
 }

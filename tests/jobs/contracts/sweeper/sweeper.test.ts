@@ -79,7 +79,8 @@ const makeRepo = (expirable: readonly unknown[]) => {
     nextSequentialNumber: stub,
     list: stub,
     listPaged: stub,
-    findExpirable: (_cutoff: PlainDate.PlainDate, _limit: number) => Promise.resolve(ok(expirable)),
+    findExpirable: (_cutoff: PlainDate.PlainDate, _limit: number) =>
+      Promise.resolve(ok({ contracts: expirable, unreadable: [] })),
     save: (contract: unknown, events: readonly unknown[]) => {
       saved.push({ contract, events });
       return Promise.resolve(ok(undefined));
@@ -123,7 +124,7 @@ describe('runSweep — auto-expire one-shot (CTR-AUTO-EXPIRE / issue #39)', () =
       listPaged: stub,
       findExpirable: (_cutoff: PlainDate.PlainDate, limit: number) => {
         limitSeen = limit;
-        return Promise.resolve(ok([]));
+        return Promise.resolve(ok({ contracts: [], unreadable: [] }));
       },
       save: () => Promise.resolve(ok(undefined)),
     } as unknown as ContractRepository;

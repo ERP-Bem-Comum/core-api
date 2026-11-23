@@ -13,6 +13,7 @@ import type {
   PayableStatusCounts,
 } from '#src/modules/financial/application/ports/payable-list-view.ts';
 import type { DocumentStatus } from '#src/modules/financial/domain/document/types.ts';
+import { inDateWindow } from './in-date-window.ts';
 
 // Adapter in-memory do PayableListView (#221): deriva os itens (pai + filhos como linhas) dos
 // `StoredDocument` da fonte injetada — espelha o JOIN do Drizzle sobre o agregado em memória.
@@ -43,8 +44,8 @@ const matchesFilter = (it: PayableListItem, f: PayableListFilter): boolean => {
   if (f.status !== undefined && it.status !== f.status) return false;
   if (f.documentType !== undefined && it.documentType !== f.documentType) return false;
   if (f.supplierRef !== undefined && it.supplierRef !== f.supplierRef) return false;
-  if (f.dueFrom !== undefined && it.dueDate < f.dueFrom) return false;
-  if (f.dueTo !== undefined && it.dueDate > f.dueTo) return false;
+  if (!inDateWindow(it.dueDate, f.dueFrom, f.dueTo)) return false;
+  if (!inDateWindow(it.issueDate, f.issuedFrom, f.issuedTo)) return false;
   return true;
 };
 

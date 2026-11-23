@@ -11,9 +11,9 @@ import type {
 } from '../../domain/budget-plan/repository.ts';
 import type {
   BudgetResultRepository,
-  BudgetResultRepositoryError,
+  BudgetResultSumError,
 } from '../../domain/budget-result/repository.ts';
-import { planTotalCents } from '../read-models/plan-total.ts';
+import { planTotal, type PlanTotalError } from '../read-models/plan-total.ts';
 
 export type ApproveBudgetPlanCommand = Readonly<{ planId: string; updatedByRef: string }>;
 
@@ -24,7 +24,8 @@ export type ApproveBudgetPlanError =
   | 'budget-plan-not-found'
   | BudgetPlanError
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError
+  | BudgetResultSumError
+  | PlanTotalError
   | UserRef.UserRefError;
 
 export type ApproveBudgetPlanDeps = Readonly<{
@@ -55,17 +56,15 @@ export const approveBudgetPlan =
     const approved = BudgetPlan.approve(found.value, deps.clock.now(), actor.value);
     if (!approved.ok) return approved;
 
-    const saved = await deps.planRepo.save(approved.value.plan, []);
-    if (!saved.ok) return saved;
-
-    // #458 — o plano aprovado preserva os orçamentos; o total da response é a soma dos lançamentos.
     const sums = await deps.budgetResultRepo.sumByBudgetIds(
       approved.value.plan.budgets.map((b) => b.id),
     );
     if (!sums.ok) return sums;
+    const total = planTotal(approved.value.plan, sums.value);
+    if (!total.ok) return total;
 
-    return ok({
-      plan: approved.value.plan,
-      totalInCents: planTotalCents(approved.value.plan, sums.value),
-    });
+    const saved = await deps.planRepo.save(approved.value.plan, []);
+    if (!saved.ok) return saved;
+
+    return ok({ plan: approved.value.plan, totalInCents: total.value.cents });
   };

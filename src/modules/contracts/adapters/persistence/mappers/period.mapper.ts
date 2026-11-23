@@ -32,14 +32,15 @@ export const periodToColumns = (p: Period.Period): PeriodColumns => {
   }
 };
 
-// ─── Tagged error variant (Padrão D — DO D§22) ───────────────────────────────
+// ─── Tagged error variants (Padrão D — DO D§22) ──────────────────────────────
 //
-// `PeriodMapperFixedMissingEnd` é o único erro próprio do mapper — ocorre quando
-// uma row com kind='Fixed' tem `end` null no DB (estado corrompido).
-// `PeriodMapperError` é union heterogênea: PeriodError (string literal — VO puro)
-// | PeriodMapperFixedMissingEnd (tagged record — mapper). Pragmatismo aceito:
-// migração do VO string literal para tagged é escopo de ticket dedicado (Bloco B).
-// Consumidores que precisam distinguir os dois ramos: `typeof e === 'string'`.
+// Dois erros próprios do mapper, ambos de estado corrompido no DB:
+//   - `PeriodMapperFixedMissingEnd`: row com kind='Fixed' e `end` null;
+//   - `PeriodMapperInvalidDate`: coluna `start`/`end` que o driver devolveu como `Date` inválido.
+// `PeriodMapperError` é union heterogênea de 3 membros: PeriodError (string literal — VO puro)
+// | os dois tagged records do mapper. Pragmatismo aceito: migração do VO string literal para
+// tagged é escopo de ticket dedicado (Bloco B). Para distinguir: `typeof e === 'string'` separa o
+// erro do VO, e `e.tag` separa os dois do mapper.
 
 export type PeriodMapperFixedMissingEnd = Readonly<{
   tag: 'PeriodMapperFixedMissingEnd';
@@ -49,18 +50,35 @@ export const periodMapperFixedMissingEnd = (): PeriodMapperFixedMissingEnd => ({
   tag: 'PeriodMapperFixedMissingEnd',
 });
 
-export type PeriodMapperError = PeriodError | PeriodMapperFixedMissingEnd;
+// Coluna de data que o banco devolveu como `Date` inválido (ex.: data zerada no mysql2).
+// `reason` repete o erro do kernel para a causa-raiz ser filtrável pelo mesmo nome em todo mapper.
+export type PeriodMapperInvalidDate = Readonly<{
+  tag: 'PeriodMapperInvalidDate';
+  column: 'start' | 'end';
+  reason: PlainDate.PlainDateFromDateError;
+}>;
+
+export const periodMapperInvalidDate = (
+  column: PeriodMapperInvalidDate['column'],
+  reason: PlainDate.PlainDateFromDateError,
+): PeriodMapperInvalidDate => ({ tag: 'PeriodMapperInvalidDate', column, reason });
+
+export type PeriodMapperError = PeriodError | PeriodMapperInvalidDate | PeriodMapperFixedMissingEnd;
 
 export const periodFromColumns = (
   cols: PeriodColumns,
 ): Result<Period.Period, PeriodMapperError> => {
+  const start = PlainDate.fromDate(cols.start);
+  if (!start.ok) return err(periodMapperInvalidDate('start', start.error));
   switch (cols.kind) {
     case 'Fixed': {
       if (cols.end === null) return err(periodMapperFixedMissingEnd());
-      return Period.create(PlainDate.fromDate(cols.start), PlainDate.fromDate(cols.end));
+      const end = PlainDate.fromDate(cols.end);
+      if (!end.ok) return err(periodMapperInvalidDate('end', end.error));
+      return Period.create(start.value, end.value);
     }
     case 'Indefinite':
-      return ok(Period.createIndefinite(PlainDate.fromDate(cols.start)));
+      return ok(Period.createIndefinite(start.value));
     default: {
       const _exhaustive: never = cols.kind;
       return _exhaustive;
