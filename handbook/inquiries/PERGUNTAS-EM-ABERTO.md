@@ -100,8 +100,8 @@ valer nesta branch**, onde o #814 já está integrado.
 - [ ] **S4.** `withDeadlockRetry` no `remittance-repository` — rede, não correção. ⚠️ A política atual é
       `maxAttempts: 3` **sem jitter**: duas transações que colidiram no mesmo instante voltam juntas.
 - [ ] **S5.** Desenhar o fluxo **"destransmitir"** (nunca "retransmitir") — **P.O.** (decisão de 23/11).
-- [ ] **S6.** Confirmar se o `editMetadata` (`adjust-document.ts`) aceita documento com título
-      Transmitido e, se aceitar, recusar — a regra de 23/11 não deixa editar nada — **tech lead**.
+- [ ] **S6.** Mensagem de recusa no drawer do Transmitido: trocar o genérico "Somente consulta" por
+      uma que nomeie o título e a remessa (item 2 de 02/09) — redação com a P.O.
 
 ---
 

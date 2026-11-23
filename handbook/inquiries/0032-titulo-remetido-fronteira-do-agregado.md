@@ -508,8 +508,9 @@ A redação do item 2 entra como uma linha no mapa de mensagens, sem tocar view 
 **Substitui o item 3 da resposta de 02/09** ("o caminho de escape EXISTE"). Decisão da P.O. na
 revisão de 23/11:
 
-1. **Documento com título Transmitido não tem edição nenhuma**, nem de campo não-financeiro. O
-   bloqueio deixa de ser só do que muda dinheiro e passa a ser do documento inteiro.
+1. **Documento Transmitido não tem edição nenhuma**, nem de campo não-financeiro. A P.O. manteria a
+   descrição editável **se ela já fosse**; não é (ver abaixo), então a regra mantém o comportamento
+   atual.
 2. **O ciclo de status segue como existe:** Transmitido → Pago.
 3. **A saída futura é "destransmitir", nunca "retransmitir".** A P.O. vai desenhar o fluxo em que o
    título volta do estado Transmitido para um estado editável. Um título destransmitido não volta a
@@ -518,9 +519,22 @@ revisão de 23/11:
 Os itens 1, 2 e 4 de 02/09 continuam valendo: a recusa acontece antes do clique, a mensagem nomeia
 o título e a remessa, e o `1451` não chega ao operador.
 
-Consequência para o `editMetadata` (`adjust-document.ts`): o ajuste leve preserva os títulos e hoje
-não consulta remessa. Se ele aceita documento com título Transmitido, a regra nova pede que recuse.
-Isso fica para o tech lead confirmar no código.
+**Conferido no código em 23/11 — o que já se editava em Transmitido: nada.** Os três caminhos de
+`adjust-document.ts` exigem outro status:
+
+| Caminho | Campos | Exige |
+| --- | --- | --- |
+| ajuste leve (`editMetadata`) | descrição, vencimento, complemento de pagamento | `Open` |
+| ajuste de valor (`Document.adjust`) | valor, descontos, encargos, retenções | `Open` |
+| edição do Aprovado (`editApproved`, spec 125) | descrição, forma de pagamento, categorização | `Approved`, com todos os títulos em Aprovado |
+
+O front espelha isso: fora de Aberto e do Aprovado editável, o drawer abre em somente-consulta
+(`editLocksFor` / `isApprovedEditable`). Logo, a decisão de 23/11 **não muda comportamento**: só
+deixa de prometer o caminho de escape que o item 3 de 02/09 previa e que nunca foi construído.
+
+**Pendente: a mensagem de recusa.** Hoje o drawer mostra o genérico "Somente consulta · este
+documento não pode ser editado", sem dizer por quê. O item 2 de 02/09 (nomear o título e a remessa)
+continua valendo e ainda não foi feito; a redação está sendo estruturada com a P.O.
 
 ---
 
@@ -854,8 +868,10 @@ sessão — reportar, nunca alterar.
       os títulos — `adjust-document.ts:169-170`). **Respondido em 23/11:** não há caminho de escape
       por enquanto, nada se edita em título Transmitido; a saída futura é "destransmitir" (§3).
 - [ ] Desenho do fluxo "destransmitir" (nunca "retransmitir") — **com a P.O.** (§3, 23/11).
-- [ ] Confirmar se o `editMetadata` aceita documento com título Transmitido e, se aceitar, recusar
-      (§3, 23/11) — **tech lead**.
+- [x] ~~Confirmar se o `editMetadata` aceita documento com título Transmitido~~ — **conferido em
+      23/11: não aceita** (exige `Open`), nem os outros dois caminhos (§3, tabela).
+- [ ] Mensagem de recusa no drawer do Transmitido: trocar o genérico "Somente consulta" por uma
+      que nomeie o título e a remessa (item 2 de 02/09) — redação com a P.O.
 - [ ] Contagem `1213` vs `1205` no ambiente real — fecha a lacuna do laudo de infra.
 - [ ] Abrir `document-repository-concurrency.drizzle-mysql.test.ts` — **lacuna declarada** pelo
       `drizzle-orm-expert`: é onde mudança de padrão de lock quebra em silêncio.
