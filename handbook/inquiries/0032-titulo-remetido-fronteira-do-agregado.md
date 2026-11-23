@@ -3,7 +3,7 @@ inquiry: 0032
 title: "Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock"
 state: open
 opened: 2026-08-23
-last_reviewed: 2026-08-23
+last_reviewed: 2026-11-23
 ---
 
 # Inquiry-0032: Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock
@@ -503,6 +503,42 @@ A redação do item 2 entra como uma linha no mapa de mensagens, sem tocar view 
 
 ---
 
+### 2026-11-23 — P.O. (revisão): por enquanto, nada se edita em título Transmitido
+
+**Substitui o item 3 da resposta de 02/09** ("o caminho de escape EXISTE"). Decisão da P.O. na
+revisão de 23/11:
+
+1. **Documento Transmitido não tem edição nenhuma**, nem de campo não-financeiro. A P.O. manteria a
+   descrição editável **se ela já fosse**; não é (ver abaixo), então a regra mantém o comportamento
+   atual.
+2. **O ciclo de status segue como existe:** Transmitido → Pago.
+3. **A saída futura é "destransmitir", nunca "retransmitir".** A P.O. vai desenhar o fluxo em que o
+   título volta do estado Transmitido para um estado editável. Um título destransmitido não volta a
+   ser remetido. Até esse desenho existir, não há caminho de correção.
+
+Os itens 1 e 4 de 02/09 continuam valendo: a recusa acontece antes do clique (campos travados), e o
+`1451` não chega ao operador. O item 2 (mensagem nomeando título e remessa) foi superado — ver abaixo.
+
+**Conferido no código em 23/11 — o que já se editava em Transmitido: nada.** Os três caminhos de
+`adjust-document.ts` exigem outro status:
+
+| Caminho | Campos | Exige |
+| --- | --- | --- |
+| ajuste leve (`editMetadata`) | descrição, vencimento, complemento de pagamento | `Open` |
+| ajuste de valor (`Document.adjust`) | valor, descontos, encargos, retenções | `Open` |
+| edição do Aprovado (`editApproved`, spec 125) | descrição, forma de pagamento, categorização | `Approved`, com todos os títulos em Aprovado |
+
+O front espelha isso: fora de Aberto e do Aprovado editável, o drawer abre em somente-consulta
+(`editLocksFor` / `isApprovedEditable`). Logo, a decisão de 23/11 **não muda comportamento**: só
+deixa de prometer o caminho de escape que o item 3 de 02/09 previa e que nunca foi construído.
+
+**Sem mensagem de recusa (P.O., 23/11).** Os campos já abrem travados, e o status **Transmitido**
+basta para o usuário saber por quê: a regra foi ensinada no treinamento. Vale também para **Pago** e
+**Conciliado**. Isso **supera o item 2 de 02/09** (mensagem nomeando o título e a remessa), que não
+será construído. O drawer continua com o "Somente consulta" de hoje.
+
+---
+
 ### 2026-08-23 — Agente `mysql-database-expert` (leitura estática + Refman 8.4)
 
 **Veredito: o diagnóstico está certo e três dos quatro remédios também. O item "releitura sob lock no
@@ -829,8 +865,14 @@ sessão — reportar, nunca alterar.
 - [ ] ADR novo: fronteira `Document`↔`Payable`. ⚠️ Forma correta: **`Payable` é agregado próprio
       desde sempre**, referenciado por identidade — não "sai do agregado ao virar `Transmitted`".
       `Transmitted` é tipo refinado; a invariante é a **ausência** de transição destrutiva.
-- [ ] Caminho de escape com a P.O.: corrigir só campos não-financeiros (`editMetadata` já preserva
-      os títulos — `adjust-document.ts:169-170`).
+- [x] Caminho de escape com a P.O.: corrigir só campos não-financeiros (`editMetadata` já preserva
+      os títulos — `adjust-document.ts:169-170`). **Respondido em 23/11:** não há caminho de escape
+      por enquanto, nada se edita em título Transmitido; a saída futura é "destransmitir" (§3).
+- [ ] Desenho do fluxo "destransmitir" (nunca "retransmitir") — **com a P.O.** (§3, 23/11).
+- [x] ~~Confirmar se o `editMetadata` aceita documento com título Transmitido~~ — **conferido em
+      23/11: não aceita** (exige `Open`), nem os outros dois caminhos (§3, tabela).
+- [x] ~~Mensagem de recusa no drawer do Transmitido~~ — **descartada pela P.O. em 23/11**: o status
+      e os campos travados bastam; vale também para Pago e Conciliado (§3).
 - [ ] Contagem `1213` vs `1205` no ambiente real — fecha a lacuna do laudo de infra.
 - [ ] Abrir `document-repository-concurrency.drizzle-mysql.test.ts` — **lacuna declarada** pelo
       `drizzle-orm-expert`: é onde mudança de padrão de lock quebra em silêncio.

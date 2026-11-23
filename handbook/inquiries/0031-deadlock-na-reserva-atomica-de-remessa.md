@@ -1,10 +1,10 @@
 ---
 inquiry: 0031
 title: 'A reserva que trava o vão antes do registro — deadlock 1213 na emissão concorrente de remessa'
-state: open
+state: decided
 opened: 2026-08-21
-decided:
-last_reviewed: 2026-08-21
+decided: 2026-08-23
+last_reviewed: 2026-11-23
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
@@ -306,7 +306,22 @@ cauda já registrado, e nada além dele.
 - [x] Medir a taxa com `fin_remittances` **populada** (§7, limitação 1) — feito em 24/08: o defeito
       é determinístico em banco pequeno e raro em banco grande (1 em 20 com ~10k linhas); o braço A
       zera nos dois
-- [ ] Issue [#808](https://github.com/ERP-Bem-Comum/core-api/issues/808) — corroborada, ver §7
+- [x] Issue [#808](https://github.com/ERP-Bem-Comum/core-api/issues/808) — corroborada, ver §7;
+      fechada
+
+### Revisão de 2026-11-23 — o estado acompanha a §5
+
+O gatilho de fechamento foi cumprido em 2026-08-23 (braço A, §5), mas o frontmatter ficou `open`, e
+por isso a inquiry venceu a janela de 90 dias do `INQUIRY-HYGIENE`. Conferido contra a `dev` em
+2026-11-23:
+
+- o PR #814 e a integração #835 (`chore/integra-frentes-abertas`) estão na `dev` desde 2026-08-24;
+- o `FOR UPDATE` sobre `fin_payables` está no topo da transação do `save`
+  (`remittance-repository.drizzle.ts`), como a §5 descreve;
+- a issue #789 está fechada.
+
+O que sobra é a issue sobre o `fin_payables_status_idx` (§3.8), que **não** é gatilho desta inquiry:
+fica como follow-up, sem bloquear o fechamento.
 
 ---
 
