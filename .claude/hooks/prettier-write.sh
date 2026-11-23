@@ -49,6 +49,13 @@ esac
 # Roda Prettier via pnpm (NUNCA npx: npm aborta com EBADDEVENGINES quando a versão
 # de Node diverge de package.json#devEngines.runtime — ADR-0029, pnpm é canônico).
 # Ignora código de saída pra não bloquear o turno (apenas log).
+#
+# Roda da raiz do projeto: o Prettier procura o `.prettierignore` no cwd, e o cwd do hook é o
+# da sessão. Com a sessão num subdiretório (ex.: `handbook/inquiries/`), o ignore não era
+# achado e o hook reformatava o `handbook/` — que o `.prettierignore` exclui de propósito.
+# Medido em 2026-11-23: `prettier --check` de dentro de `handbook/inquiries/` acusa o INDEX.md;
+# da raiz, o mesmo arquivo é ignorado.
+cd "${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel)}" || exit 0
 if ! pnpm exec prettier --write --ignore-unknown --log-level warn "$FILE" 2>&1 | grep -v '^$' >&2; then
   # Prettier não instalado ou erro real — silencioso (não atrapalha o Claude).
   :
