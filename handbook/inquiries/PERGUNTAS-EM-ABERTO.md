@@ -7,14 +7,14 @@
 > recorte de _o que ainda falta responder_. Para contexto, fundamentação e alternativas pesadas, sempre
 > voltar à inquiry-fonte linkada em cada bloco.
 
-- **Última revisão da prosa:** 2026-11-18 — a 0030 (dead-man's switch) virou `decided`: sai de vez, sem substituto
+- **Última revisão da prosa:** 2026-11-23 — revisão dos 90 dias: a 0031 virou `decided` (o gatilho estava cumprido desde 24/08) e o bloco saiu daqui; a 0032 segue `open`, com a resposta da P.O. de 23/11 sobre título Transmitido (revisão anterior em 2026-11-18: a 0030 virou `decided`)
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 6 de 38 — [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0038](./0038-fim-do-compose-como-modelo-de-execucao.md)
-- **Total de perguntas em aberto:** **16**
+- **Inquiries cobertas:** 5 de 38 — [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0038](./0038-fim-do-compose-como-modelo-de-execucao.md)
+- **Total de perguntas em aberto:** **18**
 
-As demais 32 estão `decided` (24), `deferred` (5, com gatilho declarado) ou `superseded` (3) — nenhuma
+As demais 33 estão `decided` (25), `deferred` (5, com gatilho declarado) ou `superseded` (3) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 
 <!-- END:generated -->
@@ -26,8 +26,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | Inquiry | Estado | Aguardando | Bloqueia | # |
 | :--- | :--- | :--- | :--- | ---: |
 | [0026](#inquiry-0026--assíncrono-human-in-the-loop-drizzle-10-e-bruno--ts) | `open` | Gatilho declarado — só (c) é medível hoje | Épico de aprovação por e-mail; major do ORM; possível supersede do ADR-0038 | 4 |
-| [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | **Nada — o gatilho de fechamento está cumprido.** Falta decidir se vira `decided` | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 0 |
-| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu a forma da recusa na tela em 02/09; restam as 4 saídas, que são execução | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
+| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu em 02/09 e revisou em 23/11 (nada se edita em Transmitido; saída futura = "destransmitir"); restam as 4 saídas, que são execução, e o desenho do "destransmitir" com a P.O. | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 6 |
 | [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
 | [0036](#inquiry-0036--onde-a-documentação-deve-viver) | `open` | Dono do repo + o MCP `acdg-skills` de volta ao ar, para inventariar o que já indexa | Nada de código — decide o layout do repositório: 1.442 arquivos (84 % do volume) e 707 citações do harness | 2 |
 | [0038](#inquiry-0038--o-fim-do-composeyaml-como-modelo-de-execução) | `open` | Dono do repo em (a); em (b), olhar o `ERP-INFRA` | Remoção dos serviços do `compose.yaml` — hoje o único caminho local de integração, usado pelos 4 scripts de e2e; e a direção `compose → taskdef` que três artefatos afirmam e o [ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md) nega | 2 |
@@ -60,65 +59,6 @@ somente se as coleções morrerem junto** — se sobreviverem como documentaçã
 
 ---
 
-## Inquiry-0031 — Deadlock na reserva atômica de remessa
-
-> **Origem:** [`0031-deadlock-na-reserva-atomica-de-remessa.md`](./0031-deadlock-na-reserva-atomica-de-remessa.md) §4 e §6
-> **Aberta em:** 2026-08-21 · **Destinatário:** Gabriel — não espera resposta de terceiro, espera **escolha** entre quatro alternativas já medidas
-> **Por que importa:** a reserva do PR #814 fecha a janela TOCTOU da #789 (mesmo título em duas remessas =
-> pagamento em dobro), mas duas emissões concorrentes entram em **deadlock 1213** — medido em **20/20
-> rodadas** contra MySQL 8.4.11 real. A causa é o `SELECT … FROM fin_remittances WHERE id = ? FOR UPDATE`
-> do ramo de criação, que busca uma linha **inexistente** e por isso trava o **vão** (gap lock) em vez do
-> registro; o `INSERT` da concorrente precisa de _insert-intention_, que conflita com esse vão. O código do
-> gap lock é **pré-existente** — o PR só alongou a espera entre pegá-lo e chegar ao INSERT. Comportamento é
-> **fail-safe** (nenhuma gravação dupla em 35 rodadas), mas o operador recebe "banco indisponível" em vez de
-> "o título já está em outra remessa", e emissão legítima morre por ruído de concorrência.
-
-**Bloqueador para fechar: nenhum.** O gatilho declarado no cabeçalho da inquiry era *"existir decisão
-sobre qual das quatro alternativas adotar, com o efeito colateral do braço escolhido medido"* — e as duas
-partes estão cumpridas desde 24/08: braço **A** decidido e aplicado, verificado com contrafactual (40
-rodadas, 0 deadlocks), efeito colateral medido no ramo de update (sem ciclo novo; custo só de cauda) e a
-rota contra o hard replace refutada. **Todas as caixas fechadas.**
-
-⚠️ **Uma inquiry `open` com zero perguntas é uma contradição a resolver, não um estado.** O que falta é a
-decisão editorial de promovê-la a `decided` — e as duas lacunas que restam pertencem a outros lugares: o
-`delete()` com `CASCADE` (não medido, rota distinta) e a classificação do `1451`, que já é a `S3` da
-[0032](#inquiry-0032--título-remetido-pertence-ao-documento).
-
-- [x] **D1.** ~~Escolher entre as quatro alternativas da §4.3~~ — **braço A** (inverter a ordem de
-      aquisição), decidido e aplicado em 2026-08-23 na branch `chore/integra-frentes-abertas`: o
-      `FOR UPDATE` sobre `fin_payables` subiu para o topo da transação do `save`, antes da busca em
-      `fin_remittances`. **Verificado em 2026-08-24** contra MySQL 8.4.11 real: 40 rodadas, **0
-      deadlocks**, 40/40 perdedoras com o erro de negócio — e o contrafactual (só a ordem desfeita)
-      deadlockando no mesmo instrumento, que é o que autoriza ler o zero como correção.
-- [x] **D2.** ~~Medir o efeito colateral do braço (A)/(B)~~ — **medido em 2026-08-24**. O ramo de
-      **update** travando `fin_payables` não cria deadlock novo, não gera lock-wait e não bloqueia o
-      INSERT de um título novo (20/20 passaram). O custo é de **cauda**: mediana igual (119ms vs
-      103ms), pior caso ~3× (428ms vs 140ms) — com N=20, ordem de grandeza, não número fino. A razão
-      é o modo do lock: `X,REC_NOT_GAP` sobre os registros pedidos, sem gap com que a
-      insert-intention da concorrente pudesse conflitar.
-- [x] **D5.** ~~Medir o `save` de update × hard replace do documento~~ — **medido em 24/08 e
-      REFUTADO**. 0 deadlocks em 20 rodadas, controle positivo em 6/6 na mesma bancada, e o
-      contrafactual `pre` (sem lock algum em `fin_payables` no update) dando resultado idêntico: o
-      braço A não mudou nada neste caminho. O ramo de update só faz `UPDATE fin_remittances` e nunca
-      insere em `fin_remittance_payables`, logo nunca pede lock em `fin_documents` — sem essa aresta
-      não há ciclo. **O ciclo é privativo do ramo de criação**, e o efeito colateral do braço A está
-      medido até o fim.
-- [x] **D3.** ~~Reforçar o teste `a emissão que perde a corrida não deixa rastro algum`~~ — a cegueira
-      foi **confirmada** (verde em 8 de 8 rodadas com deadlock acontecendo), mas o remédio já existia:
-      o irmão `duas emissões do mesmo título: exatamente uma grava, a outra perde com nome próprio`
-      exige o erro nominal e ficou **vermelho nas mesmas 8**. Em vez de teste novo, os dois ganharam
-      a anotação de que **não são duplicata** — um fixa atomicidade, o outro fixa o desfecho.
-- [x] **D4.** ~~Corrigir as duas afirmações falsas no comentário de `remittance-repository.drizzle.ts`~~ —
-      **feito em 2026-08-23**, na branch `chore/integra-frentes-abertas`. O comentário agora diz que a
-      citação do Refman §17.7.3 só vale porque **aqui** o registro é encontrado, atribui o deadlock ao gap
-      do passo 1 (id inexistente) e troca a promessa sobre o plano de execução pelo que foi medido:
-      `fin_payables_status_idx`, `supremum + 3 registros` com next-key.
-
-> _(As duas afirmações erradas citavam o Refman **corretamente**. O erro foi aplicar a passagem certa ao
-> ramo errado — e ambas foram "verificadas" por leitura, nunca por medição. Ver §3.6 e §3.8.)_
-
----
-
 ## Inquiry-0032 — Título remetido pertence ao documento?
 
 > **Origem:** [`0032-titulo-remetido-fronteira-do-agregado.md`](./0032-titulo-remetido-fronteira-do-agregado.md) §5 e §6
@@ -132,8 +72,12 @@ decisão editorial de promovê-la a `decided` — e as duas lacunas que restam p
 **Bloqueador para fechar:** as quatro saídas abaixo já estão **decididas** e esperam execução, não decisão.
 ~~O que ainda espera terceiro é a forma da recusa na tela.~~ ✅ **[02/09] A forma da recusa na tela foi
 respondida pela P.O.** — recusa antecipada por `FieldLocks` (campos financeiros somente-consulta, motivo
-visível), mensagem nomeando **qual título e em qual remessa**, e **sim** ao caminho de escape para campos
-não-financeiros (o `editMetadata` já os preserva). Texto integral em `0032-…md` §3 e na discussion #956.
+visível), mensagem nomeando **qual título e em qual remessa**, e ~~**sim** ao caminho de escape para
+campos não-financeiros~~. Texto integral em `0032-…md` §3 e na discussion #956.
+
+✅ **[23/11] A P.O. revisou o caminho de escape:** por enquanto **nada se edita** em documento com título
+Transmitido, nem campo não-financeiro. O status segue Transmitido → Pago, como existe. A saída futura é
+**"destransmitir", nunca "retransmitir"**, num fluxo que a P.O. vai desenhar. Texto em `0032-…md` §3.
 O encanamento de erro nomeado no front entrou em 02/09 (web-app#396). A decisão de base de 23/08 — a Fatia B esperar o
 merge do PR #814, para não resolver conflito à mão na região onde a ordem dos locks se decide — **deixa de
 valer nesta branch**, onde o #814 já está integrado.
@@ -155,6 +99,9 @@ valer nesta branch**, onde o #814 já está integrado.
       nunca o dado.**
 - [ ] **S4.** `withDeadlockRetry` no `remittance-repository` — rede, não correção. ⚠️ A política atual é
       `maxAttempts: 3` **sem jitter**: duas transações que colidiram no mesmo instante voltam juntas.
+- [ ] **S5.** Desenhar o fluxo **"destransmitir"** (nunca "retransmitir") — **P.O.** (decisão de 23/11).
+- [ ] **S6.** Confirmar se o `editMetadata` (`adjust-document.ts`) aceita documento com título
+      Transmitido e, se aceitar, recusar — a regra de 23/11 não deixa editar nada — **tech lead**.
 
 ---
 

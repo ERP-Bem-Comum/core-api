@@ -3,7 +3,7 @@ inquiry: 0032
 title: "Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock"
 state: open
 opened: 2026-08-23
-last_reviewed: 2026-08-23
+last_reviewed: 2026-11-23
 ---
 
 # Inquiry-0032: Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock
@@ -503,6 +503,27 @@ A redação do item 2 entra como uma linha no mapa de mensagens, sem tocar view 
 
 ---
 
+### 2026-11-23 — P.O. (revisão): por enquanto, nada se edita em título Transmitido
+
+**Substitui o item 3 da resposta de 02/09** ("o caminho de escape EXISTE"). Decisão da P.O. na
+revisão de 23/11:
+
+1. **Documento com título Transmitido não tem edição nenhuma**, nem de campo não-financeiro. O
+   bloqueio deixa de ser só do que muda dinheiro e passa a ser do documento inteiro.
+2. **O ciclo de status segue como existe:** Transmitido → Pago.
+3. **A saída futura é "destransmitir", nunca "retransmitir".** A P.O. vai desenhar o fluxo em que o
+   título volta do estado Transmitido para um estado editável. Um título destransmitido não volta a
+   ser remetido. Até esse desenho existir, não há caminho de correção.
+
+Os itens 1, 2 e 4 de 02/09 continuam valendo: a recusa acontece antes do clique, a mensagem nomeia
+o título e a remessa, e o `1451` não chega ao operador.
+
+Consequência para o `editMetadata` (`adjust-document.ts`): o ajuste leve preserva os títulos e hoje
+não consulta remessa. Se ele aceita documento com título Transmitido, a regra nova pede que recuse.
+Isso fica para o tech lead confirmar no código.
+
+---
+
 ### 2026-08-23 — Agente `mysql-database-expert` (leitura estática + Refman 8.4)
 
 **Veredito: o diagnóstico está certo e três dos quatro remédios também. O item "releitura sob lock no
@@ -829,8 +850,12 @@ sessão — reportar, nunca alterar.
 - [ ] ADR novo: fronteira `Document`↔`Payable`. ⚠️ Forma correta: **`Payable` é agregado próprio
       desde sempre**, referenciado por identidade — não "sai do agregado ao virar `Transmitted`".
       `Transmitted` é tipo refinado; a invariante é a **ausência** de transição destrutiva.
-- [ ] Caminho de escape com a P.O.: corrigir só campos não-financeiros (`editMetadata` já preserva
-      os títulos — `adjust-document.ts:169-170`).
+- [x] Caminho de escape com a P.O.: corrigir só campos não-financeiros (`editMetadata` já preserva
+      os títulos — `adjust-document.ts:169-170`). **Respondido em 23/11:** não há caminho de escape
+      por enquanto, nada se edita em título Transmitido; a saída futura é "destransmitir" (§3).
+- [ ] Desenho do fluxo "destransmitir" (nunca "retransmitir") — **com a P.O.** (§3, 23/11).
+- [ ] Confirmar se o `editMetadata` aceita documento com título Transmitido e, se aceitar, recusar
+      (§3, 23/11) — **tech lead**.
 - [ ] Contagem `1213` vs `1205` no ambiente real — fecha a lacuna do laudo de infra.
 - [ ] Abrir `document-repository-concurrency.drizzle-mysql.test.ts` — **lacuna declarada** pelo
       `drizzle-orm-expert`: é onde mudança de padrão de lock quebra em silêncio.
