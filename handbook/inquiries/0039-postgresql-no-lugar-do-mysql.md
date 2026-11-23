@@ -131,6 +131,47 @@ Ecossistema Node (registry npm, 2026-11-23):
 - **ETL:** o `package.json` ainda tem os scripts `etl:*` e `scripts/etl/` existe. O desligamento é intenção declarada, ainda não executada, e a branch `experimento/arrancar-etl` está fora da `dev`.
 - **"O SQL atual destrói a performance":** é avaliação do dono do repositório e ainda não foi medida nesta inquiry. P5 mede a linha de base, para que o antes e depois da reescrita seja comparável.
 
+### 2026-11-23 — P4: pesquisa da stack SQL-first e spike executado contra PostgreSQL 18.7
+
+**Pesquisa** (versões e datas pelo registry npm e pela API do GitHub; comportamento pelo README, pela doc ou pelo código-fonte de cada ferramenta):
+
+| Papel | Escolha | Descartados, e por quê |
+| :--- | :--- | :--- |
+| Migrations em SQL puro, com up e down | **dbmate** 2.38.2 | Graphile Migrate: sem down e sem v2 estável. Atlas: lint e testes ficam no plano pago. Sqitch fica como plano B (exige Perl) |
+| Rascunho de migration e checagem de drift | **psqldef** 3.11.30 (o CI deles testa PG 18) | — |
+| Queries e commands em `.sql`, com tipos gerados pelo servidor | **PgTyped** 2.4.x | SafeQL é regra de ESLint e o projeto usa oxlint. sqlc-gen-typescript está parado e sem LICENSE. Kysely é builder, não SQL à mão. TypeSQL marca Postgres como "Experimental". sqlx-ts baixa binário no postinstall |
+| Driver | **pg** 8.23.1 | postgres.js 4.1.1 é tecnicamente superior (`AbortSignal`, zero deps), mas é uma major de 4 semanas e o runtime do PgTyped espera a interface do `pg` |
+| Lint de migration | **squawk** 2.73.0 (a 2.74.0 ainda está na quarentena do `minimumReleaseAge`) | — |
+| Testes de schema | **pgTAP** | — |
+
+**Spike** em `~/dev/Casly/spike-pg18-sql-first`, fora do repositório. A fatia é real: `par_suppliers`, `fin_outbox` e `eventos_processados` com claim por consumidor (ADR-0064). O PostgreSQL 18.7 foi compilado da fonte oficial, com SHA-256 conferido e ICU, via `~/instalar-postgresql.pl`. Resultado: **7/7 testes verdes**, mais rollback e reaplicação da migration.
+
+| Prova | Resultado |
+| :--- | :--- |
+| `LIKE '%jose%'` em coluna `COLLATE ci_ai` (ICU `und-u-ks-level1`, não-determinística) acha `José` e `JOSE` | ✅ É o equivalente do `utf8mb4_unicode_ci`, nativo no PG 18 |
+| Paginação keyset `(name, id) > (…)` sem repetir nem pular linha | ✅ |
+| Upsert `ON CONFLICT … RETURNING new.*, old.name` (PG 18) | ✅ Devolve o nome anterior na atualização e `NULL` na inserção |
+| Duas réplicas do mesmo consumidor em `FOR UPDATE OF o SKIP LOCKED` | ✅ Lotes disjuntos, sem espera |
+| **Produtor grava com um claim aberto**, com `lock_timeout = 1s` como detector | ✅ **Não bloqueia.** No InnoDB, este é o cenário do `1205` por gap lock que obrigou o claim a rodar em `READ COMMITTED` (rule `adapters.md`) |
+| Fanout: o que um consumidor processou continua pendente para o outro | ✅ |
+| `EXPLAIN` da busca `LIKE '%…%'` | `Seq Scan` + `Sort`, como esperado: collation não-determinística não serve `LIKE` por índice. Medir em volume real é a P5 |
+
+**Achados do spike, que entram como condição da adoção:**
+
+1. **O squawk reprovou o primeiro rascunho em 8 pontos, todos vícios trazidos do MySQL:**
+   - `varchar(n)` deve virar `text` + `CHECK (char_length(...) …)`, porque mudar o `n` depois exige lock exclusivo;
+   - `SET lock_timeout` e `statement_timeout` precisam vir no início da migration;
+   - `bigint` no lugar de `integer`.
+   - Com isso corrigido, deu 0 issues. O lint funciona como professor do idioma Postgres, que é exatamente o papel pedido.
+2. **`camelCaseColumnNames` do PgTyped é um tipo que mente.** A opção muda só os tipos gerados, o runtime devolve `snake_case`, e o typecheck passa com os valores `undefined`. **Proibir a opção.** O tipo fica com o nome da coluna, e a tradução para o domínio continua no mapper do adapter, como já é hoje.
+3. **A nulidade em `RETURNING old.*` sai errada.** O PgTyped deduz `string` da coluna base `NOT NULL`, mas o valor é `NULL` na inserção. Corrige-se com a dica `AS "previous_name?"`. Toda expressão que não seja coluna direta precisa de revisão de nulidade.
+4. **O PgTyped imprime erro de parse e sai com código 0, apesar do `failOnError`.** Ele recusa texto livre dentro do bloco `/* @name … */`. No CI, a geração de tipos precisa de outra trava: o typecheck do código que importa o `*.queries.ts`, mais `git diff --exit-code` sobre os arquivos gerados.
+5. **O driver `pg` devolve `bigint` como `string`.** O tipo gerado está correto, mas afeta o `Money` em centavos (bigint). A migração precisa de um parser de `int8` → `bigint` no driver, decidido junto com o mapper do `Money`.
+6. **Supply chain:**
+   - `@pgtyped/cli` → `io-ts-reporters` puxa o `@scarf/scarf`, telemetria com postinstall. O `allowBuilds` do pnpm barrou o script; foi negado explicitamente (`'@scarf/scarf': false`) e o PgTyped funciona sem ele.
+   - dbmate e squawk chegam como `optionalDependencies` por plataforma, sem script.
+7. **O código gerado roda direto pelo type stripping do Node 26:** sem `enum`, e com o import do runtime como valor.
+
 ### Não confirmado
 
 - Versão default do RDS e do Aurora, e disponibilidade por versão em `sa-east-1` (a doc não detalha por região).
@@ -195,8 +236,8 @@ Ecossistema Node (registry npm, 2026-11-23):
 
 - [x] **P1.** As premissas do ADR-0013 ainda valem? — **Não** (Gabriel, 2026-11-23): o ETL será desligado, a reescrita do SQL está decidida e não há ligação com a Magalu. Ver §3 e §4.
 - [x] **P2.** Onde fica a homologação? — **Fora da Magalu**, que saiu do projeto. PG 18.7 em todos os ambientes.
-- [ ] **P3.** Medir, num PostgreSQL 18 real, o outbox com `SKIP LOCKED` e os cenários de deadlock das inquiries 0031 e 0032 em `READ COMMITTED`, com citação da doc oficial sobre o modelo de locks.
-- [ ] **P4.** Escolher a stack SQL-first para PostgreSQL (o Skeema é só MySQL; do lado PG há PgTyped, SafeQL, sqlc e Atlas/sqldef) antes do ADR.
+- [ ] **P3.** Medir, num PostgreSQL 18 real, os cenários de deadlock das inquiries 0031 e 0032 em `READ COMMITTED`, com citação da doc oficial sobre o modelo de locks. **Parcial (2026-11-23):** o outbox com `SKIP LOCKED` e o produtor sem bloqueio durante o claim já estão provados pelo spike (§3). Faltam os dois ciclos de deadlock: a reserva de remessa da 0031 e o hard replace do documento da 0032.
+- [x] **P4.** Escolher a stack SQL-first para PostgreSQL. — **dbmate + psqldef + PgTyped + pg + squawk + pgTAP**, provada por spike com 7/7 verdes contra o PG 18.7. Os 7 achados que viram condição de adoção estão no §3.
 - [ ] **P5.** Medir a linha de base de desempenho do SQL atual, com as queries mais lentas e o `EXPLAIN` das rotas quentes, para que "o SQL atual destrói a performance" vire número comparável antes e depois da reescrita.
 
 ---
