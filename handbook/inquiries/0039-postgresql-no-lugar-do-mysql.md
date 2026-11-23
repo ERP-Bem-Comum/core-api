@@ -14,7 +14,7 @@ last_reviewed: 2026-11-23
 - **Opened by:** Gabriel Aderaldo (sessão assistida)
 - **Asked to:** pesquisa própria — fontes primárias (postgresql.org, docs AWS RDS/Aurora, docs.magalu.cloud, docs Drizzle, registry npm) e inventário do código
 - **Impact:** [ADR-0013](../architecture/adr/0013-mysql-database-engine.md) e [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) (ambos `Accepted`; trocar de engine exige ADR novo que os substitua) · [ADR-0014](../architecture/adr/0014-mysql-database-isolation.md) · [ADR-0015](../architecture/adr/0015-mysql-outbox-pattern.md) · anti-padrão nº 4 do `CLAUDE.md`
-- **Gatilho de fechamento:** decisão registrada sobre P1 e P2 (§6). Se a decisão for migrar, ela sai como ADR que substitui o 0013 e o 0020. Se não, esta inquiry fica `decided` com o motivo.
+- **Gatilho de fechamento:** P3, P4 e P5 respondidas (§6) e o ADR que substitui o 0013 e o 0020 escrito com esses números. P1 e P2 foram respondidas em 2026-11-23.
 
 ---
 
@@ -114,6 +114,23 @@ Ecossistema Node (registry npm, 2026-11-23):
 - nenhum desses pacotes declara requisito de versão do servidor;
 - imagem oficial `postgres:18` / `18.7`: `latest` já é `19.0-trixie`, então fixar a tag. Do 18 em diante, `PGDATA` muda para `/var/lib/postgresql/<major>/docker`.
 
+### 2026-11-23 — Gabriel (resposta a P1 e P2)
+
+> O ETL vai ser desligado: foi identificado como a maior fonte de bugs do código, mais problema do que
+> solução. Também foi decidido migrar para SQL escrito da forma mais natural, verificável e validada
+> possível — o SQL atual está destruindo a performance e está muito mal escrito. Não existe mais nenhuma
+> ligação com a infra da Magalu Cloud dentro deste projeto.
+
+**Conferência contra o código (mesma data):**
+
+- **Magalu:** procede operacionalmente, mas sobrou resíduo.
+  - O adapter `magalu-object-storage` existe (`src/modules/contracts/adapters/storage/magalu-cloud-config.ts`, 135 linhas) e é exportado pelo `public-api` do `contracts`.
+  - Nenhum composition root o instancia, e o próprio `src/deploy/capability-adapters.ts:95` registra isso.
+  - Continuam no código e na doc: 4 variáveis `MAGALU_*` em `src/deploy/env-catalog.ts:516-535`, menções em `.claude/rules/supply-chain.md`, `.claude/skills/web-security-backend/`, `README.md` e o [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md), `Accepted`, que ainda põe a homologação na Magalu.
+  - Pela regra do repositório, isso é **divergência a registrar**. A limpeza do código é issue; o ADR-0021 só muda por ADR novo.
+- **ETL:** o `package.json` ainda tem os scripts `etl:*` e `scripts/etl/` existe. O desligamento é intenção declarada, ainda não executada, e a branch `experimento/arrancar-etl` está fora da `dev`.
+- **"O SQL atual destrói a performance":** é avaliação do dono do repositório e ainda não foi medida nesta inquiry. P5 mede a linha de base, para que o antes e depois da reescrita seja comparável.
+
 ### Não confirmado
 
 - Versão default do RDS e do Aurora, e disponibilidade por versão em `sa-east-1` (a doc não detalha por região).
@@ -139,23 +156,25 @@ Ecossistema Node (registry npm, 2026-11-23):
 - `pg_stat_lock`;
 - um ano a mais de suporte.
 
-**O bloqueio:** o DBaaS da Magalu, onde mora a homologação (PBE, ADR-0021), só vai até a 17. Homologação na 17 com produção na 18 quebra exatamente o item que justifica a 18. As saídas coerentes são duas (P2): homologação sai do DBaaS da Magalu (`postgres:18` em VM ou container, ou RDS também), ou tudo fica na 17.12.
+**O bloqueio da Magalu caiu (P2, §3).** O DBaaS da Magalu só ia até a 17, mas o projeto não tem mais ligação com ela. Com isso, a 17.12 perde o único motivo que tinha. Todos os ambientes podem ficar na 18.7: RDS/Aurora na AWS e `postgres:18.7` fixado por tag no local e no CI.
 
 ### As premissas do ADR-0013
 
-| Premissa (2026-04-28) | Estado hoje | A verificar |
+| Premissa (2026-04-28) | Estado em 2026-11-23 | Ainda vale? |
 | :--- | :--- | :--- |
-| Dump MySQL → MySQL do legado, sem conversão | O core-api tem schema próprio (136 migrations) e ETL de mapeamento (`scripts/etl/`), não dump. A branch `experimento/arrancar-etl` sugere que o ETL pode sair | P1: o ETL do legado continua no plano? Se sim, ele passa a ser cross-engine (MySQL legado → PG), que o ADR-0013 rejeitou como alternativa B |
-| Codebit opera MySQL | A produção foi para a AWS (ADR-0021) | P1: quem opera o banco do core-api hoje? |
-| Uma batalha de cada vez (ADR-0001) | O core-api está em release candidate (`1.0.0-rc.7`) | P1: momento — antes ou depois do 1.0 |
+| Dump MySQL → MySQL do legado, sem conversão | O core-api tem schema próprio (136 migrations) e um ETL de mapeamento, não dump. **O ETL vai ser desligado** (Gabriel, §3) | ❌ Sem ETL, não há fluxo legado → core-api para manter no mesmo engine. A alternativa B rejeitada no ADR-0013 (cross-engine) deixa de existir como problema |
+| Codebit opera MySQL | Produção na AWS (ADR-0021); **nenhuma ligação com a Magalu** (§3) | ❌ |
+| Uma batalha de cada vez (ADR-0001) | **A reescrita do SQL já foi decidida** (§3) | ❌ **Inverte o argumento.** O maior custo de trocar de engine era traduzir 97 upserts, 136 migrations e o SQL cru, e esse SQL vai ser reescrito de qualquer forma. Trocar o engine depois da reescrita seria pagar a tradução duas vezes; junto com ela, a batalha é uma só |
+
+**Nenhuma das três premissas do ADR-0013 se sustenta hoje.** O ADR registrava a escolha por continuidade e listava como negativos do MySQL a falta de JSONB, índice parcial, `LISTEN/NOTIFY` e schemas reais. Sem a continuidade, sobram só os negativos.
 
 ### Alternativas avaliadas
 
 | Alternativa | Prós | Contras | Veredito |
 | :--- | :--- | :--- | :--- |
 | A. Ficar no MySQL 8.4 | Zero custo de migração; código e testes de lock já medidos no InnoDB | Collation `_ci` e deadlocks de gap lock continuam (0031/0032); ecossistema SQL-first mais pobre (ver abaixo) | em aberto |
-| B. PostgreSQL 18.7 | Única versão com equivalente direto da busca `_ci`; RDS/Aurora; suporte até 2030/31 | Homologação precisa sair do DBaaS da Magalu; tradução de 97 upserts, errno, 136 migrations | **versão recomendada, se migrar** |
-| C. PostgreSQL 17.12 | Paridade AWS + Magalu hoje; 12 minors | Busca `_ci` vira projeto à parte; sem `uuidv7`/`RETURNING OLD/NEW`; EOL 2029; um upgrade de major a mais | ❌ só se a Magalu for inegociável |
+| B. PostgreSQL 18.7 | Única versão com equivalente direto da busca `_ci`; RDS/Aurora; suporte até 2030/31 | Tradução de 97 upserts, errno e 136 migrations — custo que a reescrita do SQL já vai pagar | **versão recomendada** |
+| C. PostgreSQL 17.12 | 12 minors | Busca `_ci` vira projeto à parte; sem `uuidv7`/`RETURNING OLD/NEW`; EOL 2029; um upgrade de major a mais | ❌ seu único motivo era a Magalu, que saiu do projeto |
 | D. PostgreSQL 19.0 | Mais features e suporte até 2031 | 4 dias de vida; sem oferta gerenciada | ❌ reavaliar quando entrar no RDS |
 
 **Ligação com a pesquisa SQL-first (mesma sessão):** a recomendação para MySQL era Skeema (schema), dbmate (migrations) e Kysely + kysely-codegen (queries). **O Skeema é só MySQL.** No PostgreSQL, o leque de ferramentas que tipam SQL escrito à mão é maior e mais maduro (PgTyped, SafeQL, sqlc com TS, Atlas/sqldef para schema declarativo). Escolher o engine muda a resposta daquela pesquisa, então as duas decisões devem andar juntas.
@@ -164,16 +183,21 @@ Ecossistema Node (registry npm, 2026-11-23):
 
 ## 5. Decisão final
 
-**PENDENTE.** Respondido: **se** migrar, a versão é o **PostgreSQL 18.7**. Pendente: se migra (P1) e onde fica a homologação (P2).
+**PARCIAL (2026-11-23).**
+
+- **Versão:** **PostgreSQL 18.7** em todos os ambientes. A 17 perdeu o único motivo que tinha (a Magalu) e a 19 espera oferta gerenciada.
+- **Premissas do ADR-0013:** nenhuma se sustenta (§4). A reescrita do SQL já está decidida, então o custo da troca de engine coincide com um trabalho que vai acontecer de qualquer forma.
+- **Ainda não decidido:** a troca de engine em si. Ela sai como ADR que substitui o 0013 e o 0020, e esse ADR deve nascer junto com a escolha da stack SQL-first (P4) e com as medições (P3, P5). Sem elas, o ADR afirmaria ganho sem número.
 
 ---
 
 ## 6. Saídas (outputs concretos)
 
-- [ ] **P1.** Decidir se as premissas do ADR-0013 ainda valem: o ETL do legado, quem opera o banco e o momento em relação ao 1.0. Responde se a migração acontece.
-- [ ] **P2.** Decidir a homologação: sair do DBaaS da Magalu para ter PG18 nos dois ambientes, ou nivelar tudo na 17.12 e pagar a busca `_ci` com coluna normalizada.
+- [x] **P1.** As premissas do ADR-0013 ainda valem? — **Não** (Gabriel, 2026-11-23): o ETL será desligado, a reescrita do SQL está decidida e não há ligação com a Magalu. Ver §3 e §4.
+- [x] **P2.** Onde fica a homologação? — **Fora da Magalu**, que saiu do projeto. PG 18.7 em todos os ambientes.
 - [ ] **P3.** Medir, num PostgreSQL 18 real, o outbox com `SKIP LOCKED` e os cenários de deadlock das inquiries 0031 e 0032 em `READ COMMITTED`, com citação da doc oficial sobre o modelo de locks.
-- [ ] **P4.** Escolher a stack SQL-first junto com o engine (Skeema é só MySQL), antes de qualquer ADR.
+- [ ] **P4.** Escolher a stack SQL-first para PostgreSQL (o Skeema é só MySQL; do lado PG há PgTyped, SafeQL, sqlc e Atlas/sqldef) antes do ADR.
+- [ ] **P5.** Medir a linha de base de desempenho do SQL atual, com as queries mais lentas e o `EXPLAIN` das rotas quentes, para que "o SQL atual destrói a performance" vire número comparável antes e depois da reescrita.
 
 ---
 
