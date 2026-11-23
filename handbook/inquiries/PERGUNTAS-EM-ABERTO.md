@@ -7,14 +7,14 @@
 > recorte de _o que ainda falta responder_. Para contexto, fundamentação e alternativas pesadas, sempre
 > voltar à inquiry-fonte linkada em cada bloco.
 
-- **Última revisão da prosa:** 2026-11-04 — revisão dos 90 dias das sete inquiries paradas desde 06/08: 0011, 0014, 0027 e 0028 viraram `decided`, 0012 `superseded`, 0015 e 0019 `deferred` com gatilho; os sete blocos saíram daqui (revisões anteriores em 2026-09-01, 2026-08-17 e 2026-08-07)
+- **Última revisão da prosa:** 2026-11-18 — a 0030 (dead-man's switch) virou `decided`: sai de vez, sem substituto
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 7 de 38 — [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0038](./0038-fim-do-compose-como-modelo-de-execucao.md)
-- **Total de perguntas em aberto:** **18**
+- **Inquiries cobertas:** 6 de 38 — [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0038](./0038-fim-do-compose-como-modelo-de-execucao.md)
+- **Total de perguntas em aberto:** **16**
 
-As demais 31 estão `decided` (23), `deferred` (5, com gatilho declarado) ou `superseded` (3) — nenhuma
+As demais 32 estão `decided` (24), `deferred` (5, com gatilho declarado) ou `superseded` (3) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 
 <!-- END:generated -->
@@ -26,7 +26,6 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | Inquiry | Estado | Aguardando | Bloqueia | # |
 | :--- | :--- | :--- | :--- | ---: |
 | [0026](#inquiry-0026--assíncrono-human-in-the-loop-drizzle-10-e-bruno--ts) | `open` | Gatilho declarado — só (c) é medível hoje | Épico de aprovação por e-mail; major do ORM; possível supersede do ADR-0038 | 4 |
-| [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
 | [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | **Nada — o gatilho de fechamento está cumprido.** Falta decidir se vira `decided` | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 0 |
 | [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | ✅ P.O. respondeu a forma da recusa na tela em 02/09; restam as 4 saídas, que são execução | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
 | [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
@@ -58,35 +57,6 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 ⚠️ **A armadilha que (c) precisa evitar:** o ADR-0038 nasceu de 24 de 26 falhas serem `.bru` desalinhados com o
 servidor, porque a coleção não tinha runner e apodreceu sem ninguém ver. Trocar Bruno por TS resolve isso **se e
 somente se as coleções morrerem junto** — se sobreviverem como documentação, o problema volta com os papéis invertidos.
-
----
-
-## Inquiry-0030 — O dead-man's switch que nunca vigiou
-
-> **Origem:** [`0030-deadman-switch-nunca-vigiou.md`](./0030-deadman-switch-nunca-vigiou.md) §5 e §7
-> **Aberta em:** 2026-08-17 · **Destinatário:** ninguém — não espera resposta de terceiro, espera **desenho**
-> **Por que importa:** o mecanismo do ADR-0042 foi construído inteiro (emissor Go com HMAC, dois planos de
-> ingestão, dois workflows, contratos de dados) e **nunca recebeu um único ping** — `deadman/history.jsonl`
-> ficou em 0 linhas do início ao fim, porque o emissor jamais foi implantado. O auditor rodou 23 vezes e
-> escreveu 22 vereditos, todos em bootstrap. Em 2026-07-24 parou até de rodar, quando a proteção da `main`
-> passou a recusar o `git push` do keep-alive — e ficou **24 dias vermelho sem ninguém notar**, porque o
-> único canal por onde ele se manifestava era justamente esse push. Código removido em 2026-08-17.
-
-**Bloqueador para fechar:** não há pergunta a responder nem terceiro a consultar — falta **desenhar a
-substituição**. O ADR-0042 segue `Accepted` e **não superado**: não decidimos parar de detectar job morto,
-decidimos parar de manter um mecanismo que nunca detectou. O ponto cego fica descoberto até lá.
-
-- [ ] **D1.** Desenhar a substituição atendendo aos cinco requisitos da §5 — com destaque para os dois que
-      mataram a tentativa anterior: **o vigia precisa de quem o vigie** (silêncio não pode ser
-      indistinguível de "tudo bem") e **custo de operação compatível com o valor** (o desenho antigo pedia
-      emissor compilado, deploy próprio, Object Storage e dois workflows para vigiar **um** job — foi caro
-      demais para ser terminado). Vira ADR novo com `supersedes: [ADR-0042]`, e esta inquiry fecha nele.
-- [ ] **D2.** Decidir o destino das issues abertas do épico #67 que descrevem o mecanismo removido
-      (#70, #71, #72 e a #368 dos 14 falsos positivos).
-
-> _(A §5 da inquiry pede explicitamente para reabrir a rejeição de SaaS de heartbeat: o ADR-0042 a
-> descartou pesando controle, custo e privacidade contra um custo de construção que se assumiu pagável — e
-> que, medido agora, nunca foi pago.)_
 
 ---
 
