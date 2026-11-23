@@ -47,7 +47,7 @@ case "$FILE" in
 esac
 
 # Roda Prettier via pnpm (NUNCA npx: npm aborta com EBADDEVENGINES quando a versão
-# de Node diverge de package.json#devEngines.runtime — ADR-0029, pnpm é canônico).
+# de Node diverge de package.json#devEngines.runtime — ADR-0076, pnpm é canônico).
 # Ignora código de saída pra não bloquear o turno (apenas log).
 #
 # Roda da raiz do projeto: o Prettier procura o `.prettierignore` no cwd, e o cwd do hook é o

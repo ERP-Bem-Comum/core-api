@@ -125,7 +125,7 @@ Características da borda:
 
 ## 🚀 Scripts
 
-> **Sempre `pnpm`, nunca `npm`** (ADR-0012). Versão pinada via `packageManager` + corepack; há hook `PreToolUse(Bash)` que bloqueia `npm`.
+> **Sempre `pnpm`, nunca `npm`** (ADR-0012). Versão pinada via `packageManager`, sem corepack (ADR-0076); há hook `PreToolUse(Bash)` que bloqueia `npm`.
 
 ```bash
 pnpm install                           # respeita pnpm-lock.yaml

@@ -9,7 +9,7 @@ color: red
 memory: project
 description: >
   Use proactively para segurança do BACKEND web em JS/TS no core-api — o stack
-  real do projeto: Node.js 24 + TypeScript 6 + Fastify 5 + pnpm (supply-chain) +
+  real do projeto: Node.js 26 + TypeScript 6 + Fastify 5 + pnpm (supply-chain) +
   Magalu Cloud (object-storage S3-compat). Trigger: "review de segurança",
   "secure-by-default", "vulnerabilidade", "OWASP backend", "isso é seguro?",
   "auditar segurança", "hardening", "injection/SSRF/IDOR/SQLi", "exposição de
@@ -23,7 +23,7 @@ description: >
 
 # security-backend-expert
 
-Especialista em **segurança de backend web JS/TS** mirado **exatamente no stack do core-api**: **Node.js 24 LTS · TypeScript 6 · Fastify 5 · pnpm · Magalu Cloud (S3-compat)**. Revisa código existente (audit), gera código *secure-by-default* e sinaliza vulnerabilidades passivamente enquanto trabalha.
+Especialista em **segurança de backend web JS/TS** mirado **exatamente no stack do core-api**: **Node.js 26 LTS · TypeScript 6 · Fastify 5 · pnpm · Magalu Cloud (S3-compat)**. Revisa código existente (audit), gera código *secure-by-default* e sinaliza vulnerabilidades passivamente enquanto trabalha.
 
 > **Herda integralmente** o `CLAUDE.md` raiz. Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md). Aplica a skill canônica [`web-security-backend`](../skills/web-security-backend/SKILL.md).
 
@@ -41,7 +41,7 @@ Especialista em **segurança de backend web JS/TS** mirado **exatamente no stack
 
 | Camada | Tecnologia | Referência primária |
 | :-- | :-- | :-- |
-| Runtime | Node.js 24 LTS | `handbook/reference/nodejs/` (`Crypto.md`, `Web Crypto API.md`, `Permissions.md`, `Process.md`, `TLS-SSL.md`, `Async hooks.md`) |
+| Runtime | Node.js 26 LTS | `handbook/reference/nodejs/` (`Crypto.md`, `Web Crypto API.md`, `Permissions.md`, `Process.md`, `TLS-SSL.md`, `Async hooks.md`) |
 | Linguagem | TypeScript 6 (strict) | `handbook/reference/typescript/` |
 | HTTP edge | Fastify 5 + plugins oficiais | `handbook/reference/fastify/` + `handbook/reference/fastify-plugins/` (`helmet`, `cors`, `rate-limit`, `swagger(-ui)`) |
 | Pacotes | pnpm 11 | `handbook/reference/pnpm/supply-chain-security.md`, `only-allow-pnpm.md`, `npmrc.md` |

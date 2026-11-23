@@ -49,13 +49,13 @@ Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter 
 - **Configurar `.npmrc` / `pnpm-workspace.yaml` / `package.json#pnpm`**.
 - **Definir scripts** (`scripts`, `pre/post` lifecycle, `--filter`).
 - **Diagnosticar** erro de install (`ERR_PNPM_PEER_DEP_ISSUES`, `ERR_PNPM_FROZEN_LOCKFILE_*`, `ERR_PNPM_UNEXPECTED_STORE`).
-- **Setup CI** (`pnpm install --frozen-lockfile`, `pnpm fetch`, cache, `corepack enable`).
+- **Setup CI** (`pnpm install --frozen-lockfile`, `pnpm fetch`, cache, `pnpm/action-setup` lendo o `packageManager` — sem corepack, ADR-0076).
 - **Supply-chain:**
   - `only-allow=pnpm` (recusar npm/yarn).
   - `approve-builds` (scripts de pós-instalação bloqueados por default desde o pnpm 10).
   - `ignored-builds` (lista granular).
   - `audit-level=high`.
-  - Pin de `packageManager` (corepack).
+  - Pin de `packageManager` (o próprio pnpm troca para a versão pinada).
 - **Workspaces** quando Fase 2 ativar (multi-package no mesmo repo).
 - **Catalogs** (desde o pnpm 10) para versões compartilhadas.
 - **Update planejado** (`pnpm outdated`, `pnpm update --interactive`).
@@ -77,7 +77,7 @@ Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter 
 ## Mapa de referências `handbook/reference/pnpm/`
 
 ### Núcleo (sempre relevantes)
-- [`installation.md`](../../handbook/reference/pnpm/installation.md) — via corepack obrigatório no projeto.
+- [`installation.md`](../../handbook/reference/pnpm/installation.md) — no projeto, sem corepack (ADR-0076): `packageManager` + troca automática de versão pelo pnpm.
 - [`pnpm-cli.md`](../../handbook/reference/pnpm/pnpm-cli.md) — overview do CLI.
 - [`configuring.md`](../../handbook/reference/pnpm/configuring.md) — onde tudo vai.
 - [`package_json.md`](../../handbook/reference/pnpm/package_json.md) — campos suportados.
@@ -99,7 +99,7 @@ Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter 
 ### CI / produção
 - [`continuous-integration.md`](../../handbook/reference/pnpm/continuous-integration.md) — **referência primária** ao montar CI.
 - [`production.md`](../../handbook/reference/pnpm/production.md) — `--prod`, deploy patterns.
-- [`docker.md`](../../handbook/reference/pnpm/docker.md) — corepack no container; cache mount.
+- [`docker.md`](../../handbook/reference/pnpm/docker.md) — pnpm no container via `COPY --from=ghcr.io/pnpm/pnpm`; cache mount.
 - [`podman.md`](../../handbook/reference/pnpm/podman.md) — informativo.
 
 ### Supply-chain (vinculadas a ADR-0011)
@@ -181,10 +181,9 @@ registry=https://registry.npmjs.org/
     "node": ">=26.0.0",
     "pnpm": ">=12.0.0 <13"
   },
-  "packageManager": "pnpm@12.21.0+sha512.<hex do dist.integrity>",
+  "packageManager": "pnpm@12.22.0+sha512.<hex do dist.integrity>",
   "scripts": {
-    "preinstall": "npx only-allow pnpm",
-    "install": "pnpm install --frozen-lockfile=false",
+    "preinstall": "node scripts/ci/only-allow-pnpm.ts",
     "ci:install": "pnpm install --frozen-lockfile",
     "audit": "pnpm audit --audit-level=high",
     "outdated": "pnpm outdated --long"
@@ -220,7 +219,7 @@ pnpm run test:integration   # quando aplicável
 - **`shamefully-hoist=true`** num PR ⇒ rejeitar; resolver o root cause (lib que assume node_modules flat).
 - **Lockfile dando conflito de merge** ⇒ `pnpm install` resolve. Não edite à mão.
 - **`pnpm dlx` vs `pnpm exec`:** `dlx` baixa pacote, executa, descarta (one-shot). `exec` roda binário do `node_modules` local. Confundir gera download desnecessário.
-- **Versão de pnpm divergindo em time** ⇒ pinar via `packageManager` + `corepack enable`.
+- **Versão de pnpm divergindo em time** ⇒ pinar via `packageManager`; o pnpm troca sozinho para a versão pinada.
 - **`npm install` num doc/PR** ⇒ substituir por `pnpm install`. Sempre.
 
 ---
@@ -242,7 +241,7 @@ pnpm run test:integration   # quando aplicável
 3. **Editar `pnpm-lock.yaml` manualmente.**
 4. **`shamefully-hoist=true`** sem ADR.
 5. **`only-allow` removido.**
-6. **`packageManager` ausente** — corepack não consegue pinar versão sem ele.
+6. **`packageManager` ausente** — sem ele o pnpm não tem versão para a qual trocar, e cada máquina roda a sua.
 7. **Postinstall script aprovado sem revisão** — supply-chain.
 8. **`pnpm install` em CI sem `--frozen-lockfile`** — perde reprodutibilidade.
 
@@ -257,7 +256,7 @@ contratos-orchestrator
        │       │
        │       └─► reference: handbook/reference/pnpm/
        │
-       ├─► docker-compose-expert  (corepack no Dockerfile)
+       ├─► docker-compose-expert  (pnpm no Dockerfile)
        └─► nodejs-runtime-expert  (engines, ESM/NodeNext)
 ```
 

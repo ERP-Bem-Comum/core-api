@@ -46,8 +46,8 @@
 # Stage 1 — base
 # Pin: digest do índice multi-arch (amd64 + arm64), Debian 12 Bookworm Slim.
 # Para atualizar: `docker buildx imagetools inspect node:26.13-bookworm-slim --format '{{.Manifest.Digest}}'`
-# Digest atual (2026-11-23, índice OCI publicado em 2026-11-11):
-# sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1
+# Digest atual (2026-11-23, índice OCI publicado em 2026-11-11; `NODE_VERSION=26.13.1` no config
+# da imagem, conferido no registry): sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1
 #
 # A major.minor desta tag é cobrada contra o `.nvmrc` por
 # `tests/cleanup/node-version-single-source.test.ts` — subir aqui sem subir lá (ou vice-versa) fica
@@ -59,7 +59,10 @@
 # (https://pnpm.io/docker) recomenda copiar `/opt/pnpm` da imagem oficial. O diretório vai
 # inteiro porque também carrega o `node-gyp`. A tag repete `PNPM_VERSION`, que
 # `tests/cleanup/supply-chain-settings.test.ts` cobra contra `packageManager`.
-FROM ghcr.io/pnpm/pnpm:12.21.0@sha256:168feba88e6a1684c99a62cbf4fe361d4e683e2a6c920d3b0acde7e15a28b62d AS pnpm
+# A imagem é Debian (glibc): o executável em `/opt/pnpm` carrega com `ld-linux-x86-64.so.2` /
+# `ld-linux-aarch64.so.1` e só pede libc, libm, libdl, libpthread e libgcc_s — todas presentes na
+# bookworm-slim. Conferido nas camadas amd64 e arm64 da 12.22.0 em 2026-11-23.
+FROM ghcr.io/pnpm/pnpm:12.22.0@sha256:81346f048d668195928d441b80efc0df300474ed8bf81789e4554ec0079079d0 AS pnpm
 
 FROM node:26.13-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS base
 
@@ -70,7 +73,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Versão pinada (ADR-0076). Precisa bater com a tag do stage `pnpm` acima.
-ENV PNPM_VERSION=12.21.0
+ENV PNPM_VERSION=12.22.0
 COPY --from=pnpm /opt/pnpm /opt/pnpm
 RUN for bin in pnpm pn pnpx pnx; do ln -s "/opt/pnpm/$bin" "/usr/local/bin/$bin"; done \
  && pnpm --version | grep -qx "${PNPM_VERSION}"

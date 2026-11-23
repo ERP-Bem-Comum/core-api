@@ -13,7 +13,7 @@
  * perfil possível: alto impacto, custo zero de remover, detecção nenhuma.
  *
  * A segunda parte cobre a concordância de versão. O pnpm é declarado em TRÊS lugares —
- * `packageManager` (corepack ativa), `engines.pnpm` (recusa versão fora da faixa) e
+ * `packageManager` (o pnpm troca para ela), `engines.pnpm` (recusa versão fora da faixa) e
  * `ENV PNPM_VERSION` no Dockerfile (o que roda no build da imagem). Se divergirem, a imagem instala
  * com um resolvedor diferente do que o desenvolvedor testou, e o lockfile deixa de ser garantia.
  *

@@ -128,7 +128,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: pnpm — versão lida do packageManager
-        # Executável nativo do pnpm 12: o `audit` não precisa de Node no PATH.
+        # Sem setup-node: o `audit` só consulta o registry. O pnpm/action-setup usa o Node que o
+        # runner hospedado já traz — runner sem Node exigiria `standalone: true`.
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - name: Audit completo (visibilidade de devDependencies — não bloqueia)
         continue-on-error: true
