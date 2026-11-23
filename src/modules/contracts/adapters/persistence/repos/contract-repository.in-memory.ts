@@ -61,11 +61,11 @@ export const InMemoryContractRepository = (
   const repo: ContractRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
     findBySequentialNumber: async (sequentialNumber) =>
-      ok([...map.values()].find((c) => c.sequentialNumber === sequentialNumber) ?? null),
+      ok(map.values().find((c) => c.sequentialNumber === sequentialNumber) ?? null),
     // #1024: espelha o Drizzle — pula as grafias já ocupadas (número informado à mão não move
     // o contador, e o gerado não pode colidir com ele).
     nextSequentialNumber: async (year) => {
-      const taken = new Set([...map.values()].map((c) => c.sequentialNumber));
+      const taken = new Set(map.values().map((c) => c.sequentialNumber));
       let next = (seqByYear.get(year) ?? 0) + 1;
       while (sequentialNumberSpellings(next, year).some((s) => taken.has(s))) next += 1;
       seqByYear.set(year, next);
@@ -89,9 +89,9 @@ export const InMemoryContractRepository = (
     save: async (contract: Contract, events: readonly ContractsModuleEvent[]) => {
       // #1024: espelha o `UNIQUE(sequential_number)` do MySQL — outro contrato com o mesmo número
       // é conflito, não sobrescrita silenciosa.
-      const clash = [...map.values()].some(
-        (c) => c.id !== contract.id && c.sequentialNumber === contract.sequentialNumber,
-      );
+      const clash = map
+        .values()
+        .some((c) => c.id !== contract.id && c.sequentialNumber === contract.sequentialNumber);
       if (clash) return err('contract-repo-conflict');
       map.set(contract.id, contract);
       if (events.length > 0) {

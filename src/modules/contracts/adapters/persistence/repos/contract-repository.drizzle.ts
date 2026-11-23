@@ -202,9 +202,7 @@ export const createDrizzleContractRepository = (
       );
     const byContract = new Map<string, string[]>();
     for (const link of links) {
-      const arr = byContract.get(link.contractId) ?? [];
-      arr.push(link.amendmentId);
-      byContract.set(link.contractId, arr);
+      byContract.getOrInsert(link.contractId, []).push(link.amendmentId);
     }
 
     for (const row of rows) {

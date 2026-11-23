@@ -50,9 +50,7 @@ export const InMemoryBudgetResultRepository = (): InMemoryBudgetResultRepository
       for (const r of store) {
         const key = String(r.budgetId);
         if (!wanted.has(key)) continue;
-        const values = valuesByBudget.get(key) ?? [];
-        values.push(r.value);
-        valuesByBudget.set(key, values);
+        valuesByBudget.getOrInsert(key, []).push(r.value);
       }
       const sums = new Map<string, Money.Money>();
       for (const [key, values] of valuesByBudget) {

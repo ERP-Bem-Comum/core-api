@@ -20,7 +20,7 @@ export const makeInMemoryUserProfileStore = (): InMemoryUserProfileStore => {
 
   const repository: UserProfileRepository = {
     findByUserRef: async (userRef) => ok(map.get(userRef) ?? null),
-    findByCpf: async (cpf) => ok([...map.values()].find((p) => p.cpf === cpf) ?? null),
+    findByCpf: async (cpf) => ok(map.values().find((p) => p.cpf === cpf) ?? null),
     save: async (profile) => {
       for (const existing of map.values()) {
         if (existing.cpf === profile.cpf && existing.userRef !== profile.userRef) {

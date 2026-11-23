@@ -169,35 +169,18 @@ export const stitchRealizedReport = (
   // Índice (budgetPlanId, subcategoryId) -> folha do PLANO, para casar o financial em O(1).
   const leafIndex = new Map<string, SubAcc>();
 
-  const getCenter = (key: string, id: string, name: string, budgetPlanId: string): CcAcc => {
-    const existing = centers.get(key);
-    if (existing !== undefined) return existing;
-    const created: CcAcc = { id, name, budgetPlanId, cats: new Map() };
-    centers.set(key, created);
-    return created;
-  };
+  const getCenter = (key: string, id: string, name: string, budgetPlanId: string): CcAcc =>
+    centers.getOrInsertComputed(key, () => ({ id, name, budgetPlanId, cats: new Map() }));
   const getCategory = (
     cc: CcAcc, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types -- acumulador mutável (é onde a categoria é inserida)
     id: string,
     name: string,
-  ): CatAcc => {
-    const existing = cc.cats.get(id);
-    if (existing !== undefined) return existing;
-    const created: CatAcc = { id, name, subs: new Map() };
-    cc.cats.set(id, created);
-    return created;
-  };
+  ): CatAcc => cc.cats.getOrInsertComputed(id, () => ({ id, name, subs: new Map() }));
   const getSub = (
     cat: CatAcc, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types -- acumulador mutável (é onde a subcategoria é inserida)
     id: string,
     name: string,
-  ): SubAcc => {
-    const existing = cat.subs.get(id);
-    if (existing !== undefined) return existing;
-    const created: SubAcc = { id, name, months: zeroMonths() };
-    cat.subs.set(id, created);
-    return created;
-  };
+  ): SubAcc => cat.subs.getOrInsertComputed(id, () => ({ id, name, months: zeroMonths() }));
 
   // ── 1. Esqueleto: a árvore + o `expected` vêm do PLANO. ────────────────────────────────────────
   for (const row of planned) {

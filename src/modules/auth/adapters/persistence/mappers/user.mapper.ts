@@ -178,9 +178,7 @@ export const userFromRows = (
   // Agrupar permissoes por role_id (Map<roleId, Permission[]>)
   const permsByRole = new Map<string, string[]>();
   for (const perm of permRows) {
-    const existing = permsByRole.get(perm.roleId) ?? [];
-    existing.push(perm.name);
-    permsByRole.set(perm.roleId, existing);
+    permsByRole.getOrInsert(perm.roleId, []).push(perm.name);
   }
 
   // Construir roles[] via Role.create + Permission.parse

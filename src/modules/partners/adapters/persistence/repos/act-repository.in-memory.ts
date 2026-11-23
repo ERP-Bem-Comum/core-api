@@ -21,7 +21,7 @@ export const makeInMemoryActStore = (): InMemoryActStore => {
   const repository: ActRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
     findByActNumber: async (actNumber) =>
-      ok([...map.values()].find((a) => a.actNumber === actNumber) ?? null),
+      ok(map.values().find((a) => a.actNumber === actNumber) ?? null),
     list: async () => ok([...map.values()]),
     save: async (act) => {
       for (const existing of map.values()) {

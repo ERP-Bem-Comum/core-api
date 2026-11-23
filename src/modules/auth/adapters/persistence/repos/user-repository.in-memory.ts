@@ -44,7 +44,7 @@ export const makeInMemoryUserStore = (): InMemoryUserStore => {
 
   const reader: UserReader = {
     findById: async (id) => ok(map.get(id) ?? null),
-    findByEmail: async (email) => ok([...map.values()].find((u) => u.email === email) ?? null),
+    findByEmail: async (email) => ok(map.values().find((u) => u.email === email) ?? null),
   };
 
   return {

@@ -193,7 +193,7 @@ export const createInMemoryRemittanceRepository = (
     findByFileName: async (
       fileName: string,
     ): Promise<Result<Remittance | null, RemittanceRepositoryError>> =>
-      Promise.resolve(ok([...remittances.values()].find((r) => r.fileName === fileName) ?? null)),
+      Promise.resolve(ok(remittances.values().find((r) => r.fileName === fileName) ?? null)),
 
     // Espelha a semântica do adapter real: só remessas que PRENDEM contam. `Discarded` não prende —
     // é o único estado que devolve o título para a fila, e depende de decisão humana.

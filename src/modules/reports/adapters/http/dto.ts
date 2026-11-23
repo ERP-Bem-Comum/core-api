@@ -104,12 +104,7 @@ export const analysisToReport = (
 ): AnalysisReportResponseDto => {
   const totalValueOfPeriod = rows.reduce((sum, r) => sum + r.totalCents, 0);
 
-  const byPlan = new Map<string | null, AnalysisRow[]>();
-  for (const r of rows) {
-    const bucket = byPlan.get(r.budgetPlanRef);
-    if (bucket === undefined) byPlan.set(r.budgetPlanRef, [r]);
-    else bucket.push(r);
-  }
+  const byPlan = Map.groupBy(rows, (r) => r.budgetPlanRef);
 
   const data = [...byPlan.entries()].map(([budgetPlanRef, planRows]) => {
     const total = planRows.reduce((sum, r) => sum + r.totalCents, 0);
@@ -130,11 +125,11 @@ export const analysisToReport = (
       { name: string | null; total: number; months: Map<string, number> }
     >();
     for (const r of planRows) {
-      let cur = ccTotals.get(r.costCenterRef);
-      if (cur === undefined) {
-        cur = { name: r.costCenterName, total: 0, months: new Map() };
-        ccTotals.set(r.costCenterRef, cur);
-      }
+      const cur = ccTotals.getOrInsertComputed(r.costCenterRef, () => ({
+        name: r.costCenterName,
+        total: 0,
+        months: new Map(),
+      }));
       cur.total += r.totalCents;
       cur.months.set(r.monthYear, (cur.months.get(r.monthYear) ?? 0) + r.totalCents);
     }

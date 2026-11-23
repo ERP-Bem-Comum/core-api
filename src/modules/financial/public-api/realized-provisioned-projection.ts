@@ -116,11 +116,7 @@ interface Bucket {
 
 const bucketFor = (acc: Map<string, Bucket>, grain: Grain): Bucket => {
   const key = keyOf(grain.budgetPlanRef, grain.categoryRef, grain.subcategoryRef, grain.month);
-  const existing = acc.get(key);
-  if (existing !== undefined) return existing;
-  const created: Bucket = { ...grain, realizedCents: 0, provisionedCents: 0 };
-  acc.set(key, created);
-  return created;
+  return acc.getOrInsertComputed(key, () => ({ ...grain, realizedCents: 0, provisionedCents: 0 }));
 };
 
 export const openRealizedProvisionedReader = async (

@@ -678,12 +678,7 @@ export const createDrizzleRemittanceRepository = (
             documentId: link.documentId,
             yourNumber: link.yourNumber,
           };
-          const bucket = payablesByRemittance.get(link.remittanceId);
-          if (bucket === undefined) {
-            payablesByRemittance.set(link.remittanceId, [payable]);
-          } else {
-            bucket.push(payable);
-          }
+          payablesByRemittance.getOrInsert(link.remittanceId, []).push(payable);
         }
 
         const items: Remittance[] = [];

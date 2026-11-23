@@ -45,7 +45,7 @@ export const makeInMemorySupplierStore = (outbox?: InjectableOutbox): InMemorySu
   const repository: SupplierRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
     findByDocument: async (document) =>
-      ok([...map.values()].find((s) => sameDocument(s, document)) ?? null),
+      ok(map.values().find((s) => sameDocument(s, document)) ?? null),
     list: async () => ok([...map.values()]),
     save: async (supplier, events) => {
       for (const existing of map.values()) {

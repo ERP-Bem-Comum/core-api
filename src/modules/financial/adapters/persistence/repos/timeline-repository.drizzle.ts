@@ -121,15 +121,7 @@ const findByDocumentWithDb = async (
       .where(inArray(s.finTimelineFieldChanges.timelineEntryId, entryIds));
 
     // 3. Agrupar changes por entryId (Map O(n)).
-    const changesByEntry = new Map<string, typeof changeRows>();
-    for (const cr of changeRows) {
-      const list = changesByEntry.get(cr.timelineEntryId);
-      if (list !== undefined) {
-        list.push(cr);
-      } else {
-        changesByEntry.set(cr.timelineEntryId, [cr]);
-      }
-    }
+    const changesByEntry = Map.groupBy(changeRows, (cr) => cr.timelineEntryId);
 
     // 4. Reidratar entries com suas changes (mapper retorna Result por entry).
     const entries: FinancialTimelineEntry[] = [];

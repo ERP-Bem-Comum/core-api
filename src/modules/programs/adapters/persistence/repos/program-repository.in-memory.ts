@@ -33,7 +33,7 @@ export const InMemoryProgramRepository = (
     findById: async (id) => ok(map.get(id) ?? null),
 
     findBySigla: async (siglaNormalized) =>
-      ok([...map.values()].find((p) => String(p.sigla) === siglaNormalized) ?? null),
+      ok(map.values().find((p) => String(p.sigla) === siglaNormalized) ?? null),
 
     listPaged: async (query): Promise<Result<ProgramPage, never>> => {
       const filtered = [...map.values()]
@@ -49,10 +49,7 @@ export const InMemoryProgramRepository = (
     },
 
     nextProgramNumber: async () => {
-      const max = [...map.values()].reduce(
-        (m, p) => (p.programNumber > m ? p.programNumber : m),
-        0,
-      );
+      const max = map.values().reduce((m, p) => (p.programNumber > m ? p.programNumber : m), 0);
       return ok(max + 1);
     },
 

@@ -172,12 +172,7 @@ export const createInMemoryDocumentRepository = (
       if (timelineStore !== undefined && timelineEntries.length > 0) {
         for (const entry of timelineEntries) {
           const key = entry.documentId as unknown as string;
-          const existingEntries = timelineStore.get(key);
-          if (existingEntries !== undefined) {
-            existingEntries.push(entry);
-          } else {
-            timelineStore.set(key, [entry]);
-          }
+          timelineStore.getOrInsert(key, []).push(entry);
         }
       }
       return Promise.resolve(ok(undefined));

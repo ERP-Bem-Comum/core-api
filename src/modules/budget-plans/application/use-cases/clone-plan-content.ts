@@ -113,13 +113,9 @@ export const clonePlanContent =
     // assim não existe "lançamento de rede desconhecida" para descartar (R9 da segunda revisão — o
     // antigo `continue` "inalcançável" descartaria em silêncio se um dia fosse alcançado). O port só
     // devolve lançamentos dos ids pedidos.
-    const resultsBySourceBudget = new Map<string, BudgetResult.BudgetResult[]>();
-    for (const result of sourceResults.value) {
-      const key = String(result.budgetId);
-      const group = resultsBySourceBudget.get(key) ?? [];
-      group.push(result);
-      resultsBySourceBudget.set(key, group);
-    }
+    const resultsBySourceBudget = Map.groupBy(sourceResults.value, (result) =>
+      String(result.budgetId),
+    );
 
     // lançamentos remapeados (budgetId + subcategoryId)
     const results: BudgetResult.BudgetResult[] = [];

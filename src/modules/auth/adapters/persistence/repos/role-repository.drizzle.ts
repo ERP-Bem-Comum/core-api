@@ -216,12 +216,7 @@ export const createDrizzleRoleStore = (
         .where(inArray(schema.authRolePermission.roleId, roleIds))) as PermJoinRow[];
 
       // Agrupar permissoes por role_id via Map (sem N+1 — blueprint §list)
-      const permsByRole = new Map<string, PermJoinRow[]>();
-      for (const permRow of permRows) {
-        const existing = permsByRole.get(permRow.roleId) ?? [];
-        existing.push(permRow);
-        permsByRole.set(permRow.roleId, existing);
-      }
+      const permsByRole = Map.groupBy(permRows, (permRow) => permRow.roleId);
 
       // buildRole por role
       const roles: Role[] = [];
