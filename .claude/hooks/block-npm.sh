@@ -49,9 +49,9 @@ if echo "$COMMAND" | grep -qE '(^|[;&|()[:space:]])npm([[:space:]]|$)'; then
 Use `pnpm` em vez de `npm` neste projeto.
 
 Razão canônica:
-  • ADR-0029 (handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md)
-    define pnpm 11 como package manager único do core-api. Ele supersedes o
-    ADR-0012, que era a referência antiga desta mensagem.
+  • ADR-0076 (handbook/architecture/adr/0076-pnpm-12-supersedes-0029.md)
+    define pnpm 12 como package manager único do core-api. Ele supersedes o
+    ADR-0029 (pnpm 11), que por sua vez superseded o ADR-0012.
   • ADR-0011 (supply-chain hardening) exige --frozen-lockfile + approve-builds,
     workflow que só funciona com pnpm.
   • `npm install` regrava package-lock.json em paralelo, criando drift

@@ -35,8 +35,10 @@ jobs:
           # upstream e um valor exato duplica o .nvmrc. Cobrado por
           # tests/cleanup/node-version-single-source.test.ts.
           node-version-file: .nvmrc
-      - name: Habilita pnpm (corepack lê a versão do packageManager)
-        run: corepack enable
+      - name: pnpm — versão lida do packageManager
+        # Sem `version:`: a action lê `packageManager` do package.json, fonte única (ADR-0076).
+        # Substitui o `corepack enable`: o corepack saiu do Node a partir do 25.
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - name: Install (frozen-lockfile)
         run: pnpm install --frozen-lockfile
       - name: Typecheck

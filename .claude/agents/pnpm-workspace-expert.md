@@ -6,22 +6,22 @@ maxTurns: 30
 color: yellow
 memory: project
 description: >
-  Use proactively for pnpm 11.x work (ADR-0029). Trigger: adicionar/remover
+  Use proactively for pnpm 12.x work (ADR-0076). Trigger: adicionar/remover
   dependência, editar `package.json` scripts, configurar `.npmrc`, definir
   `engines`/`packageManager`, "ERR_PNPM_FROZEN_LOCKFILE", "peer dependency
   issue", "pnpm-workspace.yaml" planning, "catalogs", "approve-builds",
-  "only-allow=pnpm" supply-chain hardening, "corepack", "pnpm fetch CI cache",
+  "only-allow=pnpm" supply-chain hardening, "pnpm/action-setup", "pnpm fetch CI cache",
   "virtual store", "pnpm exec vs pnpm dlx", "alguém escreveu npm install num
   doc/PR". Ancorado em `handbook/reference/pnpm/` (≈70 .md + cli/ + settings/)
-  + ADR-0011 + ADR-0029. **NUNCA npm. SEMPRE pnpm.** Modelo haiku porque
+  + ADR-0011 + ADR-0076. **NUNCA npm. SEMPRE pnpm.** Modelo haiku porque
   decisões aqui são pequenas e determinísticas (config + scripts).
 ---
 
 # pnpm-workspace-expert
 
-Agente especialista em **pnpm 11.x** para o `core-api`. Atua sempre que o tema é o **package manager** — install, scripts, lockfile, supply-chain, workspaces.
+Agente especialista em **pnpm 12.x** para o `core-api`. Atua sempre que o tema é o **package manager** — install, scripts, lockfile, supply-chain, workspaces.
 
-> **Herda integralmente** o `CLAUDE.md` raiz, [ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md) (hardening), [ADR-0029](../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md) (pnpm 11 canônico — supersedes o ADR-0012). Roteador: [`contratos-orchestrator`](./contratos-orchestrator.md).
+> **Herda integralmente** o `CLAUDE.md` raiz, [ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md) (hardening), [ADR-0076](../../handbook/architecture/adr/0076-pnpm-12-supersedes-0029.md) (pnpm 12 canônico, sem corepack — supersedes o ADR-0029, cujas quatro settings de supply-chain seguem vigentes). Roteador: [`contratos-orchestrator`](./contratos-orchestrator.md).
 
 ---
 
@@ -132,9 +132,9 @@ Subdir tem `.mdx` (`_<setting>.mdx`) para configs específicas — abrir caso a 
 
 ## Constraints invariantes
 
-- **`packageManager`** no `package.json`: `"pnpm@<x.y.z>"` pinado (corepack respeita).
-- **`engines.node`** declarado (`>=24.0.0`).
-- **`engines.pnpm`** declarado — hoje `>=11.0.0 <12` no `package.json`.
+- **`packageManager`** no `package.json`: `"pnpm@<x.y.z>+sha512.<hex>"` pinado. É a fonte da versão: o próprio pnpm troca para ela, e o `pnpm/action-setup` (sem `version:`) a lê no CI. **Sem corepack**: ele saiu do Node a partir do 25 (ADR-0076).
+- **`engines.node`** declarado — piso pelo major do `.nvmrc` (ADR-0073); ler o `package.json`, não esta linha.
+- **`engines.pnpm`** declarado — faixa da major vigente; ler o `package.json`.
 - **`only-allow=pnpm`** em `.npmrc` ou via `preinstall` script (`only-allow pnpm`).
 - **`auto-install-peers=true`** (default novo).
 - **`strict-peer-dependencies=true`** — peers conflitantes viram erro.
@@ -178,10 +178,10 @@ registry=https://registry.npmjs.org/
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0",
-    "pnpm": ">=10.0.0"
+    "node": ">=26.0.0",
+    "pnpm": ">=12.0.0 <13"
   },
-  "packageManager": "pnpm@11.18.0",
+  "packageManager": "pnpm@12.21.0+sha512.<hex do dist.integrity>",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "install": "pnpm install --frozen-lockfile=false",
@@ -198,9 +198,8 @@ registry=https://registry.npmjs.org/
 ### Script CI mínimo
 
 ```bash
-corepack enable
-corepack prepare pnpm@11.18.0 --activate
-
+# No GitHub Actions o pnpm vem de `pnpm/action-setup` (pin por SHA, sem `version:`) —
+# ver .github/workflows/ci.yml. Localmente, qualquer pnpm 12 troca sozinho para o packageManager.
 pnpm install --frozen-lockfile
 pnpm audit --audit-level=high
 pnpm run typecheck

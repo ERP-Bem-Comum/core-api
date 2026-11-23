@@ -2,7 +2,7 @@
 
 Backend do ERP Bem Comum, modelado como **modular monolith**. Vários módulos de negócio coabitam o mesmo processo Node, isolados por pasta + prefixo de tabela (`ctr_*`, `fin_*`, …) e comunicando-se por **eventos via Outbox** (ADR-0014/0015). Cada módulo é desenhado para poder ser extraído como serviço independente no futuro, sem refactor traumático.
 
-> **Stack:** Node.js 24 LTS · TypeScript 6.0 (roadmap TS 7 / compilador nativo — ADR-0009) · ESM (`"type": "module"`, `NodeNext`) · pnpm 11 · Drizzle ORM 0.45 + mysql2 3.22 (MySQL 8.4 — ADR-0020) · **borda HTTP Fastify 5** com Zod **contract-first** + OpenAPI 3.1 (ADR-0025/0027) · storage S3/MinIO (ADR-0019) · auth próprio com JWT ES256 via `jose` (ADR-0024).
+> **Stack:** Node.js 26 LTS · TypeScript 6.0 (roadmap TS 7 / compilador nativo — ADR-0009) · ESM (`"type": "module"`, `NodeNext`) · pnpm 12 · Drizzle ORM 0.45 + mysql2 3.22 (MySQL 8.4 — ADR-0020) · **borda HTTP Fastify 5** com Zod **contract-first** + OpenAPI 3.1 (ADR-0025/0027) · storage S3/MinIO (ADR-0019) · auth próprio com JWT ES256 via `jose` (ADR-0024).
 >
 > **Source of Truth:** [`handbook/`](./handbook/) (`handbook/architecture/adr/` vence tudo). Contexto canônico em [`CLAUDE.md`](./CLAUDE.md). Orquestrador, agentes e skills em [`./.claude/`](./.claude/).
 >
@@ -230,12 +230,12 @@ Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/referen
 | ------------------------------------------------------------------------------ | ----------------------------------- | ------------------- |
 | [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         | Roteamento (agente **ou** skill)    | ✅ ativo            |
 | [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md) | TypeScript 6 / type system          | ✅ ativo            |
-| [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)           | Node 24 / ESM / `node:test`         | ✅ ativo            |
+| [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)           | Node 26 / ESM / `node:test`         | ✅ ativo            |
 | [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                 | Drizzle ORM + Drizzle Kit           | ✅ ativo            |
 | [`mysql-database-expert`](./.claude/agents/mysql-database-expert.md)           | MySQL 8.4 (SQL, índices, locks)     | ✅ ativo            |
 | [`mysql2-driver-expert`](./.claude/agents/mysql2-driver-expert.md)             | Driver `mysql2` (pool, auth, TLS)   | ✅ ativo            |
 | [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)           | Docker / Compose / BuildKit         | ✅ ativo            |
-| [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           | pnpm 11 / supply-chain              | ✅ ativo            |
+| [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           | pnpm 12 / supply-chain              | ✅ ativo            |
 | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           | Fastify 5 + plugins                 | ✅ ativo (ADR-0025) |
 | [`zod-expert`](./.claude/agents/zod-expert.md)                                 | Zod 4 (schemas de borda, ADR-0027)  | ✅ ativo            |
 | [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       | Nodemailer SMTP adapter             | ✅ ativo            |

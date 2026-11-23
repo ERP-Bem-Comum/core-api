@@ -2,7 +2,7 @@
 
 # ADR-0029: pnpm 11.x com defaults de supply-chain (supersedes ADR-0012)
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0076](./0076-pnpm-12-supersedes-0029.md) em 2026-11-23 (versão maior e corepack; as quatro settings seguem vigentes)
 - **Date:** 2026-05-30
 - **Deciders:** Arquiteto técnico + Gabriel Aderaldo
 - **Supersedes:** [ADR-0012](./0012-pnpm-package-manager.md)
