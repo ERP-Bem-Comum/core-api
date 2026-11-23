@@ -1,10 +1,10 @@
 ---
 inquiry: 0031
 title: 'A reserva que trava o vão antes do registro — deadlock 1213 na emissão concorrente de remessa'
-state: open
+state: decided
 opened: 2026-08-21
-decided:
-last_reviewed: 2026-08-21
+decided: 2026-08-23
+last_reviewed: 2026-11-23
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
@@ -15,6 +15,7 @@ last_reviewed: 2026-08-21
 - **Asked to:** medição própria contra MySQL 8.4.11 real (x99), com `innodb_print_all_deadlocks=ON` e `performance_schema.data_locks`; fonte primária = MySQL 8.4 Reference Manual
 - **Impact:** issue [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) · PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) · o piloto VAN (épico #756) depende da emissão de remessa
 - **Gatilho de fechamento:** existir decisão sobre QUAL das quatro alternativas da §4 adotar, com o efeito colateral do braço C medido. Enquanto não houver, o PR #814 fica aberto e a proteção contra dupla emissão **não** está em produção.
+- **Revisão 2026-11-23 — passa a `decided`:** o gatilho está cumprido desde 2026-08-23 (braço A, §5), e o efeito colateral foi medido em 24/08. O PR #814 foi integrado em 2026-08-24 e as issues #789 e #808 estão fechadas. Sobra uma saída de §6 sem dono — a issue sobre a superfície de lock do `fin_payables_status_idx` (§3.8) —, que é execução e não mantém a pergunta aberta.
 
 ---
 

@@ -3,7 +3,7 @@ inquiry: 0032
 title: "Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock"
 state: open
 opened: 2026-08-23
-last_reviewed: 2026-08-23
+last_reviewed: 2026-11-23
 ---
 
 # Inquiry-0032: Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock
@@ -14,6 +14,7 @@ last_reviewed: 2026-08-23
 - **Opened by:** Gabriel (sessão `core-api-17`, assistida)
 - **Asked to:** P.O. (pendente) / `suporte-infra-agent` (medição em MySQL real, respondida)
 - **Impact:** ADR novo sobre fronteira `Document`↔`Payable` | decisão operacional sobre ajuste de nota
+- **Revisão 2026-11-23:** segue `open`, mas não espera mais terceiro: a P.O. respondeu em 02/09 e o que resta é execução. Parte já entrou — `AdjustDocumentFailure` carrega os títulos presos (`kind: 'held-payables'`, `adjust-document.ts`). Ainda falta: o `1451` não é classificado em nenhum adapter do `financial` (nenhuma ocorrência em `src/modules/financial/`), e o ADR da fronteira `Document`↔`Payable` não existe.
 
 ---
 
