@@ -64,7 +64,11 @@ const PROBES: Readonly<Record<string, readonly Probe[]>> = {
 const LIB_ARRAY = /"lib"\s*:\s*\[([^\]]*)\]/;
 
 const declaredLibs = (): readonly string[] => {
-  const match = LIB_ARRAY.exec(readSource('tsconfig.json'));
+  const withoutComments = readSource('tsconfig.json')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/,\s*\/\/.*$/gm, ',');
+  const match = LIB_ARRAY.exec(withoutComments);
   assert.ok(
     match?.[1] !== undefined,
     'tsconfig.json sem "lib" — o default do target esconde o que é tipado',
