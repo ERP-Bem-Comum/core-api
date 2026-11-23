@@ -12,7 +12,7 @@
 <!-- BEGIN:generated -->
 
 - **Inquiries cobertas:** 7 de 39 — [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md) · [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) · [0036](./0036-onde-a-documentacao-deve-viver.md) · [0038](./0038-fim-do-compose-como-modelo-de-execucao.md) · [0039](./0039-postgresql-no-lugar-do-mysql.md)
-- **Total de perguntas em aberto:** **20**
+- **Total de perguntas em aberto:** **19**
 
 As demais 32 estão `decided` (24), `deferred` (5, com gatilho declarado) ou `superseded` (3) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -31,7 +31,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0035](#inquiry-0035--duas-normas-que-a-medição-contradiz) | `open` | Dono do repo — as duas saídas mexem em norma, não em código | Anti-padrão nº 4 do `CLAUDE.md`; §"Padrão de upsert" do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — nenhuma bloqueia código hoje | 4 |
 | [0036](#inquiry-0036--onde-a-documentação-deve-viver) | `open` | Dono do repo + o MCP `acdg-skills` de volta ao ar, para inventariar o que já indexa | Nada de código — decide o layout do repositório: 1.442 arquivos (84 % do volume) e 707 citações do harness | 2 |
 | [0038](#inquiry-0038--o-fim-do-composeyaml-como-modelo-de-execução) | `open` | Dono do repo em (a); em (b), olhar o `ERP-INFRA` | Remoção dos serviços do `compose.yaml` — hoje o único caminho local de integração, usado pelos 4 scripts de e2e; e a direção `compose → taskdef` que três artefatos afirmam e o [ADR-0068](../architecture/adr/0068-env-fail-fast-every-environment.md) nega | 2 |
-| [0039](#inquiry-0039--postgresql-no-lugar-do-mysql-84) | `open` | Quem trabalha nela — P1, P2 e P4 respondidas em 23/11 (premissas do ADR-0013 caíram; PG 18.7 em todos os ambientes; stack provada por spike 7/7); restam os deadlocks da 0031/0032 e a linha de base de desempenho | Supersede do [ADR-0013](../architecture/adr/0013-mysql-database-engine.md) e do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md); a reescrita do SQL, que deve nascer já no engine escolhido | 2 |
+| [0039](#inquiry-0039--postgresql-no-lugar-do-mysql-84) | `open` | Quem trabalha nela — P1 a P5 respondidas em 23/11 (premissas do ADR-0013 caíram; PG 18.7 em todos os ambientes; stack provada por spike; deadlocks e linha de base medidos); balanço mudar × não mudar favorece mudar; resta escrever o ADR | Supersede do [ADR-0013](../architecture/adr/0013-mysql-database-engine.md) e do [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md); a reescrita do SQL, que deve nascer já no engine escolhido | 1 |
 
 ---
 
@@ -208,7 +208,7 @@ real. Das inquiries que restam aqui, nenhuma espera terceiro: ou dependem do don
 ## Inquiry-0039 — PostgreSQL no lugar do MySQL 8.4
 
 > **Origem:** [`0039-postgresql-no-lugar-do-mysql.md`](./0039-postgresql-no-lugar-do-mysql.md) §4 e §6
-> **Aberta em:** 2026-11-23 · **Destinatário:** quem trabalha nela — P1 e P2 foram respondidas pelo Gabriel em 23/11; o que resta é medição e escolha técnica
+> **Aberta em:** 2026-11-23 · **Destinatário:** quem trabalha nela — P1 e P2 foram respondidas pelo Gabriel em 23/11, e P3 a P5 foram medidas no mesmo dia; a P7 (dados de produção) também foi respondida, e o que resta é o ADR
 > **Por que importa:** o [ADR-0013](../architecture/adr/0013-mysql-database-engine.md) ficou com MySQL por continuidade
 > com o legado, e **nenhuma das três premissas se sustenta mais**: o ETL será desligado, não há ligação com a Magalu e
 > a reescrita do SQL já está decidida. Como esse SQL vai ser reescrito de qualquer forma, o custo de trocar o engine
@@ -217,9 +217,16 @@ real. Das inquiries que restam aqui, nenhuma espera terceiro: ou dependem do don
 
 - [x] ~~**P1.** As premissas do ADR-0013 ainda valem?~~ — **Não** (Gabriel, 23/11).
 - [x] ~~**P2.** Onde fica a homologação?~~ — fora da Magalu, que saiu do projeto; PG 18.7 em todos os ambientes.
-- [ ] **P3.** Medir num PostgreSQL 18 real os cenários de deadlock da [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) e da [0032](#inquiry-0032--título-remetido-pertence-ao-documento) em `READ COMMITTED`. _Parcial: o outbox com `SKIP LOCKED` e o produtor sem bloqueio durante o claim já foram provados pelo spike._
+- [x] ~~**P3.** Deadlocks da [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) e da [0032](#inquiry-0032--título-remetido-pertence-ao-documento) no PG 18~~:
+  - 0031: 0/20 deadlocks.
+  - 0032: 20/20 com `FOR UPDATE` e 0/20 com `FOR NO KEY UPDATE`, que passa a ser condição de adoção.
+  - A recusa por `RESTRICT` sai como `23001`.
 - [x] ~~**P4.** Stack SQL-first para PostgreSQL~~ — dbmate + psqldef + PgTyped + pg + squawk + pgTAP, com spike 7/7 verde contra o PG 18.7.
-- [ ] **P5.** Medir a linha de base de desempenho do SQL atual (queries mais lentas, `EXPLAIN` das rotas quentes), para que "o SQL atual destrói a performance" vire número comparável antes e depois.
+- [x] ~~**P5.** Linha de base do SQL atual~~:
+  - 9 casos acima de 100 ms, de 0,25 s a 4,0 s, no MySQL 8.4.13 com 200 mil títulos fictícios.
+  - O padrão dominante é agregação sobre a tabela inteira (`recon`) para servir uma página.
+- [ ] **P6.** Escrever o ADR que substitui o [ADR-0013](../architecture/adr/0013-mysql-database-engine.md) e o [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md), com a versão, a stack, as condições de adoção (P3/P4) e a linha de base da P5.
+- [x] ~~**P7.** Há dado de produção a migrar?~~ — Sim, desatualizado, e precisa ser carregado de qualquer forma; fica um dump de reserva (Gabriel, 23/11). Deixa de ser impedimento e vira condição: um script de conversão verificado contra o dump.
 
 **O que NÃO se decide aqui:** a tradução em si (97 upserts, 136 migrations, mapeamento de errno), que só começa depois de um ADR que substitua o 0013 e o 0020.
 

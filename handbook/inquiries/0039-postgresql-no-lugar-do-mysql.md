@@ -14,7 +14,7 @@ last_reviewed: 2026-11-23
 - **Opened by:** Gabriel Aderaldo (sessão assistida)
 - **Asked to:** pesquisa própria — fontes primárias (postgresql.org, docs AWS RDS/Aurora, docs.magalu.cloud, docs Drizzle, registry npm) e inventário do código
 - **Impact:** [ADR-0013](../architecture/adr/0013-mysql-database-engine.md) e [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) (ambos `Accepted`; trocar de engine exige ADR novo que os substitua) · [ADR-0014](../architecture/adr/0014-mysql-database-isolation.md) · [ADR-0015](../architecture/adr/0015-mysql-outbox-pattern.md) · anti-padrão nº 4 do `CLAUDE.md`
-- **Gatilho de fechamento:** P3, P4 e P5 respondidas (§6) e o ADR que substitui o 0013 e o 0020 escrito com esses números. P1 e P2 foram respondidas em 2026-11-23.
+- **Gatilho de fechamento:** o ADR que substitui o 0013 e o 0020 escrito com os números das P3, P4 e P5 (P6, §6). As P1 a P5 foram respondidas em 2026-11-23.
 
 ---
 
@@ -172,11 +172,98 @@ Ecossistema Node (registry npm, 2026-11-23):
    - dbmate e squawk chegam como `optionalDependencies` por plataforma, sem script.
 7. **O código gerado roda direto pelo type stripping do Node 26:** sem `enum`, e com o import do runtime como valor.
 
+### 2026-11-23 — P3: os ciclos de deadlock da 0031 e da 0032 medidos no PostgreSQL 18.7
+
+Mesmo spike, com a migration `20261123000002_financial_lock_cycles.sql`: o recorte do `financial` que forma os dois ciclos (`fin_documents`, `fin_payables`, `fin_remittances`, `fin_remittance_payables`), com as FKs e o `ON DELETE` iguais aos de `schemas/mysql.ts` — `CASCADE` dentro do documento, `RESTRICT` nas três FKs do vínculo. Os testes ficam em `test/lock-cycles.test.ts`.
+
+Cada rodada força a mesma intercalação dos dumps das inquiries de origem. Duas sessões, `READ COMMITTED` (o default), `deadlock_timeout = 50ms`. O teste só avança quando `pg_stat_activity` mostra a sessão anterior em `wait_event_type = 'Lock'`. Há 6.000 títulos fictícios de fundo, para que nenhum lock caia em tabela vazia. São **20 rodadas por cenário**.
+
+| Cenário | MySQL 8.4 (medido na inquiry de origem) | PostgreSQL 18.7 |
+| :--- | :--- | :--- |
+| **0031**: duas emissões dos mesmos títulos, na ordem **antiga** (busca da remessa inexistente com `FOR UPDATE` antes de travar os títulos) | deadlock em 20/20; gap lock no `supremum` × insert-intention | **0/20 deadlocks.** A primeira emissão grava 20/20 e a segunda é recusada por `payables-already-held` 20/20, isto é, a releitura sob lock vê o vínculo já commitado |
+| **0032**: emissão × hard replace do documento, com o documento travado por `SELECT … FOR UPDATE`, que é o que `document-repository.drizzle.ts:224-228` faz | 10/10 deadlocks, em RR e em RC | **deadlock em 20/20** (`40P01`). A vítima foi sempre a emissão |
+| **0032**, com o documento travado por `SELECT … FOR NO KEY UPDATE` | não existe no InnoDB | **0/20 deadlocks.** A emissão grava 20/20 e o hard replace é recusado com `23001 restrict_violation` 20/20: a regra de negócio aparece no lugar do deadlock |
+
+**Por que cada resultado sai assim, pela doc oficial do PostgreSQL 18:**
+
+- **0031.** No PostgreSQL a busca por uma linha inexistente não deixa lock. O `FOR UPDATE` trava linhas encontradas, e não há equivalente ao gap lock do InnoDB. A doc não afirma isso com a palavra "gap": a página de isolamento só menciona *predicate locking* para `SERIALIZABLE`. **A prova é a medição.** A segunda sessão espera no título e, em `READ COMMITTED`, *"the would-be updater will wait for the first updating transaction to commit or roll back"* e *"the search condition of the command (the `WHERE` clause) is re-evaluated"* ([transaction-iso](https://www.postgresql.org/docs/18/transaction-iso.html) §13.2.1).
+- **0032 com `FOR UPDATE`.** A checagem de FK do `INSERT` em `fin_remittance_payables` pede `FOR KEY SHARE` na linha do documento. Pela tabela de conflitos, `FOR KEY SHARE` conflita **só** com `FOR UPDATE` ([explicit-locking](https://www.postgresql.org/docs/18/explicit-locking.html), Tabela 13.3). O ciclo é o mesmo do InnoDB, porque nasce da **ordem de aquisição** do código e não do engine. *"The best defense against deadlocks is generally to avoid them by being certain that all applications … acquire locks on multiple objects in a consistent order"* (§13.3.4).
+- **0032 com `FOR NO KEY UPDATE`.** *"this lock will not block `SELECT FOR KEY SHARE` commands that attempt to acquire a lock on the same rows"*, e é o mesmo lock que *"any `UPDATE` that does not acquire a `FOR UPDATE` lock"* já toma (§13.3.2). O documento continua serializado contra outro `save`, mas deixa de bloquear quem só precisa que a chave exista.
+
+**Achados que entram como condição da adoção:**
+
+1. **A troca de engine não cura o ciclo da 0032 sozinha.** O `save` do documento precisa travar com `FOR NO KEY UPDATE`, porque `FOR UPDATE` reproduz o deadlock 20/20. O `version` e o `UPDATE` do documento não mexem na chave, então não há motivo para o lock mais forte.
+2. **A ordem de aquisição da 0031 (braço A) passa a ser defesa em profundidade, e não a correção.** Sem gap lock, a ordem antiga não deadlocka. Manter a ordem global não custa nada e evita a próxima surpresa.
+3. **`ON DELETE RESTRICT` responde `23001 restrict_violation`, e não `23503 foreign_key_violation`.** É o que o PG chama de `restrict_violation` ([errcodes](https://www.postgresql.org/docs/18/errcodes-appendix.html)). Quem hoje traduz o `1451` do MySQL precisa reconhecer o `23001`, senão a recusa "título já remetido" vira erro genérico de infraestrutura. O primeiro rascunho do teste esperava `23503` e falhou nisso.
+4. **O `1213` vira `40P01 deadlock_detected`**, e o `withDeadlockRetry` precisa ser retraduzido junto. `55P03 lock_not_available` é o equivalente do `1205`.
+
+### 2026-11-23 — P5: linha de base de desempenho do SQL atual (MySQL 8.4.13, carga fictícia)
+
+**Ambiente.** MySQL **8.4.13**, a mesma linha do `compose.yaml` (`mysql:8.4`), baixado do CDN oficial com a assinatura GPG da Oracle conferida e instalado em `~` sem sudo. Fica num laboratório fora do repositório (`~/dev/Casly/p5-mysql-baseline`) com `innodb_buffer_pool_size = 2G`, na máquina de desenvolvimento (8 vCPU, 15 GB, WSL2).
+
+**Schema.** As **136 migrations reais**, aplicadas por `src/jobs/migrate/run.ts` sem nenhuma alteração.
+
+**Volume.** É **premissa declarada, não medição de produção**. Todos os dados são fictícios: nomes de listas fixas, documentos com raiz `9`, UUID v4 derivado de hash.
+
+| Tabela | Linhas |
+| :--- | ---: |
+| `par_suppliers` / `fin_supplier_view` | 5.000 |
+| `fin_documents` | 100.000 |
+| `fin_payables` / `fin_payable_view` | 200.000 (1 principal + 1 retenção por nota) |
+| `fin_remittances` / `fin_remittance_payables` | 2.000 / 40.000 |
+| `fin_reconciliations` / `_items` | 60.000 / 60.000 |
+| `ctr_contracts` | 5.000 |
+
+**Método.**
+- O **servidor HTTP real** (`src/server.ts`, código sem alteração) roda contra esse banco, e as rotas `GET` vêm do próprio OpenAPI (`/docs/json`).
+- O SQL medido é o que o Drizzle de fato emite. Cada rota é chamada 1 vez para aquecer e 7 vezes medidas; a tabela mostra a mediana.
+- O SQL é atribuído por `performance_schema.events_statements_summary_by_digest`, zerado antes de cada rota, e o plano vem de `EXPLAIN ANALYZE` sobre o texto capturado em `events_statements_history_long`.
+- Variantes: padrão (página 1), busca `silva` e página 2000.
+- Resultado reprodutível: os números se repetiram, dentro de ±20%, depois de recriar o banco do zero.
+- Foram 73 casos (rota × variante).
+  - 61 responderam 200. Os 47 que não estão na tabela abaixo ficaram abaixo de 80 ms.
+  - 12 responderam 400/404, porque o gerador não preencheu algum parâmetro obrigatório.
+  - **Ficaram sem medição:** `/financial/payables`, `/financial/reconciliation-periods`, `/reports/dashboard/realized`, `/partner-municipalities`, `/programs` e `/users`.
+
+**Os casos acima de 100 ms:**
+
+| Rota | Mediana | Queries/req | O que gasta o tempo |
+| :--- | ---: | ---: | :--- |
+| `GET /reports/generalReport` | **3,6–4,0 s** | 15–23 | `COUNT(*)` de 2,9–3,3 s examinando **800 mil linhas**, sem índice. Depois o `SELECT` da página (0,7–1,4 s). Mais **N+1**: uma consulta ao `partners` por fornecedor da página (12–20 por request) |
+| `GET /financial/payable-titles/counts` | **2,4 s** | 3 | `GROUP BY status` sobre o join inteiro (300 mil linhas examinadas), mais o `COUNT` e o `SELECT` de `listDocuments` com a `recon` |
+| `GET /reports/cashflow/chart` | **2,3 s** | 1 | 622 mil linhas examinadas; `GROUP BY` + `ORDER BY` sobre `DATE_FORMAT(due_date)`; temporária com 21.600 linhas |
+| `GET /reports/payment-position` | **2,3 s** | 1 | **1 milhão de linhas examinadas**, sem índice; temporária com 5.000 grupos |
+| `GET /financial/documents` | **1,8–2,1 s** | 2 | A `recon` (abaixo) executada **duas vezes**: no `COUNT` e no `SELECT` da página. A página 1 custa 0,7 s para devolver 20 linhas |
+| `GET /reports/cashflow` | **1,9 s** | 1 | 600 mil linhas examinadas, sem índice |
+| `GET /financial/payable-titles` | **0,6–0,7 s** | 2 | `COUNT` do join inteiro (300 mil); `ORDER BY created_at` sem índice, filesort sobre 200 mil |
+| `GET /reports/realized` | **0,6 s** | 4 | `YEAR(reconciled_at)` / `DATE_FORMAT` no `WHERE` e no `GROUP BY`; 164 mil + 118 mil linhas |
+| `GET /financial/dashboard/cost-centers` | **0,25 s** | 1 | soma condicional sobre todos os pagos, sem recorte de data no `WHERE` |
+
+**O padrão que mais custa: a subquery `recon`.** É `document-repository.drizzle.ts:529-537`, e `general-report-projection.ts:137-143` repete o padrão. O plano é sempre o mesmo:
+
+```
+-> Materialize  (actual time=714..714 rows=100000 loops=1)
+   -> Group aggregate: count(0), sum((fin_payables.status = 'Reconciled'))  (actual time=0.7..533 rows=100000)
+      -> ... fin_payables (200000 linhas)
+```
+
+A tabela derivada agrupa **todos** os títulos da base (100 mil grupos, ~0,7 s) para usar 20 deles. Como `COUNT` e página são duas queries, ela roda duas vezes por request. O custo cresce com o tamanho da base, e não com o da página: com o dobro de títulos, a listagem de documentos dobra.
+
+**Resumo para o antes e depois da reescrita:**
+- **Agregação sobre a tabela inteira para servir uma página:** `recon` e os `COUNT(*)` totais.
+- **Função sobre coluna em `WHERE` e `GROUP BY`:** `YEAR()` e `DATE_FORMAT()`.
+- **`ORDER BY` em coluna sem índice.**
+- **N+1 cross-módulo:** generalReport.
+- **`OFFSET`:** a página 2000 custa pouco a mais que a página 1. O custo dominante já é a varredura total, e não o deslocamento.
+
+O PostgreSQL não resolve nenhum desses itens sozinho. São defeitos de SQL, e o número acima é a régua da reescrita.
+
 ### Não confirmado
 
 - Versão default do RDS e do Aurora, e disponibilidade por versão em `sa-east-1` (a doc não detalha por região).
 - Lista ao vivo da Magalu: `mgc` não está autenticada.
-- Fonte primária sobre gap locks: o PostgreSQL não usa next-key/gap lock em `READ COMMITTED` como o InnoDB em `REPEATABLE READ`, mas isso ainda não foi citado da doc oficial nem medido contra os cenários da 0031 e da 0032.
+- Volume real de produção. A P5 usou volume fictício declarado acima; a relação entre o tempo e o tamanho da base vale como forma, mas o número absoluto de produção depende do volume de lá.
+- A ausência de gap lock em `READ COMMITTED` no PostgreSQL está **medida** (P3, cenário 0031), mas a doc oficial não a afirma com essas palavras.
 
 ---
 
@@ -213,12 +300,67 @@ Ecossistema Node (registry npm, 2026-11-23):
 
 | Alternativa | Prós | Contras | Veredito |
 | :--- | :--- | :--- | :--- |
-| A. Ficar no MySQL 8.4 | Zero custo de migração; código e testes de lock já medidos no InnoDB | Collation `_ci` e deadlocks de gap lock continuam (0031/0032); ecossistema SQL-first mais pobre (ver abaixo) | em aberto |
+| A. Ficar no MySQL 8.4 | Zero custo de migração; código e testes de lock já medidos no InnoDB | Collation `_ci` e deadlocks de gap lock continuam (0031/0032); ecossistema SQL-first mais pobre (ver abaixo) | em aberto; ver o balanço abaixo |
 | B. PostgreSQL 18.7 | Única versão com equivalente direto da busca `_ci`; RDS/Aurora; suporte até 2030/31 | Tradução de 97 upserts, errno e 136 migrations — custo que a reescrita do SQL já vai pagar | **versão recomendada** |
 | C. PostgreSQL 17.12 | 12 minors | Busca `_ci` vira projeto à parte; sem `uuidv7`/`RETURNING OLD/NEW`; EOL 2029; um upgrade de major a mais | ❌ seu único motivo era a Magalu, que saiu do projeto |
 | D. PostgreSQL 19.0 | Mais features e suporte até 2031 | 4 dias de vida; sem oferta gerenciada | ❌ reavaliar quando entrar no RDS |
 
 **Ligação com a pesquisa SQL-first (mesma sessão):** a recomendação para MySQL era Skeema (schema), dbmate (migrations) e Kysely + kysely-codegen (queries). **O Skeema é só MySQL.** No PostgreSQL, o leque de ferramentas que tipam SQL escrito à mão é maior e mais maduro (PgTyped, SafeQL, sqlc com TS, Atlas/sqldef para schema declarativo). Escolher o engine muda a resposta daquela pesquisa, então as duas decisões devem andar juntas.
+
+### Balanço: mudar ou não mudar (2026-11-23)
+
+Cada ponto aponta para a evidência da §3. Quando não há evidência, o ponto diz isso.
+
+**Pontos para mudar:**
+
+| # | Ponto | Evidência |
+| :- | :--- | :--- |
+| M1 | As três premissas que mantiveram o MySQL caíram. O ADR-0013 já listava os negativos do MySQL; sem a continuidade, eles ficam sem contrapeso | §4, premissas |
+| M2 | A reescrita do SQL já está decidida. Feita no PostgreSQL, a tradução de 97 upserts, 136 migrations e 204 SQL crus é paga uma vez só; feita no MySQL e trocada depois, é paga duas | §3, inventário; §4 |
+| M3 | O objetivo declarado é SQL "natural, verificável e validado". No PostgreSQL existe a cadeia completa: tipos derivados do servidor (PgTyped), lint de migration (squawk) e teste de schema (pgTAP). No MySQL o Skeema cobre o schema, mas as queries ficam em builder (Kysely), e não em SQL escrito à mão | P4 |
+| M4 | Sem gap lock em `READ COMMITTED`: o ciclo da 0031 não ocorre (0/20), e o produtor do outbox não bloqueia com um claim aberto, o que dispensa o desvio de isolamento da rule `adapters.md` | P3, P4 |
+| M5 | Modos de lock mais finos (`FOR NO KEY UPDATE` × `FOR KEY SHARE`) dão o remédio para o ciclo da 0032 sem reordenar o agregado | P3 |
+| M6 | A busca sem caixa nem acento tem equivalente nativo no 18, com `LIKE` em collation ICU | P4, spike |
+| M7 | Recursos que o código hoje contorna: `RETURNING` (inclusive `OLD`/`NEW` no upsert), `uuidv7()`, índice parcial, schemas reais (alternativa ao isolamento por prefixo do ADR-0014) e DDL transacional (no MySQL, DDL faz commit implícito, então uma migration que falha no meio deixa estado parcial) | §3, versões; spike (rollback e reaplicação) |
+
+**Pontos para não mudar (ou custos e riscos de mudar):**
+
+| # | Ponto | Evidência |
+| :- | :--- | :--- |
+| N1 | **A lentidão não é do engine.** As 9 rotas lentas são agregação sobre a tabela inteira, função em `WHERE`, `ORDER BY` sem índice e N+1. Uma reescrita no próprio MySQL resolve todas | P5 |
+| N2 | O deadlock da 0032 continua no PostgreSQL se o código não mudar (20/20 com `FOR UPDATE`) | P3 |
+| N3 | **Migração dos dados de produção.** Desligar o ETL elimina o fluxo legado → core-api, mas não os dados que o próprio core-api já tenha gravado em MySQL. Se houver produção com dado real, a conversão é um projeto à parte, com janela de corte e conferência | **não medido**: volume e existência de produção não confirmados |
+| N4 | O harness inteiro é MySQL: 52 arquivos em `.claude/` (rules, skills e agents), 5 ADRs com MySQL no título (0013, 0014, 0015, 0020, 0026), 19 gates em `tests/cleanup`/semgrep, mais compose, CI e deploy. Cada um precisa ser reescrito ou aposentado, e ADR aceito só muda por ADR novo | `grep -ril mysql` em 2026-11-23 |
+| N5 | A semântica de isolamento muda: o default passa de `REPEATABLE READ` (InnoDB) para `READ COMMITTED`. Os 21 pontos com isolamento explícito e o código que conte com o snapshot do RR precisam ser revistos | §3, inventário |
+| N6 | Ferramentas menos maduras do que parecem: o PgTyped sai com código 0 em erro de parse, deduz nulidade errada em `RETURNING old.*` e tem uma opção (`camelCaseColumnNames`) que mente no tipo. O `pg` devolve `bigint` como string, o que toca o `Money`. O `@scarf/scarf` tenta rodar telemetria no postinstall | P4, achados 2 a 6 |
+| N7 | A busca `_ci` no 18 tem limites: só `LIKE` (sem `ILIKE` nem regex), não usa índice e o B-tree perde a deduplicação | P4; doc de collation do 18 |
+| N8 | Mudar engine e SQL ao mesmo tempo concentra o risco numa entrega só. É o oposto do "uma batalha de cada vez" do ADR-0001, ainda que M2 mostre que separar as duas custa mais | §4 |
+| N9 | O `WAIT FOR LSN`, que daria leitura das próprias escritas na réplica (ADR-0026), só existe no 19, que ainda não tem oferta gerenciada | §3, versões |
+
+**Pontos neutros:** os dois engines estão no RDS e no Aurora em `sa-east-1`; `FOR UPDATE`, `SKIP LOCKED` e `CHECK` existem nos dois; o Drizzle suporta os dois dialetos.
+
+**Como os pontos se pesam:**
+
+- **N1 tira o desempenho da conta.** Desempenho justifica a reescrita, não a troca de engine. A troca se sustenta em M2, M3 e M4: custo pago uma vez, ferramentas para o SQL verificável e uma classe inteira de deadlock (gap lock) que deixa de existir.
+- **N2, N5, N6 e N7 viram condições de adoção**, e não motivos contra: cada um tem remédio conhecido e medido (P3, P4).
+- **N4 é custo certo e grande, mas finito**, e uma parte dele (ADRs e rules sobre o SQL atual) muda com a reescrita de qualquer forma.
+- **N3 é o único ponto que pode inverter o balanço.** Sem produção com dado real, a troca custa quase só a reescrita, que já vai acontecer. Com produção, entra uma migração de dados que esta inquiry não mediu.
+- **N8 se mitiga pela ordem:** migrar por módulo (o isolamento por prefixo `ctr_*`/`fin_*` do ADR-0014 permite essa divisão), começando por um módulo pequeno, com a régua da P5 no fim de cada etapa.
+
+**N3 respondida (Gabriel, 2026-11-23):**
+
+> Tem dados em produção, porém estão desatualizados e precisam ser migrados para produção de qualquer maneira, e podemos
+> manter um dump do banco também para isso, fazendo não ser um impedimento.
+
+Uma carga de dados em produção já ia acontecer de qualquer forma. A conversão de MySQL para PostgreSQL entra nessa carga, em vez de ser um projeto à parte, e o dump do MySQL serve de reserva e de base para conferir a conversão. O que sobra de N3 é uma **condição de adoção**: um script de conversão verificado, que trate:
+
+- `datetime` → `timestamp`;
+- `varchar(36)` → `uuid`;
+- `bigint` do `Money`;
+- collations;
+- e confira a contagem de linhas e somas de controle contra o dump.
+
+**Leitura:** com N3 neutralizado, **nenhum ponto inverte o balanço, e ele favorece mudar**. Os custos que sobram (N2 e N4 a N9) entram no ADR (P6) como condições de adoção e plano de execução.
 
 ---
 
@@ -228,7 +370,13 @@ Ecossistema Node (registry npm, 2026-11-23):
 
 - **Versão:** **PostgreSQL 18.7** em todos os ambientes. A 17 perdeu o único motivo que tinha (a Magalu) e a 19 espera oferta gerenciada.
 - **Premissas do ADR-0013:** nenhuma se sustenta (§4). A reescrita do SQL já está decidida, então o custo da troca de engine coincide com um trabalho que vai acontecer de qualquer forma.
-- **Ainda não decidido:** a troca de engine em si. Ela sai como ADR que substitui o 0013 e o 0020, e esse ADR deve nascer junto com a escolha da stack SQL-first (P4) e com as medições (P3, P5). Sem elas, o ADR afirmaria ganho sem número.
+- **Medições (P3, P5, 2026-11-23):**
+  - Dos dois ciclos de deadlock, o da 0031 some no PG 18.7.
+  - O da 0032 só some com `FOR NO KEY UPDATE` no `save` do documento, uma mudança de código que entra na reescrita.
+  - A linha de base do SQL atual tem 9 rotas acima de 100 ms. A pior é o `generalReport`, com ~4 s em 200 mil títulos fictícios.
+  - O custo dominante é agregação sobre a tabela inteira para servir uma página. É defeito de SQL, independente de engine.
+- **Balanço mudar × não mudar (§4):** favorece mudar. O único ponto capaz de inverter, a migração dos dados de produção, foi neutralizado na P7: a carga já ia acontecer, e há dump de reserva.
+- **Ainda não decidido:** a troca de engine em si. Ela sai como ADR que substitui o 0013 e o 0020, com os números da §3 (P6).
 
 ---
 
@@ -236,9 +384,23 @@ Ecossistema Node (registry npm, 2026-11-23):
 
 - [x] **P1.** As premissas do ADR-0013 ainda valem? — **Não** (Gabriel, 2026-11-23): o ETL será desligado, a reescrita do SQL está decidida e não há ligação com a Magalu. Ver §3 e §4.
 - [x] **P2.** Onde fica a homologação? — **Fora da Magalu**, que saiu do projeto. PG 18.7 em todos os ambientes.
-- [ ] **P3.** Medir, num PostgreSQL 18 real, os cenários de deadlock das inquiries 0031 e 0032 em `READ COMMITTED`, com citação da doc oficial sobre o modelo de locks. **Parcial (2026-11-23):** o outbox com `SKIP LOCKED` e o produtor sem bloqueio durante o claim já estão provados pelo spike (§3). Faltam os dois ciclos de deadlock: a reserva de remessa da 0031 e o hard replace do documento da 0032.
+- [x] **P3.** Medir, num PostgreSQL 18 real, os cenários de deadlock das inquiries 0031 e 0032 em `READ COMMITTED`, com citação da doc oficial sobre o modelo de locks.
+  - **0031:** 0/20 deadlocks; a segunda emissão é recusada corretamente.
+  - **0032 com `FOR UPDATE`:** 20/20 deadlocks, como no MySQL.
+  - **0032 com `FOR NO KEY UPDATE`:** 0/20 deadlocks, e a recusa sai como `23001`.
+  - Os 4 achados de adoção estão no §3.
 - [x] **P4.** Escolher a stack SQL-first para PostgreSQL. — **dbmate + psqldef + PgTyped + pg + squawk + pgTAP**, provada por spike com 7/7 verdes contra o PG 18.7. Os 7 achados que viram condição de adoção estão no §3.
-- [ ] **P5.** Medir a linha de base de desempenho do SQL atual, com as queries mais lentas e o `EXPLAIN` das rotas quentes, para que "o SQL atual destrói a performance" vire número comparável antes e depois da reescrita.
+- [x] **P5.** Medir a linha de base de desempenho do SQL atual, com as queries mais lentas e o `EXPLAIN` das rotas quentes, para que "o SQL atual destrói a performance" vire número comparável antes e depois da reescrita.
+  - Medido no MySQL 8.4.13, com as 136 migrations reais, o servidor HTTP real e carga fictícia de 100 mil notas e 200 mil títulos.
+  - 9 rotas passam de 100 ms, de 0,25 s a 4,0 s.
+  - O padrão dominante é a `recon`, que materializa 100 mil grupos para servir 20 linhas.
+  - A tabela completa e os planos estão no §3.
+- [ ] **P6.** Escrever o ADR que substitui o [ADR-0013](../architecture/adr/0013-mysql-database-engine.md) e o [ADR-0020](../architecture/adr/0020-mysql-only-supersedes-dual-dialect.md). Ele leva:
+  - a versão (18.7) e a stack (P4);
+  - as condições de adoção da P3 e da P4;
+  - a linha de base da P5 como régua da reescrita;
+  - o balanço mudar × não mudar (§4), com a conversão dos dados de produção verificada contra o dump (P7) como condição.
+- [x] **P7.** Existe dado de produção gravado pelo core-api em MySQL? — **Sim, desatualizado, e precisa ser carregado em produção de qualquer forma** (Gabriel, 2026-11-23). Fica um dump do MySQL de reserva. A conversão entra nessa carga e deixa de ser impedimento. A condição de adoção é um script de conversão verificado contra o dump (§4, balanço).
 
 ---
 
