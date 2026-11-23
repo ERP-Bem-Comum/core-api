@@ -168,12 +168,16 @@ secrets:
 
 ```Dockerfile
 # syntax=docker/dockerfile:1
-ARG NODE_VERSION=24-bookworm-slim
+ARG NODE_VERSION=26-bookworm-slim
+
+# pnpm sem corepack (saiu do Node a partir do 25) — ADR-0076. Pinar por digest no Dockerfile real.
+FROM ghcr.io/pnpm/pnpm:<versão do packageManager> AS pnpm
 
 # --- deps ------------------------------------------------------------------
 FROM node:${NODE_VERSION} AS deps
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@latest --activate
+COPY --from=pnpm /opt/pnpm /opt/pnpm
+RUN ln -s /opt/pnpm/pnpm /usr/local/bin/pnpm
 COPY package.json pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod=false
@@ -243,7 +247,7 @@ handbook/
 - **`unhealthy`** mesmo com app rodando ⇒ healthcheck checa endpoint errado, ou intervalo curto demais.
 - **`depends_on` "espera" sem `condition: service_healthy`** ⇒ não espera de verdade; usar `condition: service_healthy`.
 - **Build lento, baixando tudo do registry npm** ⇒ cache mount no BuildKit (`--mount=type=cache,target=/root/.local/share/pnpm/store`).
-- **`pnpm install` falhando no container** ⇒ corepack precisa estar ativado; usar `RUN corepack enable && corepack prepare pnpm@<version> --activate`.
+- **`pnpm install` falhando no container** ⇒ o pnpm vem de `COPY --from=ghcr.io/pnpm/pnpm` (`/opt/pnpm`), não de corepack — a imagem node:26 não traz corepack (ADR-0076). Conferir tag/digest e `PNPM_VERSION` contra o `packageManager`.
 - **`root` no container** ⇒ red flag; criar `USER nonroot`.
 - **`latest` em imagem** ⇒ rejeitar; pinar SHA quando possível.
 - **Secret via env var no `docker run -e PASSWORD=...`** ⇒ vaza em `ps aux` e history. Usar `secrets:` ou file mount.

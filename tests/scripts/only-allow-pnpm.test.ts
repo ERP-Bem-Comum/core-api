@@ -34,7 +34,7 @@ describe('only-allow-pnpm guard', () => {
   it('CA1: aborta (exit ≠ 0) quando o user agent é npm', () => {
     const r = runWith('npm/10.0.0 node/v24.16.0 linux x64', NPM_EXECPATH);
     assert.notEqual(r.status, 0);
-    assert.match(r.stderr, /ADR-0012/);
+    assert.match(r.stderr, /ADR-0076/);
   });
 
   it('CA1: aborta (exit ≠ 0) quando o user agent é yarn', () => {
@@ -63,9 +63,16 @@ describe('only-allow-pnpm guard', () => {
     assert.equal(r.status, 0);
   });
 
-  it('CA3: mensagem de erro está em PT-BR e cita ADR-0012', () => {
+  it('CA2: permite (exit 0) no pnpm 12 — UA volta a vir preenchido', () => {
+    // Medido em 2026-11-23 com `pnpm exec`: "pnpm/12.21.0 npm/? node/? linux x64".
+    const r = runWith('pnpm/12.21.0 npm/? node/? linux x64', '');
+    assert.equal(r.status, 0);
+  });
+
+  // A norma vigente do package manager é o ADR-0076 (supersedes 0029, que supersede 0012).
+  it('CA3: mensagem de erro está em PT-BR e cita o ADR vigente (0076)', () => {
     const r = runWith('npm/10.0.0 node/v24.16.0 linux x64', NPM_EXECPATH);
     assert.match(r.stderr, /pnpm/);
-    assert.match(r.stderr, /ADR-0012/);
+    assert.match(r.stderr, /ADR-0076/);
   });
 });

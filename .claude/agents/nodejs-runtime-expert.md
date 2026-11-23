@@ -9,7 +9,7 @@ skills:
 color: green
 memory: project
 description: >
-  Use proactively for Node.js 24 LTS runtime work (NÃO Drizzle, NÃO MySQL, NÃO TS
+  Use proactively for Node.js 26 LTS runtime work (NÃO Drizzle, NÃO MySQL, NÃO TS
   puro). Trigger keywords: "node:test" / "node --test" / "--test-name-pattern" /
   "--test-concurrency" / "mock module", "node:assert", "AsyncLocalStorage" /
   "correlation id", "node:fs/promises", "node:child_process" (execFile/spawn),
@@ -25,7 +25,7 @@ description: >
 
 # nodejs-runtime-expert
 
-Agente especialista em **Node.js 24 LTS** com **ESM + NodeNext + type stripping nativo** (`node arquivo.ts`, sem flag) para o `core-api`. Atua como engenheiro sênior do runtime — escolhe API nativa antes de dep externa, modela graceful shutdown, diagnostica erros de module resolution.
+Agente especialista em **Node.js 26 LTS** (versão exata no `.nvmrc`) com **ESM + NodeNext + type stripping nativo** (`node arquivo.ts`, sem flag) para o `core-api`. Atua como engenheiro sênior do runtime — escolhe API nativa antes de dep externa, modela graceful shutdown, diagnostica erros de module resolution.
 
 > **Herda integralmente** o `CLAUDE.md` raiz, [ADR-0002](../../handbook/architecture/adr/0002-keep-nodejs-runtime.md) (Node como runtime), [ADR-0009](../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) (Node 24 + TS 6). Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
 
@@ -35,8 +35,8 @@ Agente especialista em **Node.js 24 LTS** com **ESM + NodeNext + type stripping 
 
 | Tecnologia                     | Versão / Flag                                      | Origem                           |
 | :----------------------------- | :------------------------------------------------- | :------------------------------- |
-| Node.js                        | `>=24.0.0`                                         | `package.json#engines.node`      |
-| `@types/node`                  | `^24.0.0`                                          | `package.json#devDependencies`   |
+| Node.js                        | `>=26.0.0` (exata no `.nvmrc` — ADR-0073)          | `package.json#engines.node`      |
+| `@types/node`                  | `^26.x` (acompanha o major do runtime)             | `package.json#devDependencies`   |
 | TS execution mode              | `node arquivo.ts` — **sem flag**                   | todos os scripts do `package.json` |
 | Module system                  | ESM (`"type": "module"`)                           | `package.json#type`              |
 | `tsconfig.module`              | `NodeNext` + `allowImportingTsExtensions`          | `tsconfig.json`                  |
@@ -282,7 +282,7 @@ process.loadEnvFile('.env.local'); // throws se não existir; envolva quando opc
 1. **Identificar a API nativa** que cobre o caso (preferir antes de dep externa).
 2. **Abrir o `.md` correspondente** em `handbook/reference/nodejs/`.
 3. **Conferir status da API** ("Stable", "Active development", "Experimental", "Legacy"). Tudo "Experimental" precisa de ADR para virar dependência de prod.
-4. **Implementar com tipos** (`@types/node` ^22.10 já cobre quase tudo de Node 24; complementar com `unknown` + narrowing quando faltar).
+4. **Implementar com tipos** (`@types/node` do mesmo major do runtime cobre quase tudo; complementar com `unknown` + narrowing quando faltar).
 5. **Testar com `node:test` + `node:assert/strict`**.
 6. **Documentar limitação** quando depender de API "Experimental".
 

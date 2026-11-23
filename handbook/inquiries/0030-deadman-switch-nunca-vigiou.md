@@ -4,7 +4,7 @@ title: "O dead-man's switch que nunca vigiou — o ADR-0042 sai do código sem s
 state: open
 opened: 2026-08-17
 decided:
-last_reviewed: 2026-08-17
+last_reviewed: 2026-11-23
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
@@ -15,6 +15,7 @@ last_reviewed: 2026-08-17
 - **Asked to:** verificação própria — estado do repositório, histórico de runs do Actions e o registro de aferição do ADR
 - **Impact:** [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md) (`Accepted`, **não superado**) · épico #67 · o ponto cego que ele existia para cobrir segue aberto
 - **Gatilho de fechamento:** existir um desenho que satisfaça os cinco requisitos da §5. Enquanto não houver, esta inquiry fica `open` — e o ADR-0042 fica de pé descrevendo um mecanismo que o código não tem.
+- **Revisão 2026-11-23:** continua `open` pelo mesmo motivo. O ADR-0042 segue `Accepted` e sem supersede; não há `deadman/` nem `deadman-audit.yml` no repositório (só duas menções em comentário de `.github/workflows/audit.yml`), e nenhum desenho novo foi proposto. A pergunta continua fazendo sentido: job que morre em silêncio segue sem detecção.
 
 ---
 

@@ -10,17 +10,17 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0",
-    "pnpm": ">=11.0.0 <12"
+    "node": ">=26.0.0",
+    "pnpm": ">=12.0.0 <13"
   },
   "devEngines": {
     "runtime": {
       "name": "node",
-      "version": "24.22.3",
+      "version": "26.13.1",
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c",
+  "packageManager": "pnpm@12.22.0+sha512.894940a3d9a57dfa6fd373990fb4e41e09c2f2d76d982ed1d75275d39267f988fb4e2d40900cbe9921c68d97c67aa1a1096d276633db248f7b34927ac9ddb7a4",
   "imports": {
     "#src/*": "./src/*",
     "#scripts/*": "./scripts/*",
@@ -94,7 +94,7 @@
     "financial:payee-bank-distribution": "node --enable-source-maps scripts/financial/diagnostics/payee-bank-distribution.ts"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.6",
     "@types/nodemailer": "^8.0.1",
     "drizzle-kit": "^0.31.10",
     "oxlint": "1.86.0",

@@ -14,12 +14,13 @@
 #
 # core-api — módulo Contracts
 # ─────────────────────────────────────────────────────────────────────────────
-# Stack: Node.js 24 LTS (Krypton) + TypeScript 6 — ver ADR-0009.
+# Stack: Node.js 26 LTS (Lithium) + TypeScript — runtime acompanha o LTS recomendado (ADR-0058),
+# versão lida do `.nvmrc` (ADR-0073).
 # Persistência: MySQL 8 (ADR-0020). `mysql2` é JS puro, sem binário nativo —
 # stage `deps` não precisa de toolchain C++.
 #
 # Camadas:
-#   1. base    — pin do node:24.22-bookworm-slim por digest (ADR-0011 supply chain)
+#   1. base    — pin do node:26.13-bookworm-slim por digest (ADR-0011 supply chain)
 #   2. deps    — instala dependências (sem toolchain C++)
 #   3. runtime — imagem final mínima, non-root, signal-safe
 #
@@ -44,16 +45,26 @@
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 1 — base
 # Pin: digest do índice multi-arch (amd64 + arm64), Debian 12 Bookworm Slim.
-# Para atualizar: `docker buildx imagetools inspect node:24.22-bookworm-slim --format '{{.Manifest.Digest}}'`
-# Digest atual (2026-11-12, Node 24.22.3 — remove a confiança nas CAs eMudhra comprometidas, SGM #110338):
-# sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54
+# Para atualizar: `docker buildx imagetools inspect node:26.13-bookworm-slim --format '{{.Manifest.Digest}}'`
+# Digest atual (2026-11-23, índice OCI publicado em 2026-11-11; `NODE_VERSION=26.13.1` no config
+# da imagem, conferido no registry): sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1
 #
 # A major.minor desta tag é cobrada contra o `.nvmrc` por
 # `tests/cleanup/node-version-single-source.test.ts` — subir aqui sem subir lá (ou vice-versa) fica
 # vermelho no gate. O digest em si o teste NÃO cobra: a tag é reconstruída upstream a cada patch
 # de Debian, e digest errado já falha o build com `manifest unknown`.
 # ────────────────────────────────────────────────────────────────────────────
-FROM node:24.22-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS base
+# pnpm vem da imagem oficial `ghcr.io/pnpm/pnpm`, pinada por digest como a base (ADR-0011).
+# O corepack saiu do Node a partir do 25 — a imagem node:26 não o traz —, e a doc do pnpm 12
+# (https://pnpm.io/docker) recomenda copiar `/opt/pnpm` da imagem oficial. O diretório vai
+# inteiro porque também carrega o `node-gyp`. A tag repete `PNPM_VERSION`, que
+# `tests/cleanup/supply-chain-settings.test.ts` cobra contra `packageManager`.
+# A imagem é Debian (glibc): o executável em `/opt/pnpm` carrega com `ld-linux-x86-64.so.2` /
+# `ld-linux-aarch64.so.1` e só pede libc, libm, libdl, libpthread e libgcc_s — todas presentes na
+# bookworm-slim. Conferido nas camadas amd64 e arm64 da 12.22.0 em 2026-11-23.
+FROM ghcr.io/pnpm/pnpm:12.22.0@sha256:81346f048d668195928d441b80efc0df300474ed8bf81789e4554ec0079079d0 AS pnpm
+
+FROM node:26.13-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS base
 
 # tini é o init mínimo (PID 1) para reaping de zumbis e forward de SIGTERM/SIGINT.
 # Disponível via apt em Debian — equivalente ao `apk add tini` do Alpine anterior.
@@ -61,9 +72,11 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends tini \
  && rm -rf /var/lib/apt/lists/*
 
-# Corepack habilita pnpm sem npm install global. Versão pinada (ADR-0029).
-ENV PNPM_VERSION=11.18.0
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+# Versão pinada (ADR-0076). Precisa bater com a tag do stage `pnpm` acima.
+ENV PNPM_VERSION=12.22.0
+COPY --from=pnpm /opt/pnpm /opt/pnpm
+RUN for bin in pnpm pn pnpx pnx; do ln -s "/opt/pnpm/$bin" "/usr/local/bin/$bin"; done \
+ && pnpm --version | grep -qx "${PNPM_VERSION}"
 
 WORKDIR /app
 
@@ -78,14 +91,18 @@ FROM base AS deps
 # pnpm-workspace.yaml é necessário aqui: carrega `overrides` (security fixes —
 # Dependabot/esbuild) que o `--frozen-lockfile` valida contra o lock. Sem ele o
 # build falha com ERR_PNPM_LOCKFILE_CONFIG_MISMATCH (override no lock sem config).
-# pnpm 11 ignora package.json#pnpm.overrides quando há pnpm-workspace.yaml.
+# O pnpm (desde o 11) ignora package.json#pnpm.overrides quando há pnpm-workspace.yaml.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # --frozen-lockfile (ADR-0011) + --ignore-scripts (zero allowlist necessária
 # após remoção de better-sqlite3 — `mysql2` e `drizzle-orm` são JS puros).
 # Cache mount do BuildKit acelera builds repetidos em CI.
+# `--store-dir` explícito: no pnpm 12, quando nenhum diretório acima do projeto aceita hardlink
+# (o cache mount é outro filesystem), o store padrão cai em `node_modules/.pnpm-store` — e iria
+# para dentro da imagem em vez de ficar no cache.
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install \
+      --store-dir=/root/.local/share/pnpm/store \
       --frozen-lockfile \
       --prod \
       --ignore-scripts
@@ -104,7 +121,7 @@ LABEL org.opencontainers.image.title="core-api" \
       org.opencontainers.image.vendor="Envolve / Bem Comum" \
       org.opencontainers.image.source="https://github.com/envolve/bem-comum-core-api" \
       org.opencontainers.image.licenses="proprietary" \
-      org.opencontainers.image.base.name="docker.io/library/node:24.22-bookworm-slim"
+      org.opencontainers.image.base.name="docker.io/library/node:26.13-bookworm-slim"
 
 # Variáveis de runtime.
 # - NODE_ENV=production: stripping de warnings, otimizações.
@@ -131,7 +148,7 @@ ENV NODE_ENV=production \
 # Copia node_modules do estágio deps.
 COPY --from=deps /app/node_modules ./node_modules
 # pnpm-workspace.yaml também no runtime: `pnpm <script>` (ex.: `pnpm job:auth:sync-permissions`
-# no deploy) roda o deps-status-check do pnpm 11, que revalida `overrides` (esbuild) contra o lock.
+# no deploy) roda o deps-status-check do pnpm, que revalida `overrides` (esbuild) contra o lock.
 # Sem o workspace aqui, `overrides` fica vazio vs. lock → ERR_PNPM_LOCKFILE_CONFIG_MISMATCH.
 # (O exemplo era `pnpm seed:admin` — comando que não existe na imagem, já que `scripts/` não é
 # copiado. Era o sintoma do #462: a intenção estava documentada e quebrada.)
@@ -152,18 +169,18 @@ RUN groupadd -r app --gid ${APP_GID} \
  && chown -R app:app /app
 USER app:app
 
-# Sinal de parada limpa. Node 24 responde a SIGTERM via `process.on('SIGTERM')`.
+# Sinal de parada limpa. O Node responde a SIGTERM via `process.on('SIGTERM')`.
 STOPSIGNAL SIGTERM
 
 # HTTP-first (ADR-0037): a borda primária é o servidor HTTP (`src/server.ts`).
 # Endpoint /health: src/shared/http/app.ts:185 → retorna {"status":"ok"}.
 # Porta: DEFAULT_PORT=3000 (src/shared/http/config.ts); override via env PORT.
-# Probe via node (Node 24 fetch global) — a imagem base (bookworm-slim) NÃO tem
+# Probe via node (fetch global) — a imagem base (bookworm-slim) NÃO tem
 # curl nem wget, então `CMD wget ...` seria exit 127. O probe node é puro runtime.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
 
-# `tini` como PID 1, depois `node` executando o `.ts` direto (stripping é default no Node 24).
+# `tini` como PID 1, depois `node` executando o `.ts` direto (stripping é default desde o Node 23.6).
 # ENTRYPOINT é o binário Node direto (sem shell) — encaminha sinais corretamente sem shell-trap.
 #
 # CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida; o entrypoint é o servidor HTTP.

@@ -4,7 +4,8 @@ import process from 'node:process';
 // Dois sinais, porque o pnpm mudou de comportamento entre majors:
 //   - pnpm 10 exporta `npm_config_user_agent` ("pnpm/10.33.4 ...");
 //   - pnpm 11 deixa esse env vazio em lifecycle scripts, mas `npm_execpath`
-//     aponta para `.../pnpm/<ver>/bin/pnpm.mjs`.
+//     aponta para `.../pnpm/<ver>/bin/pnpm.mjs`;
+//   - pnpm 12 volta a exportar o UA ("pnpm/12.21.0 ..."), medido em 2026-11-23.
 // Aceitar se QUALQUER sinal indicar pnpm; npm/yarn falham em ambos
 // (`npm-cli.js`, `yarn.js`), impedindo um lockfile divergente.
 //
@@ -22,8 +23,8 @@ const isPnpm = userAgent.startsWith('pnpm/') || (userAgent === '' && execBase.st
 
 if (!isPnpm) {
   process.stderr.write(
-    'Este repositório exige pnpm (ADR-0012). Rode `pnpm install` — o corepack ativa\n' +
-      'a versão fixada em package.json#packageManager. npm/yarn divergem o lockfile.\n',
+    'Este repositório exige pnpm (ADR-0076). Rode `pnpm install` — o pnpm troca sozinho\n' +
+      'para a versão fixada em package.json#packageManager. npm/yarn divergem o lockfile.\n',
   );
   process.exit(1);
 }

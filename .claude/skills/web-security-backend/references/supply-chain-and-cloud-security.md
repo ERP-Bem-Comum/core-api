@@ -13,8 +13,8 @@ Ref: `handbook/reference/pnpm/{supply-chain-security,only-allow-pnpm,npmrc,conti
 - **SC-002 (MUST):** **`approve-builds`** — scripts de lifecycle (`postinstall` etc.) de dependências só rodam se explicitamente aprovados. Dependência nova com build script não-aprovado ⇒ revisar antes (vetor clássico de supply-chain attack).
 - **SC-003 (MUST):** **lockfile congelado em CI** (`pnpm install --frozen-lockfile`); `pnpm-lock.yaml` commitado e revisado. Drift de lockfile ⇒ build não-reprodutível.
 - **SC-004 (MUST):** **versões pinadas** para deps sensíveis (exatas, sem `^`/`~` quando o ADR exigir); dep nova **auditada** (origem, manutenção, alternativa nativa) antes de entrar — ver Inquiry-0005.
-- **SC-005 (SHOULD):** **corepack** fixa a versão do pnpm (`packageManager` no `package.json`). Sem isso, versão do gerenciador varia entre máquinas.
-- **SC-006 (SHOULD):** preferir **API nativa do Node 24** a dep externa quando equivalente (menos superfície). Ex.: `node:crypto` em vez de lib de hash; `Result` homemade em vez de neverthrow.
+- **SC-005 (SHOULD):** **`packageManager`** no `package.json` fixa a versão do pnpm (o pnpm troca para ela; sem corepack desde o Node 25 — ADR-0076). Sem isso, versão do gerenciador varia entre máquinas.
+- **SC-006 (SHOULD):** preferir **API nativa do Node** a dep externa quando equivalente (menos superfície). Ex.: `node:crypto` em vez de lib de hash; `Result` homemade em vez de neverthrow.
 - **SC-007 (MUST):** nenhum secret no `package.json`/scripts/`.npmrc` commitado (token de registry privado vai em env/`.npmrc` local fora do git).
 
 *Detecção:* `git diff` em `package.json`/`pnpm-lock.yaml` adicionando dep desconhecida; `postinstall` novo; `npm` em qualquer arquivo; `^`/`latest` em dep de segurança.

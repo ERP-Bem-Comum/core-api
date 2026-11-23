@@ -49,8 +49,10 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version-file: .nvmrc
-      - name: Habilita pnpm (corepack — packageManager pinado em package.json)
-        run: corepack enable
+      - name: pnpm — versão lida do packageManager
+        # Sem `version:`: a action lê `packageManager` do package.json, fonte única (ADR-0076).
+        # Substitui o `corepack enable`: o corepack saiu do Node a partir do 25.
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - name: Audit (dependencies de runtime ≥ high)
         id: audit
         run: |
@@ -125,8 +127,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-      - name: Habilita pnpm (corepack — packageManager pinado em package.json)
-        run: corepack enable
+      - name: pnpm — versão lida do packageManager
+        # Sem setup-node: o `audit` só consulta o registry. O pnpm/action-setup usa o Node que o
+        # runner hospedado já traz — runner sem Node exigiria `standalone: true`.
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - name: Audit completo (visibilidade de devDependencies — não bloqueia)
         continue-on-error: true
         run: pnpm audit --audit-level=high --ignore-registry-errors

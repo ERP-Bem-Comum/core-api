@@ -9,8 +9,8 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 7 | quem trabalha nela |
-| `decided` | 23 | ninguém — fechada |
+| `open` | 6 | quem trabalha nela |
+| `decided` | 24 | ninguém — fechada |
 | `deferred` | 5 | o gatilho declarado |
 | `superseded` | 3 | — |
 
@@ -24,7 +24,6 @@ Total: **38**.
 | :--- | :--- | :--- | :--- |
 | [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) | Três trocas estruturais em aberto — assíncrono human-in-the-loop, Drizzle 1.0 e Bruno × TS | 2026-08-05 |  |
 | [0030](./0030-deadman-switch-nunca-vigiou.md) | O dead-man's switch que nunca vigiou — o ADR-0042 sai do código sem ser superado | 2026-08-17 |  |
-| [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) | A reserva que trava o vão antes do registro — deadlock 1213 na emissão concorrente de remessa | 2026-08-21 |  |
 | [0032](./0032-titulo-remetido-fronteira-do-agregado.md) | Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock | 2026-08-23 |  |
 | [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) | Duas normas que a medição contradiz — migration "sempre gerada" e a proibição global de ODKU | 2026-09-01 |  |
 | [0036](./0036-onde-a-documentacao-deve-viver.md) | Onde a documentação deve viver — o critério do `grep` e os 30 MB de handbook/reference | 2026-09-02 |  |
@@ -56,6 +55,7 @@ Total: **38**.
 | [0024](./0024-adr-format-for-llm-agents.md) | Inquiry 0024 — ADR como contexto de agente: o que o campo convergiu, e onde estamos fora |  |  |
 | [0027](./0027-teses-orfas-de-branches-contaminadas.md) | Teses órfãs — o que 7 branches contaminadas tentavam provar | 2026-08-06 | 2026-11-04 |
 | [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) | O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação | 2026-08-06 | 2026-10-15 |
+| [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) | A reserva que trava o vão antes do registro — deadlock 1213 na emissão concorrente de remessa | 2026-08-21 | 2026-08-23 |
 | [0033](./0033-cnab-multipag-bisseccao-validador.md) | O que o Bradesco realmente exige — bisseção de 18 remessas contra o Validador Universal | 2026-08-25 |  |
 | [0034](./0034-in-memory-fora-de-local-custo-na-piramide.md) | Eliminar o in-memory fora de LOCAL — o custo na pirâmide de testes, e por que a estimativa de 179 arquivos estava errada | 2026-08-31 |  |
 | [0037](./0037-laudo-multipag-pix-e-validador-cego.md) | O laudo do Multipag Pix — os 6 pontos confirmados, e a descoberta de que o Validador Universal é cego para a modalidade | 2026-09-02 |  |

@@ -6,22 +6,22 @@ maxTurns: 30
 color: yellow
 memory: project
 description: >
-  Use proactively for pnpm 11.x work (ADR-0029). Trigger: adicionar/remover
+  Use proactively for pnpm 12.x work (ADR-0076). Trigger: adicionar/remover
   dependência, editar `package.json` scripts, configurar `.npmrc`, definir
   `engines`/`packageManager`, "ERR_PNPM_FROZEN_LOCKFILE", "peer dependency
   issue", "pnpm-workspace.yaml" planning, "catalogs", "approve-builds",
-  "only-allow=pnpm" supply-chain hardening, "corepack", "pnpm fetch CI cache",
+  "only-allow=pnpm" supply-chain hardening, "pnpm/action-setup", "pnpm fetch CI cache",
   "virtual store", "pnpm exec vs pnpm dlx", "alguém escreveu npm install num
   doc/PR". Ancorado em `handbook/reference/pnpm/` (≈70 .md + cli/ + settings/)
-  + ADR-0011 + ADR-0029. **NUNCA npm. SEMPRE pnpm.** Modelo haiku porque
+  + ADR-0011 + ADR-0076. **NUNCA npm. SEMPRE pnpm.** Modelo haiku porque
   decisões aqui são pequenas e determinísticas (config + scripts).
 ---
 
 # pnpm-workspace-expert
 
-Agente especialista em **pnpm 11.x** para o `core-api`. Atua sempre que o tema é o **package manager** — install, scripts, lockfile, supply-chain, workspaces.
+Agente especialista em **pnpm 12.x** para o `core-api`. Atua sempre que o tema é o **package manager** — install, scripts, lockfile, supply-chain, workspaces.
 
-> **Herda integralmente** o `CLAUDE.md` raiz, [ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md) (hardening), [ADR-0029](../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md) (pnpm 11 canônico — supersedes o ADR-0012). Roteador: [`contratos-orchestrator`](./contratos-orchestrator.md).
+> **Herda integralmente** o `CLAUDE.md` raiz, [ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md) (hardening), [ADR-0076](../../handbook/architecture/adr/0076-pnpm-12-supersedes-0029.md) (pnpm 12 canônico, sem corepack — supersedes o ADR-0029, cujas quatro settings de supply-chain seguem vigentes). Roteador: [`contratos-orchestrator`](./contratos-orchestrator.md).
 
 ---
 
@@ -49,13 +49,13 @@ Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter 
 - **Configurar `.npmrc` / `pnpm-workspace.yaml` / `package.json#pnpm`**.
 - **Definir scripts** (`scripts`, `pre/post` lifecycle, `--filter`).
 - **Diagnosticar** erro de install (`ERR_PNPM_PEER_DEP_ISSUES`, `ERR_PNPM_FROZEN_LOCKFILE_*`, `ERR_PNPM_UNEXPECTED_STORE`).
-- **Setup CI** (`pnpm install --frozen-lockfile`, `pnpm fetch`, cache, `corepack enable`).
+- **Setup CI** (`pnpm install --frozen-lockfile`, `pnpm fetch`, cache, `pnpm/action-setup` lendo o `packageManager` — sem corepack, ADR-0076).
 - **Supply-chain:**
   - `only-allow=pnpm` (recusar npm/yarn).
   - `approve-builds` (scripts de pós-instalação bloqueados por default desde o pnpm 10).
   - `ignored-builds` (lista granular).
   - `audit-level=high`.
-  - Pin de `packageManager` (corepack).
+  - Pin de `packageManager` (o próprio pnpm troca para a versão pinada).
 - **Workspaces** quando Fase 2 ativar (multi-package no mesmo repo).
 - **Catalogs** (desde o pnpm 10) para versões compartilhadas.
 - **Update planejado** (`pnpm outdated`, `pnpm update --interactive`).
@@ -77,7 +77,7 @@ Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter 
 ## Mapa de referências `handbook/reference/pnpm/`
 
 ### Núcleo (sempre relevantes)
-- [`installation.md`](../../handbook/reference/pnpm/installation.md) — via corepack obrigatório no projeto.
+- [`installation.md`](../../handbook/reference/pnpm/installation.md) — no projeto, sem corepack (ADR-0076): `packageManager` + troca automática de versão pelo pnpm.
 - [`pnpm-cli.md`](../../handbook/reference/pnpm/pnpm-cli.md) — overview do CLI.
 - [`configuring.md`](../../handbook/reference/pnpm/configuring.md) — onde tudo vai.
 - [`package_json.md`](../../handbook/reference/pnpm/package_json.md) — campos suportados.
@@ -99,7 +99,7 @@ Qualquer comando `npm install`/`npm run` num PR ou doc → rejeitar e converter 
 ### CI / produção
 - [`continuous-integration.md`](../../handbook/reference/pnpm/continuous-integration.md) — **referência primária** ao montar CI.
 - [`production.md`](../../handbook/reference/pnpm/production.md) — `--prod`, deploy patterns.
-- [`docker.md`](../../handbook/reference/pnpm/docker.md) — corepack no container; cache mount.
+- [`docker.md`](../../handbook/reference/pnpm/docker.md) — pnpm no container via `COPY --from=ghcr.io/pnpm/pnpm`; cache mount.
 - [`podman.md`](../../handbook/reference/pnpm/podman.md) — informativo.
 
 ### Supply-chain (vinculadas a ADR-0011)
@@ -132,9 +132,9 @@ Subdir tem `.mdx` (`_<setting>.mdx`) para configs específicas — abrir caso a 
 
 ## Constraints invariantes
 
-- **`packageManager`** no `package.json`: `"pnpm@<x.y.z>"` pinado (corepack respeita).
-- **`engines.node`** declarado (`>=24.0.0`).
-- **`engines.pnpm`** declarado — hoje `>=11.0.0 <12` no `package.json`.
+- **`packageManager`** no `package.json`: `"pnpm@<x.y.z>+sha512.<hex>"` pinado. É a fonte da versão: o próprio pnpm troca para ela, e o `pnpm/action-setup` (sem `version:`) a lê no CI. **Sem corepack**: ele saiu do Node a partir do 25 (ADR-0076).
+- **`engines.node`** declarado — piso pelo major do `.nvmrc` (ADR-0073); ler o `package.json`, não esta linha.
+- **`engines.pnpm`** declarado — faixa da major vigente; ler o `package.json`.
 - **`only-allow=pnpm`** em `.npmrc` ou via `preinstall` script (`only-allow pnpm`).
 - **`auto-install-peers=true`** (default novo).
 - **`strict-peer-dependencies=true`** — peers conflitantes viram erro.
@@ -178,13 +178,12 @@ registry=https://registry.npmjs.org/
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0",
-    "pnpm": ">=10.0.0"
+    "node": ">=26.0.0",
+    "pnpm": ">=12.0.0 <13"
   },
-  "packageManager": "pnpm@11.18.0",
+  "packageManager": "pnpm@12.22.0+sha512.<hex do dist.integrity>",
   "scripts": {
-    "preinstall": "npx only-allow pnpm",
-    "install": "pnpm install --frozen-lockfile=false",
+    "preinstall": "node scripts/ci/only-allow-pnpm.ts",
     "ci:install": "pnpm install --frozen-lockfile",
     "audit": "pnpm audit --audit-level=high",
     "outdated": "pnpm outdated --long"
@@ -198,9 +197,8 @@ registry=https://registry.npmjs.org/
 ### Script CI mínimo
 
 ```bash
-corepack enable
-corepack prepare pnpm@11.18.0 --activate
-
+# No GitHub Actions o pnpm vem de `pnpm/action-setup` (pin por SHA, sem `version:`) —
+# ver .github/workflows/ci.yml. Localmente, qualquer pnpm 12 troca sozinho para o packageManager.
 pnpm install --frozen-lockfile
 pnpm audit --audit-level=high
 pnpm run typecheck
@@ -221,7 +219,7 @@ pnpm run test:integration   # quando aplicável
 - **`shamefully-hoist=true`** num PR ⇒ rejeitar; resolver o root cause (lib que assume node_modules flat).
 - **Lockfile dando conflito de merge** ⇒ `pnpm install` resolve. Não edite à mão.
 - **`pnpm dlx` vs `pnpm exec`:** `dlx` baixa pacote, executa, descarta (one-shot). `exec` roda binário do `node_modules` local. Confundir gera download desnecessário.
-- **Versão de pnpm divergindo em time** ⇒ pinar via `packageManager` + `corepack enable`.
+- **Versão de pnpm divergindo em time** ⇒ pinar via `packageManager`; o pnpm troca sozinho para a versão pinada.
 - **`npm install` num doc/PR** ⇒ substituir por `pnpm install`. Sempre.
 
 ---
@@ -243,7 +241,7 @@ pnpm run test:integration   # quando aplicável
 3. **Editar `pnpm-lock.yaml` manualmente.**
 4. **`shamefully-hoist=true`** sem ADR.
 5. **`only-allow` removido.**
-6. **`packageManager` ausente** — corepack não consegue pinar versão sem ele.
+6. **`packageManager` ausente** — sem ele o pnpm não tem versão para a qual trocar, e cada máquina roda a sua.
 7. **Postinstall script aprovado sem revisão** — supply-chain.
 8. **`pnpm install` em CI sem `--frozen-lockfile`** — perde reprodutibilidade.
 
@@ -258,7 +256,7 @@ contratos-orchestrator
        │       │
        │       └─► reference: handbook/reference/pnpm/
        │
-       ├─► docker-compose-expert  (corepack no Dockerfile)
+       ├─► docker-compose-expert  (pnpm no Dockerfile)
        └─► nodejs-runtime-expert  (engines, ESM/NodeNext)
 ```
 

@@ -4,6 +4,14 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-11-23 — 📦 Node 26 LTS + pnpm 12 (ADR-0076 supersedes ADR-0029)
+
+**Runtime para a linha 26**, que é o LTS recomendado desde 28/10/2026. A subida segue o ADR-0058 §1 e não precisa de ADR: a versão vive no `.nvmrc` (ADR-0073), e as derivadas (`devEngines.runtime`, `engines.node`, `@types/node`, `FROM` e `LABEL` do `Dockerfile`) são conferidas por `tests/cleanup/node-version-single-source.test.ts`.
+
+**O pnpm passa para a 12.x**, com o [ADR-0076](./architecture/adr/0076-pnpm-12-supersedes-0029.md). Quem forçou a mudança foi o runtime: **o corepack saiu do Node a partir do 25**, e o repositório ativava o pnpm por ele no `Dockerfile` e em quatro workflows. Agora o CI usa `pnpm/action-setup`, pinado por SHA e sem `version:`, e o Docker copia `/opt/pnpm` da imagem `ghcr.io/pnpm/pnpm`, pinada por digest. As quatro settings de supply-chain seguem iguais. A exceção `trustPolicyExclude: undici-types@6.21.0` saiu porque essa versão não está mais na árvore (verificado com `pnpm why`).
+
+---
+
 ## 2026-08-24 — 🏦 ADR-0065 (Accepted): a responsabilidade pela remessa termina no bucket — `Transmitted` do título na geração; download em produção sob permissão + rastro
 
 **Uma decisão de produto que era, na verdade, uma decisão de fronteira.** A [#792](https://github.com/ERP-Bem-Comum/core-api/issues/792) registrava que, depois de gerar e transmitir, o título continuava "Aprovado" — `Transmitted` existia no enum e nada o atribuía. A P.O. decidiu em 24/08, num menu de trade-offs com o tech lead: o título vira **Transmitido na geração**, porque a partir do bucket a responsabilidade é da VAN e do banco (ACL — Vernon, p. 142), acompanhada pelo site da instituição.
