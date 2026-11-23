@@ -9,12 +9,12 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 6 | quem trabalha nela |
+| `open` | 7 | quem trabalha nela |
 | `decided` | 24 | ninguém — fechada |
 | `deferred` | 5 | o gatilho declarado |
 | `superseded` | 3 | — |
 
-Total: **38**.
+Total: **39**.
 
 ---
 
@@ -28,6 +28,7 @@ Total: **38**.
 | [0035](./0035-norma-de-migration-e-proibicao-de-odku.md) | Duas normas que a medição contradiz — migration "sempre gerada" e a proibição global de ODKU | 2026-09-01 |  |
 | [0036](./0036-onde-a-documentacao-deve-viver.md) | Onde a documentação deve viver — o critério do `grep` e os 30 MB de handbook/reference | 2026-09-02 |  |
 | [0038](./0038-fim-do-compose-como-modelo-de-execucao.md) | O fim do `compose.yaml` como modelo de execução — o que o substitui, e o que ele carregava sem estar declarado | 2026-09-04 |  |
+| [0039](./0039-postgresql-no-lugar-do-mysql.md) | PostgreSQL no lugar do MySQL 8.4 — qual versão, e as premissas do ADR-0013 ainda valem? | 2026-11-23 |  |
 
 ---
 
