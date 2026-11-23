@@ -15,11 +15,10 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { repoPaths } from '../../scripts/handbook/link-scan.ts';
 
-const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..');
 const FILE = join(PROJECT_ROOT, 'handbook/redirects.json');
 
 interface Entry {

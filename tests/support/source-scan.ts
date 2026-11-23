@@ -23,9 +23,8 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 
 /** Raiz do repositório, derivada da posição deste arquivo (`tests/support/`). */
 export const PROJECT_ROOT = resolve(HERE, '..', '..');

@@ -300,7 +300,7 @@ export function loadRedirects(root: string): ReadonlyMap<string, string | null> 
 }
 
 function main(): void {
-  const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const root = resolve(import.meta.dirname, '..', '..');
   const result = scanHandbook(root, { redirects: loadRedirects(root) });
   const count = (c: LinkClass): number => (result.get(c) ?? []).length;
 

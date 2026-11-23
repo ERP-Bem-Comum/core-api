@@ -125,7 +125,7 @@ export function formatViolations(violations: readonly TombstoneViolation[]): str
 }
 
 function main(): void {
-  const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const root = resolve(import.meta.dirname, '..', '..');
   const removed = stagedRemovedMarkdown(root);
   if (removed.length === 0) return;
 

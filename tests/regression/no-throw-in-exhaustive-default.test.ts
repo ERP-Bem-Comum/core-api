@@ -27,10 +27,9 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const repoRoot = resolve(__dirname, '..', '..');
 
 const WATCHED_FILES: readonly string[] = [

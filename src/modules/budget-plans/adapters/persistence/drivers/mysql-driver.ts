@@ -6,7 +6,6 @@ import { createPool, type Pool, type PoolOptions } from 'mysql2/promise';
 import { drizzle, type MySql2Database } from 'drizzle-orm/mysql2';
 import { migrate } from 'drizzle-orm/mysql2/migrator';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -39,7 +38,7 @@ export type BudgetPlansMysqlDriverError =
 
 const CONNECTION_STRING_RE = /^mysql:\/\/[^/@\s]+(?::[^/@\s]*)?@[^/\s]+\/[^/?\s]+/;
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const MIGRATIONS_FOLDER = resolve(HERE, '..', 'migrations', 'mysql');
 
 // Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts), que garante

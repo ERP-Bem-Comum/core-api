@@ -19,10 +19,9 @@ import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // ─── Paths ────────────────────────────────────────────────────────────────
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..', '..', '..', '..');
 const DRIZZLE_MYSQL_CONFIG = join(PROJECT_ROOT, 'db/drizzle/contracts.ts');
 const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');

@@ -21,9 +21,8 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const ADR_DIR = join(PROJECT_ROOT, 'handbook/architecture/adr');
 const INQUIRIES_DIR = join(PROJECT_ROOT, 'handbook/inquiries');

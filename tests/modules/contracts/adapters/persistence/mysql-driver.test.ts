@@ -16,7 +16,6 @@ import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import type {
   MysqlConnectOptions,
@@ -27,7 +26,7 @@ import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/m
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ─── Paths ────────────────────────────────────────────────────────────────
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..', '..', '..');
 const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
 

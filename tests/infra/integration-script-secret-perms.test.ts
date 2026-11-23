@@ -17,9 +17,8 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
 // CI-RUNNER-NON-DESTRUCTIVE (Parte A da #500): a escrita dos secrets (com o `chmod 0o644`) migrou do

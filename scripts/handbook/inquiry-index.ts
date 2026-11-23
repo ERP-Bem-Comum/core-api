@@ -163,7 +163,7 @@ export function countOpenQuestions(checklist: string): number {
 }
 
 function main(): void {
-  const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const root = resolve(import.meta.dirname, '..', '..');
   const dir = join(root, 'handbook/inquiries');
   const check = process.argv.includes('--check');
 

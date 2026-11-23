@@ -26,10 +26,9 @@ import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // ─── Paths ────────────────────────────────────────────────────────────────
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const COMPOSE_YAML = join(PROJECT_ROOT, 'compose.yaml');
 const COMPOSE_CI_YAML = join(PROJECT_ROOT, 'compose.ci.yaml');

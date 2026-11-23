@@ -28,7 +28,6 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   readInquiries,
@@ -38,7 +37,7 @@ import {
   countOpenQuestions,
 } from '../../scripts/handbook/inquiry-index.ts';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const DIR = resolve(HERE, '..', '..', 'handbook/inquiries');
 
 /** Conjunto FECHADO. Um estado novo exige editar este teste — que é o ponto. */
