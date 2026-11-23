@@ -1,27 +1,17 @@
-/**
- * `sleep` cancelável por `AbortSignal` — o pedaço que todo loop de worker precisa para dormir sem
- * atrasar o shutdown. Sem o `addEventListener('abort')`, um SIGTERM durante o sono só teria efeito
- * quando o timer vencesse: até 5 minutos de espera para um processo que já deveria ter morrido.
- *
- * Vive em `shared/runtime/` porque é mecânica de processo, não regra de domínio nem primitiva de
- * tipo. Extraído de `shared/outbox/outbox-worker.ts` quando o segundo loop apareceu — a alternativa
- * era a terceira cópia, e cópia de espera é onde o shutdown silenciosamente diverge.
- */
+import { setTimeout as delay } from 'node:timers/promises';
 
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-export const sleep = async (ms: number, signal?: AbortSignal): Promise<void> =>
-  new Promise((resolve) => {
-    if (signal?.aborted === true) {
-      resolve();
-      return;
-    }
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+/**
+ * Dorme `ms` milissegundos; resolve antes, sem rejeitar, se o `signal` abortar. Não deixa listener
+ * no `signal` depois de resolver, então pode ser chamado em loop com o mesmo `signal`.
+ *
+ * @param ms - duração do sono em milissegundos
+ * @param signal - aborta o sono quando disparado
+ * @see tests/shared/runtime/sleep.test.ts
+ */
+export const sleep = async (ms: number, signal?: AbortSignal): Promise<void> => {
+  if (signal === undefined) return delay(ms);
+  if (signal.aborted) return;
+  await delay(ms, undefined, { signal }).catch((error: unknown) => {
+    if (!signal.aborted) throw error;
   });
+};

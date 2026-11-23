@@ -18,7 +18,6 @@ import { join, resolve } from 'node:path';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
 import {
   stripCode,
@@ -30,7 +29,7 @@ import {
 } from '../../scripts/handbook/link-scan.ts';
 import { gitFixtureEnv, withoutGitEnv } from '../support/git-fixture.ts';
 
-const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..');
 
 const link = (over: Partial<LinkRef> = {}): LinkRef => ({
   from: 'handbook/architecture/x.md',

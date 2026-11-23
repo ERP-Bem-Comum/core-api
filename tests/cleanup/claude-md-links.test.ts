@@ -38,9 +38,8 @@ import { strict as assert } from 'node:assert';
 import { readFileSync, globSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 
 const posix = (p: string): string => p.split(sep).join('/');

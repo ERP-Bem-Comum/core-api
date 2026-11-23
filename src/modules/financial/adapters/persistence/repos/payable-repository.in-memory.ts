@@ -93,9 +93,7 @@ export const createInMemoryPayableRepository = (
     if (timelineStore !== undefined && timelineEntries.length > 0) {
       for (const entry of timelineEntries) {
         const key = entry.documentId as unknown as string;
-        const existing = timelineStore.get(key);
-        if (existing !== undefined) existing.push(entry);
-        else timelineStore.set(key, [entry]);
+        timelineStore.getOrInsert(key, []).push(entry);
       }
     }
 

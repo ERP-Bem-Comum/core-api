@@ -21,8 +21,8 @@ export const makeInMemoryCollaboratorStore = (): InMemoryCollaboratorStore => {
 
   const repository: CollaboratorRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
-    findByCpf: async (cpf) => ok([...map.values()].find((c) => c.cpf === cpf) ?? null),
-    findByEmail: async (email) => ok([...map.values()].find((c) => c.email === email) ?? null),
+    findByCpf: async (cpf) => ok(map.values().find((c) => c.cpf === cpf) ?? null),
+    findByEmail: async (email) => ok(map.values().find((c) => c.email === email) ?? null),
     list: async () => ok([...map.values()]),
     save: async (collaborator) => {
       for (const existing of map.values()) {

@@ -21,7 +21,7 @@ export const makeInMemoryFinancierStore = (): InMemoryFinancierStore => {
 
   const repository: FinancierRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
-    findByCnpj: async (cnpj) => ok([...map.values()].find((f) => f.cnpj === cnpj) ?? null),
+    findByCnpj: async (cnpj) => ok(map.values().find((f) => f.cnpj === cnpj) ?? null),
     list: async () => ok([...map.values()]),
     save: async (financier) => {
       for (const existing of map.values()) {

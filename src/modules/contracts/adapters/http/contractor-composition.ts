@@ -78,10 +78,7 @@ const readByType = (
 
 // Sentinela de timeout — resolve com `onTimeout` (colapsa no mesmo resultado da degradação).
 const withTimeout = async <T>(p: Promise<T>, ms: number, onTimeout: T): Promise<T> => {
-  let fire: (value: T) => void = () => undefined;
-  const timeout = new Promise<T>((resolve) => {
-    fire = resolve;
-  });
+  const { promise: timeout, resolve: fire } = Promise.withResolvers<T>();
   const timer = setTimeout(() => {
     fire(onTimeout);
   }, ms);

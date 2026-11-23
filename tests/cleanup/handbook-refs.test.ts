@@ -17,7 +17,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { repoPaths } from '../../scripts/handbook/link-scan.ts';
 import {
@@ -28,7 +27,7 @@ import {
   REF_SOURCES,
 } from '../../scripts/handbook/refs.ts';
 
-const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..');
 
 const registry = () => buildRegistry(PROJECT_ROOT);
 const refs = () => findRefs(PROJECT_ROOT, ['handbook']);

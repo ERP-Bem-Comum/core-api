@@ -52,7 +52,7 @@ export const makeInMemoryPasswordResetTokenStore = (
     },
     saveWithEvents,
     findByTokenHash: async (tokenHash) =>
-      ok([...map.values()].find((t) => t.tokenHash === tokenHash) ?? null),
+      ok(map.values().find((t) => t.tokenHash === tokenHash) ?? null),
     findUnusedByUserId: async (userId) =>
       ok([...map.values()].filter((t) => t.userId === userId && t.usedAt === null)),
   };

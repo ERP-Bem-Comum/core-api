@@ -19,9 +19,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..');
 const WIKI_DIR = resolve(PROJECT_ROOT, '.wiki');
 const WIKI_REMOTE = 'https://github.com/ERP-Bem-Comum/core-api.wiki.git';
 

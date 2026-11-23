@@ -188,7 +188,7 @@ export function inventory(root: string, dirs: readonly string[]): readonly DirSt
 const pad = (s: string | number, n: number): string => String(s).padStart(n);
 
 function main(): void {
-  const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const root = resolve(import.meta.dirname, '..', '..');
   const dirs = [
     ...topLevelDirs(root, 'handbook').map((d) => `handbook/${d}`),
     ...topLevelDirs(root, '.claude').map((d) => `.claude/${d}`),

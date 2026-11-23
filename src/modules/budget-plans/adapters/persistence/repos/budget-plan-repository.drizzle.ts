@@ -108,12 +108,7 @@ export const createDrizzleBudgetPlanRepository = (
       .select()
       .from(schema.budgets)
       .where(inArray(schema.budgets.budgetPlanId, ids));
-    const budgetsByPlan = new Map<string, (typeof budgetRows)[number][]>();
-    for (const b of budgetRows) {
-      const arr = budgetsByPlan.get(b.budgetPlanId) ?? [];
-      arr.push(b);
-      budgetsByPlan.set(b.budgetPlanId, arr);
-    }
+    const budgetsByPlan = Map.groupBy(budgetRows, (b) => b.budgetPlanId);
     return planRows.map((row) => hydrate(row, budgetsByPlan.get(row.id) ?? []));
   };
 

@@ -66,10 +66,12 @@ export const InMemoryBudgetPlanRepository = (
     // Só a RAIZ (parentId === null) — pós-US4, (year, programRef) é compartilhado pela família.
     findRootByYearAndProgram: async (year, programRef) =>
       ok(
-        [...map.values()].find(
-          (p) =>
-            p.parentId === null && p.year === year && String(p.programRef) === String(programRef),
-        ) ?? null,
+        map
+          .values()
+          .find(
+            (p) =>
+              p.parentId === null && p.year === year && String(p.programRef) === String(programRef),
+          ) ?? null,
       ),
 
     listPaged: async (query): Promise<Result<BudgetPlanPage, never>> => {
@@ -97,21 +99,23 @@ export const InMemoryBudgetPlanRepository = (
       ),
 
     listYears: async () =>
-      ok([...new Set([...map.values()].map((p) => p.year))].toSorted((a, b) => a - b)),
+      ok([...new Set(map.values().map((p) => p.year))].toSorted((a, b) => a - b)),
 
     save,
 
     // Paridade com o INSERT puro + UNIQUE (year, program_ref, version) do drizzle: id repetido ou a
     // mesma versão do mesmo ano + programa é recusado, sem sobrescrever.
     create: async (plan, events) => {
-      const clash = [...map.values()].some(
-        (p) =>
-          String(p.id) === String(plan.id) ||
-          (p.year === plan.year &&
-            String(p.programRef) === String(plan.programRef) &&
-            p.version.major === plan.version.major &&
-            p.version.minor === plan.version.minor),
-      );
+      const clash = map
+        .values()
+        .some(
+          (p) =>
+            String(p.id) === String(plan.id) ||
+            (p.year === plan.year &&
+              String(p.programRef) === String(plan.programRef) &&
+              p.version.major === plan.version.major &&
+              p.version.minor === plan.version.minor),
+        );
       if (clash) return err('budget-plan-already-exists');
       return save(plan, events);
     },
@@ -150,11 +154,11 @@ export const InMemoryBudgetPlanRepository = (
   return {
     repo,
     hasBudget: (budgetId: string) =>
-      [...map.values()].some((plan) => plan.budgets.some((b) => String(b.id) === budgetId)),
+      map.values().some((plan) => plan.budgets.some((b) => String(b.id) === budgetId)),
     planOfBudget: (budgetId: string) => {
-      const owner = [...map.values()].find((plan) =>
-        plan.budgets.some((b) => String(b.id) === budgetId),
-      );
+      const owner = map
+        .values()
+        .find((plan) => plan.budgets.some((b) => String(b.id) === budgetId));
       return owner === undefined ? null : String(owner.id);
     },
     clear: () => {

@@ -2,18 +2,7 @@ import type { Clock } from '#src/shared/ports/clock.ts';
 import type { PlainDate as PlainDateType } from '#src/shared/kernel/plain-date.ts';
 import { utcCalendarDayOf } from '#src/shared/adapters/utc-calendar-day.ts';
 
-/** Formatador cujas partes numéricas `year`, `month` e `day` dão a data no fuso `America/Sao_Paulo`. */
-const SAO_PAULO_DATE_FORMAT = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/Sao_Paulo',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-const numericPart = (
-  parts: readonly Readonly<Intl.DateTimeFormatPart>[],
-  type: 'year' | 'month' | 'day',
-): number => Number(parts.find((p) => p.type === type)?.value);
+const SAO_PAULO = 'America/Sao_Paulo';
 
 const utcMidnightOf = (year: number, month: number, day: number): Date => {
   const utc = new Date(0);
@@ -32,14 +21,10 @@ const utcMidnightOf = (year: number, month: number, day: number): Date => {
  * @throws {RangeError} Quando `instant` é um `Date` inválido.
  */
 export const todayInSaoPauloAt = (instant: Date): PlainDateType => {
-  const parts = SAO_PAULO_DATE_FORMAT.formatToParts(instant);
-  return utcCalendarDayOf(
-    utcMidnightOf(
-      numericPart(parts, 'year'),
-      numericPart(parts, 'month'),
-      numericPart(parts, 'day'),
-    ),
-  );
+  const { year, month, day } = Temporal.Instant.fromEpochMilliseconds(instant.getTime())
+    .toZonedDateTimeISO(SAO_PAULO)
+    .toPlainDate();
+  return utcCalendarDayOf(utcMidnightOf(year, month, day));
 };
 
 /**

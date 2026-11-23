@@ -240,7 +240,7 @@ export function handleMissingManual(pdfPath: string, check: boolean): number {
 }
 
 function main(): void {
-  const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const root = resolve(import.meta.dirname, '..', '..');
   const pdfPath = join(root, MANUAL);
   const outPath = join(root, OUTPUT);
   const check = process.argv.includes('--check');

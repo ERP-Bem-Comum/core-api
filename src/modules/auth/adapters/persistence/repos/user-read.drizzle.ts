@@ -132,9 +132,7 @@ export const createDrizzleUserReadStore = (
 
       const byUser = new Map<string, (number | null)[]>();
       for (const r of rows) {
-        const arr = byUser.get(r.userId) ?? [];
-        arr.push(r.limit);
-        byUser.set(r.userId, arr);
+        byUser.getOrInsert(r.userId, []).push(r.limit);
       }
       const result: ApproverAuthorityView[] = [...byUser.entries()].map(([userId, limits]) => ({
         userId,

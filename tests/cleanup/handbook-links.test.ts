@@ -20,7 +20,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   scanHandbook,
@@ -29,7 +28,7 @@ import {
   repoPaths,
 } from '../../scripts/handbook/link-scan.ts';
 
-const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..');
 
 const scan = () => scanHandbook(PROJECT_ROOT, { redirects: loadRedirects(PROJECT_ROOT) });
 

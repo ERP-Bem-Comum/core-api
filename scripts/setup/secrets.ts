@@ -19,10 +19,9 @@ import { access, chmod, mkdir, rename, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { resolve } from 'node:path';
 import { argv, exit, stderr, stdin, stdout } from 'node:process';
-import { fileURLToPath } from 'node:url';
 
 // ─── Paths ────────────────────────────────────────────────────────────────
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 // scripts/setup/ → sobe 2 níveis até a raiz do projeto.
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const SECRETS_DIR = resolve(PROJECT_ROOT, 'secrets');

@@ -9,15 +9,11 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import { createNativePdfDocumentReader } from '#src/modules/financial/adapters/document-reader/native-pdf.ts';
 
-const DIR = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../../../handbook/guidelines/ocr-fixtures-reais',
-);
+const DIR = join(import.meta.dirname, '../../../../../handbook/guidelines/ocr-fixtures-reais');
 
 const pdfs = ((): readonly string[] => {
   try {

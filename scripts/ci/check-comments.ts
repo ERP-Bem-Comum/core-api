@@ -1,10 +1,9 @@
 import process from 'node:process';
 import { relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { formatFinding, scanPaths } from '#tests/support/comment-scan.ts';
 
-const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..');
 
 const toProjectPath = (arg: string): string =>
   relative(PROJECT_ROOT, resolve(process.cwd(), arg)).split(sep).join('/');

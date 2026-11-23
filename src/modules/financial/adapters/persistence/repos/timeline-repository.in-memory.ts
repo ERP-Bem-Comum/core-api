@@ -37,12 +37,7 @@ export const createInMemoryTimelineRepository = (
   ): Promise<Result<void, TimelineRepositoryError>> => {
     for (const entry of entries) {
       const key = entry.documentId as unknown as string;
-      const existing = store.get(key);
-      if (existing !== undefined) {
-        existing.push(entry);
-      } else {
-        store.set(key, [entry]);
-      }
+      store.getOrInsert(key, []).push(entry);
     }
     return Promise.resolve(ok(undefined));
   },

@@ -46,7 +46,10 @@ export const createInMemoryProgressStore = (): InMemoryProgressStore => {
     eventId: string,
     patch: Partial<Omit<ConsumerProgress, 'consumerId' | 'eventId'>>,
   ): void => {
-    const events = byConsumer.get(consumerId) ?? new Map<string, ConsumerProgress>();
+    const events = byConsumer.getOrInsertComputed(
+      consumerId,
+      () => new Map<string, ConsumerProgress>(),
+    );
     const current = events.get(eventId);
     events.set(eventId, {
       consumerId,
@@ -57,7 +60,6 @@ export const createInMemoryProgressStore = (): InMemoryProgressStore => {
       deadLetteredAt: current?.deadLetteredAt ?? null,
       ...patch,
     });
-    byConsumer.set(consumerId, events);
   };
 
   return {

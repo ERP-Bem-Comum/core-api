@@ -14,9 +14,7 @@ export const createInMemoryRejectedSuggestionRepository = (
   save: async (
     record: RejectSuggestionRecord,
   ): Promise<Result<void, RejectedSuggestionRepositoryError>> => {
-    const set = store.get(record.transactionId) ?? new Set<string>();
-    set.add(record.payableId);
-    store.set(record.transactionId, set);
+    store.getOrInsertComputed(record.transactionId, () => new Set<string>()).add(record.payableId);
     return Promise.resolve(ok(undefined));
   },
 

@@ -12,10 +12,9 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const DECISIONS_DIR = join(PROJECT_ROOT, 'handbook', 'decisions');
 

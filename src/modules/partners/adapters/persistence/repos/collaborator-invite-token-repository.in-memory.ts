@@ -57,7 +57,7 @@ export const makeInMemoryCollaboratorInviteTokenStore = (
     },
     saveWithEvents,
     findByTokenHash: async (tokenHash) =>
-      ok([...map.values()].find((t) => t.tokenHash === tokenHash) ?? null),
+      ok(map.values().find((t) => t.tokenHash === tokenHash) ?? null),
     markUsed: async (id, usedAt) => {
       const current = map.get(id);
       if (current === undefined) return ok(false);

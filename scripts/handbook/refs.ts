@@ -99,7 +99,7 @@ export function unresolved(
 }
 
 function main(): void {
-  const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+  const root = resolve(import.meta.dirname, '..', '..');
   const registry = buildRegistry(root);
   const refs = findRefs(root, ['handbook']);
   const bad = unresolved(refs, registry);

@@ -12,11 +12,10 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { AUTH_USER_UNIQUE_INDEX } from '#src/modules/auth/adapters/persistence/schemas/mysql.ts';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
+const HERE = import.meta.dirname;
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..', '..', '..');
 const PERSISTENCE = resolve(PROJECT_ROOT, 'src', 'modules', 'auth', 'adapters', 'persistence');
 const MIGRATIONS_DIR = resolve(PERSISTENCE, 'migrations', 'mysql');

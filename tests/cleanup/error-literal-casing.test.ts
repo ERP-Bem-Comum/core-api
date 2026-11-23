@@ -24,9 +24,8 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..');
 
 const git = (...args: readonly string[]): readonly string[] =>
   execFileSync('git', ['-C', PROJECT_ROOT, ...args], { encoding: 'utf-8' })

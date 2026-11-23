@@ -23,7 +23,7 @@ export const makeInMemoryRefreshTokenStore = (): InMemoryRefreshTokenStore => {
     },
     findById: async (id) => ok(map.get(id) ?? null),
     findByTokenHash: async (tokenHash) =>
-      ok([...map.values()].find((t) => t.tokenHash === tokenHash) ?? null),
+      ok(map.values().find((t) => t.tokenHash === tokenHash) ?? null),
     findRevocableByUserId: async (userId) =>
       ok([...map.values()].filter((t) => t.userId === userId && t.revokedAt === null)),
   };

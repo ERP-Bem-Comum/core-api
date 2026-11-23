@@ -76,17 +76,6 @@ export const costStructureToRows = (structure: CostStructure): CostStructureRows
 
 // ─── Rows → domínio (fail-closed) ────────────────────────────────────────────
 // Rejeita direction/launchType inválidos vindos do banco via os `parse` do domínio.
-const groupBy = <T>(rows: readonly T[], key: (row: T) => string): Map<string, T[]> => {
-  const map = new Map<string, T[]>();
-  for (const row of rows) {
-    const k = key(row);
-    const arr = map.get(k) ?? [];
-    arr.push(row);
-    map.set(k, arr);
-  }
-  return map;
-};
-
 const subcategoryFromRow = (
   row: Readonly<SubcategoryRow>,
 ): Result<Subcategory, CostStructureMapperError> => {
@@ -146,8 +135,8 @@ export const costStructureFromRows = (
     subcategories: readonly Readonly<SubcategoryRow>[];
   }>,
 ): Result<CostStructure, CostStructureMapperError> => {
-  const categoriesByCostCenter = groupBy(rows.categories, (r) => r.costCenterId);
-  const subcategoriesByCategory = groupBy(rows.subcategories, (r) => r.categoryId);
+  const categoriesByCostCenter = Map.groupBy(rows.categories, (r) => r.costCenterId);
+  const subcategoriesByCategory = Map.groupBy(rows.subcategories, (r) => r.categoryId);
 
   const costCenters: CostCenter[] = [];
   for (const ccRow of rows.costCenters) {
