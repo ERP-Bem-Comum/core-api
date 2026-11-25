@@ -60,6 +60,13 @@ export type ReconciliationReclassification = Readonly<{
   timeline: readonly FinancialTimelineEntry[];
 }>;
 
+export type ActiveReconciliationItem = Readonly<{
+  transactionId: string;
+  reconciliationId: string;
+  payableId: string;
+  reconciledValueCents: number;
+}>;
+
 export type ReconciliationRepository = Readonly<{
   // Insere conciliação+itens, `Paid→Reconciled` nos títulos e `Pending→Reconciled` na transação — na mesma tx.
   // `reclassifications` (M2): UPDATE dos 5 refs do documento + outbox + trilha, na MESMA tx.
@@ -93,6 +100,11 @@ export type ReconciliationRepository = Readonly<{
   findActiveByTransaction: (
     transactionId: StatementTransactionId,
   ) => Promise<Result<Reconciliation | null, ReconciliationRepositoryError>>;
+  // Spec 132: os títulos das conciliações ATIVAS de um conjunto de transações, numa leitura só (o
+  // relatório e o extrato não podem fazer uma chamada por transação). ids vazio → ok([]) sem ir ao banco.
+  findActiveItemsByTransactions: (
+    transactionIds: readonly string[],
+  ) => Promise<Result<readonly ActiveReconciliationItem[], ReconciliationRepositoryError>>;
   // `Active→Undone` (preserva registro), `Reconciled→Paid` nos títulos e `Reconciled→Pending` na transação.
   undo: (
     reconciliation: Reconciliation,

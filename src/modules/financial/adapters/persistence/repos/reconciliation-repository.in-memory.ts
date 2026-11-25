@@ -6,6 +6,7 @@ import type { ReconciliationEvent } from '#src/modules/financial/domain/reconcil
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type {
+  ActiveReconciliationItem,
   ReconciliationReclassification,
   ReconciliationRepository,
   ReconciliationRepositoryError,
@@ -269,6 +270,23 @@ export const createInMemoryReconciliationRepository = (
         }
       }
       return Promise.resolve(ok(null));
+    },
+
+    findActiveItemsByTransactions: async (
+      transactionIds: readonly string[],
+    ): Promise<Result<readonly ActiveReconciliationItem[], ReconciliationRepositoryError>> => {
+      const wanted = new Set(transactionIds);
+      const items = [...reconciliations.values()]
+        .filter((rec) => rec.status === 'Active' && wanted.has(String(rec.transactionId)))
+        .flatMap((rec) =>
+          rec.items.map((item) => ({
+            transactionId: String(rec.transactionId),
+            reconciliationId: String(rec.id),
+            payableId: String(item.payableId),
+            reconciledValueCents: item.reconciledValueCents,
+          })),
+        );
+      return Promise.resolve(ok(items));
     },
 
     undo: async (

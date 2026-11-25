@@ -100,6 +100,26 @@ describe('financial/http — statement read-model (#139)', () => {
     assert.equal(view.closingBalanceCents, '500000'); // sem transações
     assert.equal(view.days.length, 0);
     assert.equal(view.counters.all, 0);
+    assert.equal('companyName' in view, false); // sem `include`, o contrato anterior fica intacto
+
+    // Spec 132: com `include=reconciliation`, a resposta acrescenta o nome da empresa.
+    const withInclude = await handle.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/cedente-accounts/${id}/statement?from=2026-01-01&to=2026-01-31&include=reconciliation`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    assert.equal(withInclude.statusCode, 200, withInclude.body);
+    assert.equal(
+      (withInclude.json() as { companyName: string }).companyName,
+      'ASSOCIACAO BEM COMUM',
+    );
+
+    const invalid = await handle.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/cedente-accounts/${id}/statement?from=2026-01-01&to=2026-01-31&include=outra`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    assert.equal(invalid.statusCode, 400, invalid.body);
   });
 
   it('GET statement sem reconciliation:read → 403', async () => {

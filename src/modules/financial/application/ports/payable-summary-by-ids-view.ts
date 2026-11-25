@@ -31,6 +31,8 @@ export type PayableSummaryRow = Readonly<{
   supplierRef: string | null;
   supplierName: string | null;
   supplierDocument: string | null;
+  // Spec 132: imposto retido do título-filho (null = título-pai).
+  retentionType: string | null;
 }>;
 
 export type PayableSummaryByIdsViewError = 'payable-summary-by-ids-view-failure';
